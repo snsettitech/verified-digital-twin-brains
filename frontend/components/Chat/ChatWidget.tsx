@@ -9,13 +9,27 @@ interface Message {
   confidence_score?: number;
 }
 
-export default function ChatWidget({ 
-  twinId,
-  apiKey
-}: { 
+interface ChatWidgetProps {
   twinId: string;
   apiKey?: string;
-}) {
+  apiBaseUrl?: string;
+  theme?: {
+    primaryColor?: string;
+    headerColor?: string;
+    headerTextColor?: string;
+  };
+}
+
+export default function ChatWidget({ 
+  twinId,
+  apiKey,
+  apiBaseUrl,
+  theme
+}: ChatWidgetProps) {
+  const baseUrl = apiBaseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const primaryColor = theme?.primaryColor || '#2563eb';
+  const headerColor = theme?.headerColor || primaryColor;
+  const headerTextColor = theme?.headerTextColor || '#ffffff';
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -50,17 +64,46 @@ export default function ChatWidget({
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
-      const response = await fetch(`http://localhost:8000/chat/${twinId}`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      // Use X-Twin-API-Key header if API key provided, otherwise use Authorization
+      if (apiKey) {
+        headers['X-Twin-API-Key'] = apiKey;
+        // Add Origin header for domain validation
+        if (typeof window !== 'undefined') {
+          headers['Origin'] = window.location.origin;
+        }
+      } else {
+        headers['Authorization'] = 'Bearer development_token';
+      }
+
+      const response = await fetch(`${baseUrl}/chat/${twinId}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey || 'development_token'}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           query: input,
           conversation_id: conversationId,
         }),
       });
+
+      // Handle rate limit error
+      if (response.status === 429) {
+        const errorData = await response.json().catch(() => ({}));
+        const retryAfter = response.headers.get('Retry-After');
+        setMessages((prev) => {
+          const last = [...prev];
+          last[last.length - 1].content = `Rate limit exceeded. ${retryAfter ? `Please try again in ${retryAfter} seconds.` : 'Please try again later.'}`;
+          return last;
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       if (!response.body) throw new Error('No response body');
 
@@ -108,9 +151,10 @@ export default function ChatWidget({
       }
     } catch (error) {
       console.error('Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setMessages((prev) => {
         const last = [...prev];
-        last[last.length - 1].content = "Sorry, I encountered an error. Please try again.";
+        last[last.length - 1].content = `Sorry, I encountered an error: ${errorMessage}. Please try again.`;
         return last;
       });
     } finally {
@@ -124,7 +168,10 @@ export default function ChatWidget({
       {isOpen && (
         <div className="absolute bottom-20 right-0 w-80 sm:w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
           {/* Header */}
-          <div className="bg-blue-600 p-4 text-white flex items-center justify-between">
+          <div 
+            className="p-4 text-white flex items-center justify-between"
+            style={{ backgroundColor: headerColor, color: headerTextColor }}
+          >
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
@@ -140,11 +187,14 @@ export default function ChatWidget({
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-tr-none' 
-                    : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
-                }`}>
+                <div 
+                  className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${
+                    msg.role === 'user' 
+                      ? 'text-white rounded-tr-none' 
+                      : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
+                  }`}
+                  style={msg.role === 'user' ? { backgroundColor: primaryColor } : {}}
+                >
                   {msg.content}
                   {msg.role === 'assistant' && msg.confidence_score !== undefined && (
                     <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-1 text-[10px] font-bold uppercase text-slate-400">
@@ -174,12 +224,34 @@ export default function ChatWidget({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message..."
-                className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm outline-none"
+                style={{
+                  focusRing: `2px solid ${primaryColor}`
+                }}
+                onFocus={(e) => {
+                  e.target.style.boxShadow = `0 0 0 2px ${primaryColor}`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.boxShadow = '';
+                }}
               />
               <button
                 onClick={sendMessage}
                 disabled={loading || !input.trim()}
-                className="bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 disabled:bg-slate-300 transition-colors"
+                className="text-white p-2 rounded-xl disabled:bg-slate-300 transition-colors"
+                style={{ 
+                  backgroundColor: loading || !input.trim() ? undefined : primaryColor,
+                }}
+                onMouseEnter={(e) => {
+                  if (!loading && input.trim()) {
+                    e.currentTarget.style.opacity = '0.9';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!loading && input.trim()) {
+                    e.currentTarget.style.opacity = '1';
+                  }
+                }}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
               </button>
@@ -191,14 +263,18 @@ export default function ChatWidget({
       {/* Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-14 h-14 bg-blue-600 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95 group"
+        className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95 group"
+        style={{ backgroundColor: primaryColor }}
       >
         {isOpen ? (
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
         ) : (
           <div className="relative">
             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 border-blue-600 rounded-full"></span>
+            <span 
+              className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 rounded-full"
+              style={{ borderColor: primaryColor }}
+            ></span>
           </div>
         )}
       </button>

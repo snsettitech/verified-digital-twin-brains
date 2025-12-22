@@ -62,11 +62,38 @@ npm run dev
 - `verified_qna`: (id, twin_id, question, answer, question_embedding, visibility, created_by, created_at, updated_at, is_active)
 - `answer_patches`: (id, verified_qna_id, previous_answer, new_answer, reason, patched_by, patched_at)
 - `citations`: (id, verified_qna_id, source_id, chunk_id, citation_url, created_at)
+- `access_groups`: (Phase 5 - audience segmentation)
+- `group_memberships`: (Phase 5)
+- `content_permissions`: (Phase 5)
+- `group_limits`: (Phase 5)
+- `group_overrides`: (Phase 5)
+- `twin_api_keys`: (Phase 7 - API key management)
+- `sessions`: (Phase 7 - anonymous session tracking)
+- `rate_limit_tracking`: (Phase 7)
+- `user_invitations`: (Phase 7)
 
 ### Pinecone Configuration
 - **Metric**: Cosine
 - **Dimension**: 3072 (for `text-embedding-3-large`)
 - **Metadata Filtering**: Must filter by `twin_id`.
+
+## Phase Completion Status
+
+| Phase | Name | Status |
+|-------|------|--------|
+| 1 | MVP - Grounded Answers | ✅ Complete |
+| 2 | Cloud Agents & Verified Memory | ✅ Complete |
+| 3 | Digital Persona & Multi-Modal Mind | ✅ Complete |
+| 4 | Verified-First Knowledge Layer | ✅ Complete |
+| 5 | Access Groups | ✅ Complete |
+| 6 | Mind Ops Layer | ✅ Complete |
+| 7 | Omnichannel Distribution | ✅ Complete (Dec 2025) |
+| 8 | Actions Engine | 🔲 Planned |
+| 9 | Verification & Governance | ✅ Complete (Dec 2025) |
+| 10 | Enterprise Scale | 🔲 Vision |
+
+**See:** `ROADMAP.md` for detailed phase information, `PHASE_9_COMPLETION_SUMMARY.md` for latest completion details.
+
 
 ## Guidelines
 
@@ -74,4 +101,3 @@ npm run dev
 - **RAG Integrity**: Ensure all answers include citations from the knowledge base.
 - **Trust Layer**: High importance on confidence scoring and escalation for low-confidence answers.
 - **Security**: Never commit `.env` files. Use `.env.example` for template keys.
-

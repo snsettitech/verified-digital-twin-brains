@@ -53,12 +53,14 @@ export default function GroupMembersPage() {
   };
 
   const fetchUsers = async () => {
-    // For now, we'll need to fetch users from a users endpoint
-    // This is a placeholder - you may need to adjust based on your API
     try {
-      // TODO: Implement user listing endpoint or get from context
-      // For now, we'll use a placeholder
-      setUsers([]);
+      const response = await fetch('http://localhost:8000/users', {
+        headers: { 'Authorization': 'Bearer development_token' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
     } catch (error) {
       console.error('Error fetching users:', error);
     }

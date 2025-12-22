@@ -339,6 +339,18 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
     """
     Runs the agent and yields events from the graph.
     """
+    # 0. Apply Phase 9 Safety Guardrails
+    from modules.safety import apply_guardrails
+    refusal_message = apply_guardrails(twin_id, query)
+    if refusal_message:
+        # Yield a simulated refusal event to match the graph output format
+        yield {
+            "agent": {
+                "messages": [AIMessage(content=refusal_message)]
+            }
+        }
+        return
+
     # 1. Fetch full twin settings for persona encoding
     twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
     settings = twin_res.data["settings"] if twin_res.data else {}

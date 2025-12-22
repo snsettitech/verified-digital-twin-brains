@@ -225,3 +225,123 @@ class BulkUpdateRequest(BaseModel):
 
 class SourceRejectRequest(BaseModel):
     reason: str
+
+# Phase 7: Omnichannel Distribution Schemas
+
+class ApiKeyCreateRequest(BaseModel):
+    twin_id: str
+    name: str
+    group_id: Optional[str] = None
+    allowed_domains: Optional[List[str]] = None
+    expires_at: Optional[datetime] = None
+
+class ApiKeyUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    allowed_domains: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+    expires_at: Optional[datetime] = None
+
+class ApiKeySchema(BaseModel):
+    id: str
+    twin_id: str
+    name: str
+    key_prefix: str
+    group_id: Optional[str] = None
+    allowed_domains: List[str]
+    is_active: bool
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+
+class ShareLinkResponse(BaseModel):
+    twin_id: str
+    share_token: Optional[str]
+    share_url: Optional[str]
+    public_share_enabled: bool
+
+class SessionCreateRequest(BaseModel):
+    twin_id: str
+    group_id: Optional[str] = None
+    session_type: str  # 'anonymous' or 'authenticated'
+    user_id: Optional[str] = None
+
+class SessionSchema(BaseModel):
+    id: str
+    twin_id: str
+    group_id: Optional[str] = None
+    session_type: str
+    user_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+    last_active_at: datetime
+    expires_at: datetime
+
+class RateLimitStatusResponse(BaseModel):
+    requests_per_hour: Optional[Dict[str, Any]] = None
+    requests_per_day: Optional[Dict[str, Any]] = None
+
+class UserInvitationCreateRequest(BaseModel):
+    email: str
+    role: str # 'owner' or 'viewer'
+
+class UserInvitationSchema(BaseModel):
+    id: str
+    tenant_id: str
+    email: str
+    invitation_token: str
+    invitation_url: str
+    role: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+
+class ChatWidgetRequest(BaseModel):
+    query: str
+    session_id: Optional[str] = None
+    api_key: str
+
+# Phase 9: Verification & Governance Schemas
+
+class AuditLogSchema(BaseModel):
+    id: str
+    twin_id: str
+    actor_id: Optional[str] = None
+    event_type: str
+    action: str
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
+class GovernancePolicySchema(BaseModel):
+    id: str
+    twin_id: str
+    policy_type: str
+    name: str
+    content: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+class GovernancePolicyCreateRequest(BaseModel):
+    policy_type: str
+    name: str
+    content: str
+    is_active: bool = True
+
+class TwinVerificationSchema(BaseModel):
+    id: str
+    twin_id: str
+    status: str
+    verification_method: str
+    metadata: Optional[Dict[str, Any]] = None
+    requested_at: datetime
+    verified_at: Optional[datetime] = None
+    verified_by: Optional[str] = None
+
+class TwinVerificationRequest(BaseModel):
+    verification_method: str = "MANUAL_REVIEW"
+    metadata: Optional[Dict[str, Any]] = None
+
+class DeepScrubRequest(BaseModel):
+    source_id: str
+    reason: Optional[str] = None

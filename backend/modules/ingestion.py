@@ -11,6 +11,7 @@ from modules.clients import get_openai_client, get_pinecone_index
 from modules.observability import supabase, log_ingestion_event
 from modules.health_checks import run_all_health_checks, calculate_content_hash
 from modules.training_jobs import create_training_job
+from modules.governance import AuditLogger
 from typing import List, Optional, Dict, Any
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -98,6 +99,9 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         
         log_ingestion_event(source_id, twin_id, "info", f"YouTube transcript extracted: {len(text)} characters")
         
+        # Phase 9: Log the action
+        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_STAGED", metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube"})
+
         # Run health checks
         health_result = run_all_health_checks(source_id, twin_id, text, source_data={
             "filename": f"YouTube: {video_id}",
@@ -198,6 +202,9 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
 
             log_ingestion_event(source_id, twin_id, "info", f"X thread extracted: {len(text)} characters")
             
+            # Phase 9: Log the action
+            AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_STAGED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread"})
+
             # Run health checks
             health_result = run_all_health_checks(source_id, twin_id, text, source_data={
                 "filename": f"X Thread: {tweet_id} by {user}",
@@ -380,6 +387,9 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
     
     log_ingestion_event(source_id, twin_id, "info", f"Text extracted: {len(text)} characters")
     
+    # Phase 9: Log the action
+    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_STAGED", metadata={"source_id": source_id, "filename": filename or "unknown", "type": "file_upload"})
+
     # Run health checks
     health_result = run_all_health_checks(
         source_id, 
@@ -421,6 +431,9 @@ async def delete_source(source_id: str, twin_id: str):
     # 2. Delete from Supabase
     supabase.table("sources").delete().eq("id", source_id).eq("twin_id", twin_id).execute()
     
+    # Phase 9: Log the action
+    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_DELETED", metadata={"source_id": source_id})
+    
     return True
 
 # Phase 6: Staging workflow functions
@@ -450,6 +463,9 @@ async def approve_source(source_id: str) -> str:
     
     log_ingestion_event(source_id, twin_id, "info", "Source approved, creating training job")
     
+    # Phase 9: Log the action
+    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_APPROVED", metadata={"source_id": source_id})
+
     # Create training job
     job_id = create_training_job(source_id, twin_id, job_type="ingestion", priority=0)
     
@@ -476,6 +492,9 @@ async def reject_source(source_id: str, reason: str):
     }).eq("id", source_id).execute()
     
     log_ingestion_event(source_id, twin_id, "warning", f"Source rejected: {reason}")
+    
+    # Phase 9: Log the action
+    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_REJECTED", metadata={"source_id": source_id, "reason": reason})
 
 async def bulk_approve_sources(source_ids: List[str]) -> Dict[str, str]:
     """

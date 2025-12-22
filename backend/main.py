@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from modules.auth_guard import get_current_user, verify_owner
@@ -53,7 +53,14 @@ from modules.observability import (
     log_ingestion_event,
     get_ingestion_logs,
     get_dead_letter_queue,
-    retry_failed_ingestion
+)
+from modules.governance import (
+    get_audit_logs,
+    request_verification,
+    get_governance_policies,
+    create_governance_policy,
+    deep_scrub_source,
+    AuditLogger
 )
 from modules.schemas import (
     ChatRequest, 
@@ -82,8 +89,33 @@ from modules.schemas import (
     IngestionLogSchema,
     BulkApproveRequest,
     BulkUpdateRequest,
-    SourceRejectRequest
+    SourceRejectRequest,
+    SourceSchema,
+    MessageSchema,
+    ConversationSchema,
+    CitationSchema,
+    AnswerPatchSchema,
+    GroupLimitSchema,
+    GroupOverrideSchema,
+    ApiKeyCreateRequest,
+    ApiKeyUpdateRequest,
+    ApiKeySchema,
+    ShareLinkResponse,
+    SessionCreateRequest,
+    SessionSchema,
+    RateLimitStatusResponse,
+    UserInvitationCreateRequest,
+    UserInvitationSchema,
+    ChatWidgetRequest,
+    AuditLogSchema,
+    GovernancePolicySchema,
+    GovernancePolicyCreateRequest,
+    TwinVerificationSchema,
+    TwinVerificationRequest,
+    DeepScrubRequest,
 )
+from modules.safety import apply_guardrails
+
 from modules.clients import get_pinecone_index, get_openai_client
 from modules.health_checks import get_source_health_status
 from modules.training_jobs import (
@@ -92,6 +124,30 @@ from modules.training_jobs import (
     update_job_status,
     list_training_jobs
 )
+from modules.api_keys import (
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    update_api_key,
+    validate_api_key
+)
+from modules.share_links import (
+    get_share_link_info,
+    regenerate_share_token,
+    toggle_public_sharing
+)
+from modules.sessions import (
+    create_session,
+    get_session,
+    update_session_activity
+)
+from modules.user_management import (
+    list_users,
+    invite_user,
+    delete_user,
+    update_user_role
+)
+from modules.rate_limiting import get_rate_limit_status
 from worker import process_single_job
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from typing import Dict, Any
@@ -1113,6 +1169,311 @@ async def list_group_overrides(group_id: str, user=Depends(get_current_user)):
     try:
         overrides = await get_group_overrides(group_id)
         return overrides
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# Phase 7: Omnichannel Distribution Endpoints
+# ============================================================================
+
+# API Keys
+@app.post("/api-keys")
+async def create_api_key_endpoint(request: ApiKeyCreateRequest, user=Depends(verify_owner)):
+    """Create a new API key for a twin"""
+    try:
+        return create_api_key(
+            twin_id=request.twin_id,
+            group_id=request.group_id,
+            name=request.name,
+            allowed_domains=request.allowed_domains
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api-keys")
+async def list_api_keys_endpoint(twin_id: str, user=Depends(verify_owner)):
+    """List all API keys for a twin"""
+    return list_api_keys(twin_id)
+
+@app.delete("/api-keys/{key_id}")
+async def revoke_api_key_endpoint(key_id: str, user=Depends(verify_owner)):
+    """Revoke an API key"""
+    success = revoke_api_key(key_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"status": "success"}
+
+@app.patch("/api-keys/{key_id}")
+async def update_api_key_endpoint(key_id: str, request: ApiKeyUpdateRequest, user=Depends(verify_owner)):
+    """Update API key metadata"""
+    success = update_api_key(
+        key_id=key_id,
+        name=request.name,
+        allowed_domains=request.allowed_domains
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="API key not found or no changes")
+    return {"status": "success"}
+
+# Sharing
+@app.get("/twins/{twin_id}/share-link")
+async def get_share_link_endpoint(twin_id: str, user=Depends(verify_owner)):
+    """Get share link info for a twin"""
+    try:
+        return get_share_link_info(twin_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/twins/{twin_id}/share-link")
+async def generate_share_link_endpoint(twin_id: str, user=Depends(verify_owner)):
+    """Regenerate share token for a twin"""
+    try:
+        token = regenerate_share_token(twin_id)
+        return get_share_link_info(twin_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/twins/{twin_id}/sharing")
+async def toggle_sharing_endpoint(twin_id: str, request: dict, user=Depends(verify_owner)):
+    """Enable or disable public sharing"""
+    enabled = request.get("is_public", False)
+    success = toggle_public_sharing(twin_id, enabled)
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to update sharing settings")
+    return {"status": "success", "is_public": enabled}
+
+# Users & Invitations
+@app.get("/users")
+async def list_users_endpoint(user=Depends(verify_owner)):
+    """List all users in the tenant"""
+    tenant_id = user.get("tenant_id")
+    return list_users(tenant_id)
+
+@app.post("/users/invite")
+async def invite_user_endpoint(request: UserInvitationCreateRequest, user=Depends(verify_owner)):
+    """Invite a new user to the tenant"""
+    tenant_id = user.get("tenant_id")
+    invited_by = user.get("user_id")
+    try:
+        return invite_user(tenant_id, request.email, request.role, invited_by)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/users/{user_id}")
+async def delete_user_endpoint(user_id: str, user=Depends(verify_owner)):
+    """Delete a user from the tenant"""
+    deleted_by = user.get("user_id")
+    if user_id == deleted_by:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    success = delete_user(user_id, deleted_by)
+    return {"status": "success"}
+
+# Chat Widget Interface
+@app.post("/chat-widget/{twin_id}")
+async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request = None):
+    """
+    Public chat interface for widgets.
+    Uses API keys and sessions instead of user auth.
+    """
+    from fastapi import Request
+    from modules.api_keys import validate_api_key, validate_domain
+    from modules.sessions import create_session, get_session, update_session_activity
+    from modules.rate_limiting import check_rate_limit, record_request
+    
+    # 1. Validate API Key
+    key_info = validate_api_key(request.api_key)
+    if not key_info or key_info["twin_id"] != twin_id:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    
+    # 2. Validate Domain (CORS/Origin check)
+    origin = ""
+    if req_raw:
+        origin = req_raw.headers.get("origin", "")
+    
+    if key_info["allowed_domains"] and not validate_domain(origin, key_info["allowed_domains"]):
+        raise HTTPException(status_code=403, detail="Domain not allowed")
+    
+    # 3. Handle Session
+    session_id = request.session_id
+    if session_id:
+        session = get_session(session_id)
+        if not session or session["twin_id"] != twin_id:
+            session_id = None # Force new session if invalid
+        else:
+            update_session_activity(session_id)
+    
+    if not session_id:
+        session_id = create_session(
+            twin_id=twin_id,
+            group_id=key_info.get("group_id"),
+            session_type="anonymous",
+            ip_address=req_raw.client.host if req_raw else None,
+            user_agent=req_raw.headers.get("user-agent") if req_raw else None
+        )
+    
+    # 4. Rate Limiting Check
+    # Check sessions per hour
+    allowed, status = check_rate_limit(session_id, "session", "requests_per_hour", 30)
+    if not allowed:
+        raise HTTPException(status_code=429, detail="Session rate limit exceeded")
+    
+    # 5. Process Chat
+    query = request.query
+    group_id = key_info.get("group_id")
+    
+    # Get conversation for session
+    # (Simplified for now: 1 conversation per session)
+    conv_response = supabase.table("conversations").select("id").eq("session_id", session_id).limit(1).execute()
+    if conv_response.data and len(conv_response.data) > 0:
+        conversation_id = conv_response.data[0]["id"]
+    else:
+        conv_obj = create_conversation(twin_id, None, group_id=group_id)
+        conversation_id = conv_obj["id"]
+        # Link conversation to session
+        supabase.table("conversations").update({"session_id": session_id}).eq("id", conversation_id).execute()
+    
+    # Get system prompt and history
+    twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+    system_prompt = ""
+    if twin_res.data:
+        system_prompt = twin_res.data.get("settings", {}).get("system_prompt", "")
+    
+    history = get_messages(conversation_id)
+    
+    async def widget_stream_generator():
+        final_content = ""
+        citations = []
+        confidence_score = 0.0
+        sent_metadata = False
+
+        async for event in run_agent_stream(twin_id, query, history, system_prompt, group_id=group_id):
+            if "tools" in event:
+                citations = event["tools"].get("citations", citations)
+                confidence_score = event["tools"].get("confidence_score", confidence_score)
+                
+                if not sent_metadata:
+                    metadata = ChatMetadata(
+                        confidence_score=confidence_score,
+                        citations=citations,
+                        conversation_id=conversation_id
+                    )
+                    # Include session_id in the first metadata chunk
+                    output = metadata.model_dump()
+                    output["session_id"] = session_id
+                    yield json.dumps(output) + "\n"
+                    sent_metadata = True
+
+            if "agent" in event:
+                msg = event["agent"]["messages"][-1]
+                if isinstance(msg, AIMessage):
+                    final_content += msg.content
+                    yield json.dumps({"type": "content", "content": msg.content}) + "\n"
+
+        # Record usage
+        record_request(session_id, "session", "requests_per_hour")
+        
+        # Log interaction
+        log_interaction(conversation_id, "assistant", final_content, citations, confidence_score)
+        
+        yield json.dumps({"type": "done", "escalated": confidence_score < 0.7}) + "\n"
+
+    return StreamingResponse(widget_stream_generator(), media_type="text/event-stream")
+
+# Public Share Endpoints (No Auth Required)
+@app.get("/public/validate-share/{twin_id}/{token}")
+async def validate_share_token_endpoint(twin_id: str, token: str):
+    """Validate a public share token and return twin info"""
+    from modules.share_links import validate_share_token
+    
+    if not validate_share_token(token, twin_id):
+        raise HTTPException(status_code=404, detail="Invalid or expired share link")
+    
+    # Get twin name
+    try:
+        twin_response = supabase.table("twins").select("name").eq("id", twin_id).single().execute()
+        twin_name = twin_response.data.get("name", "AI Assistant") if twin_response.data else "AI Assistant"
+    except:
+        twin_name = "AI Assistant"
+    
+    return {
+        "valid": True,
+        "twin_id": twin_id,
+        "twin_name": twin_name
+    }
+
+class PublicChatRequest(BaseModel):
+    message: str
+    conversation_history: Optional[List[dict]] = None
+
+@app.post("/public/chat/{twin_id}/{token}")
+async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequest):
+    """Handle public chat via share link"""
+    from modules.share_links import validate_share_token, get_public_group_for_twin
+    
+    # Validate share token
+    if not validate_share_token(token, twin_id):
+        raise HTTPException(status_code=403, detail="Invalid or expired share link")
+    
+    # Get public group for context
+    public_group = get_public_group_for_twin(twin_id)
+    group_id = public_group["id"] if public_group else None
+    
+    # Build conversation history as LangChain messages
+    history = []
+    if request.conversation_history:
+        for msg in request.conversation_history:
+            if msg.get("role") == "user":
+                history.append(HumanMessage(content=msg.get("content", "")))
+            elif msg.get("role") == "assistant":
+                history.append(AIMessage(content=msg.get("content", "")))
+    
+    # Run the agent using existing function
+    try:
+        final_response = ""
+        async for event in run_agent_stream(twin_id, request.message, history, group_id=group_id):
+            if "agent" in event:
+                msg = event["agent"]["messages"][-1]
+                if isinstance(msg, AIMessage) and msg.content:
+                    final_response = msg.content
+        
+        return {"response": final_response}
+    except Exception as e:
+        print(f"Error in public chat: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to process message")
+
+# Phase 9: Verification & Governance Endpoints
+
+@app.get("/governance/audit-logs", response_model=List[AuditLogSchema])
+async def list_audit_logs(twin_id: str, event_type: Optional[str] = None, user=Depends(verify_owner)):
+    """List audit logs for a twin"""
+    return get_audit_logs(twin_id, event_type=event_type)
+
+@app.post("/governance/verify")
+async def request_twin_verification(twin_id: str, request: TwinVerificationRequest, user=Depends(verify_owner)):
+    """Request verification for a twin"""
+    status = request_verification(twin_id, method=request.verification_method, metadata=request.metadata)
+    return {"status": status, "message": f"Verification request {status}"}
+
+@app.get("/governance/policies", response_model=List[GovernancePolicySchema])
+async def list_policies(twin_id: str, user=Depends(verify_owner)):
+    """List governance policies for a twin"""
+    return get_governance_policies(twin_id)
+
+@app.post("/governance/policies", response_model=GovernancePolicySchema)
+async def create_policy(twin_id: str, request: GovernancePolicyCreateRequest, user=Depends(verify_owner)):
+    """Create a new governance policy"""
+    return create_governance_policy(twin_id, request.policy_type, request.name, request.content)
+
+@app.delete("/sources/{source_id}/deep-scrub")
+async def deep_scrub_source_endpoint(source_id: str, request: DeepScrubRequest, user=Depends(verify_owner)):
+    """Permanently purge a source and all its derived vectors"""
+    try:
+        await deep_scrub_source(source_id, reason=request.reason)
+        return {"status": "success", "message": "Source and all derived vectors permanently purged"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
