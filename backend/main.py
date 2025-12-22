@@ -201,6 +201,30 @@ async def health_check():
 
     return health_status
 
+# =============================================================================
+# SPECIALIZATION CONFIG
+# =============================================================================
+
+@app.get("/config/specialization")
+async def get_specialization_config():
+    """Get current specialization configuration for frontend."""
+    from modules.specializations import get_specialization
+    spec = get_specialization()
+    return {
+        "name": spec.name,
+        "display_name": spec.display_name,
+        "description": spec.description,
+        "sidebar": spec.get_sidebar_config(),
+        "features": spec.get_feature_flags(),
+        "default_settings": spec.get_default_settings()
+    }
+
+@app.get("/config/specializations")
+async def list_all_specializations():
+    """List all available specializations."""
+    from modules.specializations.registry import list_specializations
+    return list_specializations()
+
 @app.post("/chat/{twin_id}")
 async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user)):
     query = request.query

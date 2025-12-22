@@ -99,10 +99,29 @@ npm run dev
 
 **See:** `ROADMAP.md` for detailed phase information, `PHASE_9_COMPLETION_SUMMARY.md` for latest completion details.
 
+## Specialization Architecture
+
+The platform supports **specialization variants** (e.g., VC Brain, Legal Brain) via Strategy Pattern. 
+
+### Key Files
+- `backend/modules/specializations/base.py` - Abstract interface
+- `backend/modules/specializations/registry.py` - Load by env/tenant
+- `backend/modules/specializations/vc/` - VC Brain implementation
+
+### Environment Variables
+```bash
+SPECIALIZATION=vanilla|vc   # Which variant to load
+```
+
+### Creating New Specializations
+Use workflow: `/create-specialization`
 
 ## Guidelines
 
-- **Style**: Follow PEP 8 for Python and standard React/Next.js conventions for TypeScript.
+- **Style**: Follow `.agent/CODING_STANDARDS.md` for all code
 - **RAG Integrity**: Ensure all answers include citations from the knowledge base.
 - **Trust Layer**: High importance on confidence scoring and escalation for low-confidence answers.
 - **Security**: Never commit `.env` files. Use `.env.example` for template keys.
+- **Specializations**: Never modify core modules - only extend via interfaces.
+- **Documentation**: Update CLAUDE.md when adding new modules, endpoints, or tables.
+
