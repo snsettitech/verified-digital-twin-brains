@@ -48,10 +48,10 @@ const iconMap: Record<ToastType, React.ReactNode> = {
 };
 
 const bgMap: Record<ToastType, string> = {
-    success: 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-200',
-    error: 'bg-gradient-to-r from-red-50 to-rose-50 border-red-200',
-    warning: 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200',
-    info: 'bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200',
+    success: 'bg-emerald-500/10 border-emerald-500/30',
+    error: 'bg-red-500/10 border-red-500/30',
+    warning: 'bg-amber-500/10 border-amber-500/30',
+    info: 'bg-indigo-500/10 border-indigo-500/30',
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -87,7 +87,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             `}
                     >
                         {iconMap[toast.type]}
-                        <span className="text-sm font-medium text-slate-700">{toast.message}</span>
+                        <span className="text-sm font-medium text-white">{toast.message}</span>
                         <button
                             onClick={() => removeToast(toast.id)}
                             className="ml-2 p-1 rounded-lg hover:bg-black/5 transition-colors"

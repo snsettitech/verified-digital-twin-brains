@@ -20,7 +20,7 @@ interface ChatWidgetProps {
   };
 }
 
-export default function ChatWidget({ 
+export default function ChatWidget({
   twinId,
   apiKey,
   apiBaseUrl,
@@ -67,7 +67,7 @@ export default function ChatWidget({
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       // Use X-Twin-API-Key header if API key provided, otherwise use Authorization
       if (apiKey) {
         headers['X-Twin-API-Key'] = apiKey;
@@ -117,7 +117,7 @@ export default function ChatWidget({
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
-          
+
           for (const line of lines) {
             if (!line.trim()) continue;
             try {
@@ -168,7 +168,7 @@ export default function ChatWidget({
       {isOpen && (
         <div className="absolute bottom-20 right-0 w-80 sm:w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 duration-300">
           {/* Header */}
-          <div 
+          <div
             className="p-4 text-white flex items-center justify-between"
             style={{ backgroundColor: headerColor, color: headerTextColor }}
           >
@@ -187,12 +187,11 @@ export default function ChatWidget({
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
             {messages.map((msg, idx) => (
               <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div 
-                  className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${
-                    msg.role === 'user' 
-                      ? 'text-white rounded-tr-none' 
+                <div
+                  className={`max-w-[85%] p-3 rounded-2xl text-sm shadow-sm ${msg.role === 'user'
+                      ? 'text-white rounded-tr-none'
                       : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none'
-                  }`}
+                    }`}
                   style={msg.role === 'user' ? { backgroundColor: primaryColor } : {}}
                 >
                   {msg.content}
@@ -225,9 +224,6 @@ export default function ChatWidget({
                 onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message..."
                 className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-sm outline-none"
-                style={{
-                  focusRing: `2px solid ${primaryColor}`
-                }}
                 onFocus={(e) => {
                   e.target.style.boxShadow = `0 0 0 2px ${primaryColor}`;
                 }}
@@ -239,7 +235,7 @@ export default function ChatWidget({
                 onClick={sendMessage}
                 disabled={loading || !input.trim()}
                 className="text-white p-2 rounded-xl disabled:bg-slate-300 transition-colors"
-                style={{ 
+                style={{
                   backgroundColor: loading || !input.trim() ? undefined : primaryColor,
                 }}
                 onMouseEnter={(e) => {
@@ -271,7 +267,7 @@ export default function ChatWidget({
         ) : (
           <div className="relative">
             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-            <span 
+            <span
               className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 rounded-full"
               style={{ borderColor: primaryColor }}
             ></span>

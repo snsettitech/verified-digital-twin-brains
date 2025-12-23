@@ -38,6 +38,7 @@ interface IngestionLog {
 
 interface TrainingJob {
   id: string;
+  source_id?: string;
   status: string;
   job_type: string;
   error_message?: string;
@@ -114,7 +115,7 @@ export default function SourceDetailsPage() {
     try {
       const response = await fetch(`http://localhost:8000/sources/${sourceId}/approve`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': 'Bearer development_token',
           'Content-Type': 'application/json'
         }
@@ -134,7 +135,7 @@ export default function SourceDetailsPage() {
     try {
       const response = await fetch(`http://localhost:8000/sources/${sourceId}/reject`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': 'Bearer development_token',
           'Content-Type': 'application/json'
         },
@@ -202,11 +203,10 @@ export default function SourceDetailsPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab as any)}
-            className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${
-              activeTab === tab
+            className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === tab
                 ? 'border-indigo-600 text-indigo-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+              }`}
           >
             {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
@@ -277,11 +277,10 @@ export default function SourceDetailsPage() {
                 <div key={check.id} className="border border-slate-200 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-bold text-slate-800">{check.check_type}</span>
-                    <span className={`px-2 py-1 text-xs font-bold rounded ${
-                      check.status === 'pass' ? 'bg-green-100 text-green-700' :
-                      check.status === 'fail' ? 'bg-red-100 text-red-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
+                    <span className={`px-2 py-1 text-xs font-bold rounded ${check.status === 'pass' ? 'bg-green-100 text-green-700' :
+                        check.status === 'fail' ? 'bg-red-100 text-red-700' :
+                          'bg-yellow-100 text-yellow-700'
+                      }`}>
                       {check.status.toUpperCase()}
                     </span>
                   </div>
@@ -306,11 +305,10 @@ export default function SourceDetailsPage() {
             <div className="space-y-3">
               {logs.map((log) => (
                 <div key={log.id} className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl">
-                  <span className={`px-2 py-1 text-xs font-bold rounded ${
-                    log.log_level === 'error' ? 'bg-red-100 text-red-700' :
-                    log.log_level === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-blue-100 text-blue-700'
-                  }`}>
+                  <span className={`px-2 py-1 text-xs font-bold rounded ${log.log_level === 'error' ? 'bg-red-100 text-red-700' :
+                      log.log_level === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-blue-100 text-blue-700'
+                    }`}>
                     {log.log_level.toUpperCase()}
                   </span>
                   <div className="flex-1">
