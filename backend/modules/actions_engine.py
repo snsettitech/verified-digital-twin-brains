@@ -617,18 +617,53 @@ class ActionExecutor:
         }
     
     @staticmethod
-    def _execute_escalate(twin_id: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def _execute_escalate(twin_id: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Create an escalation."""
         from modules.escalation import create_escalation
+        from modules.observability import supabase, create_conversation
+        import uuid
         
         question = inputs.get("question", "Automated escalation")
         context = inputs.get("context", "")
         
-        escalation_id = create_escalation(twin_id, question, context)
-        return {
-            "status": "escalation_created",
-            "escalation_id": escalation_id
-        }
+        # Escalations require a message_id, so we need to create a message first
+        # Create or get a conversation for this escalation
+        conv = create_conversation(twin_id, None)
+        conversation_id = conv["id"] if conv else None
+        
+        if not conversation_id:
+            # Fallback: create conversation directly
+            conv_response = supabase.table("conversations").insert({
+                "twin_id": twin_id
+            }).execute()
+            conversation_id = conv_response.data[0]["id"] if conv_response.data else None
+        
+        # Create a message to attach the escalation to
+        message_content = f"Automated escalation: {question}\n\nContext: {context}"
+        msg_response = supabase.table("messages").insert({
+            "conversation_id": conversation_id,
+            "role": "assistant",
+            "content": message_content,
+            "confidence_score": 0.0  # Low confidence triggers escalation
+        }).execute()
+        
+        message_id = msg_response.data[0]["id"] if msg_response.data else None
+        
+        if message_id:
+            # Now create the escalation
+            escalation_result = await create_escalation(message_id)
+            escalation_id = escalation_result[0]["id"] if escalation_result else None
+            
+            return {
+                "status": "escalation_created",
+                "escalation_id": escalation_id,
+                "message_id": message_id
+            }
+        else:
+            return {
+                "status": "error",
+                "error": "Failed to create message for escalation"
+            }
     
     @staticmethod
     def _execute_webhook(inputs: Dict[str, Any]) -> Dict[str, Any]:

@@ -1,54 +1,12 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import ChatInterface from '../../components/Chat/ChatInterface';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const AUTH_TOKEN = process.env.NEXT_PUBLIC_DEV_TOKEN || 'development_token';
 
 export default function DashboardPage() {
-  const [activeTwin, setActiveTwin] = useState('eeeed554-9180-4229-a9af-0f8dd2c69e9b');
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [systemStatus, setSystemStatus] = useState<'checking' | 'online' | 'offline' | 'degraded'>('checking');
-  const [sources, setSources] = useState<any[]>([]);
-  
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch sources
-  const fetchSources = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/sources/${activeTwin}`, {
-        headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSources(data);
-      }
-    } catch (error) {
-      console.error('Error fetching sources:', error);
-    }
-  };
-
-  const handleDeleteSource = async (sourceId: string) => {
-    if (!confirm('Are you sure you want to delete this source? This will remove it from your twin\'s memory.')) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/sources/${activeTwin}/${sourceId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` }
-      });
-      if (response.ok) {
-        await fetchSources();
-      } else {
-        alert('Failed to delete source.');
-      }
-    } catch (error) {
-      console.error('Error deleting source:', error);
-      alert('Error connecting to backend.');
-    }
-  };
 
   // Check system health on mount
   useEffect(() => {
@@ -66,198 +24,75 @@ export default function DashboardPage() {
       }
     };
     checkHealth();
-    fetchSources();
-    const interval = setInterval(checkHealth, 10000); // Check every 10s
+    const interval = setInterval(checkHealth, 10000);
     return () => clearInterval(interval);
-  }, [activeTwin]);
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/ingest/${activeTwin}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${AUTH_TOKEN}`, // Using dev token for local testing
-        },
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        await fetchSources(); // Refresh sources list
-        alert(`Successfully ingested ${data.chunks_ingested} chunks from ${file.name}`);
-      } else {
-        const error = await response.json();
-        alert(`Upload failed: ${error.detail || 'Server error'}`);
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Failed to connect to backend. Is the FastAPI server running on port 8000?');
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const startNewSession = () => {
-    setCurrentConversationId(null);
-  };
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen bg-[#f8fafc] text-slate-900 font-sans">
-      <header className="sticky top-0 z-10 bg-white border-b px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="text-xl font-black tracking-tighter text-blue-600 hover:opacity-80 transition-opacity">
-            VT-BRAIN
-          </Link>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="/dashboard" className="text-sm font-bold text-blue-600 border-b-2 border-blue-600 pb-1">Chat</Link>
-            <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800">Knowledge Base</a>
-            <Link href="/dashboard/escalations" className="text-sm font-medium text-slate-500 hover:text-slate-800">Escalations</Link>
-            <Link href="/dashboard/settings" className="text-sm font-medium text-slate-500 hover:text-slate-800">Settings</Link>
-            <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800">Analytics</a>
-          </nav>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full border bg-slate-50">
-            <span className={`w-2 h-2 rounded-full ${
-              systemStatus === 'online' ? 'bg-green-500' : 
-              systemStatus === 'degraded' ? 'bg-yellow-500' : 
-              systemStatus === 'offline' ? 'bg-red-500' : 'bg-slate-300'
-            }`}></span>
+      <main className="flex-1 max-w-7xl mx-auto w-full p-6 md:p-10 space-y-10">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full border bg-white shadow-sm">
+            <span className={`w-2 h-2 rounded-full ${systemStatus === 'online' ? 'bg-green-500' :
+                systemStatus === 'degraded' ? 'bg-yellow-500' :
+                  systemStatus === 'offline' ? 'bg-red-500' : 'bg-slate-300'
+              }`}></span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
               System: {systemStatus}
             </span>
           </div>
-          <div className="flex -space-x-2 overflow-hidden">
-            <div className="inline-block h-8 w-8 rounded-full ring-2 ring-white bg-slate-200 flex items-center justify-center text-[10px] font-bold">JD</div>
-          </div>
-          <button className="text-xs font-bold text-slate-400 hover:text-slate-600 uppercase tracking-widest transition-colors">Logout</button>
-        </div>
-      </header>
-
-      <main className="flex-1 max-w-7xl mx-auto w-full p-6 md:p-10 grid grid-cols-1 lg:grid-cols-4 gap-8">
-        <div className="lg:col-span-3 h-[750px] flex flex-col">
-          <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-2xl font-extrabold tracking-tight">AI Assistant</h1>
-            <div className="flex gap-2">
-              <button 
-                onClick={startNewSession}
-                className="bg-white border text-xs font-bold px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-              >
-                New Session
-              </button>
-              <button className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm">Manage Twin</button>
-            </div>
-          </div>
-          <div className="flex-1 shadow-2xl rounded-2xl overflow-hidden">
-            <ChatInterface 
-              twinId={activeTwin} 
-              conversationId={currentConversationId} 
-              onConversationStarted={setCurrentConversationId}
-            />
-          </div>
         </div>
 
-        <div className="lg:col-span-1 space-y-8">
-          <section className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Active Knowledge</h2>
-            <div className="space-y-3">
-              {sources.map((doc, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group border border-transparent hover:border-slate-200">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-                    </div>
-                    <div className="overflow-hidden">
-                      <div className="text-xs font-bold text-slate-700 truncate">{doc.filename}</div>
-                      <div className="text-[10px] text-slate-400 font-medium">
-                        {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full ${doc.status === 'processed' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteSource(doc.id);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-md transition-all"
-                      title="Delete Source"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-              
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileChange} 
-                className="hidden" 
-                accept=".pdf"
-              />
-              
-              <button 
-                onClick={handleUploadClick}
-                disabled={isUploading}
-                className={`w-full mt-2 py-3 border-2 border-dashed rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                  isUploading 
-                  ? 'bg-slate-50 border-blue-200 text-blue-400 cursor-not-allowed' 
-                  : 'border-slate-200 text-slate-400 hover:border-blue-400 hover:text-blue-500'
-                }`}
-              >
-                {isUploading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                    Add Source (PDF)
-                  </>
-                )}
-              </button>
-            </div>
-          </section>
+        {/* Quick Actions Router */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
-          <section className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Quick Insights</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-green-50 rounded-xl border border-green-100">
-                <div className="text-[10px] font-bold text-green-700 uppercase tracking-wide">Reliability</div>
-                <div className="text-xl font-black text-green-800 mt-1">98%</div>
+          {/* Left Brain */}
+          <Link href="/dashboard/knowledge" className="group">
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
               </div>
-              <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100">
-                <div className="text-[10px] font-bold text-indigo-700 uppercase tracking-wide">Sync Time</div>
-                <div className="text-xl font-black text-indigo-800 mt-1">2m</div>
+              <h3 className="text-xl font-black text-slate-800 mb-2">Left Brain</h3>
+              <p className="text-sm text-slate-500 font-medium">Manage Sources & Facts</p>
+            </div>
+          </Link>
+
+          {/* Right Brain */}
+          <Link href="/dashboard/right-brain" className="group">
+            <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 rounded-[2rem] text-white shadow-xl shadow-indigo-200 hover:shadow-2xl transition-all duration-300 h-full flex flex-col items-center text-center relative overflow-hidden">
+              {/* Decorative bg */}
+              <div className="absolute top-0 right-0 p-10 opacity-10">
+                <svg className="w-32 h-32" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" /></svg>
+              </div>
+
+              <div className="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
+              </div>
+              <h3 className="text-xl font-black mb-2">Right Brain</h3>
+              <p className="text-sm text-indigo-100 font-medium opacity-90">Start Cognitive Training</p>
+              <div className="mt-8 px-4 py-2 bg-white/20 rounded-full text-xs font-bold uppercase tracking-widest animate-pulse">
+                Recommended Next Step
               </div>
             </div>
-          </section>
+          </Link>
 
-          <div className="p-6 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl text-white shadow-lg shadow-blue-200">
-            <h3 className="text-sm font-bold mb-2 flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              Did you know?
-            </h3>
-            <p className="text-xs text-blue-100 leading-relaxed opacity-90">
-              The Digital Twin Brain monitors its own confidence. If it drops below 70%, it automatically creates an escalation for you to review.
-            </p>
-          </div>
+          {/* Simulator */}
+          <Link href="/dashboard/simulator" className="group">
+            <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 h-full flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+              </div>
+              <h3 className="text-xl font-black text-slate-800 mb-2">Simulator</h3>
+              <p className="text-sm text-slate-500 font-medium">Test & Verify Output</p>
+            </div>
+          </Link>
         </div>
+
+        <div className="p-6 bg-slate-100 rounded-2xl border border-slate-200 text-center text-slate-400 text-sm font-medium">
+          Additional widgets and analytics coming soon to Dashboard Home.
+        </div>
+
       </main>
     </div>
   );

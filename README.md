@@ -65,7 +65,15 @@ npm run dev
 
 ### 3. Database Setup
 
-Run the `supabase_schema.sql` file in your Supabase SQL Editor to initialize the required tables.
+Run the database migrations in order in your Supabase SQL Editor:
+
+1. `backend/database/schema/supabase_schema.sql` (base schema)
+2. `backend/database/migrations/migration_phase4_verified_qna.sql`
+3. `backend/database/migrations/migration_phase5_access_groups.sql`
+4. `backend/database/migrations/migration_phase6_mind_ops.sql`
+5. `backend/database/migrations/migration_phase7_omnichannel.sql`
+6. `backend/database/migrations/migration_phase8_actions_engine.sql`
+7. `backend/database/migrations/migration_phase9_governance.sql`
 
 ## Project Structure
 

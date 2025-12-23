@@ -1,3 +1,20 @@
+-- ============================================================================
+-- Verified Digital Twin Brain - Database Schema Reference
+-- ============================================================================
+-- 
+-- NOTE: This file contains a REFERENCE schema up to Phase 5.
+-- For production use, run migrations in order from backend/database/migrations/:
+--  1. This base schema (or apply migrations phase by phase)
+--  2. migration_phase4_verified_qna.sql
+--  3. migration_phase5_access_groups.sql
+--  4. migration_phase6_mind_ops.sql
+--  5. migration_phase7_omnichannel.sql
+--  6. migration_phase8_actions_engine.sql
+--  7. migration_phase9_governance.sql
+--
+-- Migrations are the source of truth and include all tables, columns, and indexes.
+-- ============================================================================
+
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 

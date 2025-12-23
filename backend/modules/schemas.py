@@ -6,6 +6,7 @@ class ChatRequest(BaseModel):
     query: str
     conversation_id: Optional[str] = None
     group_id: Optional[str] = None  # NEW: Allow group override
+    metadata: Optional[Dict[str, Any]] = None
 
 class ChatMetadata(BaseModel):
     type: str = "metadata"
@@ -59,6 +60,7 @@ class EscalationSchema(BaseModel):
 class TwinSettingsUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    specialization_id: Optional[str] = None  # NEW: Gate 1
     settings: Optional[Dict[str, Any]] = None
 
 class YouTubeIngestRequest(BaseModel):
@@ -300,6 +302,10 @@ class ChatWidgetRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
     api_key: str
+
+class PublicChatRequest(BaseModel):
+    message: str
+    conversation_history: Optional[List[Dict[str, str]]] = None
 
 # Phase 9: Verification & Governance Schemas
 

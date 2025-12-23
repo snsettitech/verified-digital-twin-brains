@@ -43,8 +43,8 @@ const KnowledgeInsights = ({ profile }: { profile: KnowledgeProfile | null }) =>
           </div>
         </div>
         <div className="mt-6 h-2 w-full bg-white/20 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-white transition-all duration-1000 ease-out" 
+          <div
+            className="h-full bg-white transition-all duration-1000 ease-out"
             style={{ width: `${opinionPercent}%` }}
           ></div>
         </div>
@@ -59,7 +59,7 @@ const KnowledgeInsights = ({ profile }: { profile: KnowledgeProfile | null }) =>
           <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] font-black rounded-lg">ACTIVE</span>
         </div>
         <p className="text-xs text-slate-500 mt-4 leading-relaxed font-medium">
-          Most of your knowledge sounds <span className="text-slate-900 font-bold">{profile.top_tone.toLowerCase()}</span>. 
+          Most of your knowledge sounds <span className="text-slate-900 font-bold">{profile.top_tone.toLowerCase()}</span>.
           The twin will prioritize this style in its responses.
         </p>
       </div>
@@ -72,7 +72,7 @@ const KnowledgeInsights = ({ profile }: { profile: KnowledgeProfile | null }) =>
           <span className="ml-2 text-xs font-bold text-slate-400">Chunks</span>
         </div>
         <p className="text-xs text-slate-500 mt-4 leading-relaxed font-medium">
-          Across <span className="text-slate-900 font-bold">{profile.total_sources}</span> distinct sources, 
+          Across <span className="text-slate-900 font-bold">{profile.total_sources}</span> distinct sources,
           your twin has processed {profile.total_chunks} memory segments.
         </p>
       </div>
@@ -108,7 +108,7 @@ export default function KnowledgePage() {
 
       if (sourcesRes.ok) setSources(await sourcesRes.json());
       if (profileRes.ok) setProfile(await profileRes.json());
-      
+
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -157,7 +157,7 @@ export default function KnowledgePage() {
     try {
       const response = await fetch(`http://localhost:8000/ingest/youtube/${twinId}`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': 'Bearer development_token',
           'Content-Type': 'application/json'
         },
@@ -186,7 +186,7 @@ export default function KnowledgePage() {
     try {
       const response = await fetch(`http://localhost:8000/ingest/podcast/${twinId}`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': 'Bearer development_token',
           'Content-Type': 'application/json'
         },
@@ -215,7 +215,7 @@ export default function KnowledgePage() {
     try {
       const response = await fetch(`http://localhost:8000/ingest/x/${twinId}`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Authorization': 'Bearer development_token',
           'Content-Type': 'application/json'
         },
@@ -259,8 +259,8 @@ export default function KnowledgePage() {
     <div className="max-w-6xl mx-auto space-y-10 pb-20">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900">Knowledge Hub</h1>
-          <p className="text-slate-500 mt-2 font-medium">Quantify and manage the data that powers your Digital Twin.</p>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">Left Brain</h1>
+          <p className="text-slate-500 mt-2 font-medium">Quantify the raw knowledge (Sources) that powers your Digital Twin.</p>
         </div>
         <a
           href="/dashboard/knowledge/staging"
@@ -280,11 +280,11 @@ export default function KnowledgePage() {
           </div>
           <h3 className="text-xl font-black text-slate-800 mb-2">Upload Documents</h3>
           <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Upload PDFs, Audio files, or Text documents to enrich your twin's knowledge base.</p>
-          
+
           <label className="block">
             <span className="sr-only">Choose file</span>
-            <input 
-              type="file" 
+            <input
+              type="file"
               onChange={handleFileUpload}
               disabled={uploading}
               className="block w-full text-sm text-slate-500 file:mr-6 file:py-3 file:px-6 file:rounded-2xl file:border-0 file:text-sm file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer disabled:opacity-50 transition-all"
@@ -302,16 +302,16 @@ export default function KnowledgePage() {
           </div>
           <h3 className="text-xl font-black text-slate-800 mb-2">Import from YouTube</h3>
           <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Extract transcripts from YouTube videos to add your spoken wisdom to the brain.</p>
-          
+
           <div className="flex gap-3">
-            <input 
-              type="text" 
-              placeholder="https://youtube.com/watch?v=..." 
+            <input
+              type="text"
+              placeholder="https://youtube.com/watch?v=..."
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-red-500 transition-all"
             />
-            <button 
+            <button
               onClick={handleYoutubeIngest}
               disabled={ingestingYoutube || !youtubeUrl}
               className="px-8 py-3.5 bg-red-600 text-white rounded-2xl text-sm font-black hover:bg-red-700 disabled:opacity-50 transition-all shadow-lg shadow-red-100"
@@ -328,16 +328,16 @@ export default function KnowledgePage() {
           </div>
           <h3 className="text-xl font-black text-slate-800 mb-2">Import Podcasts</h3>
           <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Sync your latest podcast episodes via RSS feed and transcribe them automatically.</p>
-          
+
           <div className="flex gap-3">
-            <input 
-              type="text" 
-              placeholder="https://feed.podbean.com/..." 
+            <input
+              type="text"
+              placeholder="https://feed.podbean.com/..."
               value={podcastUrl}
               onChange={(e) => setPodcastUrl(e.target.value)}
               className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500 transition-all"
             />
-            <button 
+            <button
               onClick={handlePodcastIngest}
               disabled={ingestingPodcast || !podcastUrl}
               className="px-8 py-3.5 bg-purple-600 text-white rounded-2xl text-sm font-black hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-100"
@@ -356,16 +356,16 @@ export default function KnowledgePage() {
           </div>
           <h3 className="text-xl font-black text-slate-800 mb-2">Sync X Threads</h3>
           <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Turn your X (Twitter) threads and viral insights into permanent memory units.</p>
-          
+
           <div className="flex gap-3">
-            <input 
-              type="text" 
-              placeholder="https://x.com/user/status/..." 
+            <input
+              type="text"
+              placeholder="https://x.com/user/status/..."
               value={xUrl}
               onChange={(e) => setXUrl(e.target.value)}
               className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
             />
-            <button 
+            <button
               onClick={handleXIngest}
               disabled={ingestingX || !xUrl}
               className="px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-black disabled:opacity-50 transition-all shadow-lg shadow-slate-200"
@@ -391,7 +391,7 @@ export default function KnowledgePage() {
           <h3 className="text-lg font-black text-slate-800">Your Sources</h3>
           <span className="text-xs font-black text-slate-400 bg-slate-50 px-4 py-1.5 rounded-full">{sources.length} Total</span>
         </div>
-        
+
         {loading ? (
           <div className="p-20 flex justify-center">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
@@ -448,9 +448,8 @@ export default function KnowledgePage() {
                       )}
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`inline-flex items-center gap-2 text-[10px] font-black ${
-                        s.status === 'processed' ? 'text-green-600' : 'text-yellow-600 animate-pulse'
-                      }`}>
+                      <span className={`inline-flex items-center gap-2 text-[10px] font-black ${s.status === 'processed' ? 'text-green-600' : 'text-yellow-600 animate-pulse'
+                        }`}>
                         <span className={`w-2 h-2 rounded-full ${s.status === 'processed' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
                         {s.status.toUpperCase()}
                       </span>
@@ -459,7 +458,7 @@ export default function KnowledgePage() {
                       {new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <button 
+                      <button
                         onClick={() => handleDelete(s.id)}
                         className="text-slate-300 hover:text-red-600 transition-all p-2 hover:bg-red-50 rounded-xl"
                       >

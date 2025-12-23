@@ -78,9 +78,34 @@ def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversatio
                     else:
                         expanded_query = " ".join(expanded_parts)
         
-        print(f"DEBUG: search_knowledge_base called with query: '{query}' (expanded to: '{expanded_query}')")
+        # Vector search (Pinecone)
         contexts = await retrieve_context(expanded_query, twin_id, group_id=group_id)
-        return json.dumps(contexts)
+        
+        # Graph search (Supabase nodes table)
+        graph_results = []
+        try:
+            from modules.observability import supabase
+            nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 20}).execute()
+            if nodes_res.data:
+                query_words = set(expanded_query.lower().split())
+                for node in nodes_res.data:
+                    name = (node.get("name") or "").lower()
+                    desc = (node.get("description") or "").lower()
+                    # Check if any query word matches node name or description
+                    if any(word in name or word in desc for word in query_words if len(word) > 2):
+                        graph_results.append({
+                            "text": f"{node['name']}: {node['description']}",
+                            "source_id": f"graph-{node['id'][:8]}",
+                            "score": 0.85,  # High confidence for graph knowledge
+                            "is_graph": True,
+                            "category": node.get("type", "KNOWLEDGE")
+                        })
+        except Exception as e:
+            print(f"Graph search error: {e}")
+        
+        # Merge: Graph results first (higher priority), then vector results
+        all_results = graph_results + contexts
+        return json.dumps(all_results)
     
     return search_knowledge_base
 

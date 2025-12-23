@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [twinData, setTwinData] = useState({
     name: '',
     description: '',
+    specialization_id: 'vanilla', // Default
     settings: {
       system_prompt: ''
     }
@@ -25,6 +26,7 @@ export default function SettingsPage() {
         setTwinData({
           name: data.name || '',
           description: data.description || '',
+          specialization_id: data.specialization_id || 'vanilla',
           settings: {
             system_prompt: data.settings?.system_prompt || ''
           }
@@ -121,15 +123,68 @@ export default function SettingsPage() {
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
                 rows={8}
                 value={twinData.settings.system_prompt}
-                onChange={(e) => setTwinData({ 
-                  ...twinData, 
-                  settings: { ...twinData.settings, system_prompt: e.target.value } 
+                onChange={(e) => setTwinData({
+                  ...twinData,
+                  settings: { ...twinData.settings, system_prompt: e.target.value }
                 })}
                 placeholder="Define how your twin should behave and respond..."
               />
               <p className="text-[10px] text-slate-400 mt-2 italic">
                 Tip: Describe the twin's tone, expertise level, and any specific constraints.
               </p>
+            </div>
+
+            {/* Cognitive Engine Selector (Gate 1 Premium UI) */}
+            <div className="pt-6 border-t border-slate-100">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">
+                Cognitive Engine Specialization
+              </label>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Vanilla Card */}
+                <div
+                  onClick={() => setTwinData({ ...twinData, specialization_id: 'vanilla' })}
+                  className={`relative p-5 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-md ${twinData.specialization_id === 'vanilla'
+                    ? 'border-blue-600 bg-blue-50/50'
+                    : 'border-slate-100 bg-white hover:border-slate-300'
+                    }`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="h-8 w-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                    </div>
+                    {twinData.specialization_id === 'vanilla' && (
+                      <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">ACTIVE</span>
+                    )}
+                  </div>
+                  <h3 className="font-bold text-slate-800">Vanilla Brain</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Standard RAG engine with vector memory. Best for general Q&A and document retrieval tasks.
+                  </p>
+                </div>
+
+                {/* VC Brain Card */}
+                <div
+                  onClick={() => setTwinData({ ...twinData, specialization_id: 'vc' })}
+                  className={`relative p-5 rounded-2xl border-2 cursor-pointer transition-all hover:shadow-md ${twinData.specialization_id === 'vc'
+                    ? 'border-purple-600 bg-purple-50/50'
+                    : 'border-slate-100 bg-white hover:border-slate-300'
+                    }`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="h-8 w-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" /></svg>
+                    </div>
+                    {twinData.specialization_id === 'vc' && (
+                      <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded-full">ACTIVE</span>
+                    )}
+                  </div>
+                  <h3 className="font-bold text-slate-800">VC Brain</h3>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    Specialized engine with Graph Memory and Interview protocols. Designed for deal flow and founder vetting.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end pt-4">

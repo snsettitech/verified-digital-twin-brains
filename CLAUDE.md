@@ -92,26 +92,33 @@ npm run dev
 | 4 | Verified-First Knowledge Layer | ✅ Complete |
 | 5 | Access Groups | ✅ Complete |
 | 6 | Mind Ops Layer | ✅ Complete |
-| 7 | Omnichannel Distribution | ✅ Complete (Dec 2025) |
-| 8 | Actions Engine | ✅ Complete (Dec 2025) |
-| 9 | Verification & Governance | ✅ Complete (Dec 2025) |
+| 7 | Omnichannel Distribution | ✅ Complete |
+| 8 | Actions Engine | ✅ Complete |
+| 9 | Verification & Governance | ✅ Complete |
+| 3.5 | Cognitive Brain Builder | ✅ Complete |
 | 10 | Enterprise Scale | 🔲 Vision |
 
-**See:** `ROADMAP.md` for detailed phase information, `PHASE_9_COMPLETION_SUMMARY.md` for latest completion details.
+**See:** `PLATFORM_ROADMAP.md` for Gate-by-Gate details of Phase 3.5.
+
+### Phase 3.5 Tables (Cognitive Brain)
+- `nodes`: (id, twin_id, type, name, description, properties, source_message_id, created_at)
+- `edges`: (id, twin_id, from_node_id, to_node_id, relation_type, strength, created_at)
 
 ## Specialization Architecture
 
-The platform supports **specialization variants** (e.g., VC Brain, Legal Brain) via Strategy Pattern. 
+The platform supports **specialization variants** (e.g., VC Brain, Legal Brain) via a configuration-first approach. 
 
 ### Key Files
-- `backend/modules/specializations/base.py` - Abstract interface
-- `backend/modules/specializations/registry.py` - Load by env/tenant
-- `backend/modules/specializations/vc/` - VC Brain implementation
+- `backend/modules/_core/` - Generic feature base (Host, Scribe, Graph, Guard)
+- `backend/modules/specializations/registry.json` - Global specialization registry
+- `backend/modules/specializations/vc/manifest.json` - VC specialization definition
+- `backend/modules/specializations/vc/ontology/vc_base_pack.json` - VC knowledge structure
+- `frontend/src/specializations/vc/ui_clusters.json` - VC UI definitions
 
-### Environment Variables
-```bash
-SPECIALIZATION=vanilla|vc   # Which variant to load
-```
+### Specialization Selection
+Specialization is resolved per-twin at runtime via the `twins.specialization_id` column in the database.
+- `GET /twins/{twin_id}/specialization` returns the effective manifest.
+- Specializations are **assets-only** (JSON/Prompts); no new core logic.
 
 ### Creating New Specializations
 Use workflow: `/create-specialization`
@@ -124,4 +131,6 @@ Use workflow: `/create-specialization`
 - **Security**: Never commit `.env` files. Use `.env.example` for template keys.
 - **Specializations**: Never modify core modules - only extend via interfaces.
 - **Documentation**: Update CLAUDE.md when adding new modules, endpoints, or tables.
+- **Client Management**: All Supabase clients should use `modules.observability.supabase` for consistency. Never create duplicate client instances.
+- **Database**: Always use migrations in `backend/database/migrations/` for schema changes. The `supabase_schema.sql` is a reference only.
 

@@ -104,43 +104,44 @@ TONE: Professional, analytical, direct. Time is valuable - be concise but thorou
         return {
             "sections": [
                 {
-                    "title": "Deal Flow",
+                    "title": "Core",
                     "items": [
-                        {"name": "Dashboard", "href": "/dashboard", "icon": "home"},
-                        {"name": "Pipeline", "href": "/dashboard/pipeline", "icon": "funnel"},
-                        {"name": "Deal Room", "href": "/dashboard/chat", "icon": "chat"},
-                        {"name": "Screening", "href": "/dashboard/screening", "icon": "filter"}
+                        {"name": "Chat", "href": "/dashboard", "icon": "chat"},
+                        {"name": "Knowledge", "href": "/dashboard/knowledge", "icon": "book"},
+                        {"name": "Brain Graph", "href": "/dashboard/brain", "icon": "activity"},
+                        {"name": "Training Jobs", "href": "/dashboard/training-jobs", "icon": "training"},
+                        {"name": "Studio", "href": "/dashboard/studio", "icon": "studio"}
                     ]
                 },
                 {
-                    "title": "Portfolio",
+                    "title": "Management",
                     "items": [
-                        {"name": "Companies", "href": "/dashboard/portfolio", "icon": "briefcase"},
-                        {"name": "KPIs", "href": "/dashboard/kpis", "icon": "chart"},
-                        {"name": "Reports", "href": "/dashboard/reports", "icon": "document"}
+                        {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
+                        {"name": "Access Groups", "href": "/dashboard/access-groups", "icon": "users"},
+                        {"name": "Governance", "href": "/dashboard/governance", "icon": "shield"}
                     ]
                 },
                 {
-                    "title": "Knowledge",
-                    "items": [
-                        {"name": "Thesis", "href": "/dashboard/thesis", "icon": "target"},
-                        {"name": "Market Maps", "href": "/dashboard/markets", "icon": "map"},
-                        {"name": "Knowledge Base", "href": "/dashboard/knowledge", "icon": "book"}
-                    ]
-                },
-                {
-                    "title": "LP Relations",
-                    "items": [
-                        {"name": "Updates", "href": "/dashboard/lp-updates", "icon": "mail"},
-                        {"name": "Q&A", "href": "/dashboard/verified-qna", "icon": "help"},
-                        {"name": "Documents", "href": "/dashboard/lp-docs", "icon": "folder"}
-                    ]
-                },
-                {
-                    "title": "Operations",
+                    "title": "Automation",
                     "items": [
                         {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"},
-                        {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
+                        {"name": "Triggers", "href": "/dashboard/actions/triggers", "icon": "bolt"},
+                        {"name": "Inbox", "href": "/dashboard/actions/inbox", "icon": "mail"},
+                        {"name": "History", "href": "/dashboard/actions/history", "icon": "history"}
+                    ]
+                },
+                {
+                    "title": "Distribution",
+                    "items": [
+                        {"name": "API Keys", "href": "/dashboard/api-keys", "icon": "key"},
+                        {"name": "Share Links", "href": "/dashboard/share", "icon": "share"},
+                        {"name": "Embed Widget", "href": "/dashboard/widget", "icon": "code"},
+                        {"name": "Team", "href": "/dashboard/users", "icon": "users"}
+                    ]
+                },
+                {
+                    "title": "Settings",
+                    "items": [
                         {"name": "Settings", "href": "/dashboard/settings", "icon": "settings"}
                     ]
                 }
@@ -164,7 +165,8 @@ TONE: Professional, analytical, direct. Time is valuable - be concise but thorou
             "lp_portal": True,
             "market_mapping": True,
             "thesis_matching": True,
-            "dd_automation": True
+            "dd_automation": True,
+            "graph_visualization": True
         }
     
     def get_default_settings(self) -> Dict[str, Any]:

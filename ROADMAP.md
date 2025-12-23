@@ -51,6 +51,24 @@ Moving from a basic RAG bot to a high-fidelity digital mind that clones the owne
 
 ---
 
+### Phase 3.5 - Cognitive Brain Builder
+**Status: Mostly Complete ✅ (Gates 1-4 Done)**
+
+> [!NOTE]
+> Phase 3.5 documentation has been moved to its own dedicated file: [PLATFORM_ROADMAP.md](file:///c:/Users/saina/verified-digital-twin-brain/PLATFORM_ROADMAP.md).
+
+The goal is to enable **domain-specific cognitive twins** with graph memory, structured interviews, and approval workflows.
+
+- [x] **Gate 1: Per-Twin Specialization**: Manifest-driven config loaded per twin (vanilla specialization).
+- [x] **Gate 2: Real Tenant Guard**: Isolation tied to RLS with system RPCs for bypass.
+- [x] **Gate 3: Supabase Graph Persistence**: Cognitive graph stored in `nodes` and `edges` tables.
+- [x] **Gate 4: End-to-End Interview Loop**: Host/Scribe loop with Structured Outputs + Graph search.
+- [x] **Gate 4.5: Split Brain UX**: Left Brain (Knowledge), Right Brain (Interview), Simulator pages.
+- [x] **Gate 5: Approval Versioning**: Immutable profile versions with snapshots, diffs, and delete capability.
+- [x] **Gate 6: Playwright E2E**: Tenant isolation tests with multi-tenant auth support.
+
+---
+
 ## Delphi-Grade Upgrade Phases
 
 ### Phase 4: Verified-First Knowledge Layer
@@ -298,30 +316,30 @@ Moving from a basic RAG bot to a high-fidelity digital mind that clones the owne
 
 These can be implemented quickly to improve the platform:
 
-1. **Enhanced Health Check** (Phase 10, partial)
-   - Add detailed service status (Pinecone, OpenAI, Supabase connectivity)
-   - Add basic metrics endpoint (request count, average latency)
-   - **Effort: Small** | **Impact: Medium**
+1.  **Enhanced Health Check** (Phase 10, partial)
+    - Add detailed service status (Pinecone, OpenAI, Supabase connectivity)
+    - Add basic metrics endpoint (request count, average latency)
+    - **Effort: Small** | **Impact: Medium**
 
-2. **Basic Content Health Checks** (Phase 6, partial)
-   - Add duplicate detection via content hash during ingestion
-   - Add empty extraction detection
-   - **Effort: Small** | **Impact: Medium**
+2.  **Basic Content Health Checks** (Phase 6, partial)
+    - Add duplicate detection via content hash during ingestion
+    - Add empty extraction detection
+    - **Effort: Small** | **Impact: Medium**
 
-3. **Improved Escalation UI** (Phase 4, partial)
-   - Add "Approve as Verified Answer" button directly in escalation inbox
-   - Pre-populate verified QnA form with escalation context
-   - **Effort: Small** | **Impact: High**
+3.  **Improved Escalation UI** (Phase 4, partial)
+    - Add "Approve as Verified Answer" button directly in escalation inbox
+    - Pre-populate verified QnA form with escalation context
+    - **Effort: Small** | **Impact: High**
 
-4. **Widget Domain Allowlist** (Phase 7, partial)
-   - Add simple domain validation in widget API endpoint
-   - Store allowed domains in twin settings
-   - **Effort: Small** | **Impact: Medium**
+4.  **Widget Domain Allowlist** (Phase 7, partial)
+    - Add simple domain validation in widget API endpoint
+    - Store allowed domains in twin settings
+    - **Effort: Small** | **Impact: Medium**
 
-5. **Basic Audit Log** (Phase 9, partial)
-   - Add `audit_events` table with basic event logging
-   - Log all escalations, verified answer approvals, source deletions
-   - **Effort: Small** | **Impact: High**
+5.  **Basic Audit Log** (Phase 9, partial)
+    - Add `audit_events` table with basic event logging
+    - Log all escalations, verified answer approvals, source deletions
+    - **Effort: Small** | **Impact: High**
 
 ---
 
@@ -329,40 +347,40 @@ These can be implemented quickly to improve the platform:
 
 ### Immediate Next Steps (Strict Priority Order)
 
-1. **Phase 4: Verified-First Knowledge Layer** ⭐
-   - **Why First**: Prevents regression, foundation for all other phases
-   - **Blocks**: Phase 5 (Access Groups needs verified QnA for permissions)
-   - **Quick Win**: Enhanced escalation UI can be done in parallel
+1.  **Phase 4: Verified-First Knowledge Layer** ⭐
+    - **Why First**: Prevents regression, foundation for all other phases
+    - **Blocks**: Phase 5 (Access Groups needs verified QnA for permissions)
+    - **Quick Win**: Enhanced escalation UI can be done in parallel
 
-2. **Phase 5: Access Groups** ✅ **COMPLETED**
-   - **Why Second**: Enables B2B use cases, required for Phase 7 (Omnichannel)
-   - **Status**: All deliverables completed - full access group system with permissions, limits, and UI
-   - **Blocks**: Phase 7 (Public/private content separation) - now unblocked
-   - **Dependencies**: Phase 4 (verified QnA for content permissions) - completed
+2.  **Phase 5: Access Groups** ✅ **COMPLETED**
+    - **Why Second**: Enables B2B use cases, required for Phase 7 (Omnichannel)
+    - **Status**: All deliverables completed - full access group system with permissions, limits, and UI
+    - **Blocks**: Phase 7 (Public/private content separation) - now unblocked
+    - **Dependencies**: Phase 4 (verified QnA for content permissions) - completed
 
-3. **Phase 7: Omnichannel Distribution** ✅ **COMPLETED**
-   - **Status**: All deliverables completed - widget, share links, API keys, sessions, user management
-   - **Dependencies**: Phase 5 (Access Groups for public/private) - completed
-   - **Exit Criteria**: All met - widget embedding, share links, domain restrictions working
+3.  **Phase 7: Omnichannel Distribution** ✅ **COMPLETED**
+    - **Status**: All deliverables completed - widget, share links, API keys, sessions, user management
+    - **Dependencies**: Phase 5 (Access Groups for public/private) - completed
+    - **Exit Criteria**: All met - widget embedding, share links, domain restrictions working
 
-4. **Phase 6: Mind Ops Layer** ✅ **COMPLETED**
-   - **Status**: All deliverables completed - loading dock, training jobs, health checks, logs
-   - **Exit Criteria**: All met - operational visibility and control over content ingestion working
+4.  **Phase 6: Mind Ops Layer** ✅ **COMPLETED**
+    - **Status**: All deliverables completed - loading dock, training jobs, health checks, logs
+    - **Exit Criteria**: All met - operational visibility and control over content ingestion working
 
-5. **Phase 9: Verification & Governance**
-   - **Why Fifth**: Trust posture, required before scale
-   - **Dependencies**: Phase 5 (Access Groups for group policies)
-   - **Quick Win**: Basic audit log can be done first
+5.  **Phase 9: Verification & Governance**
+    - **Why Fifth**: Trust posture, required before scale
+    - **Dependencies**: Phase 5 (Access Groups for group policies)
+    - **Quick Win**: Basic audit log can be done first
 
-6. **Phase 8: Actions Engine**
-   - **Why Sixth**: Complex, requires solid foundation
-   - **Dependencies**: Phase 5 (Access Groups for tool access scoping)
-   - **Can Start**: Read-only tool connectors can begin early
+6.  **Phase 8: Actions Engine**
+    - **Why Sixth**: Complex, requires solid foundation
+    - **Dependencies**: Phase 5 (Access Groups for tool access scoping)
+    - **Can Start**: Read-only tool connectors can begin early
 
-7. **Phase 10: Enterprise Scale**
-   - **Why Last**: Only needed at scale
-   - **Dependencies**: All core features should be stable first
-   - **Can Start**: Observability can be added incrementally
+7.  **Phase 10: Enterprise Scale**
+    - **Why Last**: Only needed at scale
+    - **Dependencies**: All core features should be stable first
+    - **Can Start**: Observability can be added incrementally
 
 ---
 
@@ -371,6 +389,7 @@ These can be implemented quickly to improve the platform:
 | Feature | Current State | Delphi-Grade State | Gap | Phase |
 |---------|--------------|-------------------|-----|-------|
 | Verified Answers | Vectors in Pinecone | Postgres `verified_qna` table | Canonical storage, versioning | Phase 4 |
+| Cognitive Graph | None | Relation Graph Memory | Host/Scribe engines, snapshots | Phase 3.5 🟡 |
 | Access Groups | Full segmentation system | Full segmentation system | ✅ Completed | Phase 5 ✅ |
 | Content Staging | Staging dock + health checks | Staging dock + health checks | ✅ Completed | Phase 6 ✅ |
 | Embed Widget | Production-ready with allowlists | Production-ready with allowlists | ✅ Completed | Phase 7 ✅ |

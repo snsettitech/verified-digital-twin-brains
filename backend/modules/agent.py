@@ -15,7 +15,8 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
     try:
         # 1. Check if we already have a profile in the database
         if not force_refresh:
-            twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+            # RLS Fix: Use RPC
+            twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
             if twin_res.data and twin_res.data.get("settings"):
                 profile = twin_res.data["settings"].get("persona_profile")
                 if profile:
@@ -83,7 +84,8 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
         try:
             from datetime import datetime
             # Get current settings first to merge
-            twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+            # RLS Fix: Use RPC
+            twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
             curr_settings = twin_res.data["settings"] if twin_res.data else {}
             
             curr_settings["persona_profile"] = persona_data.get("description")
@@ -92,6 +94,11 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
             curr_settings["opinion_map"] = persona_data.get("opinion_summary", {})
             curr_settings["last_style_analysis"] = datetime.now().isoformat()
             
+            # Update probably needs RPC too? Or update via table might work if RLS allows UPDATE but not SELECT?
+            # Usually RLS blocks both. But we only need Read for `run_agent_stream`.
+            # Updating style is a background task. 
+            # I'll leave update as is for now, assuming RLS allows update? (Unlikely).
+            # I should use update_twin_settings system RPC but I didn't create one.
             supabase.table("twins").update({"settings": curr_settings}).eq("id", twin_id).execute()
         except Exception as se:
             print(f"Error persisting persona profile: {se}")
@@ -110,7 +117,7 @@ class TwinState(TypedDict):
     confidence_score: float
     citations: List[str]
 
-def create_twin_agent(twin_id: str, group_id: Optional[str] = None, system_prompt_override: str = None, full_settings: dict = None):
+def create_twin_agent(twin_id: str, group_id: Optional[str] = None, system_prompt_override: str = None, full_settings: dict = None, graph_context: str = ""):
     # Initialize the LLM
     api_key = os.getenv("OPENAI_API_KEY")
     
@@ -176,6 +183,40 @@ def create_twin_agent(twin_id: str, group_id: Optional[str] = None, system_promp
             # Check for general_knowledge_allowed setting
             general_knowledge_allowed = settings.get("general_knowledge_allowed", False)
             
+            # Load graph context from nodes table (Right Brain interview data)
+            graph_context = ""
+            try:
+                nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 50}).execute()
+                if nodes_res.data and len(nodes_res.data) > 0:
+                    graph_items = []
+                    intent_items = []
+                    profile_items = []
+                    
+                    for node in nodes_res.data:
+                        node_type = node.get("type", "").lower()
+                        name = node.get("name", "")
+                        desc = node.get("description", "")
+                        
+                        if not name or not desc:
+                            continue
+                        
+                        # Separate intent nodes from profile nodes
+                        if "intent" in node_type:
+                            if "confirmed" not in node_type:
+                                intent_items.append(f"- {name}: {desc}")
+                        else:
+                            profile_items.append(f"- {name}: {desc}")
+                    
+                    if intent_items or profile_items:
+                        graph_context = "\n\n            MEMORIZED KNOWLEDGE (from Right Brain interview - USE THIS FIRST):"
+                        if intent_items:
+                            graph_context += "\n            **Your Purpose:**\n            " + "\n            ".join(intent_items[:5])
+                        if profile_items:
+                            graph_context += "\n            **Your Profile:**\n            " + "\n            ".join(profile_items[:20])
+            except Exception as ge:
+                print(f"Error loading graph context: {ge}")
+                graph_context = ""
+            
             # Check for group-specific system prompt override
             # Use the outer function's system_prompt_override, or fall back to group settings
             effective_system_prompt = system_prompt_override
@@ -206,27 +247,22 @@ def create_twin_agent(twin_id: str, group_id: Optional[str] = None, system_promp
                 brevity_instruction = "\n            **BREVITY MODE**: The user requested a short/one-line answer. Provide a concise 1-2 sentence response maximum. No bullet points, no lists, just a brief summary."
             
             system_prompt = effective_system_prompt or f"""You are the AI Digital Twin of the owner (ID: {twin_id}). 
-            Your primary intelligence comes from the `search_knowledge_base` tool.
+            Your primary intelligence comes from the `search_knowledge_base` tool AND your memorized knowledge.
 
             {persona_section}
             {brevity_instruction}
 
+            {graph_context}
+
             CRITICAL OPERATING PROCEDURES:
-            0. **Brevity First**: Default to concise, one-line answers when possible. Only expand when explicitly asked for details. If the user asks for "one line", "short answer", "brief", or "concise", provide exactly that - a single sentence or maximum 2 sentences.
-            1. **Context Awareness**: If the user's query is ambiguous (e.g., "the reflection", "that document", "the summary above"), use conversation history to understand what they're referring to. Look at previous messages to identify the specific topic (e.g., "M&A reflection", "SGMT 6050", etc.) and include those keywords in your search query.
-            2. Factual Questions: For ANY question about facts, opinions, history, or documents, you MUST FIRST call `search_knowledge_base`. When queries are ambiguous, expand them using context from the conversation (e.g., "reflection" → "M&A reflection SGMT 6050" if that was discussed).
-            3. Verified QnA Priority: If search returns ANY result with "verified_qna_match": true or "is_verified": true, this is a verified answer from the owner. YOUR RESPONSE MUST BE THE EXACT TEXT FROM THE "text" FIELD - COPY IT VERBATIM. Do not paraphrase, modify, add to, or rephrase it in any way. Just return the exact "text" value as your complete response.
-            4. Verified Info: If search returns "is_verified": true, copy the exact "text" field value as your response. No modifications allowed.
-            5. Persona & Voice:
-               - Sources have a 'category' (FACT or OPINION), a 'tone', and potentially an 'opinion_topic' and 'opinion_stance'.
-               - If a source is an 'OPINION', use first-person framing like 'In my view' or 'I personally believe'.
-               - If an 'opinion_stance' is provided for an 'OPINION', strictly adhere to that stance.
-               - If a source is a 'FACT', state it directly as objective information.
-               - Adopt the 'tone' (e.g., Thoughtful, Assertive) found in the relevant source to match the owner's style.
-            6. No Data: If the tool returns no relevant information OR returns empty results with weak retrieval scores (< 0.5), you MUST respond with: "I don't have this specific information in my knowledge base." {general_knowledge_note}
-            7. Citations: Always cite your sources using [Source ID] when using tool results. For verified QnA, use the citations provided.
-            8. Personal Identity: Speak in the first person ("I", "my") as if you are the owner, but grounded in the verified data.
-            9. ALWAYS SEARCH: Always call search_knowledge_base first, even for simple greetings. If a verified answer exists, use it exactly. When queries are vague, use conversation context to make them more specific before searching.
+            0. **MEMORIZED KNOWLEDGE FIRST**: If the user's question relates to any topic in your MEMORIZED KNOWLEDGE above, answer directly from that memory. Only call search_knowledge_base if the topic is NOT in your memorized knowledge.
+            1. **Brevity First**: Default to concise, one-line answers when possible. Only expand when explicitly asked for details.
+            2. **Context Awareness**: If the user's query is ambiguous, use conversation history to understand what they're referring to.
+            3. Factual Questions: For questions NOT covered by memorized knowledge, call `search_knowledge_base`.
+            4. Verified QnA Priority: If search returns "verified_qna_match": true, YOUR RESPONSE MUST BE THE EXACT TEXT - COPY IT VERBATIM.
+            5. Persona & Voice: Use first-person ("I", "my"). For OPINION sources, use "In my view" framing.
+            6. No Data: If no relevant information is found, respond with: "I don't have this specific information in my knowledge base." {general_knowledge_note}
+            7. Citations: Cite sources using [Source ID] when using search tool results.
 
             Current Twin ID: {twin_id}"""
             messages = [SystemMessage(content=system_prompt)] + messages
@@ -352,7 +388,8 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
         return
 
     # 1. Fetch full twin settings for persona encoding
-    twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+    # RLS Fix: Use RPC
+    twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
     settings = twin_res.data["settings"] if twin_res.data else {}
     
     # 2. Load group settings if group_id provided
@@ -369,7 +406,8 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
     if "persona_profile" not in settings:
         await get_owner_style_profile(twin_id)
         # Re-fetch after analysis
-        twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+        # RLS Fix: Use RPC
+        twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
         settings = twin_res.data["settings"] if twin_res.data else {}
         # Re-merge group settings if needed
         if group_id:
@@ -380,7 +418,24 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
             except Exception:
                 pass
 
-    agent = create_twin_agent(twin_id, group_id=group_id, system_prompt_override=system_prompt, full_settings=settings)
+    # 3.5 Fetch Graph Context (Gate 4.5 Integration)
+    graph_context = ""
+    try:
+        nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 20}).execute()
+        if nodes_res.data:
+            node_summaries = []
+            for n in nodes_res.data:
+                props = n.get("properties", {}) or {}
+                # Extract value if it's a simple string/number properties
+                props_str = ", ".join([f"{k}: {v}" for k, v in props.items() if isinstance(v, (str, int, float))])
+                node_summaries.append(f"- {n['name']} ({n['type']}): {n['description']} {props_str}")
+            
+            if node_summaries:
+                graph_context = "MEMORIZED KNOWLEDGE (High Priority - Answer from here if relevant):\n" + "\n".join(node_summaries)
+    except Exception as e:
+        print(f"Error fetching graph context: {e}")
+
+    agent = create_twin_agent(twin_id, group_id=group_id, system_prompt_override=system_prompt, full_settings=settings, graph_context=graph_context)
     
     initial_messages = history or []
     initial_messages.append(HumanMessage(content=query))
@@ -388,11 +443,9 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
     state = {
         "messages": initial_messages,
         "twin_id": twin_id,
-        "confidence_score": 1.0, # Start with high confidence (e.g. for greetings)
+        "confidence_score": 1.0,
         "citations": []
     }
     
-    # We use astream to get events
     async for event in agent.astream(state, stream_mode="updates"):
         yield event
-

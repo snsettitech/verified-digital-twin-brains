@@ -1,0 +1,10 @@
+{
+    "specializations": [
+        {
+            "id": "vc",
+            "display_name": "VC Brain",
+            "description": "Venture Capital specialization for the Verified Digital Twin Brain",
+            "manifest_path": "modules/specializations/vc/manifest.json"
+        }
+    ]
+}

@@ -47,7 +47,9 @@ export function SpecializationProvider({ children }: { children: React.ReactNode
     useEffect(() => {
         const fetchConfig = async () => {
             try {
-                const res = await fetch('http://localhost:8000/config/specialization');
+                // TODO: Get real twin ID from auth/url context. Using dev twin for now.
+                const twinId = 'eeeed554-9180-4229-a9af-0f8dd2c69e9b';
+                const res = await fetch(`http://localhost:8000/twins/${twinId}/specialization`);
                 if (res.ok) {
                     const data = await res.json();
                     setConfig(data);

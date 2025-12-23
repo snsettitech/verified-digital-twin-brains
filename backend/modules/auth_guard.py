@@ -10,7 +10,22 @@ load_dotenv()
 SECRET_KEY = os.getenv("JWT_SECRET", "secret")
 ALGORITHM = "HS256"
 DEV_MODE = os.getenv("DEV_MODE", "true").lower() == "true"  # Default to true for local development
-DEV_TOKEN = "development_token"
+
+# Multi-tenant dev tokens for testing tenant isolation
+DEV_TOKENS = {
+    "development_token": {
+        "user_id": "b415a7a9-c8f8-43b3-8738-a0062a90c016",
+        "tenant_id": "986f270e-2d5c-4f88-ad88-7d2a15ea8ab1",
+        "role": "owner",
+        "allowed_twins": ["eeeed554-9180-4229-a9af-0f8dd2c69e9b"]
+    },
+    "tenant_b_dev_token": {
+        "user_id": "user-b-id-0000-0000-0000",
+        "tenant_id": "tenant-b-id-0000-0000-0000",
+        "role": "owner",
+        "allowed_twins": []  # Tenant B has no twins - for testing isolation
+    }
+}
 
 def get_current_user(
     request: Request,
@@ -66,13 +81,17 @@ def get_current_user(
             "api_key_id": key_info["id"]
         }
 
-    # 2. Development bypass
-    if DEV_MODE and authorization == f"Bearer {DEV_TOKEN}":
-        return {
-            "user_id": "b415a7a9-c8f8-43b3-8738-a0062a90c016", 
-            "tenant_id": "986f270e-2d5c-4f88-ad88-7d2a15ea8ab1", 
-            "role": "owner"
-        }
+    # 2. Development bypass with multi-tenant support
+    if DEV_MODE and authorization:
+        token = authorization.replace("Bearer ", "")
+        if token in DEV_TOKENS:
+            token_info = DEV_TOKENS[token]
+            return {
+                "user_id": token_info["user_id"],
+                "tenant_id": token_info["tenant_id"],
+                "role": token_info["role"],
+                "allowed_twins": token_info.get("allowed_twins", [])
+            }
 
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")

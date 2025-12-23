@@ -1,6 +1,6 @@
 import os
 from pinecone import Pinecone
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 import cohere
 from dotenv import load_dotenv
 
@@ -9,6 +9,7 @@ load_dotenv()
 _pc_client = None
 _pinecone_index = None
 _openai_client = None
+_async_openai_client = None
 _cohere_client = None
 
 def get_cohere_client():
@@ -27,6 +28,15 @@ def get_openai_client():
             raise ValueError("OPENAI_API_KEY not found in environment")
         _openai_client = OpenAI(api_key=api_key)
     return _openai_client
+
+def get_async_openai_client():
+    global _async_openai_client
+    if _async_openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY not found in environment")
+        _async_openai_client = AsyncOpenAI(api_key=api_key)
+    return _async_openai_client
 
 def get_pinecone_client():
     global _pc_client
