@@ -71,66 +71,12 @@ export function FirstChatStep({ twinName, twinId, onDataCollected }: FirstChatSt
 
     const progress = Math.round((currentQuestionIndex / INTERVIEW_QUESTIONS.length) * 100);
 
-    // Initialize with first question
-    useEffect(() => {
-        const welcomeMessage: Message = {
-            role: 'assistant',
-            content: `Hi! 👋 I'm here to learn about you so I can become your digital twin. I'll ask you a few questions to understand your background, expertise, and style. This usually takes about 5 minutes.
-
-Let's get started!`,
-        };
-
-        setMessages([welcomeMessage]);
-
-        // Ask first question after delay
-        setTimeout(() => {
-            askQuestion(0);
-        }, 1500);
-    }, []);
-
+    // Scroll to bottom helper - defined before useEffect that depends on it
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
 
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    const askQuestion = (index: number) => {
-        if (index >= INTERVIEW_QUESTIONS.length) {
-            // All questions answered - complete the interview
-            completeInterview();
-            return;
-        }
-
-        setIsTyping(true);
-
-        setTimeout(() => {
-            const question = INTERVIEW_QUESTIONS[index];
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: question.question,
-                questionId: question.id
-            }]);
-            setIsTyping(false);
-        }, 800);
-    };
-
-    const askFollowUp = (index: number) => {
-        setIsTyping(true);
-
-        setTimeout(() => {
-            const question = INTERVIEW_QUESTIONS[index];
-            setMessages(prev => [...prev, {
-                role: 'assistant',
-                content: question.followUp,
-                questionId: question.id + '_followup'
-            }]);
-            setIsTyping(false);
-            setNeedsFollowUp(false);
-        }, 800);
-    };
-
+    // Complete interview function - defined before it's used
     const completeInterview = () => {
         setIsTyping(true);
 
@@ -153,6 +99,67 @@ Click "Get Started" to go to your dashboard.`
             setIsComplete(true);
             onDataCollected?.(collectedData);
         }, 1000);
+    };
+
+    // Ask question function - defined before useEffect that calls it
+    const askQuestion = (index: number) => {
+        if (index >= INTERVIEW_QUESTIONS.length) {
+            // All questions answered - complete the interview
+            completeInterview();
+            return;
+        }
+
+        setIsTyping(true);
+
+        setTimeout(() => {
+            const question = INTERVIEW_QUESTIONS[index];
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: question.question,
+                questionId: question.id
+            }]);
+            setIsTyping(false);
+        }, 800);
+    };
+
+    // Initialize with first question - uses askQuestion which is now defined above
+    useEffect(() => {
+        const welcomeMessage: Message = {
+            role: 'assistant',
+            content: `Hi! 👋 I'm here to learn about you so I can become your digital twin. I'll ask you a few questions to understand your background, expertise, and style. This usually takes about 5 minutes.
+
+Let's get started!`,
+        };
+
+        setMessages([welcomeMessage]);
+
+        // Ask first question after delay
+        const timer = setTimeout(() => {
+            askQuestion(0);
+        }, 1500);
+
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Scroll when messages change
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
+
+    const askFollowUp = (index: number) => {
+        setIsTyping(true);
+
+        setTimeout(() => {
+            const question = INTERVIEW_QUESTIONS[index];
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: question.followUp,
+                questionId: question.id + '_followup'
+            }]);
+            setIsTyping(false);
+            setNeedsFollowUp(false);
+        }, 800);
     };
 
     const handleSend = async () => {

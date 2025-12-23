@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 
 interface OverviewTabProps {
     twinId: string;
@@ -95,14 +96,14 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                 <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {quickActions.map((action, index) => (
-                        <a
+                        <Link
                             key={index}
                             href={action.href}
                             className="flex flex-col items-center gap-2 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all hover:scale-[1.02]"
                         >
                             <span className="text-2xl">{action.icon}</span>
                             <span className="text-sm font-medium text-slate-300">{action.label}</span>
-                        </a>
+                        </Link>
                     ))}
                 </div>
             </div>
@@ -113,14 +114,14 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold text-white">Recent Conversations</h3>
-                        <a href="?tab=chat" className="text-sm text-indigo-400 hover:text-indigo-300">View all</a>
+                        <Link href="?tab=chat" className="text-sm text-indigo-400 hover:text-indigo-300">View all</Link>
                     </div>
 
                     <div className="space-y-3">
                         {defaultStats.totalConversations === 0 ? (
                             <div className="text-center py-8">
                                 <p className="text-slate-500 text-sm">No conversations yet</p>
-                                <a href="?tab=chat" className="text-indigo-400 text-sm mt-2 inline-block">Start your first chat →</a>
+                                <Link href="?tab=chat" className="text-indigo-400 text-sm mt-2 inline-block">Start your first chat →</Link>
                             </div>
                         ) : (
                             <p className="text-slate-400 text-sm">Loading recent conversations...</p>
@@ -132,7 +133,7 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold text-white">Knowledge Health</h3>
-                        <a href="?tab=knowledge" className="text-sm text-indigo-400 hover:text-indigo-300">Manage</a>
+                        <Link href="?tab=knowledge" className="text-sm text-indigo-400 hover:text-indigo-300">Manage</Link>
                     </div>
 
                     {/* Progress Ring */}
