@@ -93,7 +93,7 @@ USING (
     EXISTS (
         SELECT 1 FROM twins
         WHERE twins.id = jobs.twin_id
-        AND twins.owner_id = auth.uid()
+        AND twins.tenant_id = auth.uid()
     )
 );
 
@@ -118,7 +118,7 @@ USING (
             EXISTS (
                 SELECT 1 FROM twins
                 WHERE twins.id = jobs.twin_id
-                AND twins.owner_id = auth.uid()
+                AND twins.tenant_id = auth.uid()
             )
         )
     )

@@ -1,6 +1,31 @@
-# Learnings Log
-
 > Compounding ledger of lessons learned. Add new entries at the top.
+
+---
+
+## 2024-12-24: Twins Table Uses tenant_id, Not owner_id
+
+### Issue
+Jobs migration failed with: `ERROR: 42703: column twins.owner_id does not exist`
+
+### Root Cause
+The twins table uses `tenant_id` to identify the owner, not `owner_id`. Different naming convention than expected.
+
+### Fix
+Changed RLS policies and backend router to use `twins.tenant_id = auth.uid()` instead of `twins.owner_id = auth.uid()`.
+
+### Preventative Guardrail
+- **Always check existing migrations** for column naming patterns before writing new ones
+- Look at `create_metrics_tables.sql` as a reference for RLS policy patterns
+
+### Reusable Snippet
+```sql
+-- Correct pattern for twins ownership check
+EXISTS (
+    SELECT 1 FROM twins
+    WHERE twins.id = <table>.twin_id
+    AND twins.tenant_id = auth.uid()
+)
+```
 
 ---
 

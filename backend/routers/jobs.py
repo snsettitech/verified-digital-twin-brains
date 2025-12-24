@@ -60,7 +60,7 @@ class JobLogResponse(BaseModel):
 
 def get_user_twin_ids(user_id: str) -> List[str]:
     """Get list of twin IDs owned by the user."""
-    result = supabase.table("twins").select("id").eq("owner_id", user_id).execute()
+    result = supabase.table("twins").select("id").eq("tenant_id", user_id).execute()
     return [row["id"] for row in result.data] if result.data else []
 
 
