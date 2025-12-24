@@ -447,5 +447,19 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
         "citations": []
     }
     
-    async for event in agent.astream(state, stream_mode="updates"):
-        yield event
+    # Phase 10: Metrics instrumentation
+    from modules.metrics_collector import MetricsCollector
+    import time
+    
+    metrics = MetricsCollector(twin_id=twin_id)
+    metrics.record_request()
+    agent_start = time.time()
+    
+    try:
+        async for event in agent.astream(state, stream_mode="updates"):
+            yield event
+    finally:
+        # Record agent latency and flush metrics
+        agent_latency = (time.time() - agent_start) * 1000
+        metrics.record_latency("agent", agent_latency)
+        metrics.flush()

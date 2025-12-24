@@ -288,3 +288,39 @@ curl https://your-backend.onrender.com/health
 | `frontend/components/Chat/ChatInterface.tsx` | Supabase auth |
 | `DEPLOYMENT_READINESS.md` | Created |
 | `DEPLOYMENT_RUNBOOK.md` | This file (corrected) |
+
+---
+
+## Phase 10 Additions (Enterprise Scale)
+
+### New Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /metrics/health` | Enhanced health check (Supabase, Pinecone, OpenAI) |
+| `GET /metrics/system` | System-wide metrics summary |
+| `GET /metrics/usage/{twin_id}` | Per-twin usage metrics |
+| `GET /metrics/quota/{tenant_id}` | Tenant quota status |
+
+### Migration Required
+
+Apply the Phase 10 migration in Supabase SQL Editor:
+
+```sql
+-- Run contents of: backend/migrations/phase10_metrics.sql
+-- Creates: metrics, usage_quotas, service_health_logs tables
+```
+
+### Dashboard Access
+
+After deployment, the metrics dashboard is available at:
+- `/dashboard/metrics` - System metrics, health status, quota usage
+
+### Post-Deploy Verification
+
+```bash
+# Test enhanced health check
+curl https://your-backend.onrender.com/metrics/health
+# Expected: { "status": "healthy", "services": { ... } }
+```
+

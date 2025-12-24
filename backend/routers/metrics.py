@@ -476,3 +476,202 @@ async def get_user_events(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 10: Enterprise Scale - System Metrics
+# ============================================================================
+
+@router.get("/system")
+async def get_system_metrics(days: int = Query(7, ge=1, le=30)):
+    """
+    Get system-wide metrics summary.
+    
+    Returns aggregated metrics across all twins for admin dashboard.
+    """
+    from modules.metrics_collector import get_metrics_summary, get_usage_by_twin
+    
+    try:
+        summary = get_metrics_summary(twin_id=None, days=days)
+        usage_by_twin = get_usage_by_twin(days=days)
+        
+        return {
+            "summary": summary,
+            "usage_by_twin": usage_by_twin[:10],  # Top 10
+            "period_days": days
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/usage/{twin_id}")
+async def get_twin_usage(twin_id: str, days: int = Query(7, ge=1, le=30)):
+    """
+    Get usage metrics for a specific twin.
+    
+    Returns token usage, latency stats, and error counts.
+    """
+    from modules.metrics_collector import get_metrics_summary
+    
+    try:
+        summary = get_metrics_summary(twin_id=twin_id, days=days)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Phase 10: Enterprise Scale - Service Health
+# ============================================================================
+
+@router.get("/health")
+async def get_detailed_health():
+    """
+    Get detailed health status of all external services.
+    
+    Checks: Supabase, Pinecone, OpenAI connectivity.
+    """
+    import time
+    import os
+    from modules.metrics_collector import log_service_health
+    
+    health = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "services": {}
+    }
+    
+    # Check Supabase
+    try:
+        start = time.time()
+        result = supabase.table("twins").select("id").limit(1).execute()
+        response_ms = (time.time() - start) * 1000
+        health["services"]["supabase"] = {
+            "status": "healthy",
+            "response_ms": round(response_ms, 2)
+        }
+        log_service_health("supabase", "healthy", response_ms)
+    except Exception as e:
+        health["services"]["supabase"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health["status"] = "degraded"
+        log_service_health("supabase", "unhealthy", error_message=str(e))
+    
+    # Check Pinecone
+    try:
+        from pinecone import Pinecone
+        start = time.time()
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        index = pc.Index(os.getenv("PINECONE_INDEX_NAME", "digital-twin"))
+        stats = index.describe_index_stats()
+        response_ms = (time.time() - start) * 1000
+        health["services"]["pinecone"] = {
+            "status": "healthy",
+            "response_ms": round(response_ms, 2),
+            "vector_count": stats.total_vector_count if stats else 0
+        }
+        log_service_health("pinecone", "healthy", response_ms)
+    except Exception as e:
+        health["services"]["pinecone"] = {
+            "status": "unhealthy",
+            "error": str(e)
+        }
+        health["status"] = "degraded"
+        log_service_health("pinecone", "unhealthy", error_message=str(e))
+    
+    # Check OpenAI (lightweight check - just validate key format)
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    if openai_key and openai_key.startswith("sk-"):
+        health["services"]["openai"] = {
+            "status": "configured",
+            "note": "API key present, not validated to avoid cost"
+        }
+    else:
+        health["services"]["openai"] = {
+            "status": "unconfigured",
+            "error": "OPENAI_API_KEY not set or invalid format"
+        }
+        health["status"] = "degraded"
+    
+    return health
+
+
+# ============================================================================
+# Phase 10: Enterprise Scale - Usage Quotas
+# ============================================================================
+
+@router.get("/quota/{tenant_id}")
+async def get_quota_status(tenant_id: str):
+    """
+    Get current quota status for a tenant.
+    
+    Returns current usage vs limits for all quota types.
+    """
+    try:
+        result = supabase.table("usage_quotas")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+        
+        quotas = result.data or []
+        
+        # Default quotas if none set
+        if not quotas:
+            return {
+                "tenant_id": tenant_id,
+                "quotas": [
+                    {
+                        "quota_type": "daily_tokens",
+                        "limit": 100000,
+                        "current_usage": 0,
+                        "remaining": 100000,
+                        "percent_used": 0
+                    }
+                ]
+            }
+        
+        formatted = []
+        for q in quotas:
+            limit_val = q.get("limit_value", 100000)
+            current = q.get("current_usage", 0)
+            formatted.append({
+                "quota_type": q["quota_type"],
+                "limit": limit_val,
+                "current_usage": current,
+                "remaining": limit_val - current,
+                "percent_used": round((current / limit_val) * 100, 1) if limit_val > 0 else 0,
+                "reset_at": q.get("reset_at")
+            })
+        
+        return {
+            "tenant_id": tenant_id,
+            "quotas": formatted
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/quota/{tenant_id}/set")
+async def set_quota(tenant_id: str, quota_type: str, limit_value: int):
+    """
+    Set or update a quota for a tenant.
+    
+    Admin endpoint to configure tenant limits.
+    """
+    try:
+        # Upsert quota
+        result = supabase.table("usage_quotas").upsert({
+            "tenant_id": tenant_id,
+            "quota_type": quota_type,
+            "limit_value": limit_value,
+            "reset_at": (datetime.utcnow() + timedelta(days=1)).isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }, on_conflict="tenant_id,quota_type").execute()
+        
+        return {"success": True, "data": result.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
