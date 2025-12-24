@@ -1,0 +1,1 @@
+export { SplitBrainLayout } from './SplitBrainLayout';

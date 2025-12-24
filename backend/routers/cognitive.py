@@ -1,0 +1,641 @@
+# backend/routers/cognitive.py
+"""Cognitive Brain interview endpoints.
+
+Integrates the Host and Scribe engines for structured knowledge elicitation:
+- Host engine: determines next slot to fill based on host_policy.json
+- Scribe engine: extracts structured output from conversation turns
+
+Endpoints:
+- POST /cognitive/interview/{twin_id}: Start or continue a cognitive interview
+- GET /cognitive/graph/{twin_id}: Get the current cognitive graph state
+"""
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+import json
+
+from modules.auth_guard import get_current_user
+from modules.observability import supabase, get_messages, log_interaction, create_conversation
+from modules.agent import run_agent_stream
+from modules._core.host_engine import get_next_slot, get_next_question, process_turn
+from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions
+from modules._core.registry_loader import get_specialization_manifest
+from modules.specializations import get_specialization
+from langchain_core.messages import AIMessage
+
+router = APIRouter(tags=["cognitive"])
+
+
+class InterviewRequest(BaseModel):
+    """Request for cognitive interview turn."""
+    message: str
+    conversation_id: Optional[str] = None
+    session_id: Optional[str] = None  # Interview session ID
+    current_slot: Optional[str] = None  # Which slot we're currently filling
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class InterviewResponse(BaseModel):
+    """Response from cognitive interview turn."""
+    response: str
+    conversation_id: str
+    session_id: Optional[str] = None  # Interview session ID
+    stage: str = "opening"  # Current interview stage
+    intent_summary: Optional[str] = None  # For confirmation stage
+    next_slot: Optional[Dict[str, Any]] = None  # Host's suggested next slot
+    suggested_question: Optional[str] = None  # Question template for next slot
+    follow_up_question: Optional[str] = None  # Follow-up if response is vague
+    extracted_data: Optional[Dict[str, Any]] = None  # Scribe's structured output
+    confidence: float = 0.0
+    contradictions: List[Dict[str, Any]] = []
+    missing_slots: List[Dict[str, Any]] = []
+    progress: Dict[str, Any] = {}  # { "intent_complete": bool, "slots_filled": 5, "total_slots": 12 }
+
+
+def _load_host_policy(spec_name: str) -> Dict[str, Any]:
+    """Load host policy from specialization manifest."""
+    from pathlib import Path
+    try:
+        manifest = get_specialization_manifest(spec_name)
+        policy_path = manifest.get("host_policy")
+        if policy_path:
+            backend_base = Path(__file__).parent.parent
+            full_path = backend_base / policy_path
+            if full_path.is_file():
+                with full_path.open("r", encoding="utf-8") as f:
+                    return json.load(f)
+    except Exception as e:
+        print(f"Warning: Could not load host policy: {e}")
+    return {}
+
+
+@router.post("/cognitive/interview/{twin_id}", response_model=InterviewResponse)
+async def cognitive_interview(
+    twin_id: str,
+    request: InterviewRequest,
+    user=Depends(get_current_user)
+):
+    """
+    Process a cognitive interview turn with intent-first podcast flow.
+
+    Stages:
+    1. OPENING: Welcome message, set expectations
+    2. INTENT_CAPTURE: Ask 3 intent questions
+    3. CONFIRM_INTENT: Summarize and confirm understanding
+    4. DEEP_INTERVIEW: Slot-driven with podcast-style questions
+    5. COMPLETE: All required slots filled
+    """
+    from modules._core.interview_controller import (
+        InterviewController, InterviewStage, 
+        generate_podcast_question, INTENT_QUESTIONS
+    )
+    from modules._core.scribe_engine import process_interaction
+    
+    spec = get_specialization()
+    host_policy = _load_host_policy(spec.name)
+
+    # Get or create conversation
+    conversation_id = request.conversation_id
+    if not conversation_id:
+        conv_obj = create_conversation(twin_id, user.get("user_id") if user else None)
+        conversation_id = conv_obj["id"]
+
+    # Get or create interview session
+    session = InterviewController.get_or_create_session(twin_id, conversation_id)
+    session_id = session.get("id")
+    stage = InterviewController.get_stage(session)
+    
+    # Get conversation history
+    history = get_messages(conversation_id)
+    
+    # Fetch existing nodes
+    existing_nodes = []
+    intent_nodes = []
+    filled_slots = {}
+    try:
+        nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 100}).execute()
+        existing_nodes = nodes_res.data or []
+        
+        for node in existing_nodes:
+            ntype = node.get("type", "").lower()
+            nname = node.get("name", "").lower()
+            
+            # Track intent nodes separately
+            if "intent" in ntype:
+                intent_nodes.append(node)
+                if "confirmed" in ntype and node.get("description", "").lower() == "true":
+                    filled_slots["intent_confirmed"] = True
+            
+            # Map other nodes to slots
+            if "thesis" in ntype or "thesis" in nname:
+                filled_slots["investment_thesis"] = node
+            elif "sector" in ntype or "focus" in nname:
+                filled_slots["sector_focus"] = node
+            elif "check" in nname and "size" in nname:
+                filled_slots["check_size_range"] = node
+            elif "stage" in ntype or "stage" in nname:
+                filled_slots["stage_focus"] = node
+            elif "deal" in nname and "source" in nname:
+                filled_slots["deal_flow_sources"] = node
+    except Exception as e:
+        print(f"Error fetching graph state: {e}")
+
+    # ========== BUILD FULL KNOWLEDGE FROM GRAPH ==========
+    # Include descriptions so we actually know what was learned
+    knowledge_items = []
+    agent_context = ""
+    
+    if existing_nodes:
+        for node in existing_nodes:
+            name = node.get("name", "")
+            desc = node.get("description", "")
+            ntype = node.get("type", "").lower()
+            
+            if not name:
+                continue
+            
+            # Skip internal nodes
+            if "intent" in ntype and "confirmed" in ntype:
+                continue
+            
+            # Build knowledge item with description
+            if desc and len(desc) > 5:
+                knowledge_items.append(f"- {name}: {desc}")
+            else:
+                knowledge_items.append(f"- {name}")
+    
+    # Short summary (3 items max)
+    short_summary = ", ".join([k.split(":")[0].replace("- ", "") for k in knowledge_items[:3]])
+    if len(knowledge_items) > 3:
+        short_summary += f" (+{len(knowledge_items) - 3} more)"
+    
+    # Full context for agent (with descriptions)
+    if knowledge_items:
+        agent_context = "What I know about you from our interviews:\n" + "\n".join(knowledge_items[:15])
+    
+    # ========== COMMAND DETECTION ==========
+    msg_lower = request.message.lower().strip()
+    
+    # "What do you know?" - Show FULL knowledge with descriptions
+    if any(p in msg_lower for p in ["what do you know", "what have we", "remember"]):
+        if knowledge_items:
+            full_knowledge = "\n".join(knowledge_items[:10])
+            return InterviewResponse(
+                response=f"Here's what I've learned about you:\n\n{full_knowledge}\n\nWhat would you like to explore or add?",
+                conversation_id=conversation_id, session_id=session_id,
+                stage=stage.value, progress={"slots_filled": len(knowledge_items)}
+            )
+        else:
+            return InterviewResponse(
+                response="Nothing yet. Let's start — what's this twin for?",
+                conversation_id=conversation_id, session_id=session_id,
+                stage=InterviewStage.INTENT_CAPTURE.value
+            )
+    
+    # "Start fresh" - Clear and go
+    if any(p in msg_lower for p in ["start fresh", "start over", "reset", "delete", "clear", "forget"]):
+        try:
+            supabase.table("nodes").delete().eq("twin_id", twin_id).execute()
+            supabase.table("edges").delete().eq("twin_id", twin_id).execute()
+            InterviewController.update_session(session_id, new_stage=InterviewStage.OPENING.value, new_intent_confirmed=False)
+        except: pass
+        return InterviewResponse(
+            response="Done. Starting fresh.\n\nWhat's this twin for?",
+            conversation_id=conversation_id, session_id=session_id,
+            stage=InterviewStage.INTENT_CAPTURE.value
+        )
+    
+    # "Continue" - Just proceed
+    if any(p in msg_lower for p in ["continue", "yes", "proceed", "go ahead", "next", "let's go"]):
+        next_slot = get_next_slot(host_policy, filled_slots)
+        if next_slot:
+            q = get_next_question(host_policy, filled_slots, spec.name)
+            question = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
+            return InterviewResponse(
+                response=question,
+                conversation_id=conversation_id, session_id=session_id,
+                stage=InterviewStage.DEEP_INTERVIEW.value,
+                suggested_question=question
+            )
+
+    # ========== STAGE-BASED ROUTING ==========
+    
+    final_response = ""
+    suggested_question = None
+    follow_up_question = None
+    intent_summary = None
+    next_stage = stage.value
+    
+    # STAGE 0: OPENING
+    if stage == InterviewStage.OPENING:
+        if short_summary and len(existing_nodes) > 3:
+            # Returning user - show what we know and offer to help
+            final_response = f"Welcome back! Here's what I know:\n\n{chr(10).join(knowledge_items[:5])}\n\nHow can I help?"
+            next_stage = InterviewStage.COMPLETE.value
+            InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+        else:
+            # Fresh user - one question
+            final_response = "Let's build your twin. What's it for?"
+            next_stage = InterviewStage.INTENT_CAPTURE.value
+            InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+    
+    # STAGE 1: INTENT CAPTURE
+    elif stage == InterviewStage.INTENT_CAPTURE:
+        # Extract from response
+        scribe_result = await process_interaction(
+            twin_id=twin_id,
+            user_message=request.message,
+            assistant_message="",  # Will be generated below
+            history=history
+        )
+        
+        log_interaction(conversation_id, "user", request.message)
+        
+        # Check how many intent nodes we have now
+        intent_count = len([n for n in (scribe_result.get("nodes") or []) if "intent" in str(n).lower()])
+        total_intent = len(intent_nodes) + intent_count
+        
+        if total_intent >= 2:
+            # Enough intent captured - move to profile
+            first_slot = get_next_slot(host_policy, filled_slots)
+            if first_slot:
+                q = get_next_question(host_policy, filled_slots, spec.name)
+                question = q.get("question") if q else f"What's your {first_slot['slot_id'].replace('_', ' ')}?"
+                final_response = f"Got it. Building your profile now.\n\n{question}"
+            else:
+                final_response = "Got it. Let me start building your profile."
+            next_stage = InterviewStage.DEEP_INTERVIEW.value
+        else:
+            # Need more intent info
+            next_intent_q = InterviewController.get_next_intent_question(session)
+            if next_intent_q:
+                final_response = next_intent_q["question"]
+                InterviewController.update_session(session_id, add_template_id=next_intent_q["id"], increment_turn=True)
+            else:
+                # All intent questions asked - skip confirmation, go straight to profile
+                first_slot = get_next_slot(host_policy, filled_slots)
+                if first_slot:
+                    q = get_next_question(host_policy, filled_slots, spec.name)
+                    question = q.get("question") if q else f"What's your {first_slot['slot_id'].replace('_', ' ')}?"
+                    final_response = f"Got it. Now building your profile.\n\n{question}"
+                else:
+                    final_response = "Got it. Your profile is set."
+                next_stage = InterviewStage.DEEP_INTERVIEW.value
+                InterviewController.update_session(session_id, new_stage=next_stage, new_intent_confirmed=True, increment_turn=True)
+    
+    # STAGE 1.5: CONFIRM INTENT (simplified - mostly auto-confirm now)
+    elif stage == InterviewStage.CONFIRM_INTENT:
+        user_msg_lower = request.message.lower().strip()
+        
+        log_interaction(conversation_id, "user", request.message)
+        
+        # Unless they explicitly say "no", just continue
+        if "no" in user_msg_lower and len(user_msg_lower) < 20:
+            final_response = "What would you like to correct?"
+            next_stage = InterviewStage.INTENT_CAPTURE.value
+        else:
+            # Confirmed - move to profile
+            supabase.rpc("create_node_system", {
+                "t_id": twin_id, "n_name": "Intent Confirmed", 
+                "n_type": "intent.confirmed", "n_desc": "true", "n_props": {}
+            }).execute()
+            
+            next_slot = get_next_slot(host_policy, filled_slots)
+            if next_slot:
+                q = get_next_question(host_policy, filled_slots, spec.name)
+                question = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
+                final_response = question
+            else:
+                final_response = "Profile complete."
+            next_stage = InterviewStage.DEEP_INTERVIEW.value
+        
+        InterviewController.update_session(session_id, new_stage=next_stage, new_intent_confirmed=True, increment_turn=True)
+        log_interaction(conversation_id, "assistant", final_response)
+    
+    # STAGE 2: DEEP INTERVIEW (concise questions)
+    elif stage == InterviewStage.DEEP_INTERVIEW:
+        # Extract structured data from user's response
+        scribe_result = await process_interaction(
+            twin_id=twin_id,
+            user_message=request.message,
+            assistant_message="",
+            history=history
+        )
+        
+        log_interaction(conversation_id, "user", request.message)
+        
+        # Get next question
+        next_slot = get_next_slot(host_policy, filled_slots)
+        
+        if next_slot:
+            q = get_next_question(host_policy, filled_slots, spec.name)
+            question = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
+            final_response = question
+            suggested_question = question
+        else:
+            # Done!
+            final_response = "Profile complete. Your twin is ready."
+            next_stage = InterviewStage.COMPLETE.value
+            InterviewController.update_session(session_id, new_stage=next_stage)
+        
+        log_interaction(conversation_id, "assistant", final_response)
+        InterviewController.update_session(session_id, increment_turn=True)
+    
+    # STAGE 3: COMPLETE (conversational with full context)
+    elif stage == InterviewStage.COMPLETE:
+        # Build context-aware system prompt for agent
+        context_prompt = f"""You are a Cognitive Host who has learned about this user through interviews.
+
+{agent_context if agent_context else "You haven't learned much about this user yet."}
+
+Use this knowledge to answer their questions intelligently.
+If they ask about something you don't know, ask them about it to learn more.
+Keep responses brief and conversational."""
+        
+        # Use agent with context (passing as part of history)
+        history_with_context = [{"role": "system", "content": context_prompt}] + history
+        
+        async for event in run_agent_stream(twin_id, request.message, history_with_context):
+            if "agent" in event:
+                msg = event["agent"]["messages"][-1]
+                if isinstance(msg, AIMessage) and msg.content:
+                    final_response = msg.content
+        
+        log_interaction(conversation_id, "user", request.message)
+        if final_response:
+            log_interaction(conversation_id, "assistant", final_response)
+        else:
+            # If agent didn't respond, ask a learning question
+            final_response = "I'd like to learn more about you. What's your focus area?"
+        
+        next_stage = InterviewStage.COMPLETE.value
+    
+    # Calculate progress
+    required_slots = host_policy.get("required_slots", [])
+    slots_filled_count = len([s for s in required_slots if s.get("slot_id") in filled_slots])
+    missing_slots = [s for s in required_slots if s.get("slot_id") not in filled_slots]
+    
+    progress = {
+        "intent_complete": session.get("intent_confirmed", False) or filled_slots.get("intent_confirmed", False),
+        "slots_filled": slots_filled_count,
+        "total_slots": len(required_slots),
+        "turn_count": session.get("turn_count", 0) + 1
+    }
+    
+    return InterviewResponse(
+        response=final_response,
+        conversation_id=conversation_id,
+        session_id=session_id,
+        stage=next_stage,
+        intent_summary=intent_summary or session.get("intent_summary"),
+        next_slot=get_next_slot(host_policy, filled_slots),
+        suggested_question=suggested_question,
+        follow_up_question=follow_up_question,
+        extracted_data=scribe_result if 'scribe_result' in dir() else {},
+        confidence=scribe_result.get("confidence", 0.0) if 'scribe_result' in dir() else 0.0,
+        contradictions=[],
+        missing_slots=missing_slots[:5],
+        progress=progress
+    )
+
+
+@router.get("/cognitive/graph/{twin_id}")
+async def get_cognitive_graph(twin_id: str, user=Depends(get_current_user)):
+    """
+    Get the current cognitive graph state for a twin.
+
+    Returns:
+        - nodes: List of cognitive graph nodes
+        - edges: List of cognitive graph edges
+        - clusters: Cluster completion percentages
+    """
+    # TODO: Implement actual graph store query
+    # For now return a placeholder structure
+    return {
+        "nodes": [],
+        "edges": [],
+        "clusters": {
+            "thesis": {"completion": 0.0, "node_count": 0},
+            "rubric": {"completion": 0.0, "node_count": 0},
+            "moat": {"completion": 0.0, "node_count": 0},
+            "process": {"completion": 0.0, "node_count": 0},
+            "comms": {"completion": 0.0, "node_count": 0},
+        },
+    }
+
+
+class ApproveRequest(BaseModel):
+    """Request to approve current cognitive profile."""
+    notes: Optional[str] = None
+
+
+class VersionResponse(BaseModel):
+    """Response for version operations."""
+    version: int
+    node_count: int
+    edge_count: int
+    approved_at: str
+    notes: Optional[str] = None
+    diff_summary: Optional[str] = None
+
+
+@router.post("/cognitive/profiles/{twin_id}/approve")
+async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Depends(get_current_user)):
+    """
+    Approve the current cognitive profile, creating an immutable version snapshot.
+    
+    This captures all nodes and edges at the current moment, computes a diff
+    from the previous version, and creates an audit trail.
+    """
+    from modules._core.versioning import compute_diff, create_snapshot, summarize_diff
+    from datetime import datetime
+    
+    try:
+        # 1. Fetch current nodes and edges
+        nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 500}).execute()
+        edges_res = supabase.rpc("get_edges_system", {"t_id": twin_id, "limit_val": 500}).execute()
+        
+        nodes = nodes_res.data or []
+        edges = edges_res.data or []
+        
+        if not nodes:
+            raise HTTPException(status_code=400, detail="Cannot approve empty profile. Add some knowledge first.")
+        
+        # 2. Create snapshot
+        snapshot = create_snapshot(nodes, edges)
+        
+        # 3. Get previous version for diff computation
+        latest_ver = supabase.rpc("get_latest_version_system", {"t_id": twin_id}).execute()
+        current_version = latest_ver.data if latest_ver.data else 0
+        new_version = current_version + 1
+        
+        # 4. Compute diff if not first version
+        diff_json = None
+        if current_version > 0:
+            prev_versions = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": 1}).execute()
+            if prev_versions.data:
+                prev_snapshot = prev_versions.data[0].get("snapshot_json", {})
+                diff_json = compute_diff(prev_snapshot, snapshot)
+        else:
+            diff_json = compute_diff({}, snapshot)
+        
+        # 5. Insert new version
+        user_id = user.get("user_id") if user else None
+        notes = request.notes if request else None
+        
+        new_id = supabase.rpc("insert_profile_version_system", {
+            "t_id": twin_id,
+            "ver": new_version,
+            "snapshot": snapshot,
+            "diff": diff_json,
+            "n_count": len(nodes),
+            "e_count": len(edges),
+            "approver": user_id,
+            "approval_notes": notes
+        }).execute()
+        
+        # 6. Emit audit log
+        try:
+            from modules.audit import AuditLogger
+            AuditLogger.log_critical_action(
+                twin_id=twin_id,
+                action="profile_approved",
+                user_id=user_id,
+                details={
+                    "version": new_version,
+                    "node_count": len(nodes),
+                    "edge_count": len(edges),
+                    "diff_summary": summarize_diff(diff_json) if diff_json else "Initial version"
+                }
+            )
+        except Exception as audit_err:
+            print(f"Warning: Audit log failed: {audit_err}")
+        
+        return {
+            "success": True,
+            "version": new_version,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "approved_at": datetime.utcnow().isoformat(),
+            "diff_summary": summarize_diff(diff_json) if diff_json else "Initial version"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error approving profile: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to approve profile: {str(e)}")
+
+
+@router.get("/cognitive/profiles/{twin_id}/versions")
+async def get_versions(twin_id: str, limit: int = 10, user=Depends(get_current_user)):
+    """
+    Get version history for a cognitive profile.
+    
+    Returns list of all approved versions with metadata.
+    """
+    from modules._core.versioning import summarize_diff
+    
+    try:
+        versions_res = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": limit}).execute()
+        
+        versions = []
+        for v in (versions_res.data or []):
+            diff = v.get("diff_json")
+            versions.append({
+                "version": v["version"],
+                "node_count": v["node_count"],
+                "edge_count": v["edge_count"],
+                "approved_at": v["approved_at"],
+                "approved_by": v.get("approved_by"),
+                "notes": v.get("notes"),
+                "diff_summary": summarize_diff(diff) if diff else "Initial version"
+            })
+        
+        return {
+            "twin_id": twin_id,
+            "total_versions": len(versions),
+            "versions": versions
+        }
+        
+    except Exception as e:
+        print(f"Error fetching versions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch versions: {str(e)}")
+
+
+@router.get("/cognitive/profiles/{twin_id}/versions/{version}")
+async def get_version_snapshot(twin_id: str, version: int, user=Depends(get_current_user)):
+    """
+    Get a specific version's full snapshot.
+    
+    Returns the complete graph state as it was when approved.
+    """
+    try:
+        versions_res = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": 100}).execute()
+        
+        for v in (versions_res.data or []):
+            if v["version"] == version:
+                return {
+                    "version": v["version"],
+                    "snapshot": v["snapshot_json"],
+                    "diff": v.get("diff_json"),
+                    "node_count": v["node_count"],
+                    "edge_count": v["edge_count"],
+                    "approved_at": v["approved_at"],
+                    "notes": v.get("notes")
+                }
+        
+        raise HTTPException(status_code=404, detail=f"Version {version} not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching version: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch version: {str(e)}")
+
+
+@router.delete("/cognitive/profiles/{twin_id}/versions/{version}")
+async def delete_version(twin_id: str, version: int, user=Depends(get_current_user)):
+    """
+    Delete a specific version (admin function).
+    
+    Note: This should be used sparingly as versions are meant to be immutable audit records.
+    """
+    try:
+        result = supabase.rpc("delete_profile_version_system", {"t_id": twin_id, "ver": version}).execute()
+        
+        if result.data:
+            return {"success": True, "message": f"Version {version} deleted"}
+        else:
+            raise HTTPException(status_code=404, detail=f"Version {version} not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error deleting version: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete version: {str(e)}")
+
+
+@router.delete("/cognitive/profiles/{twin_id}/versions")
+async def delete_all_versions(twin_id: str, user=Depends(get_current_user)):
+    """
+    Delete ALL versions for a twin (reset/cleanup function).
+    
+    Warning: This removes all version history and cannot be undone.
+    """
+    try:
+        result = supabase.rpc("delete_all_versions_system", {"t_id": twin_id}).execute()
+        deleted_count = result.data if result.data else 0
+        
+        return {
+            "success": True, 
+            "message": f"Deleted {deleted_count} version(s)",
+            "deleted_count": deleted_count
+        }
+            
+    except Exception as e:
+        print(f"Error deleting versions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete versions: {str(e)}")

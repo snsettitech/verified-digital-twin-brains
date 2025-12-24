@@ -1,0 +1,293 @@
+{
+    "pack_id": "onboarding_base",
+    "version": "1.0.0",
+    "display_name": "Onboarding Base Pack",
+    "description": "Core ontology for generic digital twin onboarding - collecting identity, expertise, and knowledge",
+    "intent_nodes": [
+        {
+            "node_type": "intent.primary_use_case",
+            "label": "Primary Use Case",
+            "description": "What the twin is being created for",
+            "value_type": "string",
+            "required": true
+        },
+        {
+            "node_type": "intent.goal",
+            "label": "Twin Goal",
+            "description": "What the twin should help accomplish",
+            "value_type": "string",
+            "required": true
+        },
+        {
+            "node_type": "intent.audience",
+            "label": "Target Audience",
+            "description": "Who will use this twin",
+            "value_type": "string",
+            "required": true
+        }
+    ],
+    "required_nodes": [
+        {
+            "node_type": "profile.background",
+            "label": "Professional Background",
+            "description": "User's professional history and experience",
+            "value_type": "string"
+        },
+        {
+            "node_type": "profile.expertise_areas",
+            "label": "Areas of Expertise",
+            "description": "Topics and domains the user is expert in",
+            "value_type": "array"
+        },
+        {
+            "node_type": "profile.unique_perspective",
+            "label": "Unique Perspective",
+            "description": "What makes the user's viewpoint unique",
+            "value_type": "string"
+        },
+        {
+            "node_type": "knowledge.common_questions",
+            "label": "Common Questions",
+            "description": "Questions people frequently ask the user",
+            "value_type": "array"
+        },
+        {
+            "node_type": "knowledge.key_insights",
+            "label": "Key Insights",
+            "description": "Most important insights to share",
+            "value_type": "array"
+        },
+        {
+            "node_type": "style.communication",
+            "label": "Communication Style",
+            "description": "How the user prefers to communicate",
+            "value_type": "string"
+        }
+    ],
+    "optional_nodes": [
+        {
+            "node_type": "profile.achievements",
+            "label": "Notable Achievements",
+            "value_type": "array"
+        },
+        {
+            "node_type": "profile.values",
+            "label": "Core Values",
+            "value_type": "array"
+        },
+        {
+            "node_type": "knowledge.frameworks",
+            "label": "Frameworks & Methods",
+            "value_type": "array"
+        },
+        {
+            "node_type": "style.tone",
+            "label": "Tone of Voice",
+            "value_type": "string"
+        },
+        {
+            "node_type": "boundaries.topics_to_avoid",
+            "label": "Topics to Avoid",
+            "value_type": "array"
+        }
+    ],
+    "clusters": [
+        {
+            "cluster_id": "profile",
+            "label": "Your Profile",
+            "node_types": [
+                "profile.*"
+            ],
+            "priority": 1
+        },
+        {
+            "cluster_id": "knowledge",
+            "label": "Your Knowledge",
+            "node_types": [
+                "knowledge.*"
+            ],
+            "priority": 2
+        },
+        {
+            "cluster_id": "style",
+            "label": "Your Style",
+            "node_types": [
+                "style.*"
+            ],
+            "priority": 3
+        },
+        {
+            "cluster_id": "boundaries",
+            "label": "Boundaries",
+            "node_types": [
+                "boundaries.*"
+            ],
+            "priority": 4
+        }
+    ],
+    "question_templates": [
+        {
+            "template_id": "background_01",
+            "target_node": "profile.background",
+            "cluster": "profile",
+            "template": "Let's start with getting to know you! Tell me about your professional background. What do you do and how did you get here?",
+            "follow_up_if_vague": "Could you share a bit more about your career journey? What are some key roles or experiences that shaped who you are today?"
+        },
+        {
+            "template_id": "background_02",
+            "target_node": "profile.background",
+            "cluster": "profile",
+            "template": "Give me the 60-second version of your story. What should people know about your background?",
+            "follow_up_if_vague": "What would someone find if they looked you up online? What are you known for?"
+        },
+        {
+            "template_id": "expertise_01",
+            "target_node": "profile.expertise_areas",
+            "cluster": "profile",
+            "template": "What topics are you most knowledgeable about? What could you talk about for hours without getting tired?",
+            "follow_up_if_vague": "If someone introduced you as an expert in something, what would that be?"
+        },
+        {
+            "template_id": "expertise_02",
+            "target_node": "profile.expertise_areas",
+            "cluster": "profile",
+            "template": "What are the areas where people come to you for advice? Where do you add the most value?",
+            "follow_up_if_vague": "What skills or knowledge have taken you years to develop?"
+        },
+        {
+            "template_id": "unique_perspective_01",
+            "target_node": "profile.unique_perspective",
+            "cluster": "profile",
+            "template": "What makes YOUR perspective on these topics unique? What do you see that others might miss?",
+            "follow_up_if_vague": "What's something you believe that most people in your field would disagree with?"
+        },
+        {
+            "template_id": "unique_perspective_02",
+            "target_node": "profile.unique_perspective",
+            "cluster": "profile",
+            "template": "What's your 'secret sauce'? What differentiates your approach from others in your space?",
+            "follow_up_if_vague": "Why should someone listen to YOUR advice over anyone else's?"
+        },
+        {
+            "template_id": "achievements_01",
+            "target_node": "profile.achievements",
+            "cluster": "profile",
+            "template": "What are you most proud of in your career? Any notable achievements or milestones?",
+            "follow_up_if_vague": "What results have you helped others achieve?"
+        },
+        {
+            "template_id": "common_questions_01",
+            "target_node": "knowledge.common_questions",
+            "cluster": "knowledge",
+            "template": "What questions do people ask you most often? What do people always want to know from you?",
+            "follow_up_if_vague": "If you had a FAQ page, what would be the top 3 questions on it?"
+        },
+        {
+            "template_id": "common_questions_02",
+            "target_node": "knowledge.common_questions",
+            "cluster": "knowledge",
+            "template": "When people reach out to you for help, what are they usually struggling with?",
+            "follow_up_if_vague": "What's the most common problem you help people solve?"
+        },
+        {
+            "template_id": "key_insights_01",
+            "target_node": "knowledge.key_insights",
+            "cluster": "knowledge",
+            "template": "What are the most important lessons you've learned that you want to share with others?",
+            "follow_up_if_vague": "If you could only teach someone THREE things, what would they be?"
+        },
+        {
+            "template_id": "key_insights_02",
+            "target_node": "knowledge.key_insights",
+            "cluster": "knowledge",
+            "template": "What advice do you find yourself giving over and over? What's your go-to wisdom?",
+            "follow_up_if_vague": "What's a piece of advice that's changed someone's life?"
+        },
+        {
+            "template_id": "frameworks_01",
+            "target_node": "knowledge.frameworks",
+            "cluster": "knowledge",
+            "template": "Do you have any frameworks, methods, or processes that you use or recommend?",
+            "follow_up_if_vague": "Is there a step-by-step approach you typically recommend?"
+        },
+        {
+            "template_id": "values_01",
+            "target_node": "profile.values",
+            "cluster": "profile",
+            "template": "What values or principles guide your work? What do you stand for?",
+            "follow_up_if_vague": "What's non-negotiable for you in how you operate?"
+        },
+        {
+            "template_id": "communication_01",
+            "target_node": "style.communication",
+            "cluster": "style",
+            "template": "How would you describe your communication style? Are you more direct and concise, or do you prefer detailed explanations?",
+            "follow_up_if_vague": "When explaining something, do you use lots of examples and stories, or do you prefer to get straight to the point?"
+        },
+        {
+            "template_id": "tone_01",
+            "target_node": "style.tone",
+            "cluster": "style",
+            "template": "What's your typical tone when helping people? Professional, casual, encouraging, challenging?",
+            "follow_up_if_vague": "If your communication had a personality, how would you describe it?"
+        },
+        {
+            "template_id": "boundaries_01",
+            "target_node": "boundaries.topics_to_avoid",
+            "cluster": "boundaries",
+            "template": "Are there any topics your twin should avoid discussing or stay away from?",
+            "follow_up_if_vague": "Anything you definitely don't want the twin to give advice on?"
+        },
+        {
+            "template_id": "audience_01",
+            "target_node": "intent.audience",
+            "cluster": "profile",
+            "template": "Who do you imagine will be talking to your twin? Who's your ideal audience?",
+            "follow_up_if_vague": "What level of expertise should your twin assume people have?"
+        },
+        {
+            "template_id": "goal_01",
+            "target_node": "intent.goal",
+            "cluster": "profile",
+            "template": "What's the main thing you want your twin to help people with?",
+            "follow_up_if_vague": "If someone spends 10 minutes with your twin, what should they walk away with?"
+        }
+    ],
+    "host_policy": {
+        "interview_mode": "conversational",
+        "required_slots": [
+            {
+                "slot_id": "background",
+                "cluster_id": "profile",
+                "priority": 1
+            },
+            {
+                "slot_id": "expertise_areas",
+                "cluster_id": "profile",
+                "priority": 2
+            },
+            {
+                "slot_id": "common_questions",
+                "cluster_id": "knowledge",
+                "priority": 3
+            },
+            {
+                "slot_id": "key_insights",
+                "cluster_id": "knowledge",
+                "priority": 4
+            },
+            {
+                "slot_id": "unique_perspective",
+                "cluster_id": "profile",
+                "priority": 5
+            },
+            {
+                "slot_id": "communication_style",
+                "cluster_id": "style",
+                "priority": 6
+            }
+        ],
+        "completion_threshold": 0.8,
+        "max_questions_per_cluster": 3
+    }
+}

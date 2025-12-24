@@ -1,0 +1,180 @@
+{
+    "pack_id": "vc_deeptech",
+    "version": "1.0.0",
+    "display_name": "DeepTech Extension Pack",
+    "description": "Extension pack for VCs focused on deep technology, hard science, and frontier tech investments",
+    "extends": "vc_base",
+    "additional_nodes": [
+        {
+            "node_type": "vc.deeptech.tech_risk_tolerance",
+            "label": "Technical Risk Tolerance",
+            "description": "How much science/technology risk is acceptable before product-market fit",
+            "value_type": "string",
+            "constraints": {
+                "allowed_values": [
+                    "minimal_tech_risk",
+                    "moderate_tech_risk",
+                    "high_tech_risk",
+                    "frontier_science_ok"
+                ]
+            }
+        },
+        {
+            "node_type": "vc.deeptech.time_to_commercialization",
+            "label": "Time to Commercialization",
+            "description": "Maximum acceptable timeline from investment to commercial revenue",
+            "value_type": "string",
+            "constraints": {
+                "suggested_values": [
+                    "under_2_years",
+                    "2_to_5_years",
+                    "5_to_10_years",
+                    "10_plus_years"
+                ]
+            }
+        },
+        {
+            "node_type": "vc.deeptech.ip_evaluation_depth",
+            "label": "IP Evaluation Depth",
+            "description": "How deeply patents and IP defensibility are evaluated",
+            "value_type": "string"
+        },
+        {
+            "node_type": "vc.deeptech.team_pedigree_requirements",
+            "label": "Team Pedigree Requirements",
+            "description": "Academic or industry background requirements for founders",
+            "value_type": "object"
+        },
+        {
+            "node_type": "vc.deeptech.capital_intensity_tolerance",
+            "label": "Capital Intensity Tolerance",
+            "description": "Comfort level with high follow-on capital requirements",
+            "value_type": "string"
+        },
+        {
+            "node_type": "vc.deeptech.technical_diligence_approach",
+            "label": "Technical Diligence Approach",
+            "description": "How technical due diligence is conducted",
+            "value_type": "string"
+        },
+        {
+            "node_type": "vc.deeptech.government_grants_view",
+            "label": "Government Grants View",
+            "description": "View on companies funded by government grants vs VC",
+            "value_type": "string"
+        },
+        {
+            "node_type": "vc.deeptech.academic_spinout_preference",
+            "label": "Academic Spinout Preference",
+            "description": "Preference for or against university spinouts",
+            "value_type": "string"
+        }
+    ],
+    "question_templates": [
+        {
+            "template_id": "deeptech_tech_risk_01",
+            "target_node": "vc.deeptech.tech_risk_tolerance",
+            "cluster": "deeptech",
+            "template": "How do you evaluate technical risk vs market risk? What's the right balance for your fund?",
+            "follow_up_if_vague": "Would you invest in something that has scientific risk - where we're not sure it can be built?"
+        },
+        {
+            "template_id": "deeptech_tech_risk_02",
+            "target_node": "vc.deeptech.tech_risk_tolerance",
+            "cluster": "deeptech",
+            "template": "At what point does 'too much science' become a concern for you?",
+            "follow_up_if_vague": "What's an example of a technology that crossed the line for you?"
+        },
+        {
+            "template_id": "deeptech_timeline_01",
+            "target_node": "vc.deeptech.time_to_commercialization",
+            "cluster": "deeptech",
+            "template": "What's the longest time-to-commercialization you'd be comfortable investing in?",
+            "follow_up_if_vague": "Would you invest in a 7-year path to revenue if the outcome was big enough?"
+        },
+        {
+            "template_id": "deeptech_timeline_02",
+            "target_node": "vc.deeptech.time_to_commercialization",
+            "cluster": "deeptech",
+            "template": "How do you think about fund lifecycle constraints when evaluating long-horizon deeptech?",
+            "follow_up_if_vague": "Does your LP base allow for longer hold periods?"
+        },
+        {
+            "template_id": "deeptech_ip_01",
+            "target_node": "vc.deeptech.ip_evaluation_depth",
+            "cluster": "deeptech",
+            "template": "How do you evaluate IP defensibility in deeptech? Do you bring in patent attorneys?",
+            "follow_up_if_vague": "What makes a patent portfolio strong vs. weak in your view?"
+        },
+        {
+            "template_id": "deeptech_team_01",
+            "target_node": "vc.deeptech.team_pedigree_requirements",
+            "cluster": "deeptech",
+            "template": "How important is founder's PhD or academic pedigree in deeptech investments?",
+            "follow_up_if_vague": "Would you back an industry person over an academic for the same technology?"
+        },
+        {
+            "template_id": "deeptech_team_02",
+            "target_node": "vc.deeptech.team_pedigree_requirements",
+            "cluster": "deeptech",
+            "template": "What's the ideal founder combination for a deeptech company - scientist-CEO or scientist-CTO with business co-founder?",
+            "follow_up_if_vague": "How do you help technical founders build the business side?"
+        },
+        {
+            "template_id": "deeptech_capital_01",
+            "target_node": "vc.deeptech.capital_intensity_tolerance",
+            "cluster": "deeptech",
+            "template": "How do you think about capital intensity? What total capital-to-exit is acceptable?",
+            "follow_up_if_vague": "At what point does the capital required make an opportunity not venture-backable?"
+        },
+        {
+            "template_id": "deeptech_capital_02",
+            "target_node": "vc.deeptech.capital_intensity_tolerance",
+            "cluster": "deeptech",
+            "template": "How do you evaluate the follow-on financing risk for capital-intensive deeptech?",
+            "follow_up_if_vague": "Do you consider strategic investor interest as part of your thesis?"
+        },
+        {
+            "template_id": "deeptech_diligence_01",
+            "target_node": "vc.deeptech.technical_diligence_approach",
+            "cluster": "deeptech",
+            "template": "What does technical diligence look like for you? Do you have in-house experts or use advisors?",
+            "follow_up_if_vague": "How do you get comfortable with technology you don't fully understand?"
+        },
+        {
+            "template_id": "deeptech_grants_01",
+            "target_node": "vc.deeptech.government_grants_view",
+            "cluster": "deeptech",
+            "template": "How do you view companies that have been funded primarily by government grants?",
+            "follow_up_if_vague": "Is grant funding a signal of validation or a red flag for commercialization?"
+        },
+        {
+            "template_id": "deeptech_spinout_01",
+            "target_node": "vc.deeptech.academic_spinout_preference",
+            "cluster": "deeptech",
+            "template": "What's your experience with university spinouts? Do you actively seek them out?",
+            "follow_up_if_vague": "How do you navigate university IP and licensing agreements?"
+        },
+        {
+            "template_id": "deeptech_spinout_02",
+            "target_node": "vc.deeptech.academic_spinout_preference",
+            "cluster": "deeptech",
+            "template": "What makes a good vs. bad technology transfer office to work with?",
+            "follow_up_if_vague": "Have you had any difficult experiences with university negotiations?"
+        },
+        {
+            "template_id": "deeptech_market_timing_01",
+            "target_node": "vc.deeptech.market_timing",
+            "cluster": "deeptech",
+            "template": "How do you assess market timing for emerging technologies? What signals do you look for?",
+            "follow_up_if_vague": "Have you ever been too early on a deeptech investment?"
+        },
+        {
+            "template_id": "deeptech_exit_01",
+            "target_node": "vc.deeptech.exit_path",
+            "cluster": "deeptech",
+            "template": "What exit paths do you typically see for deeptech companies? M&A vs IPO?",
+            "follow_up_if_vague": "Who are the typical acquirers in your portfolio's sectors?"
+        }
+    ]
+}

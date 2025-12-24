@@ -1,0 +1,102 @@
+{
+    "clusters": [
+        {
+            "id": "identity",
+            "display_name": "Identity & Focus",
+            "icon": "user-circle",
+            "color": "#8B5CF6",
+            "description": "Fund characteristics, stage focus, and investment parameters",
+            "primary_nodes": [
+                "vc.identity.stage_focus",
+                "vc.identity.check_size",
+                "vc.identity.geography",
+                "vc.identity.fund_size"
+            ],
+            "summary_prompt": "Summarize this VC's identity including their stage focus, check size, and geographic preferences."
+        },
+        {
+            "id": "thesis",
+            "display_name": "Investment Thesis",
+            "icon": "target",
+            "color": "#4A90E2",
+            "description": "Sectors, themes, and conviction areas",
+            "primary_nodes": [
+                "vc.thesis.bullish_sectors",
+                "vc.thesis.bearish_sectors",
+                "vc.thesis.contrarian_views",
+                "vc.thesis.anti_portfolio"
+            ],
+            "summary_prompt": "Summarize this VC's investment thesis including bullish/bearish sectors and key contrarian views."
+        },
+        {
+            "id": "rubric",
+            "display_name": "Evaluation Rubric",
+            "icon": "clipboard-check",
+            "color": "#50E3C2",
+            "description": "How deals are evaluated and what matters most",
+            "primary_nodes": [
+                "vc.rubric.criteria_ranked",
+                "vc.rubric.red_flags",
+                "vc.rubric.green_flags",
+                "vc.rubric.team_evaluation"
+            ],
+            "summary_prompt": "Summarize this VC's evaluation criteria including what they prioritize, red flags, and green flags."
+        },
+        {
+            "id": "moat",
+            "display_name": "Moat & Defensibility",
+            "icon": "shield",
+            "color": "#F5A623",
+            "description": "How defensibility is evaluated",
+            "primary_nodes": [
+                "vc.moat.moat_types_ranked",
+                "vc.moat.network_effects",
+                "vc.moat.data_moat",
+                "vc.moat.competition_analysis"
+            ],
+            "summary_prompt": "Summarize this VC's views on defensibility including preferred moat types and competition tolerance."
+        },
+        {
+            "id": "process",
+            "display_name": "Investment Process",
+            "icon": "git-branch",
+            "color": "#B8E986",
+            "description": "Steps from first meeting to term sheet",
+            "primary_nodes": [
+                "vc.process.steps",
+                "vc.process.typical_timeline",
+                "vc.process.due_diligence",
+                "vc.process.ic_structure"
+            ],
+            "summary_prompt": "Summarize this VC's investment process including timeline, diligence approach, and decision structure."
+        },
+        {
+            "id": "comms",
+            "display_name": "Communication Style",
+            "icon": "message-circle",
+            "color": "#EC4899",
+            "description": "How the VC communicates with founders",
+            "primary_nodes": [
+                "vc.comms.rejection_style",
+                "vc.comms.intro_preference",
+                "vc.comms.pitch_materials",
+                "vc.comms.founder_relationship"
+            ],
+            "summary_prompt": "Summarize this VC's communication preferences including how they want to be approached and how they deliver feedback."
+        },
+        {
+            "id": "deeptech",
+            "display_name": "DeepTech Focus",
+            "icon": "cpu",
+            "color": "#06B6D4",
+            "description": "Deep technology and frontier science evaluation",
+            "primary_nodes": [
+                "vc.deeptech.tech_risk_tolerance",
+                "vc.deeptech.time_to_commercialization",
+                "vc.deeptech.team_pedigree_requirements",
+                "vc.deeptech.capital_intensity_tolerance"
+            ],
+            "summary_prompt": "Summarize this VC's approach to deeptech including risk tolerance, timeline expectations, and team requirements."
+        }
+    ]
+}
