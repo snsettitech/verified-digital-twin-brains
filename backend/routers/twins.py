@@ -136,6 +136,28 @@ async def get_sidebar_config(twin_id: str):
         spec = get_specialization("vanilla")
         return spec.get_sidebar_config()
 
+
+@router.get("/twins/{twin_id}/graph-stats")
+async def get_twin_graph_stats(twin_id: str, user=Depends(get_current_user)):
+    """Get graph statistics for a twin (for UI display).
+    
+    Returns:
+        - node_count: Total number of knowledge nodes
+        - has_graph: Whether the twin has any graph data
+        - top_nodes: Preview of key knowledge items
+    """
+    from modules.graph_context import get_graph_stats
+    try:
+        stats = get_graph_stats(twin_id)
+        return stats
+    except Exception as e:
+        return {
+            "node_count": 0,
+            "has_graph": False,
+            "top_nodes": [],
+            "error": str(e)
+        }
+
 @router.patch("/twins/{twin_id}")
 async def update_twin(twin_id: str, update: TwinSettingsUpdate, user=Depends(verify_owner)):
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}

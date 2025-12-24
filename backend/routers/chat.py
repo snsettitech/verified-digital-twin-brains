@@ -81,6 +81,10 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             citations = []
             confidence_score = 1.0
             
+            # Fetch graph stats for this twin
+            from modules.graph_context import get_graph_stats
+            graph_stats = get_graph_stats(twin_id)
+            
             async for chunk in run_agent_stream(
                 twin_id=twin_id,
                 query=query,
@@ -102,12 +106,20 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                         if msg.content and not getattr(msg, 'tool_calls', None):
                             full_response = msg.content
             
+            # Determine if graph was likely used (no external citations and has graph)
+            graph_used = graph_stats["has_graph"] and len(citations) == 0
+            
             # 3. Send metadata first (so frontend knows context is found)
             metadata = {
                 "type": "metadata",
                 "citations": citations,
                 "confidence_score": confidence_score,
-                "conversation_id": conversation_id
+                "conversation_id": conversation_id,
+                "graph_context": {
+                    "has_graph": graph_stats["has_graph"],
+                    "node_count": graph_stats["node_count"],
+                    "graph_used": graph_used
+                }
             }
             yield json.dumps(metadata) + "\n"
             
