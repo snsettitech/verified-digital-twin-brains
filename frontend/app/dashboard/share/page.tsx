@@ -12,10 +12,6 @@ export default function SharePage() {
 
   const supabase = getSupabaseClient();
 
-  useEffect(() => {
-    loadShareLinks();
-  }, []);
-
   const loadShareLinks = async () => {
     // Would fetch from API
     setShareLinks([
@@ -24,6 +20,10 @@ export default function SharePage() {
     ]);
     setShareUrl(`${window.location.origin}/share/demo-twin`);
   };
+
+  useEffect(() => {
+    loadShareLinks();
+  }, []);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -78,8 +78,8 @@ export default function SharePage() {
           <button
             onClick={() => copyToClipboard(shareUrl)}
             className={`px-6 py-3 rounded-xl font-semibold text-sm transition-all ${copied
-                ? 'bg-emerald-500 text-white'
-                : 'bg-white text-indigo-600 hover:bg-indigo-50'
+              ? 'bg-emerald-500 text-white'
+              : 'bg-white text-indigo-600 hover:bg-indigo-50'
               }`}
           >
             {copied ? 'Copied!' : 'Copy'}
