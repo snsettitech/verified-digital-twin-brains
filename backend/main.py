@@ -46,6 +46,62 @@ app.include_router(cognitive.router)
 app.include_router(graph.router)
 app.include_router(metrics.router)
 
+# ============================================================================
+# P0 Deployment: Health Check Endpoint
+# ============================================================================
+
+@app.get("/health", tags=["health"])
+async def health_check():
+    """Health check endpoint for deployment readiness probes."""
+    return {
+        "status": "healthy",
+        "service": "verified-digital-twin-brain-api",
+        "version": "1.0.0"
+    }
+
+# ============================================================================
+# P0 Deployment: Startup Validation
+# ============================================================================
+
+def validate_required_env_vars():
+    """Validate required environment variables at startup."""
+    required_vars = [
+        "SUPABASE_URL",
+        "OPENAI_API_KEY",
+        "PINECONE_API_KEY",
+        "PINECONE_INDEX_NAME"
+    ]
+    
+    # At least one Supabase key is required
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    
+    missing = []
+    for var in required_vars:
+        if not os.getenv(var):
+            missing.append(var)
+    
+    if not supabase_key:
+        missing.append("SUPABASE_KEY or SUPABASE_SERVICE_KEY")
+    
+    # JWT_SECRET should be set in production
+    jwt_secret = os.getenv("JWT_SECRET", "")
+    dev_mode = os.getenv("DEV_MODE", "true").lower() == "true"
+    if not dev_mode and (not jwt_secret or jwt_secret == "your_jwt_secret" or "secret" in jwt_secret.lower()):
+        print("WARNING: JWT_SECRET is not properly configured for production!")
+        print("  Set JWT_SECRET to your Supabase project's JWT secret from:")
+        print("  Supabase Dashboard → Settings → API → JWT Secret")
+    
+    if missing:
+        print("=" * 60)
+        print("FATAL: Missing required environment variables:")
+        for var in missing:
+            print(f"  - {var}")
+        print("=" * 60)
+        exit(1)
+
+# Run validation on import (when app starts)
+validate_required_env_vars()
+
 # Startup Logic
 import socket
 

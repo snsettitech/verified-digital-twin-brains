@@ -5,7 +5,7 @@ from modules.schemas import (
     ChatRequest, ChatMetadata, ChatWidgetRequest, PublicChatRequest, 
     MessageSchema, ConversationSchema
 )
-from modules.auth_guard import get_current_user
+from modules.auth_guard import get_current_user, verify_twin_access
 from modules.access_groups import get_user_group, get_default_group
 from modules.observability import (
     supabase, get_conversations, get_messages, 
@@ -21,6 +21,9 @@ router = APIRouter(tags=["chat"])
 
 @router.post("/chat/{twin_id}")
 async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user)):
+    # P0: Verify user has access to this twin
+    verify_twin_access(twin_id, user)
+    
     query = request.query
     conversation_id = request.conversation_id
     group_id = request.group_id

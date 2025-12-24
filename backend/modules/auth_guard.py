@@ -111,3 +111,41 @@ def verify_owner(user=Depends(get_current_user)):
     if user.get("role") != "owner":
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return user
+
+def verify_twin_access(twin_id: str, user: dict) -> bool:
+    """
+    Verify that the user has access to the specified twin.
+    
+    For owners: checks if twin belongs to their tenant
+    For visitors (API key): checks if twin_id matches their allowed twin
+    
+    Returns True if access is allowed, raises HTTPException otherwise.
+    """
+    from modules.observability import supabase
+    
+    # API key users have explicit twin_id in their context
+    if user.get("role") == "visitor":
+        allowed_twin = user.get("twin_id")
+        if allowed_twin and allowed_twin == twin_id:
+            return True
+        raise HTTPException(status_code=403, detail="API key not authorized for this twin")
+    
+    # Authenticated users: verify twin belongs to them
+    user_id = user.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    # Check if user owns the twin directly
+    try:
+        twin_check = supabase.table("twins").select("id, owner_id").eq("id", twin_id).single().execute()
+        if not twin_check.data:
+            raise HTTPException(status_code=404, detail="Twin not found")
+        
+        if twin_check.data.get("owner_id") == user_id:
+            return True
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Fall through to access denied
+    
+    raise HTTPException(status_code=403, detail="You do not have access to this twin")
