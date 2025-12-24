@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
                     </svg>
                 </div>
                 <h1 className="text-2xl font-bold text-white">Reset your password</h1>
-                <p className="text-slate-400 mt-1">We'll send you a reset link</p>
+                <p className="text-slate-400 mt-1">We&apos;ll send you a reset link</p>
             </div>
 
             {/* Auth Card */}

@@ -15,7 +15,7 @@ export default function AcceptInvitationPage() {
   const params = useParams();
   const router = useRouter();
   const token = params?.token as string;
-  
+
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
@@ -23,13 +23,7 @@ export default function AcceptInvitationPage() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (token) {
-      validateInvitation();
-    }
-  }, [token]);
-
-  const validateInvitation = async () => {
+  const validateInvitation = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/auth/invitation/${token}`);
       if (response.ok) {
@@ -39,13 +33,19 @@ export default function AcceptInvitationPage() {
       } else {
         setError('Invalid or expired invitation link');
       }
-    } catch (error) {
-      console.error('Error validating invitation:', error);
+    } catch (err) {
+      console.error('Error validating invitation:', err);
       setError('Failed to validate invitation');
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (token) {
+      validateInvitation();
+    }
+  }, [token, validateInvitation]);
 
   const handleAcceptInvitation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +56,7 @@ export default function AcceptInvitationPage() {
 
     setAccepting(true);
     setError('');
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/auth/accept-invitation`, {
         method: 'POST',
@@ -69,7 +69,7 @@ export default function AcceptInvitationPage() {
           name: name.trim() || undefined
         })
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         // Store token for immediate login (in production, you'd use proper auth)
@@ -124,9 +124,9 @@ export default function AcceptInvitationPage() {
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 max-w-md w-full">
         <h1 className="text-2xl font-bold text-slate-900 mb-2">Accept Invitation</h1>
         <p className="text-slate-600 mb-6">
-          You've been invited to join as <strong>{invitation?.role}</strong>
+          You&apos;ve been invited to join as <strong>{invitation?.role}</strong>
         </p>
-        
+
         {invitation && (
           <form onSubmit={handleAcceptInvitation} className="space-y-4">
             <div>
@@ -138,7 +138,7 @@ export default function AcceptInvitationPage() {
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-500"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">Name (optional)</label>
               <input
@@ -148,7 +148,7 @@ export default function AcceptInvitationPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">Password</label>
               <input
@@ -160,13 +160,13 @@ export default function AcceptInvitationPage() {
                 placeholder="Choose a password"
               />
             </div>
-            
+
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
                 {error}
               </div>
             )}
-            
+
             <button
               type="submit"
               disabled={accepting || !password.trim()}

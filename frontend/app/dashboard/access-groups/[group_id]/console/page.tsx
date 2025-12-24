@@ -12,18 +12,14 @@ export default function GroupConsolePage() {
   const params = useParams();
   const router = useRouter();
   const groupId = params.group_id as string;
-  
-  const [group, setGroup] = useState<any>(null);
+
+  const [group, setGroup] = useState<Record<string, any> | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [twinId, setTwinId] = useState<string>('');
 
-  useEffect(() => {
-    fetchGroupInfo();
-  }, [groupId]);
-
-  const fetchGroupInfo = async () => {
+  const fetchGroupInfo = useCallback(async () => {
     try {
       const response = await fetch(`http://localhost:8000/access-groups/${groupId}`, {
         headers: { 'Authorization': 'Bearer development_token' }
@@ -33,14 +29,18 @@ export default function GroupConsolePage() {
         setGroup(data);
         setTwinId(data.twin_id);
       }
-    } catch (error) {
-      console.error('Error fetching group info:', error);
+    } catch (err) {
+      console.error('Error fetching group info:', err);
     }
-  };
+  }, [groupId]);
+
+  useEffect(() => {
+    fetchGroupInfo();
+  }, [groupId, fetchGroupInfo]);
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !twinId) return;
-    
+
     const userMessage: Message = { role: 'user', content: inputMessage };
     setMessages([...messages, userMessage]);
     setInputMessage('');
@@ -67,7 +67,6 @@ export default function GroupConsolePage() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let assistantMessage = '';
-      let conversationId = '';
 
       if (reader) {
         while (true) {
@@ -84,10 +83,8 @@ export default function GroupConsolePage() {
                 assistantMessage += data.content;
                 // Update the last message in real-time
                 setMessages([...messages, userMessage, { role: 'assistant', content: assistantMessage }]);
-              } else if (data.type === 'metadata') {
-                conversationId = data.conversation_id;
               }
-            } catch (e) {
+            } catch (err) {
               // Skip invalid JSON
             }
           }
@@ -96,8 +93,8 @@ export default function GroupConsolePage() {
 
       // Final message
       setMessages([...messages, userMessage, { role: 'assistant', content: assistantMessage }]);
-    } catch (error) {
-      console.error('Error sending message:', error);
+    } catch (err) {
+      console.error('Error sending message:', err);
       setMessages([...messages, userMessage, { role: 'assistant', content: 'Error: Failed to get response' }]);
     } finally {
       setLoading(false);
@@ -129,7 +126,7 @@ export default function GroupConsolePage() {
       <div className="flex-1 border border-gray-200 rounded-lg p-4 mb-4 overflow-y-auto bg-gray-50">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 mt-8">
-            Start a conversation to test the group's knowledge access
+            Start a conversation to test the group&apos;s knowledge access
           </div>
         ) : (
           <div className="space-y-4">
@@ -139,11 +136,10 @@ export default function GroupConsolePage() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-3xl px-4 py-2 rounded-lg ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border border-gray-200'
-                  }`}
+                  className={`max-w-3xl px-4 py-2 rounded-lg ${msg.role === 'user'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white border border-gray-200'
+                    }`}
                 >
                   {msg.content}
                 </div>

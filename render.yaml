@@ -1,0 +1,28 @@
+# Render Blueprint for FastAPI Backend
+services:
+  - type: web
+    name: verified-digital-twin-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*" # Update with your Vercel URL
+      - key: DEV_MODE
+        value: "false"
+      - key: PORT
+        value: "8000"
