@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 
 interface MemoryEvent {
     id: string;
@@ -23,28 +23,17 @@ interface TILFeedProps {
 }
 
 export default function TILFeed({ twinId }: TILFeedProps) {
-    const { session } = useAuth();
+    const { get, post, del } = useAuthFetch();
     const [events, setEvents] = useState<MemoryEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
-    useEffect(() => {
-        fetchTILFeed();
-    }, [twinId]);
-
-    const fetchTILFeed = async () => {
-        if (!session?.access_token) return;
+    const fetchTILFeed = useCallback(async () => {
+        if (!twinId) return;
 
         setLoading(true);
         try {
-            const response = await fetch(`${API_URL}/twins/${twinId}/til`, {
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await get(`/twins/${twinId}/til`);
 
             if (!response.ok) throw new Error('Failed to fetch TIL feed');
 
@@ -55,19 +44,15 @@ export default function TILFeed({ twinId }: TILFeedProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [twinId, get]);
+
+    useEffect(() => {
+        fetchTILFeed();
+    }, [fetchTILFeed]);
 
     const handleConfirm = async (nodeId: string) => {
-        if (!session?.access_token) return;
-
         try {
-            const response = await fetch(`${API_URL}/twins/${twinId}/til/${nodeId}/confirm`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await post(`/twins/${twinId}/til/${nodeId}/confirm`, {});
 
             if (!response.ok) throw new Error('Failed to confirm');
 
@@ -79,18 +64,10 @@ export default function TILFeed({ twinId }: TILFeedProps) {
     };
 
     const handleDelete = async (nodeId: string) => {
-        if (!session?.access_token) return;
-
         if (!confirm('Are you sure you want to delete this memory?')) return;
 
         try {
-            const response = await fetch(`${API_URL}/twins/${twinId}/til/${nodeId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${session.access_token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await del(`/twins/${twinId}/til/${nodeId}`);
 
             if (!response.ok) throw new Error('Failed to delete');
 
