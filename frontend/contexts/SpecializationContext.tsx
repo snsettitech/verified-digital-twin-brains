@@ -1,6 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useTwin } from '@/lib/context/TwinContext';
+import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 
 interface SidebarItem {
     name: string;
@@ -41,15 +43,23 @@ const defaultContext: SpecializationContextType = {
 const SpecializationContext = createContext<SpecializationContextType>(defaultContext);
 
 export function SpecializationProvider({ children }: { children: React.ReactNode }) {
+    const { activeTwin, isLoading: twinLoading } = useTwin();
+    const { get } = useAuthFetch();
+
     const [config, setConfig] = useState<SpecializationConfig | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchConfig = async () => {
+            if (twinLoading) return;
+
+            if (!activeTwin?.id) {
+                setLoading(false);
+                return;
+            }
+
             try {
-                // TODO: Get real twin ID from auth/url context. Using dev twin for now.
-                const twinId = 'eeeed554-9180-4229-a9af-0f8dd2c69e9b';
-                const res = await fetch(`http://localhost:8000/twins/${twinId}/specialization`);
+                const res = await get(`/twins/${activeTwin.id}/specialization`);
                 if (res.ok) {
                     const data = await res.json();
                     setConfig(data);
@@ -62,7 +72,7 @@ export function SpecializationProvider({ children }: { children: React.ReactNode
         };
 
         fetchConfig();
-    }, []);
+    }, [activeTwin?.id, twinLoading, get]);
 
     const isFeatureEnabled = (featureName: string): boolean => {
         return config?.features?.[featureName] ?? false;
