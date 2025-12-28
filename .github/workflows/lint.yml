@@ -32,13 +32,16 @@ jobs:
           # exit-zero treats all errors as warnings
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Run tests
-        run: pytest -v --tb=short
+        run: pytest -v --tb=short -m "not network"
         env:
           SUPABASE_URL: "https://mock.supabase.co"
           SUPABASE_KEY: "mock-key"
+          SUPABASE_SERVICE_KEY: "mock-service-key"
           OPENAI_API_KEY: "mock-key"
           PINECONE_API_KEY: "mock-key"
+          PINECONE_INDEX_NAME: "mock-index"
           JWT_SECRET: "test-secret"
+          DEV_MODE: "true"
 
   lint-frontend:
     runs-on: ubuntu-latest
@@ -62,4 +65,7 @@ jobs:
         run: |
           cd frontend
           npm run build
-
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "https://mock.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "mock-anon-key"
+          NEXT_PUBLIC_BACKEND_URL: "https://mock-backend.example.com"
