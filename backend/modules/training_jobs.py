@@ -133,15 +133,23 @@ def process_training_queue(twin_ids: List[str]) -> Dict[str, Any]:
     """
     import asyncio
     
+    # Early return if no twin IDs provided - don't process any jobs
+    # This prevents accidentally processing ALL jobs when empty list is passed
+    if not twin_ids or len(twin_ids) == 0:
+        return {
+            "processed": 0,
+            "failed": 0,
+            "remaining": 0,
+            "errors": []
+        }
+    
     processed = 0
     failed = 0
     errors = []
     
     # Get all queued jobs for the given twin IDs
     query = supabase.table("training_jobs").select("*").eq("status", "queued")
-    
-    if twin_ids:
-        query = query.in_("twin_id", twin_ids)
+    query = query.in_("twin_id", twin_ids)
     
     query = query.order("priority", desc=True).order("created_at", desc=False).limit(50)
     
@@ -171,8 +179,7 @@ def process_training_queue(twin_ids: List[str]) -> Dict[str, Any]:
     
     # Get remaining count
     remaining_query = supabase.table("training_jobs").select("id", count="exact").eq("status", "queued")
-    if twin_ids:
-        remaining_query = remaining_query.in_("twin_id", twin_ids)
+    remaining_query = remaining_query.in_("twin_id", twin_ids)
     remaining_response = remaining_query.execute()
     remaining = remaining_response.count if remaining_response.count else 0
     
