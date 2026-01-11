@@ -8,6 +8,45 @@ from langgraph.prebuilt import ToolNode
 from modules.tools import get_retrieval_tool, get_cloud_tools
 from modules.observability import supabase
 
+# Try to import checkpointer (optional - P1-A)
+try:
+    from langgraph.checkpoint.postgres import PostgresSaver
+    # Note: asyncpg is a dependency of langgraph-checkpoint-postgres, no need to import directly
+    CHECKPOINTER_AVAILABLE = True
+except ImportError:
+    CHECKPOINTER_AVAILABLE = False
+    PostgresSaver = None
+
+# Global checkpointer instance (singleton)
+_checkpointer = None
+
+def get_checkpointer():
+    """
+    Get or create Postgres checkpointer instance (P1-A).
+    Returns None if DATABASE_URL not set or checkpointer unavailable.
+    """
+    global _checkpointer
+    if _checkpointer is not None:
+        return _checkpointer
+    
+    if not CHECKPOINTER_AVAILABLE:
+        return None
+    
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        # Checkpointer is optional - return None if DATABASE_URL not set
+        return None
+    
+    try:
+        # Initialize checkpointer with Postgres connection
+        # The checkpointer will create its own connection pool
+        _checkpointer = PostgresSaver.from_conn_string(database_url)
+        print("[LangGraph] Checkpointer initialized with DATABASE_URL")
+        return _checkpointer
+    except Exception as e:
+        print(f"[LangGraph] Failed to initialize checkpointer: {e}")
+        return None
+
 async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> str:
     """
     Analyzes owner's verified responses and opinion documents to create a persistent style profile.
@@ -368,8 +407,12 @@ def create_twin_agent(twin_id: str, group_id: Optional[str] = None, system_promp
     # Add back edge from tools to agent
     workflow.add_edge("tools", "agent")
     
-    # Compile the graph
-    return workflow.compile()
+    # P1-A: Compile with checkpointer if available
+    checkpointer = get_checkpointer()
+    if checkpointer:
+        return workflow.compile(checkpointer=checkpointer)
+    else:
+        return workflow.compile()
 
 # Langfuse v3 tracing
 try:
@@ -384,9 +427,11 @@ except ImportError:
 
 
 @observe(name="agent_response")
-async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] = None, system_prompt: str = None, group_id: Optional[str] = None):
+async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] = None, system_prompt: str = None, group_id: Optional[str] = None, conversation_id: Optional[str] = None):
     """
     Runs the agent and yields events from the graph.
+    
+    P1-A: conversation_id is used as thread_id for state persistence if checkpointer is enabled.
     """
     # 0. Apply Phase 9 Safety Guardrails
     from modules.safety import apply_guardrails
@@ -466,8 +511,17 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
     metrics.record_request()
     agent_start = time.time()
     
+    # P1-A: Generate thread_id from conversation_id for state persistence
+    thread_id = None
+    if conversation_id:
+        # Thread ID format: conversation_id (simple, deterministic)
+        thread_id = conversation_id
+        print(f"[LangGraph] Using thread_id: {thread_id}")
+    
     try:
-        async for event in agent.astream(state, stream_mode="updates"):
+        # P1-A: Pass thread_id if checkpointer is enabled
+        config = {"configurable": {"thread_id": thread_id}} if thread_id and get_checkpointer() else {}
+        async for event in agent.astream(state, stream_mode="updates", **config):
             yield event
     finally:
         # Record agent latency and flush metrics

@@ -58,7 +58,7 @@ pip install -r requirements.txt -q
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
 
 Write-Host "→ Running flake8 (syntax errors only)..."
-python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv,env,__pycache__,.git
 if ($LASTEXITCODE -ne 0) { throw "flake8 failed" }
 
 Write-Host "→ Running tests..."

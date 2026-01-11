@@ -11,7 +11,12 @@ class GuardrailEngine:
     
     def __init__(self, twin_id: str):
         self.twin_id = twin_id
-        self.policies = get_governance_policies(twin_id)
+        try:
+            self.policies = get_governance_policies(twin_id)
+        except Exception as e:
+            # Graceful fallback if governance tables don't exist or query fails
+            print(f"[Guardrails] Warning: Could not load governance policies: {e}")
+            self.policies = []
     
     def check_prompt(self, prompt: str) -> Optional[str]:
         """
@@ -33,12 +38,21 @@ class GuardrailEngine:
         
         # 2. Refusal Rules from Policies
         for policy in self.policies:
-            if policy["policy_type"] == "refusal_rule":
-                # Basic keyword/regex check against policy content
-                pattern = policy["content"]
-                if re.search(pattern, prompt, re.IGNORECASE):
-                    AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "REFUSAL_RULE_TRIGGERED", metadata={"policy_name": policy["name"]})
-                    return f"I cannot assist with this request. [Policy: {policy['name']}]"
+            try:
+                if policy.get("policy_type") == "refusal_rule":
+                    # Basic keyword/regex check against policy content
+                    pattern = policy.get("content", "")
+                    if pattern and re.search(pattern, prompt, re.IGNORECASE):
+                        try:
+                            AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "REFUSAL_RULE_TRIGGERED", metadata={"policy_name": policy.get("name", "unknown")})
+                        except Exception:
+                            # Fallback if audit logging fails
+                            pass
+                        return f"I cannot assist with this request. [Policy: {policy.get('name', 'unknown')}]"
+            except Exception as e:
+                # Skip malformed policies gracefully
+                print(f"[Guardrails] Warning: Error processing policy: {e}")
+                continue
         
         return None
 
@@ -47,11 +61,24 @@ class GuardrailEngine:
         Enforces constraints on tool execution.
         """
         for policy in self.policies:
-            if policy["policy_type"] == "tool_restriction":
-                # e.g., restriction could be "disallow:system_exec"
-                if tool_name in policy["content"]:
-                    AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "TOOL_ACCESS_DENIED", metadata={"tool": tool_name})
-                    raise PermissionError(f"Access to tool '{tool_name}' is restricted by governance policy.")
+            try:
+                if policy.get("policy_type") == "tool_restriction":
+                    # e.g., restriction could be "disallow:system_exec"
+                    content = policy.get("content", "")
+                    if tool_name in content:
+                        try:
+                            AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "TOOL_ACCESS_DENIED", metadata={"tool": tool_name})
+                        except Exception:
+                            # Fallback if audit logging fails
+                            pass
+                        raise PermissionError(f"Access to tool '{tool_name}' is restricted by governance policy.")
+            except PermissionError:
+                # Re-raise permission errors
+                raise
+            except Exception as e:
+                # Skip malformed policies gracefully
+                print(f"[Guardrails] Warning: Error processing tool restriction policy: {e}")
+                continue
         
         return True
 

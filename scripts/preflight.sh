@@ -59,7 +59,7 @@ echo "→ Installing dependencies..."
 pip install -r requirements.txt -q
 
 echo "→ Running flake8 (syntax errors only)..."
-flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=.venv,venv,env,__pycache__,.git
 
 echo "→ Running tests..."
 pytest -v --tb=short
