@@ -1,5 +1,6 @@
 # Render Blueprint for FastAPI Backend
 services:
+  # Main API Web Service
   - type: web
     name: verified-digital-twin-backend
     runtime: python
@@ -28,3 +29,31 @@ services:
         value: "false"
       - key: PORT
         value: "8000"
+
+  # Background Worker for Job Queue Processing
+  - type: worker
+    name: verified-digital-twin-worker
+    runtime: python
+    pythonVersion: "3.12.0"
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python worker.py
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        sync: false
+      - key: WORKER_ENABLED
+        value: "true"
+      - key: WORKER_POLL_INTERVAL
+        value: "5"
