@@ -36,27 +36,45 @@ def extract_video_id(url: str) -> str:
             return match.group(1)
     return None
 
+from modules.transcription import transcribe_audio_multi
+
 async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
     """
     Ingest YouTube video transcript using robust multi-strategy approach.
-    
-    Strategies:
-    1. Official YouTube Data API (Metadata validation)
-    2. YouTubeTranscriptApi (Best for captions)
-    3. yt-dlp with Client Emulation (Bypasses IP blocking without cookies) + Gemini
     """
     video_id = extract_video_id(url)
     if not video_id:
         raise ValueError("Invalid YouTube URL")
+    
+    # -------------------------------------------------------------
+    # Step 0: Create Source Record IMMEDIATELY (Fixes FK Error)
+    # -------------------------------------------------------------
+    try:
+        # Check if exists first to handle updates
+        existing = supabase.table("sources").select("id").eq("id", source_id).execute()
+        if not existing.data:
+            supabase.table("sources").insert({
+                "id": source_id,
+                "twin_id": twin_id,
+                "filename": f"YouTube: {video_id}", # Placeholder title
+                "file_size": 0,
+                "content_text": "",
+                "status": "processing",
+                "staging_status": "processing"
+            }).execute()
+            print(f"[YouTube] Created processing record for {source_id}")
+    except Exception as e:
+        print(f"[YouTube] Error creating source record: {e}")
+        # Continue anyway, it might stem from a race condition or retry
     
     text = None
     video_title = None
     transcript_error = None
     
     # -------------------------------------------------------------
-    # Step 0: Validate via YouTube Data API (if key available)
+    # Step 1: Validate via YouTube Data API (if key available)
     # -------------------------------------------------------------
-    google_api_key = os.getenv("GOOGLE_API_KEY") # We use the same key for Gemini and YouTube Data API
+    google_api_key = os.getenv("GOOGLE_API_KEY")
     if google_api_key:
         try:
             from googleapiclient.discovery import build
@@ -67,7 +85,10 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             if response["items"]:
                 snippet = response["items"][0]["snippet"]
                 video_title = snippet["title"]
-                # We can also get description here if needed
+                # Update filename with real title
+                supabase.table("sources").update({
+                    "filename": f"YouTube: {video_title}"
+                }).eq("id", source_id).execute()
                 print(f"[YouTube] Validated video: {video_title}")
         except Exception as e:
             print(f"[YouTube] Data API check failed (non-blocking): {e}")
@@ -76,7 +97,6 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
     # Strategy 1: YouTubeTranscriptApi (Official, Fast)
     # -------------------------------------------------------------
     try:
-        # Try without cookies first (fastest)
         transcript_snippets = YouTubeTranscriptApi().fetch(video_id)
         text = " ".join([item.text for item in transcript_snippets])
         log_ingestion_event(source_id, twin_id, "info", f"Fetched official YouTube transcript")
@@ -84,10 +104,11 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         transcript_error = str(e)
         print(f"[YouTube] Transcript API failed: {e}")
         
-    # Strategy 1.5: List Transcripts (Auto-generated / Other Languages)
+    # Strategy 1.5: List Transcripts
     if not text:
         try:
             from youtube_transcript_api import YouTubeTranscriptApi as YTA
+            # Note: list_transcripts is a static method
             transcript_list = YTA.list_transcripts(video_id)
             for transcript in transcript_list:
                 try:
@@ -97,8 +118,8 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
                     break
                 except:
                     continue
-        except Exception:
-            pass
+        except Exception as e:
+             print(f"[YouTube] List transcripts failed: {e}")
             
     # -------------------------------------------------------------
     # Strategy 2: yt-dlp with Client Emulation (The "Magic" Fix)
@@ -108,14 +129,11 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         log_ingestion_event(source_id, twin_id, "warning", "Attempting robust audio download (Client Emulation)")
         
         try:
-            from modules.transcription import transcribe_audio_multi
-            
             temp_dir = "temp_uploads"
             os.makedirs(temp_dir, exist_ok=True)
             temp_filename = f"yt_{video_id}"
             
             # CRITICAL: Use 'android' client to bypass web-based IP blocking
-            # This impersonates the YouTube Android app
             ydl_opts = {
                 'format': 'm4a/bestaudio/best',
                 'outtmpl': os.path.join(temp_dir, f"{temp_filename}.%(ext)s"),
@@ -156,23 +174,9 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             
             if "Sign in" in error_str or "bot" in error_str.lower():
                 raise ValueError(
-                    "YouTube is strictly blocking this IP, even with client emulation. "
-                    "Try a video with captions, or deploy to a cloud server (non-residential IPs sometimes work better, or worse depending on the range)."
+                    "YouTube blocked the connection. Try a video with captions."
                 )
             raise ValueError(f"Download failed: {download_error}")
-
-    if not text:
-        raise ValueError("Could not extract any transcript from this video.")
-        
-    # Update filename if we got the title from API
-    if video_title:
-        try:
-            supabase.table("sources").update({
-                "filename": f"YouTube: {video_title}"
-            }).eq("id", source_id).execute()
-        except:
-            pass
-
 
     if not text:
         raise ValueError(

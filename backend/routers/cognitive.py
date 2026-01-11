@@ -290,6 +290,7 @@ async def cognitive_interview(
             InterviewController.reset_clarification_attempts(session_id)
             
             # Extract from response using slot-aware extraction
+            tenant_id = user.get("tenant_id") if user else None
             scribe_result = await extract_for_slot(
                 twin_id=twin_id,
                 user_message=request.message,
@@ -298,6 +299,7 @@ async def cognitive_interview(
                 target_node_type=current_question.get("target_node"),
                 current_question=current_question.get("question"),
                 history=history,
+                tenant_id=tenant_id,
                 conversation_id=conversation_id
             )
             
@@ -316,6 +318,7 @@ async def cognitive_interview(
                     final_response = "Got it. Let me start building your profile."
                 next_stage = InterviewStage.DEEP_INTERVIEW.value
                 InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+                log_interaction(conversation_id, "assistant", final_response)
             else:
                 # Need more intent info
                 next_intent_q = InterviewController.get_next_intent_question(session)
@@ -323,6 +326,7 @@ async def cognitive_interview(
                     final_response = next_intent_q["question"]
                     InterviewController.update_current_question(session_id, next_intent_q["id"])
                     InterviewController.update_session(session_id, add_template_id=next_intent_q["id"], increment_turn=True)
+                    log_interaction(conversation_id, "assistant", final_response)
                 else:
                     # All intent questions asked - skip confirmation, go straight to profile
                     first_slot = get_next_slot(host_policy, filled_slots)
@@ -445,6 +449,7 @@ async def cognitive_interview(
                 InterviewController.reset_clarification_attempts(session_id)
                 
                 # Extract using slot-aware extraction
+                tenant_id = user.get("tenant_id") if user else None
                 scribe_result = await extract_for_slot(
                     twin_id=twin_id,
                     user_message=request.message,
@@ -453,6 +458,7 @@ async def cognitive_interview(
                     target_node_type=current_question.get("target_node"),
                     current_question=current_question.get("question"),
                     history=history,
+                    tenant_id=tenant_id,
                     conversation_id=conversation_id
                 )
                 
