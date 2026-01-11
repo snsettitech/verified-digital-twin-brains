@@ -1,0 +1,78 @@
+{
+    "opening_message": "I'm going to ask a few questions to understand what you want this twin to do. I'll repeat back what I heard and you can correct me. Ready?",
+    "intent_slots": [
+        {
+            "slot_id": "intent_use_case",
+            "cluster_id": "intent",
+            "priority": 0,
+            "question": "What are you trying to use this twin for?",
+            "examples": "VC twin for my investment style, productivity twin, therapy-like reflection twin"
+        },
+        {
+            "slot_id": "intent_audience",
+            "cluster_id": "intent",
+            "priority": 0,
+            "question": "Who will use this twin and what should it help them accomplish?"
+        },
+        {
+            "slot_id": "intent_boundaries",
+            "cluster_id": "intent",
+            "priority": 0,
+            "question": "Anything you want it to avoid or never do?",
+            "optional": true
+        }
+    ],
+    "confirmation_prompt": "Here's what I understood: {summary}. Did I get that right?",
+    "required_slots": [
+        {
+            "slot_id": "investment_thesis",
+            "cluster_id": "thesis",
+            "priority": 1
+        },
+        {
+            "slot_id": "check_size_range",
+            "cluster_id": "rubric",
+            "priority": 2
+        },
+        {
+            "slot_id": "stage_focus",
+            "cluster_id": "rubric",
+            "priority": 3
+        },
+        {
+            "slot_id": "sector_focus",
+            "cluster_id": "thesis",
+            "priority": 4
+        },
+        {
+            "slot_id": "deal_flow_sources",
+            "cluster_id": "process",
+            "priority": 5
+        }
+    ],
+    "cluster_ordering": [
+        "thesis",
+        "rubric",
+        "moat",
+        "process",
+        "comms"
+    ],
+    "prioritization_weights": {
+        "required": 1.0,
+        "high": 0.8,
+        "medium": 0.5,
+        "low": 0.2
+    },
+    "allowed_edge_types": [
+        "belongs_to",
+        "related_to",
+        "derived_from",
+        "contradicts",
+        "supersedes"
+    ],
+    "follow_up_behavior": {
+        "max_follow_ups_per_slot": 2,
+        "skip_if_confidence_above": 0.85,
+        "escalate_if_confidence_below": 0.4
+    }
+}
