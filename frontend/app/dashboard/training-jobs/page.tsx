@@ -84,22 +84,43 @@ export default function TrainingJobsPage() {
     }
   };
 
+  const [queueStatus, setQueueStatus] = useState<{processed: number; failed: number; remaining: number; message?: string} | null>(null);
+
   const handleProcessQueue = async () => {
     if (!twinId) return;
     setProcessingQueue(true);
+    setQueueStatus(null);
     try {
       const response = await post(`/training-jobs/process-queue?twin_id=${twinId}`);
       if (response.ok) {
         const result = await response.json();
-        alert(result.message || `Processed ${result.processed} job(s)`);
-        fetchData();
+        setQueueStatus({
+          processed: result.processed || 0,
+          failed: result.failed || 0,
+          remaining: result.remaining || 0,
+          message: result.message
+        });
+        // Refresh data after a short delay to see updated job statuses
+        setTimeout(() => {
+          fetchData();
+        }, 1000);
       } else {
         const data = await response.json();
-        alert(data.detail || 'Failed to process queue');
+        setQueueStatus({
+          processed: 0,
+          failed: 0,
+          remaining: 0,
+          message: data.detail || 'Failed to process queue'
+        });
       }
     } catch (error) {
       console.error('Error processing queue:', error);
-      alert('Connection error');
+      setQueueStatus({
+        processed: 0,
+        failed: 0,
+        remaining: 0,
+        message: 'Connection error while processing queue'
+      });
     } finally {
       setProcessingQueue(false);
     }
@@ -173,11 +194,52 @@ export default function TrainingJobsPage() {
         <button
           onClick={handleProcessQueue}
           disabled={processingQueue}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 disabled:opacity-50 transition-all"
+          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
         >
-          {processingQueue ? 'Processing...' : 'Process Queue'}
+          {processingQueue ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Processing...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Process Queue
+            </>
+          )}
         </button>
       </div>
+
+      {/* Queue Status */}
+      {queueStatus && (
+        <div className={`border p-6 rounded-2xl text-sm font-bold ${
+          queueStatus.failed > 0 
+            ? 'bg-yellow-50 border-yellow-200 text-yellow-800' 
+            : queueStatus.processed > 0
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : 'bg-slate-50 border-slate-200 text-slate-800'
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
+            {queueStatus.failed > 0 ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <span>{queueStatus.message || 'Queue Processing Complete'}</span>
+          </div>
+          <div className="text-xs mt-2 space-y-1">
+            <div>Processed: {queueStatus.processed} job(s)</div>
+            {queueStatus.failed > 0 && <div>Failed: {queueStatus.failed} job(s)</div>}
+            {queueStatus.remaining > 0 && <div>Remaining: {queueStatus.remaining} job(s)</div>}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-3">

@@ -26,6 +26,8 @@ export default function StagingPage() {
   const [filter, setFilter] = useState<string>('all');
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [processingQueue, setProcessingQueue] = useState(false);
+  const [queueStatus, setQueueStatus] = useState<{processed: number; failed: number; remaining: number} | null>(null);
 
   const twinId = activeTwin?.id;
 
@@ -110,6 +112,36 @@ export default function StagingPage() {
     }
   };
 
+  const handleProcessQueue = async () => {
+    if (!twinId) return;
+    setProcessingQueue(true);
+    setError(null);
+    setQueueStatus(null);
+    
+    try {
+      const response = await post(`/training-jobs/process-queue?twin_id=${twinId}`);
+      if (response.ok) {
+        const result = await response.json();
+        setQueueStatus({
+          processed: result.processed || 0,
+          failed: result.failed || 0,
+          remaining: result.remaining || 0
+        });
+        // Refresh sources to see updated status
+        setTimeout(() => {
+          fetchSources();
+        }, 1000);
+      } else {
+        const data = await response.json();
+        setError(data.detail || 'Failed to process queue');
+      }
+    } catch (err) {
+      setError('Connection error while processing queue');
+    } finally {
+      setProcessingQueue(false);
+    }
+  };
+
   const getHealthBadge = (status: string) => {
     const colors = {
       healthy: 'bg-green-100 text-green-700',
@@ -172,14 +204,37 @@ export default function StagingPage() {
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Content Staging</h1>
           <p className="text-slate-500 mt-2 font-medium">Review and approve content before it enters the brain.</p>
         </div>
-        {selectedSources.size > 0 && (
-          <button
-            onClick={handleBulkApprove}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 transition-all"
-          >
-            Approve Selected ({selectedSources.size})
-          </button>
-        )}
+        <div className="flex gap-3">
+          {sources.filter(s => s.staging_status === 'approved').length > 0 && (
+            <button
+              onClick={handleProcessQueue}
+              disabled={processingQueue}
+              className="px-6 py-3 bg-green-600 text-white rounded-2xl text-sm font-black hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            >
+              {processingQueue ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Process Queue ({sources.filter(s => s.staging_status === 'approved').length} approved)
+                </>
+              )}
+            </button>
+          )}
+          {selectedSources.size > 0 && (
+            <button
+              onClick={handleBulkApprove}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 transition-all"
+            >
+              Approve Selected ({selectedSources.size})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -201,6 +256,26 @@ export default function StagingPage() {
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-600 p-6 rounded-2xl text-sm font-bold">
           {error}
+        </div>
+      )}
+
+      {queueStatus && (
+        <div className={`border p-6 rounded-2xl text-sm font-bold ${
+          queueStatus.failed > 0 
+            ? 'bg-yellow-50 border-yellow-200 text-yellow-800' 
+            : 'bg-green-50 border-green-200 text-green-800'
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Queue Processing Complete</span>
+          </div>
+          <div className="text-xs mt-2 space-y-1">
+            <div>Processed: {queueStatus.processed} job(s)</div>
+            {queueStatus.failed > 0 && <div>Failed: {queueStatus.failed} job(s)</div>}
+            {queueStatus.remaining > 0 && <div>Remaining: {queueStatus.remaining} job(s)</div>}
+          </div>
         </div>
       )}
 
