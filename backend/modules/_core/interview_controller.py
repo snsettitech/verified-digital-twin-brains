@@ -111,6 +111,112 @@ class InterviewController:
             return {}
     
     @staticmethod
+    def increment_clarification_attempts(session_id: str) -> int:
+        """Increment clarification attempts counter."""
+        if not session_id:
+            return 0
+        
+        try:
+            # Get current attempts
+            current = supabase.table("interview_sessions").select("clarification_attempts").eq("id", session_id).single().execute()
+            current_attempts = current.data.get("clarification_attempts", 0) if current.data else 0
+            new_attempts = current_attempts + 1
+            
+            result = supabase.rpc("update_interview_session", {
+                "session_id": session_id,
+                "new_clarification_attempts": new_attempts
+            }).execute()
+            return new_attempts
+        except Exception as e:
+            print(f"Error incrementing clarification attempts: {e}")
+            return 0
+    
+    @staticmethod
+    def reset_clarification_attempts(session_id: str) -> Dict[str, Any]:
+        """Reset clarification attempts to 0."""
+        if not session_id:
+            return {}
+        
+        try:
+            result = supabase.rpc("update_interview_session", {
+                "session_id": session_id,
+                "reset_clarification_attempts": True
+            }).execute()
+            return result.data if result.data else {}
+        except Exception as e:
+            print(f"Error resetting clarification attempts: {e}")
+            return {}
+    
+    @staticmethod
+    def get_clarification_attempts(session: Dict[str, Any]) -> int:
+        """Get current clarification attempts count."""
+        return session.get("clarification_attempts", 0)
+    
+    @staticmethod
+    def append_quality_score(session_id: str, quality_score: Dict[str, Any]) -> Dict[str, Any]:
+        """Append a quality score to the session's quality scores array."""
+        if not session_id:
+            return {}
+        
+        try:
+            result = supabase.rpc("update_interview_session", {
+                "session_id": session_id,
+                "append_quality_score": quality_score
+            }).execute()
+            return result.data if result.data else {}
+        except Exception as e:
+            print(f"Error appending quality score: {e}")
+            return {}
+    
+    @staticmethod
+    def update_current_question(session_id: str, question_id: str) -> Dict[str, Any]:
+        """Update the current question ID being asked."""
+        if not session_id:
+            return {}
+        
+        try:
+            result = supabase.rpc("update_interview_session", {
+                "session_id": session_id,
+                "new_current_question_id": question_id
+            }).execute()
+            return result.data if result.data else {}
+        except Exception as e:
+            print(f"Error updating current question: {e}")
+            return {}
+    
+    @staticmethod
+    def update_repair_strategy(session_id: str, strategy: str) -> Dict[str, Any]:
+        """Update the last repair strategy used."""
+        if not session_id:
+            return {}
+        
+        try:
+            result = supabase.rpc("update_interview_session", {
+                "session_id": session_id,
+                "new_last_repair_strategy": strategy
+            }).execute()
+            return result.data if result.data else {}
+        except Exception as e:
+            print(f"Error updating repair strategy: {e}")
+            return {}
+    
+    @staticmethod
+    def add_skipped_slot(session_id: str, slot_id: str) -> Dict[str, Any]:
+        """Add a slot ID to the skipped slots array."""
+        if not session_id:
+            return {}
+        
+        try:
+            result = supabase.rpc("update_interview_session", {
+                "session_id": session_id,
+                "add_skipped_slot": slot_id
+            }).execute()
+            return result.data if result.data else {}
+        except Exception as e:
+            print(f"Error adding skipped slot: {e}")
+            return {}
+    
+    @staticmethod
     def get_stage(session: Dict[str, Any]) -> InterviewStage:
         """Get current interview stage."""
         stage_str = session.get("stage", InterviewStage.OPENING.value)

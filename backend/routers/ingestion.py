@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import JSONResponse
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership, verify_source_ownership
 from modules.schemas import (
     YouTubeIngestRequest, PodcastIngestRequest, XThreadIngestRequest,
@@ -250,7 +251,7 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
     else:
         status = "success"
     
-    response = {
+    response_data = {
         "status": status,
         "processed": processed,
         "failed": failed,
@@ -260,12 +261,26 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
     
     # Include error details if any
     if errors:
-        response["errors"] = errors[:5]  # Limit to first 5 errors to avoid huge response
+        response_data["errors"] = errors[:5]  # Limit to first 5 errors to avoid huge response
         # If all failed, include first error in message
         if processed == 0 and failed > 0:
-            response["message"] = f"Failed to process {failed} job(s). First error: {errors[0]}"
+            response_data["message"] = f"Failed to process {failed} job(s). First error: {errors[0]}"
     
-    return response
+    # Return appropriate HTTP status codes
+    if status == "error":
+        # All jobs failed - return 500 Internal Server Error
+        # Use JSONResponse to return error status code with full error details in body
+        return JSONResponse(
+            status_code=500,
+            content=response_data
+        )
+    elif status == "partial":
+        # Some succeeded, some failed - return 200 OK with status in body
+        # Frontend can check response_data.status === "partial" to handle appropriately
+        return response_data
+    else:
+        # All succeeded - return 200 OK
+        return response_data
 
 @router.get("/training-jobs/{job_id}")
 async def get_training_job_endpoint(job_id: str, user=Depends(get_current_user)):

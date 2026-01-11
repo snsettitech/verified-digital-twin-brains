@@ -215,6 +215,194 @@ async def process_interaction(
         return {"nodes": [], "edges": [], "error": str(e)}
 
 
+async def extract_for_slot(
+    twin_id: str,
+    user_message: str,
+    assistant_message: str,
+    slot_id: str,
+    target_node_type: Optional[str] = None,
+    current_question: Optional[str] = None,
+    history: List[Dict[str, Any]] = None,
+    tenant_id: str = None,
+    conversation_id: str = None
+) -> Dict[str, Any]:
+    """
+    Extract structured data from user response for a specific slot.
+    
+    Slot-aware extraction that focuses on extracting information relevant
+    to the current slot being filled.
+    
+    Args:
+        twin_id: Twin ID
+        user_message: User's response message
+        assistant_message: Assistant's question
+        slot_id: Current slot ID being filled
+        target_node_type: Expected node type for this slot (optional)
+        current_question: Current question text (optional)
+        history: Conversation history (optional)
+        tenant_id: Tenant ID (optional)
+        conversation_id: Conversation ID (optional)
+    
+    Returns:
+        Dict with nodes, edges, confidence, and slot_relevance
+    """
+    from modules.memory_events import create_memory_event, update_memory_event
+    
+    memory_event = None
+    
+    try:
+        client = get_async_openai_client()
+        
+        # Build slot-aware system prompt
+        slot_context = f"Current slot: {slot_id}"
+        if target_node_type:
+            slot_context += f"\nExpected node type: {target_node_type}"
+        if current_question:
+            slot_context += f"\nQuestion asked: {current_question}"
+        
+        system_content = f"""You are an expert Knowledge Graph Scribe focused on extracting information for a specific interview slot.
+
+{slot_context}
+
+Your goal is to extract structured entities (Nodes) and relationships (Edges) from the user's response that are relevant to this slot.
+
+Focus on:
+- Information directly answering the current question
+- Entities, concepts, and facts mentioned in the response
+- Relationships between entities
+- Metrics, values, and specific details
+
+Do NOT create generic nodes like 'User' or 'Assistant'.
+Ensure node names are canonical (Title Case).
+Only extract information that is relevant to the current slot/question."""
+        
+        messages = [
+            {"role": "system", "content": system_content}
+        ]
+        
+        if history:
+            # Flatten history (limit last 6 turns)
+            for msg in history[-6:]:
+                if hasattr(msg, "content"):  # LangChain Object
+                    role = "user"
+                    if hasattr(msg, "type") and msg.type == "ai":
+                        role = "assistant"
+                    elif hasattr(msg, "role"):
+                        role = msg.role
+                    content = msg.content
+                elif isinstance(msg, dict):  # Check dict last
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                else:
+                    continue
+                
+                messages.append({"role": role, "content": content})
+        
+        # Add current turn
+        messages.append({"role": "user", "content": user_message})
+        if assistant_message:
+            messages.append({"role": "assistant", "content": assistant_message})
+        
+        # Call OpenAI with Pydantic Schema
+        response = await client.beta.chat.completions.parse(
+            model="gpt-4o-2024-08-06",
+            messages=messages,
+            response_format=GraphUpdates,
+            temperature=0.0
+        )
+        
+        updates = response.choices[0].message.parsed
+        
+        if not updates:
+            logger.warning(f"Scribe returned no parsed structure for slot {slot_id}")
+            return {"nodes": [], "edges": [], "confidence": 0.0, "slot_relevance": 0.0}
+        
+        logger.info(f"Scribe extracted for slot {slot_id}: {len(updates.nodes)} nodes, {len(updates.edges)} edges, conf={updates.confidence}")
+        
+        # Calculate slot relevance (check if extracted nodes match target type)
+        slot_relevance = updates.confidence
+        if target_node_type and updates.nodes:
+            # Check if any node type matches target
+            matching_nodes = [
+                n for n in updates.nodes
+                if target_node_type.lower() in n.type.lower() or n.type.lower() in target_node_type.lower()
+            ]
+            if matching_nodes:
+                slot_relevance = min(1.0, updates.confidence + 0.2)
+            else:
+                slot_relevance = max(0.0, updates.confidence - 0.1)
+        
+        # Create MemoryEvent BEFORE persist (audit trail)
+        if tenant_id:
+            memory_event = await create_memory_event(
+                twin_id=twin_id,
+                tenant_id=tenant_id,
+                event_type="slot_extract",
+                payload={
+                    "slot_id": slot_id,
+                    "target_node_type": target_node_type,
+                    "raw_nodes": [n.model_dump() for n in updates.nodes],
+                    "raw_edges": [e.model_dump() for e in updates.edges],
+                    "confidence": updates.confidence,
+                    "slot_relevance": slot_relevance
+                },
+                status="applied",
+                source_type="chat_turn",
+                source_id=conversation_id
+            )
+        
+        # Persist to Supabase
+        created_nodes = await _persist_nodes(twin_id, updates.nodes)
+        
+        # Create map for Edges
+        node_map = {n['name']: n['id'] for n in created_nodes}
+        
+        # Persist Edges
+        valid_edges = []
+        for edge in updates.edges:
+            from_id = node_map.get(edge.from_node)
+            to_id = node_map.get(edge.to_node)
+            
+            if from_id and to_id:
+                valid_edges.append(edge)
+        
+        created_edges = await _persist_edges(twin_id, valid_edges, node_map)
+        
+        # Update MemoryEvent with resolved IDs
+        if memory_event:
+            await update_memory_event(memory_event['id'], {
+                "nodes_created": [n['id'] for n in created_nodes],
+                "edges_created": [e['id'] for e in created_edges],
+                "node_count": len(created_nodes),
+                "edge_count": len(created_edges)
+            })
+        
+        return {
+            "nodes": created_nodes,
+            "edges": created_edges,
+            "confidence": updates.confidence,
+            "slot_relevance": slot_relevance,
+            "memory_event_id": memory_event['id'] if memory_event else None
+        }
+    
+    except Exception as e:
+        logger.error(f"Scribe Engine Error (slot {slot_id}): {e}", exc_info=True)
+        print(f"Scribe Engine Critical Failure (slot {slot_id}): {e}")
+        
+        # Create failed MemoryEvent for audit trail
+        if tenant_id:
+            await create_memory_event(
+                twin_id=twin_id,
+                tenant_id=tenant_id,
+                event_type="slot_extract",
+                payload={"slot_id": slot_id, "error": str(e)},
+                status="failed",
+                source_type="chat_turn",
+                source_id=conversation_id
+            )
+        
+        return {"nodes": [], "edges": [], "confidence": 0.0, "slot_relevance": 0.0, "error": str(e)}
+
 
 async def _persist_nodes(twin_id: str, nodes: List[NodeUpdate]) -> List[Dict[str, Any]]:
     """Persist nodes using system RPC."""

@@ -18,8 +18,10 @@ import json
 from modules.auth_guard import get_current_user, verify_twin_ownership
 from modules.observability import supabase, get_messages, log_interaction, create_conversation
 from modules.agent import run_agent_stream
-from modules._core.host_engine import get_next_slot, get_next_question, process_turn
-from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions
+from modules._core.host_engine import get_next_slot, get_next_question, process_turn, generate_contextual_question
+from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions, extract_for_slot
+from modules._core.response_evaluator import ResponseEvaluator
+from modules._core.repair_strategies import RepairManager
 from modules._core.registry_loader import get_specialization_manifest
 from modules.specializations import get_specialization
 from langchain_core.messages import AIMessage
@@ -226,6 +228,7 @@ async def cognitive_interview(
     follow_up_question = None
     intent_summary = None
     next_stage = stage.value
+    scribe_result = {}  # Initialize to empty dict for return statement
     
     # STAGE 0: OPENING
     if stage == InterviewStage.OPENING:
@@ -242,47 +245,96 @@ async def cognitive_interview(
     
     # STAGE 1: INTENT CAPTURE
     elif stage == InterviewStage.INTENT_CAPTURE:
-        # Extract from response
-        scribe_result = await process_interaction(
-            twin_id=twin_id,
-            user_message=request.message,
-            assistant_message="",  # Will be generated below
-            history=history
-        )
-        
         log_interaction(conversation_id, "user", request.message)
         
-        # Check how many intent nodes we have now
-        intent_count = len([n for n in (scribe_result.get("nodes") or []) if "intent" in str(n).lower()])
-        total_intent = len(intent_nodes) + intent_count
+        # Get current question
+        next_intent_q = InterviewController.get_next_intent_question(session)
+        current_question = next_intent_q if next_intent_q else INTENT_QUESTIONS[0]
         
-        if total_intent >= 2:
-            # Enough intent captured - move to profile
-            first_slot = get_next_slot(host_policy, filled_slots)
-            if first_slot:
-                q = get_next_question(host_policy, filled_slots, spec.name)
-                question = q.get("question") if q else f"What's your {first_slot['slot_id'].replace('_', ' ')}?"
-                final_response = f"Got it. Building your profile now.\n\n{question}"
-            else:
-                final_response = "Got it. Let me start building your profile."
-            next_stage = InterviewStage.DEEP_INTERVIEW.value
+        # Evaluate response quality
+        quality_result = await ResponseEvaluator.evaluate_response(
+            request.message,
+            current_question=current_question,
+            use_llm=True
+        )
+        
+        # Track quality score
+        InterviewController.append_quality_score(session_id, {
+            "turn": session.get("turn_count", 0) + 1,
+            "stage": "intent_capture",
+            "slot": current_question.get("id", "unknown"),
+            "quality_score": quality_result.quality_score,
+            "tier": quality_result.tier,
+            "is_substantive": quality_result.is_substantive
+        })
+        
+        # Check if response is sufficient
+        if not quality_result.is_substantive or quality_result.quality_score < 0.5:
+            # Response insufficient - use repair strategy
+            clarification_attempts = InterviewController.get_clarification_attempts(session) + 1
+            InterviewController.increment_clarification_attempts(session_id)
+            
+            repair = RepairManager.get_repair_strategy(
+                clarification_attempts,
+                current_question=current_question,
+                user_message=request.message
+            )
+            
+            InterviewController.update_repair_strategy(session_id, repair.strategy_type)
+            final_response = repair.message
+            next_stage = InterviewStage.INTENT_CAPTURE.value  # Stay in same stage
+            InterviewController.update_session(session_id, increment_turn=True)
+            log_interaction(conversation_id, "assistant", final_response)
         else:
-            # Need more intent info
-            next_intent_q = InterviewController.get_next_intent_question(session)
-            if next_intent_q:
-                final_response = next_intent_q["question"]
-                InterviewController.update_session(session_id, add_template_id=next_intent_q["id"], increment_turn=True)
-            else:
-                # All intent questions asked - skip confirmation, go straight to profile
+            # Response sufficient - extract and process
+            InterviewController.reset_clarification_attempts(session_id)
+            
+            # Extract from response using slot-aware extraction
+            scribe_result = await extract_for_slot(
+                twin_id=twin_id,
+                user_message=request.message,
+                assistant_message=current_question.get("question", ""),
+                slot_id=current_question.get("id", ""),
+                target_node_type=current_question.get("target_node"),
+                current_question=current_question.get("question"),
+                history=history,
+                conversation_id=conversation_id
+            )
+            
+            # Check how many intent nodes we have now
+            intent_count = len([n for n in (scribe_result.get("nodes") or []) if "intent" in str(n.get("type", "")).lower()])
+            total_intent = len(intent_nodes) + intent_count
+            
+            if total_intent >= 2:
+                # Enough intent captured - move to profile
                 first_slot = get_next_slot(host_policy, filled_slots)
                 if first_slot:
                     q = get_next_question(host_policy, filled_slots, spec.name)
                     question = q.get("question") if q else f"What's your {first_slot['slot_id'].replace('_', ' ')}?"
-                    final_response = f"Got it. Now building your profile.\n\n{question}"
+                    final_response = f"Got it. Building your profile now.\n\n{question}"
                 else:
-                    final_response = "Got it. Your profile is set."
+                    final_response = "Got it. Let me start building your profile."
                 next_stage = InterviewStage.DEEP_INTERVIEW.value
-                InterviewController.update_session(session_id, new_stage=next_stage, new_intent_confirmed=True, increment_turn=True)
+                InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+            else:
+                # Need more intent info
+                next_intent_q = InterviewController.get_next_intent_question(session)
+                if next_intent_q:
+                    final_response = next_intent_q["question"]
+                    InterviewController.update_current_question(session_id, next_intent_q["id"])
+                    InterviewController.update_session(session_id, add_template_id=next_intent_q["id"], increment_turn=True)
+                else:
+                    # All intent questions asked - skip confirmation, go straight to profile
+                    first_slot = get_next_slot(host_policy, filled_slots)
+                    if first_slot:
+                        q = get_next_question(host_policy, filled_slots, spec.name)
+                        question = q.get("question") if q else f"What's your {first_slot['slot_id'].replace('_', ' ')}?"
+                        final_response = f"Got it. Now building your profile.\n\n{question}"
+                    else:
+                        final_response = "Got it. Your profile is set."
+                    next_stage = InterviewStage.DEEP_INTERVIEW.value
+                    InterviewController.update_session(session_id, new_stage=next_stage, new_intent_confirmed=True, increment_turn=True)
+                log_interaction(conversation_id, "assistant", final_response)
     
     # STAGE 1.5: CONFIRM INTENT (simplified - mostly auto-confirm now)
     elif stage == InterviewStage.CONFIRM_INTENT:
@@ -315,32 +367,144 @@ async def cognitive_interview(
     
     # STAGE 2: DEEP INTERVIEW (concise questions)
     elif stage == InterviewStage.DEEP_INTERVIEW:
-        # Extract structured data from user's response
-        scribe_result = await process_interaction(
-            twin_id=twin_id,
-            user_message=request.message,
-            assistant_message="",
-            history=history
-        )
-        
         log_interaction(conversation_id, "user", request.message)
         
-        # Get next question
-        next_slot = get_next_slot(host_policy, filled_slots)
+        # Get current slot being filled
+        current_slot = get_next_slot(host_policy, filled_slots)
         
-        if next_slot:
-            q = get_next_question(host_policy, filled_slots, spec.name)
-            question = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
-            final_response = question
-            suggested_question = question
-        else:
-            # Done!
+        if not current_slot:
+            # No more slots - we're done!
             final_response = "Profile complete. Your twin is ready."
             next_stage = InterviewStage.COMPLETE.value
-            InterviewController.update_session(session_id, new_stage=next_stage)
-        
-        log_interaction(conversation_id, "assistant", final_response)
-        InterviewController.update_session(session_id, increment_turn=True)
+            InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+            log_interaction(conversation_id, "assistant", final_response)
+        else:
+            # Get current question
+            q = get_next_question(host_policy, filled_slots, spec.name, session.get("asked_template_ids", []))
+            current_question = {
+                "question": q.get("question") if q else f"What's your {current_slot['slot_id'].replace('_', ' ')}?",
+                "id": q.get("template_id") if q else current_slot.get("slot_id"),
+                "target_node": q.get("target_node") if q else None
+            }
+            
+            # Evaluate response quality
+            quality_result = await ResponseEvaluator.evaluate_response(
+                request.message,
+                current_question=current_question,
+                current_slot=current_slot,
+                use_llm=True
+            )
+            
+            # Track quality score
+            InterviewController.append_quality_score(session_id, {
+                "turn": session.get("turn_count", 0) + 1,
+                "stage": "deep_interview",
+                "slot": current_slot.get("slot_id", "unknown"),
+                "quality_score": quality_result.quality_score,
+                "tier": quality_result.tier,
+                "is_substantive": quality_result.is_substantive,
+                "relevance_score": quality_result.relevance_score
+            })
+            
+            # Check if response is sufficient (quality > 0.5 and scribe confidence > 0.4)
+            if not quality_result.is_substantive or quality_result.quality_score < 0.5:
+                # Response insufficient - use repair strategy
+                clarification_attempts = InterviewController.get_clarification_attempts(session) + 1
+                InterviewController.increment_clarification_attempts(session_id)
+                
+                repair = RepairManager.get_repair_strategy(
+                    clarification_attempts,
+                    current_question=current_question,
+                    current_slot=current_slot,
+                    user_message=request.message
+                )
+                
+                InterviewController.update_repair_strategy(session_id, repair.strategy_type)
+                
+                # Handle skip request
+                if repair.should_skip and RepairManager.detect_skip_request(request.message):
+                    InterviewController.add_skipped_slot(session_id, current_slot.get("slot_id"))
+                    # Move to next slot
+                    next_slot = get_next_slot(host_policy, filled_slots)
+                    if next_slot:
+                        q = get_next_question(host_policy, filled_slots, spec.name, session.get("asked_template_ids", []))
+                        question = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
+                        final_response = f"Skipped. {question}"
+                    else:
+                        final_response = "Profile complete. Your twin is ready."
+                        next_stage = InterviewStage.COMPLETE.value
+                        InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+                else:
+                    final_response = repair.message
+                    next_stage = InterviewStage.DEEP_INTERVIEW.value  # Stay in same stage
+                    InterviewController.update_session(session_id, increment_turn=True)
+                
+                log_interaction(conversation_id, "assistant", final_response)
+            else:
+                # Response sufficient - extract and process
+                InterviewController.reset_clarification_attempts(session_id)
+                
+                # Extract using slot-aware extraction
+                scribe_result = await extract_for_slot(
+                    twin_id=twin_id,
+                    user_message=request.message,
+                    assistant_message=current_question.get("question", ""),
+                    slot_id=current_slot.get("slot_id", ""),
+                    target_node_type=current_question.get("target_node"),
+                    current_question=current_question.get("question"),
+                    history=history,
+                    conversation_id=conversation_id
+                )
+                
+                # Only advance if extraction was successful (confidence > 0.4 and nodes extracted)
+                scribe_confidence = scribe_result.get("confidence", 0.0)
+                nodes_extracted = len(scribe_result.get("nodes", []))
+                
+                if scribe_confidence > 0.4 and nodes_extracted > 0:
+                    # Extraction successful - move to next slot
+                    next_slot = get_next_slot(host_policy, filled_slots)
+                    
+                    if next_slot:
+                        q = get_next_question(host_policy, filled_slots, spec.name, session.get("asked_template_ids", []))
+                        question_text = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
+                        
+                        # Generate contextual question if we have existing nodes
+                        if existing_nodes:
+                            question_text = generate_contextual_question(
+                                question_text,
+                                next_slot,
+                                existing_nodes=existing_nodes,
+                                history=history,
+                                use_llm=False
+                            )
+                        
+                        final_response = question_text
+                        suggested_question = question_text
+                        InterviewController.update_current_question(session_id, q.get("template_id") if q else next_slot.get("slot_id"))
+                        InterviewController.update_session(session_id, add_template_id=q.get("template_id") if q else None, increment_turn=True)
+                    else:
+                        # Done!
+                        final_response = "Profile complete. Your twin is ready."
+                        next_stage = InterviewStage.COMPLETE.value
+                        InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
+                else:
+                    # Extraction failed - ask again with repair strategy
+                    clarification_attempts = InterviewController.get_clarification_attempts(session) + 1
+                    InterviewController.increment_clarification_attempts(session_id)
+                    
+                    repair = RepairManager.get_repair_strategy(
+                        clarification_attempts,
+                        current_question=current_question,
+                        current_slot=current_slot,
+                        user_message=request.message
+                    )
+                    
+                    InterviewController.update_repair_strategy(session_id, repair.strategy_type)
+                    final_response = repair.message
+                    next_stage = InterviewStage.DEEP_INTERVIEW.value
+                    InterviewController.update_session(session_id, increment_turn=True)
+                
+                log_interaction(conversation_id, "assistant", final_response)
     
     # STAGE 3: COMPLETE (conversational with full context)
     elif stage == InterviewStage.COMPLETE:
@@ -392,8 +556,8 @@ Keep responses brief and conversational."""
         next_slot=get_next_slot(host_policy, filled_slots),
         suggested_question=suggested_question,
         follow_up_question=follow_up_question,
-        extracted_data=scribe_result if 'scribe_result' in dir() else {},
-        confidence=scribe_result.get("confidence", 0.0) if 'scribe_result' in dir() else 0.0,
+        extracted_data=scribe_result if scribe_result else {},
+        confidence=scribe_result.get("confidence", 0.0) if scribe_result else 0.0,
         contradictions=[],
         missing_slots=missing_slots[:5],
         progress=progress

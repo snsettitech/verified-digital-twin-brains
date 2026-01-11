@@ -162,6 +162,53 @@ def get_next_question(
             "target_node": None
         }
 
+def generate_contextual_question(
+    template_question: str,
+    slot: Dict[str, Any],
+    existing_nodes: List[Dict[str, Any]] = None,
+    history: List[Dict[str, Any]] = None,
+    use_llm: bool = False
+) -> str:
+    """
+    Generate a contextual question by referencing prior answers.
+    
+    Args:
+        template_question: Base question template
+        slot: Slot definition dict
+        existing_nodes: Existing nodes from the graph (optional)
+        history: Conversation history (optional)
+        use_llm: Whether to use LLM for contextualization (default: False)
+    
+    Returns:
+        Contextualized question string
+    """
+    if not use_llm:
+        # Simple contextualization without LLM
+        # Just add a transition if we have recent context
+        if existing_nodes and len(existing_nodes) > 0:
+            # Reference the most recent relevant node
+            recent_node = existing_nodes[-1]
+            node_name = recent_node.get("name", "")
+            if node_name:
+                # Simple pattern: "You mentioned X. [question]"
+                transitions = [
+                    "Building on that",
+                    "Related to that",
+                    "Given that",
+                ]
+                import random
+                transition = random.choice(transitions)
+                # Only add context if it makes sense
+                if len(node_name) < 30:  # Don't add long names
+                    return f"{transition} you mentioned {node_name}. {template_question}"
+        
+        return template_question
+    
+    # LLM-based contextualization (future enhancement)
+    # For now, just return the template
+    return template_question
+
+
 def process_turn(twin_id: str, user_message: str, history: List[Dict[str, Any]]) -> str:
     """
     Generate a Host-driven response (Question).
