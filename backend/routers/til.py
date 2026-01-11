@@ -62,8 +62,6 @@ async def list_memory_events_endpoint(
     event_type: Optional[str] = None,
     user=Depends(get_current_user)
 ):
-    # Verify user has access to this twin
-    verify_twin_ownership(twin_id, user)
     """
     List all memory events for a twin.
     
@@ -71,6 +69,7 @@ async def list_memory_events_endpoint(
     - limit: Max events to return
     - event_type: Filter by type (auto_extract, manual_edit, confirm, delete)
     """
+    # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
     
     try:

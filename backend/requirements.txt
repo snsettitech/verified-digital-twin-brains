@@ -25,3 +25,5 @@ feedparser
 twikit
 openai-whisper
 youtube-transcript-api
+google-genai
+google-api-python-client

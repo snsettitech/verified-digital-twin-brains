@@ -58,3 +58,6 @@ Thumbs.db
 *.swp
 *.swo
 .cursor/
+
+# YouTube
+youtube_cookies.txt

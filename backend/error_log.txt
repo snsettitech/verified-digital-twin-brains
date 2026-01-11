@@ -1,0 +1,61 @@
+﻿.\.venv\Scripts\python.exe 
+: Traceback (most recent 
+call last):
+At line:1 char:1
++ 
+.\.venv\Scripts\python.exe 
+main.py 2>&1 | Out-File 
+-FilePath error_lo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
+    + CategoryInfo         
+     : NotSpecified: (Tra  
+  ceback (most recent ca   
+ ll last)::String) [],     
+RemoteException
+    + FullyQualifiedErrorI 
+   d : NativeCommandError
+ 
+  File "C:\Users\saina\veri
+fied-digital-twin-brain\bac
+kend\main.py", line 5, in 
+<module>
+    from routers import (
+  File "C:\Users\saina\veri
+fied-digital-twin-brain\bac
+kend\routers\auth.py", 
+line 5, in <module>
+    from 
+modules.auth_guard import 
+verify_owner, 
+get_current_user
+  File "C:\Users\saina\veri
+fied-digital-twin-brain\bac
+kend\modules\auth_guard.py"
+, line 5, in <module>
+    from modules.api_keys 
+import validate_api_key, 
+validate_domain
+  File "C:\Users\saina\veri
+fied-digital-twin-brain\bac
+kend\modules\api_keys.py", 
+line 10, in <module>
+    from 
+modules.observability 
+import supabase
+  File "C:\Users\saina\veri
+fied-digital-twin-brain\bac
+kend\modules\observability.
+py", line 4, in <module>
+    from modules.clients 
+import get_pinecone_index
+  File "C:\Users\saina\veri
+fied-digital-twin-brain\bac
+kend\modules\clients.py", 
+line 2, in <module>
+    from pinecone import 
+Pinecone
+ImportError: cannot import 
+name 'Pinecone' from 
+'pinecone' (unknown 
+location)

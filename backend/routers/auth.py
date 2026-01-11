@@ -50,14 +50,33 @@ async def sync_user(user=Depends(get_current_user)):
     existing = supabase.table("users").select("*, tenants(id, name)").eq("id", user_id).execute()
     
     if existing.data and len(existing.data) > 0:
-        # User exists - return profile
+        # User exists - check if they have a tenant
         user_data = existing.data[0]
-        tenant_id = None
-        if user_data.get("tenants"):
-            tenant_id = user_data["tenants"].get("id") if isinstance(user_data["tenants"], dict) else None
+        tenant_id = user_data.get("tenant_id")
+        
+        # ENTERPRISE FIX: Auto-create tenant if missing
+        if not tenant_id:
+            print(f"[SYNC DEBUG] User exists but has no tenant_id, auto-creating...")
+            full_name = user.get("name") or user.get("user_metadata", {}).get("full_name") or email.split("@")[0]
+            
+            try:
+                tenant_insert = supabase.table("tenants").insert({
+                    "name": f"{full_name}'s Workspace"
+                }).execute()
+                tenant_id = tenant_insert.data[0]["id"] if tenant_insert.data else None
+                print(f"[SYNC DEBUG] Created tenant {tenant_id} for existing user")
+                
+                # Update user with new tenant_id
+                if tenant_id:
+                    supabase.table("users").update({
+                        "tenant_id": tenant_id
+                    }).eq("id", user_id).execute()
+                    print(f"[SYNC DEBUG] Updated user with tenant_id")
+            except Exception as e:
+                print(f"[SYNC DEBUG] ERROR auto-creating tenant: {e}")
+                # Continue without tenant - will fail on operations but at least auth works
         
         # Check if they have any twins (onboarding complete if yes)
-        # Use tenant_id from user's tenant to find twins
         if tenant_id:
             twins_check = supabase.table("twins").select("id").eq("tenant_id", tenant_id).limit(1).execute()
             has_twins = bool(twins_check.data)

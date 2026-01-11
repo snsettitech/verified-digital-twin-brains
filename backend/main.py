@@ -52,6 +52,22 @@ app.include_router(jobs.router)
 app.include_router(til.router)
 app.include_router(feedback.router)
 
+# Conditional VC Routes (only if explicitly enabled)
+# VC routes are conditionally loaded to prevent VC files from interfering
+# with vanilla flows. This is critical because:
+# 1. VC routes should only be available when VC is actively used
+# 2. VC imports/dependencies should not be loaded globally
+# 3. This prevents VC-related startup errors from breaking vanilla deployments
+VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
+if VC_ROUTES_ENABLED:
+    try:
+        from api import vc_routes
+        app.include_router(vc_routes.router, prefix="/api", tags=["vc"])
+        print("✅ VC routes enabled (ENABLE_VC_ROUTES=true)")
+    except ImportError as e:
+        print(f"⚠️  VC routes not available (ImportError): {e}")
+        print("   VC routes will be disabled. Set ENABLE_VC_ROUTES=false to suppress this warning.")
+
 # ============================================================================
 # P0 Deployment: Health Check Endpoint
 # ============================================================================

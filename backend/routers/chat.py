@@ -122,7 +122,8 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                 twin_id=twin_id,
                 query=query,
                 history=langchain_history,
-                group_id=group_id
+                group_id=group_id,
+                conversation_id=conversation_id
             ):
                 # Capture metadata from tools
                 if "tools" in chunk:
@@ -284,7 +285,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         confidence_score = 0.0
         sent_metadata = False
 
-        async for event in run_agent_stream(twin_id, query, history, system_prompt, group_id=group_id):
+        async for event in run_agent_stream(twin_id, query, history, system_prompt, group_id=group_id, conversation_id=conversation_id):
             if "tools" in event:
                 citations = event["tools"].get("citations", citations)
                 confidence_score = event["tools"].get("confidence_score", confidence_score)
@@ -373,7 +374,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
     
     try:
         final_response = ""
-        async for event in run_agent_stream(twin_id, request.message, history, group_id=group_id):
+        async for event in run_agent_stream(twin_id, request.message, history, group_id=group_id, conversation_id=conversation_id):
             if "agent" in event:
                 msg = event["agent"]["messages"][-1]
                 if isinstance(msg, AIMessage) and msg.content:

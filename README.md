@@ -1,5 +1,7 @@
 # Verified Digital Twin Brain - Platform Summary
 
+> Repository: [https://github.com/snsettitech/verified-digital-twin-brains](https://github.com/snsettitech/verified-digital-twin-brains)
+
 A **Delphi-grade** AI platform for creating verified, trustworthy digital twins with enterprise-level governance, multi-audience distribution, and agentic capabilities.
 
 ## Executive Summary

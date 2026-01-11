@@ -38,38 +38,57 @@ def extract_video_id(url: str) -> str:
 
 async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
     """
-    Ingest YouTube video transcript using multi-strategy approach:
-    1. YouTubeTranscriptApi (fastest, for videos with captions)
-    2. yt-dlp + Gemini/Whisper (for videos without captions)
+    Ingest YouTube video transcript using robust multi-strategy approach.
+    
+    Strategies:
+    1. Official YouTube Data API (Metadata validation)
+    2. YouTubeTranscriptApi (Best for captions)
+    3. yt-dlp with Client Emulation (Bypasses IP blocking without cookies) + Gemini
     """
     video_id = extract_video_id(url)
     if not video_id:
         raise ValueError("Invalid YouTube URL")
     
     text = None
+    video_title = None
     transcript_error = None
     
-    # ============================================================
-    # Strategy 1: YouTubeTranscriptApi (official transcripts - FREE)
-    # ============================================================
+    # -------------------------------------------------------------
+    # Step 0: Validate via YouTube Data API (if key available)
+    # -------------------------------------------------------------
+    google_api_key = os.getenv("GOOGLE_API_KEY") # We use the same key for Gemini and YouTube Data API
+    if google_api_key:
+        try:
+            from googleapiclient.discovery import build
+            youtube = build('youtube', 'v3', developerKey=google_api_key)
+            request = youtube.videos().list(part="snippet", id=video_id)
+            response = request.execute()
+            
+            if response["items"]:
+                snippet = response["items"][0]["snippet"]
+                video_title = snippet["title"]
+                # We can also get description here if needed
+                print(f"[YouTube] Validated video: {video_title}")
+        except Exception as e:
+            print(f"[YouTube] Data API check failed (non-blocking): {e}")
+
+    # -------------------------------------------------------------
+    # Strategy 1: YouTubeTranscriptApi (Official, Fast)
+    # -------------------------------------------------------------
     try:
+        # Try without cookies first (fastest)
         transcript_snippets = YouTubeTranscriptApi().fetch(video_id)
         text = " ".join([item.text for item in transcript_snippets])
         log_ingestion_event(source_id, twin_id, "info", f"Fetched official YouTube transcript")
     except Exception as e:
         transcript_error = str(e)
         print(f"[YouTube] Transcript API failed: {e}")
-        log_ingestion_event(source_id, twin_id, "warning", f"Transcript API failed: {e}")
-    
-    # ============================================================
-    # Strategy 2: Try alternative transcript languages
-    # ============================================================
+        
+    # Strategy 1.5: List Transcripts (Auto-generated / Other Languages)
     if not text:
         try:
             from youtube_transcript_api import YouTubeTranscriptApi as YTA
             transcript_list = YTA.list_transcripts(video_id)
-            
-            # Try all available transcripts
             for transcript in transcript_list:
                 try:
                     fetched = transcript.fetch()
@@ -78,15 +97,15 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
                     break
                 except:
                     continue
-        except Exception as e:
-            print(f"[YouTube] Alternative transcript fetch failed: {e}")
-    
-    # ============================================================
-    # Strategy 3: yt-dlp + Gemini/Whisper transcription
-    # ============================================================
+        except Exception:
+            pass
+            
+    # -------------------------------------------------------------
+    # Strategy 2: yt-dlp with Client Emulation (The "Magic" Fix)
+    # -------------------------------------------------------------
     if not text:
-        print("[YouTube] No captions found, attempting audio download + transcription...")
-        log_ingestion_event(source_id, twin_id, "warning", "Attempting audio download + transcription")
+        print("[YouTube] No captions found. Starting robust audio download...")
+        log_ingestion_event(source_id, twin_id, "warning", "Attempting robust audio download (Client Emulation)")
         
         try:
             from modules.transcription import transcribe_audio_multi
@@ -95,7 +114,8 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             os.makedirs(temp_dir, exist_ok=True)
             temp_filename = f"yt_{video_id}"
             
-            # yt-dlp options with better compatibility
+            # CRITICAL: Use 'android' client to bypass web-based IP blocking
+            # This impersonates the YouTube Android app
             ydl_opts = {
                 'format': 'm4a/bestaudio/best',
                 'outtmpl': os.path.join(temp_dir, f"{temp_filename}.%(ext)s"),
@@ -106,22 +126,23 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
                 }],
                 'quiet': True,
                 'no_warnings': True,
-                # Cookie options for authenticated access
-                'cookiesfrombrowser': ('chrome',) if os.name == 'nt' else None,  # Use Chrome cookies on Windows
+                # KEY FIX: Emulate Android client to bypass bot checks
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                        'player_skip': ['webpage', 'configs', 'js'],
+                        'include_live_dash': [True] 
+                    }
+                },
+                'nocheckcertificate': True,
             }
-            
-            # Check for cookies file (more reliable than browser extraction)
-            cookies_file = os.path.join(os.path.dirname(__file__), '..', 'youtube_cookies.txt')
-            if os.path.exists(cookies_file):
-                ydl_opts['cookiefile'] = cookies_file
-                print(f"[YouTube] Using cookies file: {cookies_file}")
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
             
             audio_path = os.path.join(temp_dir, f"{temp_filename}.mp3")
             
-            # Use multi-provider transcription (Gemini first, then Whisper)
+            # Transcribe
             text = transcribe_audio_multi(audio_path)
             log_ingestion_event(source_id, twin_id, "info", "Audio transcribed via Gemini/Whisper")
             
@@ -131,18 +152,27 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
                 
         except Exception as download_error:
             error_str = str(download_error)
-            print(f"[YouTube] Download + transcription failed: {error_str}")
+            print(f"[YouTube] Robust download failed: {error_str}")
             
-            # Provide user-friendly error message
-            if "Sign in to confirm" in error_str or "bot" in error_str.lower():
+            if "Sign in" in error_str or "bot" in error_str.lower():
                 raise ValueError(
-                    "YouTube requires authentication for this video. "
-                    "Please try a video with closed captions (CC), or ensure "
-                    "the server has valid YouTube cookies configured. "
-                    f"Original error: {transcript_error or 'No captions available'}"
+                    "YouTube is strictly blocking this IP, even with client emulation. "
+                    "Try a video with captions, or deploy to a cloud server (non-residential IPs sometimes work better, or worse depending on the range)."
                 )
-            else:
-                raise ValueError(f"Could not ingest YouTube video: {download_error}")
+            raise ValueError(f"Download failed: {download_error}")
+
+    if not text:
+        raise ValueError("Could not extract any transcript from this video.")
+        
+    # Update filename if we got the title from API
+    if video_title:
+        try:
+            supabase.table("sources").update({
+                "filename": f"YouTube: {video_title}"
+            }).eq("id", source_id).execute()
+        except:
+            pass
+
 
     if not text:
         raise ValueError(

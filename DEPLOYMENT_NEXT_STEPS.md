@@ -19,7 +19,7 @@ The GitHub Actions workflow (`.github/workflows/lint.yml`) will automatically:
 - ✅ Verify all changes pass CI checks
 
 **Check CI Status:**
-- Visit: `https://github.com/snsettitech/verified-digital-twin-brain/actions`
+- Visit: `https://github.com/snsettitech/verified-digital-twin-brains/actions`
 - Look for workflow run triggered by commit `b4a5d13`
 
 ### Deployment (if configured)

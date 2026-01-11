@@ -1,6 +1,6 @@
 import uuid
 from modules.clients import get_pinecone_index
-from modules.ingestion import get_embedding
+from modules.embeddings import get_embedding
 from modules.observability import supabase
 
 async def inject_verified_memory(escalation_id: str, owner_answer: str):

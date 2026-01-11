@@ -3,56 +3,229 @@ Verified QnA Module: Canonical storage and retrieval of owner-verified answers.
 """
 import uuid
 import json
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from difflib import SequenceMatcher
 from modules.observability import supabase
-from modules.ingestion import get_embedding
-from modules.clients import get_pinecone_index
-from modules.memory import inject_verified_memory
+from modules.embeddings import get_embedding, cosine_similarity
 
 
-async def create_verified_qna(
-    escalation_id: str,
-    question: str,
-    answer: str,
-    owner_id: str,
-    citations: Optional[List[str]] = None,
-    twin_id: Optional[str] = None
-) -> str:
+def _fetch_verified_qna_entries(
+    twin_id: str,
+    group_id: Optional[str] = None
+) -> List[Dict[str, Any]]:
     """
-    Creates a verified QnA entry in Postgres and optionally stores in Pinecone.
+    Fetch verified QnA entries for a twin, optionally filtered by group.
     
     Args:
-        escalation_id: ID of the escalation being resolved
-        question: Original question that triggered escalation
-        answer: Owner's verified answer
-        owner_id: ID of the user creating this QnA
-        citations: Optional list of source/chunk IDs
-        twin_id: Optional twin_id (will be fetched from escalation if not provided)
-    
+        twin_id: Twin ID to filter by
+        group_id: Optional group ID to filter by permissions
+        
     Returns:
-        verified_qna_id: UUID of the created verified QnA entry
+        List of verified QnA entries
     """
-    # Fetch escalation to get twin_id if not provided
-    if not twin_id:
-        response = supabase.table("escalations").select(
-            "*, messages(conversation_id, conversations(twin_id))"
-        ).eq("id", escalation_id).single().execute()
-        if not response.data:
-            raise ValueError(f"Escalation {escalation_id} not found")
-        twin_id = response.data["messages"]["conversations"]["twin_id"]
+    if group_id:
+        # Get allowed content_ids from content_permissions
+        permissions_response = supabase.table("content_permissions").select("content_id").eq(
+            "group_id", group_id
+        ).eq("content_type", "verified_qna").execute()
+        
+        allowed_content_ids = [perm["content_id"] for perm in (permissions_response.data or [])]
+        
+        if not allowed_content_ids:
+            return []
+        
+        # Fetch verified QnA entries that match the allowed content_ids
+        response = supabase.table("verified_qna").select("*").eq(
+            "twin_id", twin_id
+        ).eq("is_active", True).in_("id", allowed_content_ids).execute()
+    else:
+        # No group filter - fetch all active verified QnA entries for this twin
+        response = supabase.table("verified_qna").select("*").eq(
+            "twin_id", twin_id
+        ).eq("is_active", True).execute()
     
-    # Generate embedding for question (for semantic matching)
+    return response.data if response.data else []
+
+
+def _exact_match_query(
+    query: str,
+    qna_entries: List[Dict[str, Any]],
+    exact_threshold: float
+) -> Tuple[Optional[Dict[str, Any]], float]:
+    """
+    Perform exact/fuzzy matching on QnA entries.
+    
+    Args:
+        query: User's query string
+        qna_entries: List of QnA entries to match against
+        exact_threshold: Similarity threshold for exact matching (0-1)
+        
+    Returns:
+        Tuple of (best_match, best_score)
+    """
+    best_match = None
+    best_score = 0.0
+    
+    query_normalized = query.lower().strip()
+    for qna in qna_entries:
+        question_normalized = qna["question"].lower().strip()
+        
+        # Check for exact match first (case-insensitive)
+        if query_normalized == question_normalized:
+            # Perfect match - return immediately
+            return (qna, 1.0)
+        
+        # Otherwise use fuzzy matching
+        similarity = SequenceMatcher(None, query_normalized, question_normalized).ratio()
+        if similarity > best_score and similarity >= exact_threshold:
+            best_score = similarity
+            best_match = qna
+    
+    return (best_match, best_score)
+
+
+def _semantic_match_query(
+    query: str,
+    qna_entries: List[Dict[str, Any]],
+    semantic_threshold: float,
+    current_best_score: float
+) -> Tuple[Optional[Dict[str, Any]], float]:
+    """
+    Perform semantic (embedding) matching on QnA entries.
+    
+    Args:
+        query: User's query string
+        qna_entries: List of QnA entries to match against
+        semantic_threshold: Similarity threshold for semantic matching (0-1)
+        current_best_score: Current best score from exact matching
+        
+    Returns:
+        Tuple of (best_match, best_score)
+    """
+    best_match = None
+    best_score = current_best_score
+    
+    try:
+        # Generate embedding for the query
+        query_embedding = get_embedding(query)
+        
+        # Compare query embedding with stored embeddings in Postgres
+        for qna in qna_entries:
+            # Skip if no embedding stored
+            if not qna.get("question_embedding"):
+                continue
+            
+            try:
+                # Parse stored embedding from JSON
+                stored_embedding = json.loads(qna["question_embedding"])
+                
+                # Calculate cosine similarity
+                similarity = cosine_similarity(query_embedding, stored_embedding)
+                
+                # Update best match if similarity exceeds threshold and is better than current best
+                if similarity >= semantic_threshold and similarity > best_score:
+                    best_score = similarity
+                    best_match = qna
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                # Skip entries with invalid embeddings
+                print(f"Warning: Invalid embedding for QnA {qna.get('id')}: {e}")
+                continue
+    except Exception as e:
+        print(f"Error during semantic matching: {e}")
+    
+    return (best_match, best_score)
+
+
+def _format_match_result(
+    best_match: Dict[str, Any],
+    best_score: float
+) -> Dict[str, Any]:
+    """
+    Format a match result with citations.
+    
+    Args:
+        best_match: Matched QnA entry
+        best_score: Similarity score
+        
+    Returns:
+        Formatted match result with citations
+    """
+    # Fetch citations for this QnA
+    citations_res = supabase.table("citations").select("*").eq(
+        "verified_qna_id", best_match["id"]
+    ).execute()
+    citations = citations_res.data if citations_res.data else []
+    
+    return {
+        "id": best_match["id"],
+        "question": best_match["question"],
+        "answer": best_match["answer"],
+        "similarity_score": best_score,
+        "is_verified": True,
+        "citations": [c["source_id"] for c in citations if c.get("source_id")]
+    }
+
+
+def _get_twin_id_from_escalation(escalation_id: str) -> str:
+    """
+    Fetch twin_id from escalation record.
+    
+    Args:
+        escalation_id: ID of the escalation
+        
+    Returns:
+        Twin ID
+    """
+    response = supabase.table("escalations").select(
+        "*, messages(conversation_id, conversations(twin_id))"
+    ).eq("id", escalation_id).single().execute()
+    
+    if not response.data:
+        raise ValueError(f"Escalation {escalation_id} not found")
+    
+    return response.data["messages"]["conversations"]["twin_id"]
+
+
+def _generate_and_store_embedding(question: str) -> str:
+    """
+    Generate embedding for a question and return as JSON string.
+    
+    Args:
+        question: Question text to embed
+        
+    Returns:
+        JSON-encoded embedding string
+    """
     try:
         question_embedding = get_embedding(question)
-        question_embedding_json = json.dumps(question_embedding)
+        return json.dumps(question_embedding)
     except Exception as e:
         import traceback
         error_msg = f"Error generating embedding: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
         raise ValueError(error_msg)
+
+
+def _create_verified_qna_entry(
+    twin_id: str,
+    question: str,
+    answer: str,
+    question_embedding_json: str,
+    owner_id: str
+) -> str:
+    """
+    Create a verified QnA entry in the database.
     
-    # Create verified_qna entry
+    Args:
+        twin_id: Twin ID
+        question: Question text
+        answer: Answer text
+        question_embedding_json: JSON-encoded embedding
+        owner_id: Owner user ID
+        
+    Returns:
+        Verified QnA ID
+    """
     try:
         qna_response = supabase.table("verified_qna").insert({
             "twin_id": twin_id,
@@ -67,34 +240,73 @@ async def create_verified_qna(
         if not qna_response.data:
             raise ValueError("Failed to create verified QnA entry - no data returned")
         
-        verified_qna_id = qna_response.data[0]["id"]
+        return qna_response.data[0]["id"]
     except Exception as e:
         import traceback
         error_msg = f"Error creating verified_qna entry: {str(e)}\n{traceback.format_exc()}"
         print(error_msg)
         raise ValueError(error_msg)
+
+
+def _create_citation_entries(verified_qna_id: str, citations: List[str]) -> None:
+    """
+    Create citation entries for a verified QnA.
+    
+    Args:
+        verified_qna_id: Verified QnA ID
+        citations: List of source/chunk IDs
+    """
+    if not citations:
+        return
+    
+    citation_entries = [
+        {
+            "verified_qna_id": verified_qna_id,
+            "source_id": citation,
+            "chunk_id": None,
+            "citation_url": None
+        }
+        for citation in citations
+    ]
+    supabase.table("citations").insert(citation_entries).execute()
+
+
+async def create_verified_qna(
+    escalation_id: str,
+    question: str,
+    answer: str,
+    owner_id: str,
+    citations: Optional[List[str]] = None,
+    twin_id: Optional[str] = None
+) -> str:
+    """
+    Creates a verified QnA entry in Postgres.
+    
+    Args:
+        escalation_id: ID of the escalation being resolved
+        question: Original question that triggered escalation
+        answer: Owner's verified answer
+        owner_id: ID of the user creating this QnA
+        citations: Optional list of source/chunk IDs
+        twin_id: Optional twin_id (will be fetched from escalation if not provided)
+    
+    Returns:
+        verified_qna_id: UUID of the created verified QnA entry
+    """
+    # Fetch escalation to get twin_id if not provided
+    if not twin_id:
+        twin_id = _get_twin_id_from_escalation(escalation_id)
+    
+    # Generate embedding for question (for semantic matching)
+    question_embedding_json = _generate_and_store_embedding(question)
+    
+    # Create verified_qna entry
+    verified_qna_id = _create_verified_qna_entry(
+        twin_id, question, answer, question_embedding_json, owner_id
+    )
     
     # Create citation entries if provided
-    if citations:
-        citation_entries = [
-            {
-                "verified_qna_id": verified_qna_id,
-                "source_id": citation,
-                "chunk_id": None,
-                "citation_url": None
-            }
-            for citation in citations
-        ]
-        supabase.table("citations").insert(citation_entries).execute()
-    
-    # Maintain backward compatibility: Also inject into Pinecone
-    # This ensures existing retrieval still works during migration
-    try:
-        await inject_verified_memory(escalation_id, answer)
-    except Exception as e:
-        # Log error but don't fail the whole operation if Pinecone injection fails
-        print(f"Warning: Failed to inject verified memory to Pinecone: {e}")
-        # Continue - the Postgres entry is more important
+    _create_citation_entries(verified_qna_id, citations or [])
     
     return verified_qna_id
 
@@ -105,7 +317,7 @@ async def match_verified_qna(
     group_id: Optional[str] = None,
     use_exact: bool = True,
     use_semantic: bool = True,
-    exact_threshold: float = 0.7,  # Lowered from 0.8 to 0.7 for better matching
+    exact_threshold: float = 0.7,
     semantic_threshold: float = 0.7
 ) -> Optional[Dict[str, Any]]:
     """
@@ -125,29 +337,9 @@ async def match_verified_qna(
         Best matching QnA entry with similarity score, or None if no match above threshold
     """
     # Fetch verified QnA entries, filtered by group if provided
-    if group_id:
-        # Get allowed content_ids from content_permissions
-        permissions_response = supabase.table("content_permissions").select("content_id").eq(
-            "group_id", group_id
-        ).eq("content_type", "verified_qna").execute()
-        
-        allowed_content_ids = [perm["content_id"] for perm in (permissions_response.data or [])]
-        
-        if not allowed_content_ids:
-            # No permissions for this group, return None
-            return None
-        
-        # Fetch verified QnA entries that match the allowed content_ids
-        response = supabase.table("verified_qna").select("*").eq(
-            "twin_id", twin_id
-        ).eq("is_active", True).in_("id", allowed_content_ids).execute()
-    else:
-        # No group filter - fetch all active verified QnA entries for this twin
-        response = supabase.table("verified_qna").select("*").eq(
-            "twin_id", twin_id
-        ).eq("is_active", True).execute()
+    qna_entries = _fetch_verified_qna_entries(twin_id, group_id)
     
-    if not response.data:
+    if not qna_entries:
         return None
     
     best_match = None
@@ -155,69 +347,24 @@ async def match_verified_qna(
     
     # Exact matching: Compare query with question using fuzzy matching
     if use_exact:
-        query_normalized = query.lower().strip()
-        for qna in response.data:
-            question_normalized = qna["question"].lower().strip()
-            
-            # Check for exact match first (case-insensitive)
-            if query_normalized == question_normalized:
-                # Perfect match - return immediately
-                best_score = 1.0
-                best_match = qna
-                break
-            
-            # Otherwise use fuzzy matching
-            similarity = SequenceMatcher(None, query_normalized, question_normalized).ratio()
-            if similarity > best_score and similarity >= exact_threshold:
-                best_score = similarity
-                best_match = qna
+        best_match, best_score = _exact_match_query(query, qna_entries, exact_threshold)
+        # If perfect match found, return immediately
+        if best_score == 1.0 and best_match:
+            return _format_match_result(best_match, best_score)
     
-    # Semantic matching: Use Pinecone to search verified vectors
+    # Semantic matching: Use Postgres embeddings (stored as JSON)
     if use_semantic:
-        try:
-            query_embedding = get_embedding(query)
-            index = get_pinecone_index()
-            
-            # Search in Pinecone for verified vectors matching this twin
-            results = index.query(
-                vector=query_embedding,
-                top_k=5,
-                include_metadata=True,
-                namespace=twin_id,
-                filter={"is_verified": {"$eq": True}}
-            )
-            
-            # For each Pinecone match, try to find corresponding Postgres entry
-            # by matching on question or answer text
-            for match in results.get("matches", []):
-                if match["score"] >= semantic_threshold and match["score"] > best_score:
-                    # Try to match Pinecone metadata with Postgres entries
-                    match_text = match["metadata"].get("text", "")
-                    for qna in response.data:
-                        # Match if answer text matches or if source_id links to escalation
-                        if qna["answer"] == match_text or match["metadata"].get("source_id", "").startswith("verified_"):
-                            if match["score"] > best_score:
-                                best_score = match["score"]
-                                best_match = qna
-                                break
-        except Exception as e:
-            print(f"Error during semantic matching: {e}")
+        best_match, best_score = _semantic_match_query(
+            query, qna_entries, semantic_threshold, best_score
+        )
     
-    if best_match and best_score >= exact_threshold:
-        # Fetch citations for this QnA
-        citations_res = supabase.table("citations").select("*").eq(
-            "verified_qna_id", best_match["id"]
-        ).execute()
-        citations = citations_res.data if citations_res.data else []
-        
-        return {
-            "id": best_match["id"],
-            "question": best_match["question"],
-            "answer": best_match["answer"],
-            "similarity_score": best_score,
-            "is_verified": True,
-            "citations": [c["source_id"] for c in citations if c.get("source_id")]
-        }
+    # Return best match if it exceeds the appropriate threshold
+    threshold = exact_threshold if use_exact and not use_semantic else (
+        semantic_threshold if use_semantic and not use_exact else min(exact_threshold, semantic_threshold)
+    )
+    
+    if best_match and best_score >= threshold:
+        return _format_match_result(best_match, best_score)
     
     return None
 
@@ -264,7 +411,7 @@ async def edit_verified_qna(
     owner_id: str
 ) -> bool:
     """
-    Edits a verified QnA entry, creating a patch entry for version history.
+    Edits a verified QnA entry by creating a patch and updating the answer.
     
     Args:
         qna_id: UUID of the verified QnA entry
@@ -298,8 +445,8 @@ async def edit_verified_qna(
         "updated_at": datetime.now().isoformat()
     }).eq("id", qna_id).execute()
     
-    # TODO: Update Pinecone vector if dual storage enabled
-    # This would require storing the vector_id in verified_qna or searching Pinecone
+    # Note: Embeddings are now stored in Postgres only (no Pinecone vectors)
+    # The question_embedding column contains the JSON-encoded embedding for semantic matching
     
     return True
 
@@ -320,8 +467,16 @@ async def list_verified_qna(
     Returns:
         List of verified QnA entries
     """
-    # If group_id provided, filter by permissions
+    # Build query
+    query = supabase.table("verified_qna").select("*").eq("twin_id", twin_id).eq("is_active", True)
+    
+    # Apply visibility filter if provided
+    if visibility:
+        query = query.eq("visibility", visibility)
+    
+    # Apply group filter if provided
     if group_id:
+        # Get allowed content_ids from content_permissions
         permissions_response = supabase.table("content_permissions").select("content_id").eq(
             "group_id", group_id
         ).eq("content_type", "verified_qna").execute()
@@ -331,12 +486,7 @@ async def list_verified_qna(
         if not allowed_content_ids:
             return []
         
-        query = supabase.table("verified_qna").select("*").eq("twin_id", twin_id).eq("is_active", True).in_("id", allowed_content_ids)
-    else:
-        query = supabase.table("verified_qna").select("*").eq("twin_id", twin_id).eq("is_active", True)
+        query = query.in_("id", allowed_content_ids)
     
-    if visibility:
-        query = query.eq("visibility", visibility)
-    
-    response = query.order("created_at", desc=True).execute()
+    response = query.execute()
     return response.data if response.data else []

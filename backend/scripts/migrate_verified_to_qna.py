@@ -138,7 +138,7 @@ async def migrate_verified_vector(vector_data: Dict[str, Any]) -> bool:
         # For now, create directly in database
         question_embedding_json = None
         try:
-            from modules.ingestion import get_embedding
+            from modules.embeddings import get_embedding
             question_embedding = get_embedding(question)
             import json
             question_embedding_json = json.dumps(question_embedding)
