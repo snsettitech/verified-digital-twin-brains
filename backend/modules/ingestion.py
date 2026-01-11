@@ -430,18 +430,19 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
 
 async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: str = None):
     # 0. Check for existing sources with same name to handle "update"
+    has_duplicate = False
     if filename:
         existing = supabase.table("sources").select("id").eq("twin_id", twin_id).eq("filename", filename).execute()
         if existing.data:
             print(f"File {filename} already exists. Updating source(s)...")
-            log_ingestion_event(source_id, twin_id, "info", f"Duplicate filename detected, removing old sources")
+            has_duplicate = True
             # Delete ALL old versions first to keep knowledge clean
             for record in existing.data:
                 old_source_id = record["id"]
                 await delete_source(old_source_id, twin_id)
             # We keep the new source_id for the new record
 
-    # 0.1 Record source in Supabase
+    # 0.1 Record source in Supabase FIRST (before logging - prevents FK error)
     if filename:
         file_size = os.path.getsize(file_path)
         supabase.table("sources").insert({
@@ -451,6 +452,11 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
             "file_size": file_size,
             "status": "processing"
         }).execute()
+    
+    # Log after source record exists (to satisfy FK constraint)
+    if has_duplicate:
+        log_ingestion_event(source_id, twin_id, "info", f"Duplicate filename detected, removed old sources")
+
 
     # 1. Extract text (PDF or Audio)
     if file_path.endswith('.pdf'):
