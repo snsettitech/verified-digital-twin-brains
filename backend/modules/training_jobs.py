@@ -26,7 +26,7 @@ def create_training_job(source_id: str, twin_id: str, job_type: str = 'ingestion
         Job ID (UUID)
     """
     job_id = str(uuid.uuid4())
-    
+
     # Create job record in database
     supabase.table("training_jobs").insert({
         "id": job_id,
@@ -37,10 +37,10 @@ def create_training_job(source_id: str, twin_id: str, job_type: str = 'ingestion
         "priority": priority,
         "metadata": metadata or {}
     }).execute()
-    
+
     # Add to queue
     enqueue_job(job_id, job_type, priority, metadata)
-    
+
     return job_id
 
 
@@ -69,25 +69,25 @@ def update_job_status(job_id: str, status: str, error_message: Optional[str] = N
         "status": status,
         "updated_at": datetime.utcnow().isoformat()
     }
-    
+
     # Get current job to check existing fields
     current_job = get_training_job(job_id)
-    
+
     if status == "processing" and current_job and not current_job.get("started_at"):
         update_data["started_at"] = datetime.utcnow().isoformat()
-    
+
     if status in ("complete", "failed", "needs_attention") and current_job and not current_job.get("completed_at"):
         update_data["completed_at"] = datetime.utcnow().isoformat()
-    
+
     if error_message:
         update_data["error_message"] = error_message
-    
+
     if metadata:
         # Merge with existing metadata
         existing_metadata = current_job.get("metadata", {}) if current_job else {}
         existing_metadata.update(metadata)
         update_data["metadata"] = existing_metadata
-    
+
     supabase.table("training_jobs").update(update_data).eq("id", job_id).execute()
 
 
@@ -104,12 +104,12 @@ def list_training_jobs(twin_id: str, status: Optional[str] = None, limit: int = 
         List of job records
     """
     query = supabase.table("training_jobs").select("*").eq("twin_id", twin_id)
-    
+
     if status:
         query = query.eq("status", status)
-    
+
     query = query.order("created_at", desc=True).limit(limit)
-    
+
     response = query.execute()
     return response.data if response.data else []
 
@@ -128,31 +128,31 @@ async def process_training_job(job_id: str) -> bool:
     if not job:
         print(f"Job {job_id} not found")
         return False
-    
+
     source_id = job["source_id"]
     twin_id = job["twin_id"]
     job_type = job["job_type"]
-    
+
     try:
         # Update status to processing
         update_job_status(job_id, "processing")
-        
+
         # Get source data
         source_response = supabase.table("sources").select("*").eq("id", source_id).single().execute()
         if not source_response.data:
             raise ValueError(f"Source {source_id} not found")
-        
+
         source_data = source_response.data
         extracted_text = source_data.get("content_text")
         filename = source_data.get("filename", "Unknown")
-        
+
         # Validate content_text exists
         if not extracted_text or len(extracted_text.strip()) == 0:
             # Fallback: If no content_text, try to reconstruct from Pinecone
             print(f"[Process Job] Source {source_id} ({filename}) has no content_text, attempting to reconstruct from Pinecone...")
             from modules.clients import get_pinecone_index
             index = get_pinecone_index()
-            
+
             # Query Pinecone for all chunks from this source
             try:
                 # Use a dummy query to get all vectors for this source
@@ -163,12 +163,12 @@ async def process_training_job(job_id: str) -> bool:
                     filter={"source_id": {"$eq": source_id}},
                     namespace=twin_id
                 )
-                
+
                 if query_res.get("matches"):
                     # Reconstruct text from chunks (sorted by some order if available)
                     chunks = [match["metadata"].get("text", "") for match in query_res["matches"]]
                     extracted_text = " ".join(chunks)
-                    
+
                     if extracted_text:
                         # Save the reconstructed text back to the source
                         supabase.table("sources").update({
@@ -198,13 +198,13 @@ async def process_training_job(job_id: str) -> bool:
                     f"Could not reconstruct from Pinecone: {str(pinecone_error)}. "
                     f"Please delete this source and re-upload it."
                 )
-        
+
         # Process based on job type
         if job_type == "ingestion":
             # Process and index text (lazy import to avoid circular dependency)
             from modules.ingestion import process_and_index_text
             num_chunks = await process_and_index_text(source_id, twin_id, extracted_text)
-            
+
             # Update source with chunk count and extracted text length
             supabase.table("sources").update({
                 "chunk_count": num_chunks,
@@ -212,47 +212,47 @@ async def process_training_job(job_id: str) -> bool:
                 "staging_status": "live",
                 "status": "live"
             }).eq("id", source_id).execute()
-            
+
             # Update job metadata
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
-            
+
         elif job_type == "reindex":
             # Reindex existing content (delete old vectors and re-index)
             # This would require deleting old vectors from Pinecone first
             # For now, just re-index
             from modules.ingestion import process_and_index_text
             num_chunks = await process_and_index_text(source_id, twin_id, extracted_text)
-            
+
             supabase.table("sources").update({
                 "chunk_count": num_chunks,
                 "staging_status": "live",
                 "status": "live"
             }).eq("id", source_id).execute()
-            
+
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
-            
+
         elif job_type == "health_check":
             # Run health checks (already done during staging, but can be re-run)
             from modules.health_checks import run_all_health_checks
             health_result = run_all_health_checks(
-                source_id, 
-                twin_id, 
+                source_id,
+                twin_id,
                 extracted_text,
                 chunk_count=source_data.get("chunk_count"),
                 source_data=source_data
             )
-            
+
             # Update source health status
             supabase.table("sources").update({
                 "health_status": health_result["overall_status"]
             }).eq("id", source_id).execute()
-            
+
             update_job_status(job_id, "complete", metadata=health_result)
         else:
             raise ValueError(f"Unknown job type: {job_type}")
-        
+
         return True
-        
+
     except Exception as e:
         import traceback
         error_msg = str(e)
@@ -260,7 +260,7 @@ async def process_training_job(job_id: str) -> bool:
         print(f"Error processing job {job_id}: {error_msg}")
         print(f"Traceback: {error_traceback}")
         update_job_status(job_id, "failed", error_message=f"{error_msg}\n\nTraceback:\n{error_traceback}")
-        
+
         # Update source status (only if source_id is available)
         if source_id:
             try:
@@ -270,7 +270,7 @@ async def process_training_job(job_id: str) -> bool:
                 }).eq("id", source_id).execute()
             except Exception as source_error:
                 print(f"Error updating source status: {source_error}")
-        
+
         return False
 
 
@@ -278,19 +278,21 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
     """
     Process all queued training jobs for the given twin IDs.
     This is a synchronous wrapper that handles async job processing.
-    
+
     Args:
         twin_ids: List of twin UUIDs to process jobs for
-    
+
     Returns:
         Dict with processed, failed, remaining counts and errors
     """
     import asyncio
     from modules.observability import supabase
-    
+
     # Get all queued jobs for these twins
     try:
-        query = supabase.table("training_jobs").select("id, twin_id, source_id").in_("twin_id", twin_ids).eq("status", "queued").order("priority", desc=True).limit(50)
+        query = supabase.table("training_jobs").select("id, twin_id, source_id") \
+            .in_("twin_id", twin_ids).eq("status", "queued") \
+            .order("priority", desc=True).limit(50)
         response = query.execute()
         queued_jobs = response.data or []
     except Exception as e:
@@ -301,7 +303,7 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
             "remaining": 0,
             "errors": [str(e)]
         }
-    
+
     if not queued_jobs:
         return {
             "processed": 0,
@@ -309,11 +311,11 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
             "remaining": 0,
             "errors": []
         }
-    
+
     processed = 0
     failed = 0
     errors = []
-    
+
     # Process each job
     for job in queued_jobs:
         job_id = job["id"]
@@ -346,7 +348,7 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
         except Exception as e:
             failed += 1
             errors.append(f"Job {job_id}: {str(e)}")
-    
+
     # Count remaining
     try:
         remaining_query = supabase.table("training_jobs").select("id", count="exact").in_("twin_id", twin_ids).eq("status", "queued")
@@ -354,7 +356,7 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
         remaining = remaining_response.count or 0
     except Exception:
         remaining = 0
-    
+
     return {
         "processed": processed,
         "failed": failed,

@@ -15,13 +15,13 @@ async def list_sources(twin_id: str, status: Optional[str] = None, user=Depends(
     """
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
-    
+
     try:
         query = supabase.table("sources").select("*").eq("twin_id", twin_id).order("created_at", desc=True)
-        
+
         if status:
             query = query.eq("status", status)
-        
+
         response = query.execute()
         return response.data or []
     except Exception as e:
@@ -33,13 +33,13 @@ async def list_sources(twin_id: str, status: Optional[str] = None, user=Depends(
 async def get_source(twin_id: str, source_id: str, user=Depends(get_current_user)):
     """Get a specific source with its details."""
     verify_twin_ownership(twin_id, user)
-    
+
     try:
         response = supabase.table("sources").select("*").eq("id", source_id).eq("twin_id", twin_id).single().execute()
-        
+
         if not response.data:
             raise HTTPException(status_code=404, detail="Source not found")
-        
+
         return response.data
     except HTTPException:
         raise
@@ -63,17 +63,24 @@ async def delete_source_endpoint(twin_id: str, source_id: str, user=Depends(veri
 async def get_source_health(source_id: str, user=Depends(get_current_user)):
     """Get health check results for a source."""
     try:
+        # First get source to verify ownership
+        source = supabase.table("sources").select("twin_id, health_status, staging_status").eq("id", source_id).single().execute()
+        if not source.data:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        # Verify user owns this twin
+        verify_twin_ownership(source.data["twin_id"], user)
+
         # Get health checks from ingestion_logs
         response = supabase.table("ingestion_logs").select("*").eq("source_id", source_id).order("created_at", desc=True).limit(20).execute()
-        
-        # Get source health status
-        source_response = supabase.table("sources").select("health_status, staging_status").eq("id", source_id).single().execute()
-        
+
         return {
-            "health_status": source_response.data.get("health_status") if source_response.data else None,
-            "staging_status": source_response.data.get("staging_status") if source_response.data else None,
+            "health_status": source.data.get("health_status"),
+            "staging_status": source.data.get("staging_status"),
             "logs": response.data or []
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error getting source health: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -83,8 +90,18 @@ async def get_source_health(source_id: str, user=Depends(get_current_user)):
 async def get_source_logs(source_id: str, user=Depends(get_current_user)):
     """Get ingestion logs for a source."""
     try:
+        # First get source to verify ownership
+        source = supabase.table("sources").select("twin_id").eq("id", source_id).single().execute()
+        if not source.data:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        # Verify user owns this twin
+        verify_twin_ownership(source.data["twin_id"], user)
+
         response = supabase.table("ingestion_logs").select("*").eq("source_id", source_id).order("created_at", desc=True).limit(50).execute()
         return response.data or []
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error getting source logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -125,7 +142,7 @@ async def re_extract_source(source_id: str, user=Depends(verify_owner)):
             "staging_status": "processing",
             "status": "processing"
         }).eq("id", source_id).execute()
-        
+
         return {"status": "success", "message": "Re-extraction queued"}
     except Exception as e:
         print(f"Error re-extracting source: {e}")
