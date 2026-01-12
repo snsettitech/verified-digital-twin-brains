@@ -10,7 +10,7 @@ from modules.job_queue import enqueue_job
 # Note: process_and_index_text is imported inside process_training_job to avoid circular import
 
 
-def create_training_job(source_id: str, twin_id: str, job_type: str = 'ingestion', 
+def create_training_job(source_id: str, twin_id: str, job_type: str = 'ingestion',
                        priority: int = 0, metadata: Optional[Dict[str, Any]] = None) -> str:
     """
     Creates job record and adds to Redis queue.
@@ -54,7 +54,7 @@ def get_training_job(job_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def update_job_status(job_id: str, status: str, error_message: Optional[str] = None, 
+def update_job_status(job_id: str, status: str, error_message: Optional[str] = None,
                      metadata: Optional[Dict[str, Any]] = None):
     """
     Updates job status.
@@ -274,10 +274,10 @@ async def process_training_job(job_id: str) -> bool:
         return False
 
 
-def process_training_queue(twin_ids: list) -> Dict[str, Any]:
+async def process_training_queue(twin_ids: list) -> Dict[str, Any]:
     """
     Process all queued training jobs for the given twin IDs.
-    This is a synchronous wrapper that handles async job processing.
+    This is an async function that properly awaits job processing.
 
     Args:
         twin_ids: List of twin UUIDs to process jobs for
@@ -285,7 +285,6 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
     Returns:
         Dict with processed, failed, remaining counts and errors
     """
-    import asyncio
     from modules.observability import supabase
 
     # Get all queued jobs for these twins
@@ -316,42 +315,25 @@ def process_training_queue(twin_ids: list) -> Dict[str, Any]:
     failed = 0
     errors = []
 
-    # Process each job
+    # Process each job - properly await the async function
     for job in queued_jobs:
         job_id = job["id"]
         try:
-            # Run the async function in a new event loop context
-            # This handles the sync-to-async bridge
-            success = asyncio.get_event_loop().run_until_complete(process_training_job(job_id))
+            success = await process_training_job(job_id)
             if success:
                 processed += 1
             else:
                 failed += 1
                 errors.append(f"Job {job_id}: Processing returned False")
-        except RuntimeError:
-            # If there's no event loop or it's already running, create a new one
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    success = loop.run_until_complete(process_training_job(job_id))
-                    if success:
-                        processed += 1
-                    else:
-                        failed += 1
-                        errors.append(f"Job {job_id}: Processing returned False")
-                finally:
-                    loop.close()
-            except Exception as e:
-                failed += 1
-                errors.append(f"Job {job_id}: {str(e)}")
         except Exception as e:
             failed += 1
             errors.append(f"Job {job_id}: {str(e)}")
 
     # Count remaining
     try:
-        remaining_query = supabase.table("training_jobs").select("id", count="exact").in_("twin_id", twin_ids).eq("status", "queued")
+        remaining_query = supabase.table("training_jobs") \
+            .select("id", count="exact") \
+            .in_("twin_id", twin_ids).eq("status", "queued")
         remaining_response = remaining_query.execute()
         remaining = remaining_response.count or 0
     except Exception:

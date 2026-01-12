@@ -65,11 +65,11 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
     user_id = user.get("user_id")
     if not user_id:
         raise HTTPException(status_code=401, detail="User not authenticated")
-    
+
     # Get user's twins
     twins_result = supabase.table("twins").select("id").eq("tenant_id", user_id).execute()
     user_twin_ids = [t["id"] for t in (twins_result.data or [])]
-    
+
     if not user_twin_ids:
         return {
             "status": "success",
@@ -78,7 +78,7 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
             "remaining": 0,
             "message": "No twins found for this user"
         }
-    
+
     # Filter by twin_id if provided
     if twin_id:
         if twin_id not in user_twin_ids:
@@ -86,15 +86,15 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
         twin_ids_to_process = [twin_id]
     else:
         twin_ids_to_process = user_twin_ids
-    
-    # Process queue
-    results = process_training_queue(twin_ids_to_process)
-    
+
+    # Process queue (async function - must await)
+    results = await process_training_queue(twin_ids_to_process)
+
     processed = results.get("processed", 0)
     failed = results.get("failed", 0)
     remaining = results.get("remaining", 0)
     errors = results.get("errors", [])
-    
+
     # Determine overall status
     if failed == 0:
         status = "success"
@@ -102,7 +102,7 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
         status = "partial"
     else:
         status = "error"
-    
+
     response_data = {
         "status": status,
         "processed": processed,
@@ -110,11 +110,11 @@ async def process_queue_endpoint(twin_id: Optional[str] = None, user=Depends(ver
         "remaining": remaining,
         "errors": errors[:5]  # Limit to first 5 errors
     }
-    
+
     # If all failed, include first error in message
     if processed == 0 and failed > 0:
         response_data["message"] = f"Failed to process {failed} job(s). First error: {errors[0]}"
-    
+
     # Return appropriate HTTP status codes
     # Note: Always return 200 OK to maintain backward compatibility
     # Frontend can check response_data.status === "error" to handle errors appropriately
@@ -128,14 +128,13 @@ async def get_training_job_endpoint(job_id: str, user=Depends(get_current_user))
         job = get_training_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
-        
+
         # Verify user has access to this job's twin
         if job.get("twin_id"):
             verify_twin_ownership(job["twin_id"], user)
-        
+
         return job
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
