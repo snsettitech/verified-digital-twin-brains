@@ -287,7 +287,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             "file_size": len(text),
             "content_text": text,
             "content_hash": content_hash,
-            "status": "indexed",
+            "status": "processed",
             "staging_status": "approved",
             "extracted_text_length": len(text)
         }).execute()
@@ -388,7 +388,7 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
                 "file_size": len(text),
                 "content_text": text,
                 "content_hash": content_hash,
-                "status": "indexed",
+                "status": "processed",
                 "staging_status": "approved",
                 "extracted_text_length": len(text)
             }).execute()
