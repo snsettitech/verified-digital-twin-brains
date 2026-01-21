@@ -423,59 +423,154 @@ async def ingest_podcast_rss(source_id: str, twin_id: str, url: str):
 
 async def ingest_x_thread(source_id: str, twin_id: str, url: str):
     """
-    Ingests an X (Twitter) thread.
-    Uses the syndication endpoint for simplicity.
+    Ingests an X (Twitter) thread using multiple fallback strategies.
     """
     tweet_id_match = re.search(r'status/(\d+)', url)
     if not tweet_id_match:
         raise ValueError("Invalid X (Twitter) URL")
 
     tweet_id = tweet_id_match.group(1)
+    text = ""
+    user = "Unknown"
+
+    import httpx
+    import html as html_lib
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+    }
+
+    # -------------------------------------------------------------
+    # Strategy 1: cdn.syndication.twimg.com (legacy, often fails)
+    # -------------------------------------------------------------
+    try:
+        syndication_url = f"https://cdn.syndication.twimg.com/tweet-result?id={tweet_id}&token=0"
+        async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+            response = await client.get(syndication_url)
+            if response.status_code == 200:
+                data = response.json()
+                text = data.get("text", "")
+                user = data.get("user", {}).get("name", "Unknown")
+                if text:
+                    print(f"[X Thread] Syndication API returned {len(text)} chars")
+    except Exception as e:
+        print(f"[X Thread] Syndication API failed: {e}")
+
+    # -------------------------------------------------------------
+    # Strategy 2: Nitter instances (public Twitter readers)
+    # -------------------------------------------------------------
+    if not text:
+        nitter_instances = [
+            "nitter.privacydev.net",
+            "nitter.poast.org", 
+            "nitter.1d4.us",
+        ]
+        for instance in nitter_instances:
+            try:
+                nitter_url = f"https://{instance}/i/status/{tweet_id}"
+                async with httpx.AsyncClient(timeout=15, headers=headers, follow_redirects=True) as client:
+                    response = await client.get(nitter_url)
+                    if response.status_code == 200:
+                        page = response.text
+                        # Extract tweet content from nitter HTML
+                        content_match = re.search(r'<div class="tweet-content[^"]*"[^>]*>(.*?)</div>', page, re.DOTALL)
+                        if content_match:
+                            raw_text = content_match.group(1)
+                            # Clean HTML tags and entities
+                            text = re.sub(r'<[^>]+>', ' ', raw_text)
+                            text = html_lib.unescape(text)
+                            text = re.sub(r'\s+', ' ', text).strip()
+                            
+                            # Extract username
+                            user_match = re.search(r'<a class="fullname"[^>]*>([^<]+)</a>', page)
+                            if user_match:
+                                user = user_match.group(1).strip()
+                            
+                            if text:
+                                print(f"[X Thread] Nitter {instance} returned {len(text)} chars")
+                                break
+            except Exception as e:
+                print(f"[X Thread] Nitter {instance} failed: {e}")
+                continue
+
+    # -------------------------------------------------------------
+    # Strategy 3: FxTwitter API (embed generator)
+    # -------------------------------------------------------------
+    if not text:
+        try:
+            fx_url = f"https://api.fxtwitter.com/status/{tweet_id}"
+            async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+                response = await client.get(fx_url)
+                if response.status_code == 200:
+                    data = response.json()
+                    tweet = data.get("tweet", {})
+                    text = tweet.get("text", "")
+                    user = tweet.get("author", {}).get("name", "Unknown")
+                    if text:
+                        print(f"[X Thread] FxTwitter API returned {len(text)} chars")
+        except Exception as e:
+            print(f"[X Thread] FxTwitter API failed: {e}")
+
+    # -------------------------------------------------------------
+    # Strategy 4: VxTwitter API (another embed generator)
+    # -------------------------------------------------------------
+    if not text:
+        try:
+            vx_url = f"https://api.vxtwitter.com/status/{tweet_id}"
+            async with httpx.AsyncClient(timeout=15, headers=headers) as client:
+                response = await client.get(vx_url)
+                if response.status_code == 200:
+                    data = response.json()
+                    text = data.get("text", "")
+                    user = data.get("user_name", "Unknown")
+                    if text:
+                        print(f"[X Thread] VxTwitter API returned {len(text)} chars")
+        except Exception as e:
+            print(f"[X Thread] VxTwitter API failed: {e}")
+
+    # -------------------------------------------------------------
+    # Final: Handle result
+    # -------------------------------------------------------------
+    if not text:
+        log_ingestion_event(source_id, twin_id, "error", "All X thread extraction methods failed")
+        raise ValueError(
+            "Could not extract X thread content. All methods failed. "
+            "X/Twitter may be blocking requests from this server. "
+            "Try copying the tweet text manually and pasting it as a text file."
+        )
 
     try:
-        import httpx
-        # Using the syndication endpoint to get tweet content
-        syndication_url = f"https://cdn.syndication.twimg.com/tweet-result?id={tweet_id}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(syndication_url)
-            if response.status_code != 200:
-                raise ValueError(f"Failed to fetch tweet: {response.status_code}")
+        content_hash = calculate_content_hash(text)
 
-            data = response.json()
-            text = data.get("text", "")
-            user = data.get("user", {}).get("name", "Unknown")
+        # Record source in Supabase
+        supabase.table("sources").insert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": f"X Thread: {tweet_id} by {user}",
+            "file_size": len(text),
+            "content_text": text,
+            "content_hash": content_hash,
+            "status": "processed",
+            "staging_status": "approved",
+            "extracted_text_length": len(text)
+        }).execute()
 
-            # Phase 6: Staging workflow
-            content_hash = calculate_content_hash(text)
+        log_ingestion_event(source_id, twin_id, "info", f"X thread extracted: {len(text)} characters")
 
-            # Record source in Supabase with indexed status
-            supabase.table("sources").insert({
-                "id": source_id,
-                "twin_id": twin_id,
-                "filename": f"X Thread: {tweet_id} by {user}",
-                "file_size": len(text),
-                "content_text": text,
-                "content_hash": content_hash,
-                "status": "processed",
-                "staging_status": "approved",
-                "extracted_text_length": len(text)
-            }).execute()
+        # Direct indexing
+        num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
+            "filename": f"X Thread: {tweet_id} by {user}",
+            "type": "x_thread",
+            "tweet_id": tweet_id
+        })
 
-            log_ingestion_event(source_id, twin_id, "info", f"X thread extracted: {len(text)} characters")
+        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks})
 
-            # Phase 7: Direct indexing (skip staging approval)
-            num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
-                "filename": f"X Thread: {tweet_id} by {user}",
-                "type": "x_thread",
-                "tweet_id": tweet_id
-            })
+        log_ingestion_event(source_id, twin_id, "info", f"X thread indexed: {num_chunks} chunks")
 
-            # Phase 8: Log the action
-            AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks})
-
-            log_ingestion_event(source_id, twin_id, "info", f"X thread indexed: {num_chunks} chunks")
-
-            return num_chunks
+        return num_chunks
     except Exception as e:
         print(f"Error staging X thread: {e}")
         log_ingestion_event(source_id, twin_id, "error", f"Error staging X thread: {e}")
