@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useTwin } from '@/lib/context/TwinContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import UnifiedIngestion from '@/components/ingestion/UnifiedIngestion';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -90,13 +91,6 @@ export default function KnowledgePage() {
   const [sources, setSources] = useState<Source[]>([]);
   const [profile, setProfile] = useState<KnowledgeProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [podcastUrl, setPodcastUrl] = useState('');
-  const [xUrl, setXUrl] = useState('');
-  const [ingestingYoutube, setIngestingYoutube] = useState(false);
-  const [ingestingPodcast, setIngestingPodcast] = useState(false);
-  const [ingestingX, setIngestingX] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const twinId = activeTwin?.id;
@@ -136,150 +130,6 @@ export default function KnowledgePage() {
       fetchData();
     }
   }, [twinId, fetchData]);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !twinId) return;
-
-    setUploading(true);
-    setError(null);
-    const token = await getAuthToken();
-    if (!token) {
-      setError('Not authenticated');
-      setUploading(false);
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/ingest/file/${twinId}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
-      });
-
-      if (response.ok) {
-        fetchData();
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Upload failed');
-      }
-    } catch (err) {
-      setError('Connection error');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleYoutubeIngest = async () => {
-    if (!youtubeUrl.trim() || !twinId) return;
-
-    setIngestingYoutube(true);
-    setError(null);
-    const token = await getAuthToken();
-    if (!token) {
-      setError('Not authenticated');
-      setIngestingYoutube(false);
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/ingest/youtube/${twinId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url: youtubeUrl }),
-      });
-
-      if (response.ok) {
-        setYoutubeUrl('');
-        fetchData();
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Ingestion failed');
-      }
-    } catch (err) {
-      setError('Connection error');
-    } finally {
-      setIngestingYoutube(false);
-    }
-  };
-
-  const handlePodcastIngest = async () => {
-    if (!podcastUrl.trim() || !twinId) return;
-
-    setIngestingPodcast(true);
-    setError(null);
-    const token = await getAuthToken();
-    if (!token) {
-      setError('Not authenticated');
-      setIngestingPodcast(false);
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/ingest/podcast/${twinId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url: podcastUrl }),
-      });
-
-      if (response.ok) {
-        setPodcastUrl('');
-        fetchData();
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Ingestion failed');
-      }
-    } catch (err) {
-      setError('Connection error');
-    } finally {
-      setIngestingPodcast(false);
-    }
-  };
-
-  const handleXIngest = async () => {
-    if (!xUrl.trim() || !twinId) return;
-
-    setIngestingX(true);
-    setError(null);
-    const token = await getAuthToken();
-    if (!token) {
-      setError('Not authenticated');
-      setIngestingX(false);
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/ingest/x/${twinId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ url: xUrl }),
-      });
-
-      if (response.ok) {
-        setXUrl('');
-        fetchData();
-      } else {
-        const data = await response.json();
-        setError(data.detail || 'Ingestion failed');
-      }
-    } catch (err) {
-      setError('Connection error');
-    } finally {
-      setIngestingX(false);
-    }
-  };
 
   const handleDelete = async (sourceId: string) => {
     if (!twinId) return;
@@ -358,109 +208,12 @@ export default function KnowledgePage() {
 
       {!loading && <KnowledgeInsights profile={profile} />}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Upload Card */}
-        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-8">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-          </div>
-          <h3 className="text-xl font-black text-slate-800 mb-2">Upload Documents</h3>
-          <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Upload PDFs, Audio files, or Text documents to enrich your twin's knowledge base.</p>
-
-          <label className="block">
-            <span className="sr-only">Choose file</span>
-            <input
-              type="file"
-              onChange={handleFileUpload}
-              disabled={uploading}
-              className="block w-full text-sm text-slate-500 file:mr-6 file:py-3 file:px-6 file:rounded-2xl file:border-0 file:text-sm file:font-black file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer disabled:opacity-50 transition-all"
-            />
-          </label>
-          {uploading && <div className="mt-6 text-xs font-black text-blue-600 animate-pulse flex items-center gap-3">
-            <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-bounce"></div> Ingesting and embedding...
-          </div>}
-        </div>
-
-        {/* YouTube Card */}
-        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300">
-          <div className="w-14 h-14 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mb-8">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-          </div>
-          <h3 className="text-xl font-black text-slate-800 mb-2">Import from YouTube</h3>
-          <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Extract transcripts from YouTube videos to add your spoken wisdom to the brain.</p>
-
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="https://youtube.com/watch?v=..."
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-red-500 transition-all"
-            />
-            <button
-              onClick={handleYoutubeIngest}
-              disabled={ingestingYoutube || !youtubeUrl}
-              className="px-8 py-3.5 bg-red-600 text-white rounded-2xl text-sm font-black hover:bg-red-700 disabled:opacity-50 transition-all shadow-lg shadow-red-100"
-            >
-              {ingestingYoutube ? '...' : 'Add'}
-            </button>
-          </div>
-        </div>
-
-        {/* Podcast Card */}
-        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300">
-          <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-8">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>
-          </div>
-          <h3 className="text-xl font-black text-slate-800 mb-2">Import Podcasts</h3>
-          <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Sync your latest podcast episodes via RSS feed and transcribe them automatically.</p>
-
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="https://feed.podbean.com/..."
-              value={podcastUrl}
-              onChange={(e) => setPodcastUrl(e.target.value)}
-              className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-            />
-            <button
-              onClick={handlePodcastIngest}
-              disabled={ingestingPodcast || !podcastUrl}
-              className="px-8 py-3.5 bg-purple-600 text-white rounded-2xl text-sm font-black hover:bg-purple-700 disabled:opacity-50 transition-all shadow-lg shadow-purple-100"
-            >
-              {ingestingPodcast ? '...' : 'Add'}
-            </button>
-          </div>
-        </div>
-
-        {/* X Thread Card */}
-        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300">
-          <div className="w-14 h-14 bg-slate-900 text-white rounded-2xl flex items-center justify-center mb-8">
-            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 2L2 22h20L12 2zM12 18l-4-4h8l-4 4z" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-black text-slate-800 mb-2">Sync X Threads</h3>
-          <p className="text-sm text-slate-500 mb-8 font-medium leading-relaxed">Turn your X (Twitter) threads and viral insights into permanent memory units.</p>
-
-          <div className="flex gap-3">
-            <input
-              type="text"
-              placeholder="https://x.com/user/status/..."
-              value={xUrl}
-              onChange={(e) => setXUrl(e.target.value)}
-              className="flex-1 px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-slate-900 transition-all"
-            />
-            <button
-              onClick={handleXIngest}
-              disabled={ingestingX || !xUrl}
-              className="px-8 py-3.5 bg-slate-900 text-white rounded-2xl text-sm font-black hover:bg-black disabled:opacity-50 transition-all shadow-lg shadow-slate-200"
-            >
-              {ingestingX ? '...' : 'Add'}
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Unified Ingestion Component */}
+      <UnifiedIngestion
+        twinId={twinId}
+        onComplete={() => fetchData()}
+        onError={(err) => setError(err)}
+      />
 
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-600 p-6 rounded-[2rem] text-sm font-bold flex items-center gap-4">
