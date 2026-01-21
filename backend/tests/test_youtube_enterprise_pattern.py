@@ -5,6 +5,11 @@ Tests all components: config, error classification, language detection, PII scru
 
 import os
 import sys
+import io
+
+# Configure UTF-8 output for Windows
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # Add parent directory to path so modules can be imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
