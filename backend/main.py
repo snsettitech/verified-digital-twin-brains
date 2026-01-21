@@ -6,6 +6,7 @@ from routers import (
     auth,
     chat,
     ingestion,
+    youtube_preflight,
     twins,
     actions,
     knowledge,
@@ -39,6 +40,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(ingestion.router)
+app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 app.include_router(actions.router)
 app.include_router(knowledge.router)

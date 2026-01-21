@@ -418,71 +418,111 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
 
     # -------------------------------------------------------------
     # Strategy 2: yt-dlp with Multiple Client Emulation & Better Error Handling
+    # Using YouTubeRetryStrategy for enterprise-grade retry logic
     # -------------------------------------------------------------
     if not text:
         print("[YouTube] No captions found. Starting robust audio download...")
         log_ingestion_event(source_id, twin_id, "warning", "Attempting robust audio download (yt-dlp with multiple clients)")
 
+        from modules.youtube_retry_strategy import YouTubeRetryStrategy
+        from modules.ingestion import ErrorClassifier
+        
         ydl_opts, temp_dir, temp_filename = _build_yt_dlp_opts(video_id, source_id, twin_id)
-
-        # Up to 5 retries with exponential backoff for transient issues
-        attempts = 0
-        last_error = None
-        while attempts < 5 and not text:
-            attempts += 1
+        
+        # Initialize retry strategy with configured max_retries
+        config = YouTubeConfig()
+        strategy = YouTubeRetryStrategy(
+            source_id=source_id,
+            twin_id=twin_id,
+            max_retries=config.MAX_RETRIES,
+            verbose=config.VERBOSE_LOGGING
+        )
+        
+        temp_audio_path = None
+        
+        while strategy.attempts < strategy.max_retries and not text:
             try:
-                print(f"[YouTube] Download attempt {attempts}/5 for {video_id}")
+                strategy.attempts += 1
+                print(f"[YouTube] Download attempt {strategy.attempts}/{strategy.max_retries} for {video_id}")
+                
+                # Download audio
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
 
-                audio_path = os.path.join(temp_dir, f"{temp_filename}.mp3")
+                temp_audio_path = os.path.join(temp_dir, f"{temp_filename}.mp3")
                 
-                if not os.path.exists(audio_path):
-                    raise FileNotFoundError(f"Audio file not created at {audio_path}")
+                if not os.path.exists(temp_audio_path):
+                    raise FileNotFoundError(f"Audio file not created at {temp_audio_path}")
 
                 # Transcribe
                 print(f"[YouTube] Transcribing audio for {video_id}")
-                text = transcribe_audio_multi(audio_path)
-                log_ingestion_event(source_id, twin_id, "info", f"Audio transcribed via Gemini/Whisper ({len(text)} chars)")
-
-                # Cleanup
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
-                    
-                print(f"[YouTube] Successfully transcribed {video_id}: {len(text)} characters")
+                text = transcribe_audio_multi(temp_audio_path)
+                
+                # Language detection
+                language = LanguageDetector.detect(text)
+                
+                # PII detection
+                pii_detected = PIIScrubber.has_pii(text) if config.PII_SCRUB else False
+                detected_pii = PIIScrubber.detect_pii(text) if pii_detected else []
+                
+                # Log success with metadata
+                strategy.log_success(
+                    content_length=len(text),
+                    metadata={
+                        "language": language,
+                        "has_pii": pii_detected,
+                        "pii_count": len(detected_pii)
+                    }
+                )
+                
+                log_ingestion_event(
+                    source_id, twin_id, "info",
+                    f"Audio transcribed via Gemini/Whisper ({len(text)} chars, lang={language}, pii={pii_detected})"
+                )
+                
+                print(f"[YouTube] Successfully transcribed {video_id}: {len(text)} characters, language={language}")
                 
             except Exception as download_error:
-                last_error = str(download_error)
-                print(f"[YouTube] Attempt {attempts} failed: {last_error}")
-                log_ingestion_event(source_id, twin_id, "warning", f"Download attempt {attempts} failed: {last_error}")
+                error_msg = str(download_error)
+                error_category, user_msg, retryable = ErrorClassifier.classify(error_msg)
                 
-                if attempts < 5:
-                    # Exponential backoff: 2, 4, 8, 16 seconds
-                    backoff = 2 ** attempts
-                    print(f"[YouTube] Waiting {backoff}s before retry...")
-                    time.sleep(backoff)
-                continue
+                strategy.log_attempt(error_msg)
+                
+                print(f"[YouTube] Attempt {strategy.attempts} failed [{error_category}]: {error_msg}")
+                log_ingestion_event(
+                    source_id, twin_id, "warning",
+                    f"Download attempt {strategy.attempts} failed [{error_category}]: {error_msg}"
+                )
+                
+                # Determine if we should retry
+                if not strategy.should_retry(error_category):
+                    print(f"[YouTube] Error category '{error_category}' is non-retryable, stopping attempts")
+                    break
+                
+                if strategy.attempts < strategy.max_retries:
+                    wait_time = strategy.wait_for_retry()
+                    print(f"[YouTube] Waiting {wait_time}s before retry...")
+                else:
+                    break
+
+        # Cleanup temp file
+        if temp_audio_path and os.path.exists(temp_audio_path):
+            try:
+                os.remove(temp_audio_path)
+            except:
+                pass
 
         if not text:
-            # Parse error to provide helpful guidance
-            error_msg = last_error or "Unknown download error"
+            # Get final error message with classification
+            final_error = strategy.get_final_error_message(strategy.last_error or "Unknown error")
+            metrics = strategy.get_metrics()
             
-            if "403" in error_msg or "Sign in" in error_msg or "bot" in error_msg.lower():
-                raise ValueError(
-                    "YouTube blocked the connection (HTTP 403). This can happen if: "
-                    "(1) The video doesn't have public captions (look for CC badge on videos like TED-Ed or Khan Academy), "
-                    "(2) YouTube is rate-limiting your IP address, "
-                    "(3) The video requires authentication or is region-restricted. "
-                    "Solutions: Try a public educational video with captions, or set YOUTUBE_PROXY to route through a proxy service."
-                )
-            elif "unavailable" in error_msg.lower():
-                raise ValueError(
-                    "This video is unavailable. It may be: "
-                    "(1) Deleted, (2) Private, (3) Age-restricted, or (4) Region-restricted. "
-                    "Please try a different public video."
-                )
-            else:
-                raise ValueError(f"Download failed: {error_msg}")
+            log_ingestion_event(
+                source_id, twin_id, "error",
+                f"YouTube ingestion failed after {strategy.attempts} attempts. Metrics: {metrics}"
+            )
+            
+            raise ValueError(final_error)
 
     if not text:
         raise ValueError(
