@@ -149,3 +149,85 @@ async def get_training_job_endpoint(job_id: str, user=Depends(get_current_user))
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class ExtractNodesRequest(BaseModel):
+    """Request to extract graph nodes from an ingested source."""
+    max_chunks: Optional[int] = 10  # Limit chunks to control cost
+
+
+@router.post("/ingest/extract-nodes/{source_id}")
+async def extract_nodes_from_source(
+    source_id: str,
+    request: ExtractNodesRequest = None,
+    user=Depends(get_current_user)
+):
+    """
+    Extract graph nodes/edges from an ingested source's content.
+    
+    Takes the content_text from a staged/approved source and runs it through
+    the Scribe Engine to create graph_nodes and graph_edges.
+    
+    This bridges content ingestion with the cognitive graph.
+    """
+    from modules._core.scribe_engine import extract_from_content
+    
+    # Get source and verify ownership
+    source_result = supabase.table("sources").select(
+        "id, twin_id, content_text, filename, status"
+    ).eq("id", source_id).single().execute()
+    
+    if not source_result.data:
+        raise HTTPException(status_code=404, detail="Source not found")
+    
+    source = source_result.data
+    twin_id = source["twin_id"]
+    
+    # Verify twin ownership
+    verify_twin_ownership(twin_id, user)
+    
+    content_text = source.get("content_text")
+    if not content_text:
+        raise HTTPException(status_code=400, detail="Source has no content_text to extract from")
+    
+    # Determine source type from filename
+    filename = source.get("filename", "")
+    source_type = "ingested_content"
+    if "YouTube" in filename:
+        source_type = "youtube"
+    elif "Podcast" in filename:
+        source_type = "podcast"
+    elif filename.endswith(".pdf"):
+        source_type = "pdf"
+    elif "X Thread" in filename:
+        source_type = "twitter"
+    
+    # Run extraction
+    try:
+        max_chunks = request.max_chunks if request else 10
+        
+        result = await extract_from_content(
+            twin_id=twin_id,
+            content_text=content_text,
+            source_id=source_id,
+            source_type=source_type,
+            max_chunks=max_chunks,
+            tenant_id=user.get("user_id")
+        )
+        
+        # Update source to mark extraction complete
+        supabase.table("sources").update({
+            "health_status": "extracted"
+        }).eq("id", source_id).execute()
+        
+        return {
+            "status": "success",
+            "source_id": source_id,
+            "nodes_created": len(result.get("all_nodes", [])),
+            "edges_created": len(result.get("all_edges", [])),
+            "chunks_processed": result.get("chunks_processed", 0),
+            "confidence": result.get("total_confidence", 0.0)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")

@@ -613,6 +613,150 @@ async def process_graph_extraction_job(job_id: str) -> bool:
     return False
 
 
+# --- Content Ingestion Integration ---
+
+@observe(name="scribe_content_extraction")
+async def extract_from_content(
+    twin_id: str,
+    content_text: str,
+    source_id: str = None,
+    source_type: str = "ingested_content",
+    chunk_size: int = 4000,
+    max_chunks: int = 10,
+    tenant_id: str = None
+) -> Dict[str, Any]:
+    """
+    Extract graph nodes and edges from ingested content (YouTube, podcasts, PDFs, etc.).
+    
+    Unlike process_interaction() which handles conversation turns, this function
+    processes longer-form content by chunking it and extracting entities.
+    
+    Args:
+        twin_id: Twin ID
+        content_text: Full text content to extract from
+        source_id: UUID of the source (for attribution)
+        source_type: Type of source (youtube, podcast, pdf, etc.)
+        chunk_size: Characters per chunk (default 4000)
+        max_chunks: Maximum chunks to process (to limit API costs)
+        tenant_id: Tenant ID for memory events
+    
+    Returns:
+        Dict with all_nodes, all_edges, chunks_processed, total_confidence
+    """
+    from modules.memory_events import create_memory_event
+    
+    if not content_text or len(content_text.strip()) < 50:
+        logger.warning(f"Content too short for extraction: {len(content_text) if content_text else 0} chars")
+        return {"all_nodes": [], "all_edges": [], "chunks_processed": 0, "total_confidence": 0.0}
+    
+    try:
+        client = get_async_openai_client()
+        
+        # Chunk the content
+        chunks = []
+        for i in range(0, len(content_text), chunk_size):
+            chunk = content_text[i:i + chunk_size]
+            if len(chunk.strip()) > 50:  # Skip tiny chunks
+                chunks.append(chunk)
+        
+        # Limit chunks to process
+        chunks = chunks[:max_chunks]
+        
+        logger.info(f"Extracting from content: {len(content_text)} chars -> {len(chunks)} chunks")
+        
+        all_nodes = []
+        all_edges = []
+        node_map = {}
+        total_confidence = 0.0
+        
+        for idx, chunk in enumerate(chunks):
+            try:
+                # Build content-focused extraction prompt
+                messages = [
+                    {"role": "system", "content": (
+                        "You are an expert Knowledge Graph Scribe extracting information from content. "
+                        "Your goal is to extract structured entities (Nodes) and relationships (Edges) "
+                        "from this text content. "
+                        "\n\nFocus on:"
+                        "\n- Named entities (people, companies, products, places)"
+                        "\n- Key concepts, ideas, and topics"
+                        "\n- Metrics, statistics, and numbers"
+                        "\n- Opinions, beliefs, and viewpoints"
+                        "\n- Relationships between entities"
+                        "\n\nDo NOT create generic nodes like 'Content' or 'Author'. "
+                        "Use Title Case for node names. Be selective - extract only meaningful entities."
+                    )},
+                    {"role": "user", "content": f"Extract entities and relationships from this content:\n\n{chunk}"}
+                ]
+                
+                # Call OpenAI with structured output
+                response = await client.beta.chat.completions.parse(
+                    model="gpt-4o-2024-08-06",
+                    messages=messages,
+                    response_format=GraphUpdates,
+                    temperature=0.0
+                )
+                
+                updates = response.choices[0].message.parsed
+                
+                if updates and updates.nodes:
+                    # Persist nodes and track for edge resolution
+                    created_nodes = await _persist_nodes(twin_id, updates.nodes)
+                    
+                    for node in created_nodes:
+                        if node.get('name') and node.get('id'):
+                            node_map[node['name']] = node['id']
+                            all_nodes.append(node)
+                    
+                    # Persist edges
+                    if updates.edges:
+                        valid_edges = [
+                            edge for edge in updates.edges
+                            if node_map.get(edge.from_node) and node_map.get(edge.to_node)
+                        ]
+                        created_edges = await _persist_edges(twin_id, valid_edges, node_map)
+                        all_edges.extend(created_edges)
+                    
+                    total_confidence += updates.confidence
+                    logger.info(f"Chunk {idx+1}/{len(chunks)}: {len(updates.nodes)} nodes, {len(updates.edges)} edges")
+                    
+            except Exception as chunk_error:
+                logger.warning(f"Error extracting chunk {idx+1}: {chunk_error}")
+                continue
+        
+        # Create memory event for audit
+        if tenant_id and all_nodes:
+            await create_memory_event(
+                twin_id=twin_id,
+                tenant_id=tenant_id,
+                event_type="content_extract",
+                payload={
+                    "source_id": source_id,
+                    "source_type": source_type,
+                    "chunks_processed": len(chunks),
+                    "nodes_created": len(all_nodes),
+                    "edges_created": len(all_edges)
+                },
+                status="applied",
+                source_type=source_type,
+                source_id=source_id
+            )
+        
+        avg_confidence = total_confidence / len(chunks) if chunks else 0.0
+        
+        return {
+            "all_nodes": all_nodes,
+            "all_edges": all_edges,
+            "chunks_processed": len(chunks),
+            "total_confidence": avg_confidence,
+            "source_id": source_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Content extraction error: {e}", exc_info=True)
+        return {"all_nodes": [], "all_edges": [], "chunks_processed": 0, "error": str(e)}
+
+
 # --- Legacy Support ---
 
 def extract_structured_output(text: str, schema: dict) -> dict:
