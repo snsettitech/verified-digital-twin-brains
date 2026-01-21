@@ -225,10 +225,10 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         )
 
     try:
-        # Phase 6: Staging workflow - extract and stage, don't index yet
+        # Phase 6: Direct indexing - extract, index, and approve immediately
         content_hash = calculate_content_hash(text)
 
-        # Record source in Supabase with staging status
+        # Record source in Supabase with indexed status
         supabase.table("sources").insert({
             "id": source_id,
             "twin_id": twin_id,
@@ -236,30 +236,26 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             "file_size": len(text),
             "content_text": text,
             "content_hash": content_hash,
-            "status": "staged",
-            "staging_status": "staged",
+            "status": "indexed",
+            "staging_status": "approved",
             "extracted_text_length": len(text)
         }).execute()
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube transcript extracted: {len(text)} characters")
 
-        # Phase 9: Log the action
-        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_STAGED", metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube"})
-
-        # Run health checks
-        health_result = run_all_health_checks(source_id, twin_id, text, source_data={
+        # Phase 7: Direct indexing (skip staging approval)
+        num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
             "filename": f"YouTube: {video_id}",
-            "twin_id": twin_id
+            "type": "youtube",
+            "video_id": video_id
         })
 
-        # Update source health status
-        supabase.table("sources").update({
-            "health_status": health_result["overall_status"]
-        }).eq("id", source_id).execute()
+        # Phase 8: Log the action
+        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube", "chunks": num_chunks})
 
-        log_ingestion_event(source_id, twin_id, "info", f"Health checks completed: {health_result['overall_status']}")
+        log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks")
 
-        return 0  # No chunks yet (staged, not indexed)
+        return num_chunks
     except Exception as e:
         print(f"Error staging YouTube content: {e}")
         log_ingestion_event(source_id, twin_id, "error", f"Error staging YouTube content: {e}")
@@ -333,7 +329,7 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
             # Phase 6: Staging workflow
             content_hash = calculate_content_hash(text)
 
-            # Record source in Supabase with staging status
+            # Record source in Supabase with indexed status
             supabase.table("sources").insert({
                 "id": source_id,
                 "twin_id": twin_id,
@@ -341,30 +337,26 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
                 "file_size": len(text),
                 "content_text": text,
                 "content_hash": content_hash,
-                "status": "staged",
-                "staging_status": "staged",
+                "status": "indexed",
+                "staging_status": "approved",
                 "extracted_text_length": len(text)
             }).execute()
 
             log_ingestion_event(source_id, twin_id, "info", f"X thread extracted: {len(text)} characters")
 
-            # Phase 9: Log the action
-            AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_STAGED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread"})
-
-            # Run health checks
-            health_result = run_all_health_checks(source_id, twin_id, text, source_data={
+            # Phase 7: Direct indexing (skip staging approval)
+            num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
                 "filename": f"X Thread: {tweet_id} by {user}",
-                "twin_id": twin_id
+                "type": "x_thread",
+                "tweet_id": tweet_id
             })
 
-            # Update source health status
-            supabase.table("sources").update({
-                "health_status": health_result["overall_status"]
-            }).eq("id", source_id).execute()
+            # Phase 8: Log the action
+            AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks})
 
-            log_ingestion_event(source_id, twin_id, "info", f"Health checks completed: {health_result['overall_status']}")
+            log_ingestion_event(source_id, twin_id, "info", f"X thread indexed: {num_chunks} chunks")
 
-            return 0  # No chunks yet (staged, not indexed)
+            return num_chunks
     except Exception as e:
         print(f"Error staging X thread: {e}")
         log_ingestion_event(source_id, twin_id, "error", f"Error staging X thread: {e}")
