@@ -189,10 +189,10 @@ async def get_current_user_profile(user=Depends(get_current_user)):
 @router.get("/auth/my-twins")
 async def get_my_twins(user=Depends(get_current_user)):
     """Get all twins owned by the current user."""
-    user_id = user.get("user_id")
+    tenant_id = user.get("tenant_id")
     
-    # Note: twins table uses tenant_id, not owner_id
-    result = supabase.table("twins").select("*").eq("tenant_id", user_id).execute()
+    # Note: twins table uses tenant_id
+    result = supabase.table("twins").select("*").eq("tenant_id", tenant_id).execute()
     
     return {
         "twins": result.data if result.data else [],
