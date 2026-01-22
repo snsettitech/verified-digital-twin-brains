@@ -8,7 +8,10 @@ import time
 import httpx
 import html
 import html as html_lib
+import asyncio
 from typing import List, Dict, Optional, Any, Tuple
+from modules.transcription import transcribe_audio_multi
+from modules.embeddings import get_embedding
 from PyPDF2 import PdfReader
 from youtube_transcript_api import YouTubeTranscriptApi
 from modules.clients import get_openai_client, get_pinecone_index
@@ -168,7 +171,7 @@ def extract_video_id(url: str) -> str:
     return None
 
 
-from modules.transcription import transcribe_audio_multi
+
 
 
 def _build_yt_dlp_opts(video_id: str, source_id: str, twin_id: str) -> dict:
@@ -784,8 +787,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
         chunks.append(text[i:i + chunk_size])
     return chunks
 
-# Embedding generation moved to modules.embeddings
-from modules.embeddings import get_embedding
+
 
 
 async def analyze_chunk_content(text: str) -> dict:
