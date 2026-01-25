@@ -31,7 +31,13 @@ from modules.specializations import get_specialization
 app = FastAPI(title="Verified Digital Twin Brain API")
 
 # Add CORS middleware
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+# Explicitly allow localhost:3000 if ALLOWED_ORIGINS is not set
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_raw:
+    allowed_origins = allowed_origins_raw.split(",")
+else:
+    allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,

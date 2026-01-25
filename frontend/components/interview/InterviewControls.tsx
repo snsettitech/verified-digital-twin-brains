@@ -9,11 +9,14 @@ interface InterviewControlsProps {
     onStart: () => void;
     onStop: () => void;
     disabled?: boolean;
+    error?: string | null;
 }
 
 /**
  * Interview control buttons with visual feedback for connection state.
  */
+
+
 export function InterviewControls({
     isConnected,
     isRecording,
@@ -21,6 +24,7 @@ export function InterviewControls({
     onStart,
     onStop,
     disabled = false,
+    error = null,
 }: InterviewControlsProps) {
     const [duration, setDuration] = useState(0);
 
@@ -112,6 +116,13 @@ export function InterviewControls({
                         : 'Click to start'
                 }
             </span>
+
+            {/* Error Message */}
+            {error && (
+                <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl max-w-xs text-center">
+                    <p className="text-red-400 text-xs font-medium">{error}</p>
+                </div>
+            )}
         </div>
     );
 }

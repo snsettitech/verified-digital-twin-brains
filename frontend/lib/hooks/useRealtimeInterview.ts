@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { API_BASE_URL } from '@/lib/hooks/useAuthFetch';
 
 interface TranscriptTurn {
     role: 'user' | 'assistant';
@@ -62,7 +63,7 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
      * Create interview session and get context bundle
      */
     const createInterviewSession = useCallback(async (accessToken: string) => {
-        const response = await fetch('/api/interview/sessions', {
+        const response = await fetch(`${API_BASE_URL}/api/interview/sessions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -85,7 +86,7 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
         accessToken: string,
         systemPrompt: string
     ) => {
-        const response = await fetch('/api/interview/realtime/sessions', {
+        const response = await fetch(`${API_BASE_URL}/api/interview/realtime/sessions`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -325,7 +326,7 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
             try {
                 const accessToken = await getAccessToken();
 
-                await fetch(`/api/interview/sessions/${interviewSessionIdRef.current}/finalize`, {
+                await fetch(`${API_BASE_URL}/api/interview/sessions/${interviewSessionIdRef.current}/finalize`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

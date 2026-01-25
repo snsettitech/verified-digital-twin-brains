@@ -1,10 +1,13 @@
 -- Interview Sessions Table Migration
 -- Stores interview session data with transcripts and extracted memory counts
 
-CREATE TABLE IF NOT EXISTS interview_sessions (
+-- DROP legacy table if it exists with conflicting schema
+DROP TABLE IF EXISTS interview_sessions CASCADE;
+
+CREATE TABLE interview_sessions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    twin_id UUID REFERENCES twins(id) ON DELETE SET NULL,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    twin_id UUID REFERENCES public.twins(id) ON DELETE SET NULL,
     started_at TIMESTAMPTZ DEFAULT now() NOT NULL,
     ended_at TIMESTAMPTZ,
     duration_seconds INTEGER,
@@ -17,10 +20,10 @@ CREATE TABLE IF NOT EXISTS interview_sessions (
 );
 
 -- Indexes for common queries
-CREATE INDEX IF NOT EXISTS idx_interview_sessions_user_id ON interview_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_interview_sessions_twin_id ON interview_sessions(twin_id);
-CREATE INDEX IF NOT EXISTS idx_interview_sessions_status ON interview_sessions(status);
-CREATE INDEX IF NOT EXISTS idx_interview_sessions_started_at ON interview_sessions(started_at DESC);
+CREATE INDEX idx_interview_sessions_user_id ON interview_sessions(user_id);
+CREATE INDEX idx_interview_sessions_twin_id ON interview_sessions(twin_id);
+CREATE INDEX idx_interview_sessions_status ON interview_sessions(status);
+CREATE INDEX idx_interview_sessions_started_at ON interview_sessions(started_at DESC);
 
 -- Row Level Security
 ALTER TABLE interview_sessions ENABLE ROW LEVEL SECURITY;

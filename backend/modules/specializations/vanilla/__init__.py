@@ -70,7 +70,7 @@ Guidelines:
                     "items": [
                         {"name": "Dashboard", "href": "/dashboard", "icon": "home"},
                         {"name": "Left Brain (Sources)", "href": "/dashboard/knowledge", "icon": "book"},
-                        {"name": "Right Brain (Interview)", "href": "/dashboard/right-brain", "icon": "activity"},
+                        {"name": "Interview Mode", "href": "/dashboard/interview", "icon": "activity"},
                         {"name": "Simulator", "href": "/dashboard/simulator", "icon": "chat"}
                     ]
                 },

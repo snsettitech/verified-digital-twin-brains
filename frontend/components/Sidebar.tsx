@@ -49,6 +49,7 @@ const defaultNavSections = [
     title: 'Core',
     items: [
       { name: 'Chat', href: '/dashboard', icon: 'chat' },
+      { name: 'Interview Mode', href: '/dashboard/interview', icon: 'activity' },
     ]
   }
 ];

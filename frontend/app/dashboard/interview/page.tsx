@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRealtimeInterview, TranscriptTurn } from '@/lib/hooks/useRealtimeInterview';
+import { InterviewControls, TranscriptPanel } from '@/components/interview';
 
 /**
  * Interview Mode Page
@@ -30,7 +31,7 @@ export default function InterviewPage() {
 
     const [duration, setDuration] = useState(0);
 
-    // Timer for interview duration
+    // Sync duration with recording state
     useEffect(() => {
         let interval: NodeJS.Timeout | null = null;
         if (isRecording) {
@@ -98,80 +99,23 @@ export default function InterviewPage() {
                 )}
 
                 {/* Main Control */}
-                <div className="flex flex-col items-center mb-8">
-                    <button
-                        onClick={isRecording ? stopInterview : startInterview}
-                        disabled={connectionStatus === 'connecting'}
-                        className={`
-              w-24 h-24 rounded-full flex items-center justify-center
-              transition-all duration-300 transform hover:scale-105
-              ${isRecording
-                                ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30'
-                                : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 shadow-lg shadow-purple-500/30'
-                            }
-              ${connectionStatus === 'connecting' ? 'opacity-50 cursor-not-allowed' : ''}
-            `}
-                    >
-                        {connectionStatus === 'connecting' ? (
-                            <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                        ) : isRecording ? (
-                            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                <rect x="6" y="6" width="12" height="12" rx="2" />
-                            </svg>
-                        ) : (
-                            <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
-                            </svg>
-                        )}
-                    </button>
-
-                    <p className="mt-4 text-slate-400 text-sm">
-                        {connectionStatus === 'connecting'
-                            ? 'Connecting...'
-                            : isRecording
-                                ? 'Click to stop'
-                                : 'Click to start interview'
-                        }
-                    </p>
+                <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-8 border border-slate-700/50 shadow-xl mb-8">
+                    <InterviewControls
+                        isConnected={isConnected}
+                        isRecording={isRecording}
+                        connectionStatus={connectionStatus}
+                        onStart={startInterview}
+                        onStop={stopInterview}
+                        error={error}
+                    />
                 </div>
 
                 {/* Transcript Panel */}
-                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
-                        <h2 className="text-white font-medium">Transcript</h2>
-                        {transcript.length > 0 && (
-                            <button
-                                onClick={clearTranscript}
-                                className="text-slate-400 hover:text-white text-sm transition-colors"
-                            >
-                                Clear
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="p-4 min-h-[300px] max-h-[400px] overflow-y-auto">
-                        {transcript.length === 0 ? (
-                            <div className="flex items-center justify-center h-full min-h-[200px]">
-                                <p className="text-slate-500 text-sm">
-                                    {isRecording
-                                        ? 'Listening... Start speaking.'
-                                        : 'Start the interview to see the transcript here.'
-                                    }
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                {transcript.map((turn, index) => (
-                                    <TranscriptItem key={index} turn={turn} />
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <TranscriptPanel
+                    transcript={transcript}
+                    isRecording={isRecording}
+                    onClear={clearTranscript}
+                />
 
                 {/* Instructions */}
                 <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700/30">
