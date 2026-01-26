@@ -224,10 +224,12 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
             dataChannel.onmessage = handleRealtimeEvent;
             dataChannel.onopen = () => {
                 console.log('Data channel opened');
-                // Enable audio transcription
+                // Enable audio transcription via session.update
                 dataChannel.send(JSON.stringify({
-                    type: 'input_audio_transcription.create',
-                    input_audio_transcription: { model: 'whisper-1' }
+                    type: 'session.update',
+                    session: {
+                        input_audio_transcription: { model: 'whisper-1' }
+                    }
                 }));
             };
 
