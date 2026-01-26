@@ -66,26 +66,29 @@ Guidelines:
         return {
             "sections": [
                 {
-                    "title": "Core",
+                    "title": "Build",
                     "items": [
                         {"name": "Dashboard", "href": "/dashboard", "icon": "home"},
-                        {"name": "Left Brain (Sources)", "href": "/dashboard/knowledge", "icon": "book"},
                         {"name": "Interview Mode", "href": "/dashboard/interview", "icon": "activity"},
-                        {"name": "Simulator", "href": "/dashboard/simulator", "icon": "chat"}
+                        {"name": "Knowledge", "href": "/dashboard/knowledge", "icon": "book"},
+                        {"name": "Right Brain", "href": "/dashboard/right-brain", "icon": "chart"}
                     ]
                 },
                 {
-                    "title": "Management",
+                    "title": "Train",
                     "items": [
-                        {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
+                        {"name": "Simulator", "href": "/dashboard/simulator", "icon": "chat"},
                         {"name": "Verified Q&A", "href": "/dashboard/verified-qna", "icon": "check"},
-                        {"name": "Access Groups", "href": "/dashboard/access-groups", "icon": "users"}
+                        {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
+                        {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"}
                     ]
                 },
                 {
-                    "title": "Automation",
+                    "title": "Share",
                     "items": [
-                        {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"}
+                        {"name": "Access Groups", "href": "/dashboard/access-groups", "icon": "users"},
+                        {"name": "Widget", "href": "/dashboard/widget", "icon": "code"},
+                        {"name": "API Keys", "href": "/dashboard/api-keys", "icon": "key"}
                     ]
                 },
                 {
