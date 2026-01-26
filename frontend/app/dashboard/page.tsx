@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -96,7 +97,7 @@ export default function DashboardPage() {
       // If no twin ID, try to get the first twin
       if (!activeTwinId) {
         try {
-          const twinsResponse = await fetch(`${API_BASE_URL}/twins`);
+          const twinsResponse = await authFetchStandalone('/twins');
           if (twinsResponse.ok) {
             const twins = await twinsResponse.json();
             if (twins && twins.length > 0) {

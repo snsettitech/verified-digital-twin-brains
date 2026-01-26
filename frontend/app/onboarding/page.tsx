@@ -15,6 +15,7 @@ import {
     PreviewTwinStep,
     LaunchStep
 } from '@/components/onboarding';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 // 9-Step Delphi-Style Onboarding with Specialization
 const WIZARD_STEPS = [
@@ -141,9 +142,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             console.log('Creating twin with specialization:', selectedSpecialization);
 
             // Call backend API to create twin (bypasses RLS)
-            const response = await fetch(`${backendUrl}/twins`, {
+            const response = await authFetchStandalone('/twins', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: twinName,
                     tenant_id: user.id,
@@ -184,7 +184,7 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             formData.append('twin_id', twinId);
 
             try {
-                await fetch(`${backendUrl}/ingest/document`, {
+                await authFetchStandalone('/ingest/document', {
                     method: 'POST',
                     body: formData,
                 });
@@ -196,9 +196,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
         // Submit URLs
         for (const url of pendingUrls) {
             try {
-                await fetch(`${backendUrl}/ingest/url`, {
+                await authFetchStandalone('/ingest/url', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url, twin_id: twinId }),
                 });
             } catch (error) {
@@ -216,9 +215,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
         for (const faq of faqs) {
             if (faq.question && faq.answer) {
                 try {
-                    await fetch(`${backendUrl}/twins/${twinId}/verified-qna`, {
+                    await authFetchStandalone(`/twins/${twinId}/verified-qna`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             question: faq.question,
                             answer: faq.answer,
@@ -246,9 +244,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
 
         try {
             // Use backend PATCH endpoint
-            await fetch(`${backendUrl}/twins/${twinId}`, {
+            await authFetchStandalone(`/twins/${twinId}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     description: tagline || `${twinName}'s digital twin`,
                     settings: {

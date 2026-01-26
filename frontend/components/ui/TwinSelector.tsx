@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface Twin {
     id: string;
@@ -36,7 +37,7 @@ export const TwinSelector: React.FC<TwinSelectorProps> = ({
     useEffect(() => {
         const fetchTwins = async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/twins`);
+                const response = await authFetchStandalone('/twins');
                 if (response.ok) {
                     const data = await response.json();
                     setTwins(data);

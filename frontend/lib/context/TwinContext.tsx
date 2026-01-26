@@ -133,16 +133,6 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
                 }
             }
 
-            // Fallback to public endpoint if auth failed or no token
-            if (!data) {
-                console.log('[TwinContext] Trying public /twins endpoint');
-                const publicResponse = await fetch(`${API_URL}/twins`);
-                if (publicResponse.ok) {
-                    const publicData = await publicResponse.json();
-                    data = { twins: publicData };
-                }
-            }
-
             if (data) {
                 console.log('[TwinContext] Got twins:', data.twins?.length || 0);
                 setTwins(data.twins || []);
