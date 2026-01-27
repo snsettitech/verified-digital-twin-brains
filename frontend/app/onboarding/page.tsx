@@ -129,6 +129,11 @@ export default function OnboardingPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
+            // Ensure user is synced with backend (creates tenant if missing)
+            // This prevents race conditions where the twin is created before the tenant
+            console.log('[Onboarding] Syncing user before twin creation...');
+            await authFetchStandalone('/auth/sync-user', { method: 'POST' });
+
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
             const expertiseText = [...selectedDomains, ...customExpertise].join(', ');
 

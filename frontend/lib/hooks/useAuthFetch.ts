@@ -149,12 +149,19 @@ export async function authFetchStandalone(
     const authHeaders = await getAuthHeaders();
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
+    const headers: Record<string, string> = {
+        ...authHeaders,
+        ...(options.headers as Record<string, string> || {}),
+    };
+
+    // Add Content-Type for JSON requests if body is present and not FormData
+    if (options.body && !(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+
     return fetch(url, {
         ...options,
-        headers: {
-            ...authHeaders,
-            ...(options.headers as Record<string, string> || {}),
-        },
+        headers,
     });
 }
 
