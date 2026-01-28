@@ -236,13 +236,39 @@ async def get_my_twins(user=Depends(get_current_user)):
         print(f"[MY-TWINS ERROR] Could not resolve tenant_id for user {user_id}")
         return []
     
-    # Note: twins table uses tenant_id
+    # Query twins by tenant_id
     result = supabase.table("twins").select("*").eq("tenant_id", tenant_id).execute()
-    
     twins = result.data if result.data else []
-    print(f"[MY-TWINS DEBUG] Returning {len(twins)} twins for tenant {tenant_id}")
     
+    # AUTO-REPAIR: Check for orphaned twins if none found
+    # Orphaned twins have tenant_id = user_id (wrong value from frontend bug)
+    if len(twins) == 0 and user_id:
+        print(f"[MY-TWINS DEBUG] No twins found, checking for orphaned twins with tenant_id={user_id}")
+        orphan_check = supabase.table("twins").select("*").eq("tenant_id", user_id).execute()
+        orphan_twins = orphan_check.data if orphan_check.data else []
+        
+        if len(orphan_twins) > 0:
+            print(f"[MY-TWINS REPAIR] Found {len(orphan_twins)} orphaned twin(s)! Reassigning to correct tenant_id={tenant_id}")
+            
+            # Repair each orphaned twin
+            for orphan in orphan_twins:
+                try:
+                    supabase.table("twins").update({
+                        "tenant_id": tenant_id
+                    }).eq("id", orphan["id"]).execute()
+                    print(f"[MY-TWINS REPAIR] Fixed twin {orphan['id']} ({orphan.get('name', 'unnamed')})")
+                except Exception as e:
+                    print(f"[MY-TWINS REPAIR ERROR] Failed to fix twin {orphan['id']}: {e}")
+            
+            # Return the orphaned twins (now repaired)
+            # Update the tenant_id in memory before returning
+            for twin in orphan_twins:
+                twin["tenant_id"] = tenant_id
+            twins = orphan_twins
+    
+    print(f"[MY-TWINS DEBUG] Returning {len(twins)} twins for tenant {tenant_id}")
     return twins
+
 
 # API Keys
 @router.post("/api-keys")

@@ -80,17 +80,22 @@ export default function OnboardingPage() {
     // Check if should skip onboarding (returning user with existing twins)
     useEffect(() => {
         const checkExistingTwins = async () => {
-            const { data: twins } = await supabase
-                .from('twins')
-                .select('id')
-                .limit(1);
-
-            if (twins && twins.length > 0) {
-                router.push('/dashboard');
+            try {
+                // Use API instead of direct Supabase query to ensure consistent tenant_id lookup
+                const response = await authFetchStandalone('/auth/my-twins');
+                if (response.ok) {
+                    const twins = await response.json();
+                    if (twins && twins.length > 0) {
+                        router.push('/dashboard');
+                    }
+                }
+            } catch (error) {
+                console.log('[Onboarding] Error checking twins, continuing with onboarding:', error);
             }
         };
         checkExistingTwins();
     }, []);
+
 
     const handleFileUpload = (files: File[]) => {
         setUploadedFiles(prev => [...prev, ...files]);
@@ -147,11 +152,12 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             console.log('Creating twin with specialization:', selectedSpecialization);
 
             // Call backend API to create twin (bypasses RLS)
+            // Note: tenant_id is determined server-side from authentication context
             const response = await authFetchStandalone('/twins', {
                 method: 'POST',
                 body: JSON.stringify({
                     name: twinName,
-                    tenant_id: user.id,
+                    tenant_id: 'auto', // Backend determines correct tenant_id from auth
                     description: tagline || `${twinName}'s digital twin`,
                     specialization: selectedSpecialization,
                     settings: {
@@ -163,6 +169,7 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
                     }
                 })
             });
+
 
             if (response.ok) {
                 const data = await response.json();
