@@ -253,10 +253,93 @@ def get_current_user(
         print(f"[JWT DEBUG] ERROR: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
+
+# ============================================================================
+# SCOPE ENFORCEMENT DEPENDENCIES (SINGLE SOURCE OF TRUTH)
+# Use these in all endpoints for consistent auth + scope validation
+# ============================================================================
+
 def verify_owner(user=Depends(get_current_user)):
-    if user.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+    """Require authenticated user (not API key visitor)."""
+    if user.get("role") == "visitor":
+        raise HTTPException(status_code=403, detail="API key cannot access this endpoint")
+    if not user.get("user_id"):
+        raise HTTPException(status_code=401, detail="Authentication required")
     return user
+
+
+def require_tenant(user=Depends(get_current_user)):
+    """
+    Require authenticated user with a valid tenant_id.
+    Returns the user dict (Principal) with guaranteed tenant_id.
+    """
+    if user.get("role") == "visitor":
+        raise HTTPException(status_code=403, detail="API key cannot access tenant-scoped resources")
+    
+    tenant_id = user.get("tenant_id")
+    if not tenant_id:
+        print(f"[require_tenant] Access denied: User {user.get('user_id')} has no tenant_id")
+        raise HTTPException(status_code=403, detail="User has no tenant association. Please contact support.")
+    
+    return user
+
+
+def require_admin(user=Depends(require_tenant)):
+    """
+    Require admin/owner/support role for tenant control plane operations.
+    """
+    from modules.observability import supabase as supabase_client
+    
+    user_id = user.get("user_id")
+    
+    try:
+        user_lookup = supabase_client.table("users").select("role").eq("id", user_id).single().execute()
+        actual_role = user_lookup.data.get("role", "viewer") if user_lookup.data else "viewer"
+    except Exception as e:
+        print(f"[require_admin] Role lookup failed: {e}")
+        actual_role = "viewer"
+    
+    if actual_role not in {"owner", "admin", "support"}:
+        raise HTTPException(status_code=403, detail="Administrator privileges required")
+    
+    user["actual_role"] = actual_role
+    return user
+
+
+def require_twin_access(twin_id: str, user: dict = Depends(require_tenant)) -> dict:
+    """
+    Verifies that the requested twin belongs to the user's tenant.
+    This is the primary dependency for twin-scoped endpoints.
+    
+    Returns: Minimal twin record if authorized.
+    """
+    from modules.observability import supabase as supabase_client
+    
+    tenant_id = user["tenant_id"]
+    
+    try:
+        # HARDENED: Filter by both id AND tenant_id at DB read level
+        # HARDENED: Select minimal columns only
+        twin_res = supabase_client.table("twins")\
+            .select("id, name, tenant_id")\
+            .eq("id", twin_id)\
+            .eq("tenant_id", tenant_id)\
+            .single().execute()
+            
+        if not twin_res.data:
+            # Metadata probe prevention: return 404 for missing scoped resource
+            raise HTTPException(status_code=404, detail="Twin not found or access denied")
+            
+        return twin_res.data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Never throw 500 on malformed/random UUIDs; return controlled error
+        print(f"[require_twin_access] Access validation failed for twin {twin_id}: {e}")
+        raise HTTPException(status_code=404, detail="Twin not found or access denied")
+
+
 
 def verify_twin_ownership(twin_id: str, user: dict) -> None:
     """
@@ -267,7 +350,6 @@ def verify_twin_ownership(twin_id: str, user: dict) -> None:
     For visitors (API key): checks if twin_id matches their allowed twin
     
     Raises HTTPException if access is denied.
-    Returns None if access is allowed.
     """
     from modules.observability import supabase
     
@@ -279,15 +361,14 @@ def verify_twin_ownership(twin_id: str, user: dict) -> None:
         raise HTTPException(status_code=403, detail="API key not authorized for this twin")
     
     # Authenticated users: verify twin belongs to their tenant
-    user_id = user.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Get user's tenant_id (may already be in user dict from auth)
     user_tenant_id = user.get("tenant_id")
     
-    # If not in user dict, look it up from database
     if not user_tenant_id:
+        # Fallback to lookup (should be rare if require_tenant is used)
+        user_id = user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+            
         try:
             user_lookup = supabase.table("users").select("tenant_id").eq("id", user_id).single().execute()
             if user_lookup.data:
@@ -298,34 +379,35 @@ def verify_twin_ownership(twin_id: str, user: dict) -> None:
     if not user_tenant_id:
         raise HTTPException(status_code=403, detail="User has no tenant association")
     
-    # Check if twin belongs to user's tenant
+    # HARDENED: Filter by both id AND tenant_id at DB read level
     try:
-        twin_check = supabase.table("twins").select("id, tenant_id").eq("id", twin_id).single().execute()
-        if not twin_check.data:
-            raise HTTPException(status_code=404, detail="Twin not found or access denied")
-        
-        twin_tenant_id = twin_check.data.get("tenant_id")
-        if twin_tenant_id == user_tenant_id:
+        twin_check = supabase.table("twins")\
+            .select("id, tenant_id")\
+            .eq("id", twin_id)\
+            .eq("tenant_id", user_tenant_id)\
+            .single().execute()
+            
+        if twin_check.data:
             return
             
-        print(f"[verify_twin_ownership] Access denied: user tenant {user_tenant_id} != twin tenant {twin_tenant_id}")
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"[verify_twin_ownership] Error checking twin access: {e}")
+        print(f"[verify_twin_ownership] Access check failed for twin {twin_id}: {e}")
     
     raise HTTPException(status_code=404, detail="Twin not found or access denied")
 
-def verify_source_ownership(source_id: str, user: dict) -> str:
+
+def verify_source_ownership(source_id: str, user: dict, expected_twin_id: str = None) -> str:
     """
     Verify that the user has access to the specified source.
     Returns the twin_id of the source if access is allowed.
     
+    Args:
+        source_id: Source UUID
+        user: Principal dict
+        expected_twin_id: Optional. If provided, verifies source belongs to THIS specific twin (pairing check).
+        
     For owners: checks if source belongs to a twin in their tenant
     For visitors (API key): checks if source belongs to their allowed twin
-    
-    Raises HTTPException if access is denied.
-    Returns twin_id if access is allowed.
     """
     from modules.observability import supabase
     
@@ -338,10 +420,16 @@ def verify_source_ownership(source_id: str, user: dict) -> str:
         source_twin_id = source_check.data.get("twin_id")
         if not source_twin_id:
             raise HTTPException(status_code=404, detail="Source not found or access denied")
+            
+        # HARDENED: Prevent cross-twin pairing (Deep Scrub protection)
+        if expected_twin_id and source_twin_id != expected_twin_id:
+            print(f"[SECURITY] Cross-twin pairing attempt: source {source_id} (twin {source_twin_id}) != expected twin {expected_twin_id}")
+            raise HTTPException(status_code=403, detail="Resource pairing violation: Source does not belong to the specified twin")
+            
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[verify_source_ownership] Error checking source: {e}")
+        print(f"[verify_source_ownership] Access check failed for source {source_id}: {e}")
         raise HTTPException(status_code=404, detail="Source not found or access denied")
     
     # Verify twin ownership (reuse existing logic)

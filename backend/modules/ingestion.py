@@ -560,8 +560,23 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             "video_id": video_id
         })
 
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+        except Exception:
+            pass
+
         # Phase 8: Log the action
-        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube", "chunks": num_chunks})
+        AuditLogger.log(
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="KNOWLEDGE_UPDATE", 
+            action="SOURCE_INDEXED", 
+            metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube", "chunks": num_chunks}
+        )
+
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks")
 
@@ -757,7 +772,22 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
             "tweet_id": tweet_id
         })
 
-        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks})
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+        except Exception:
+            pass
+
+        AuditLogger.log(
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="KNOWLEDGE_UPDATE", 
+            action="SOURCE_INDEXED", 
+            metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks}
+        )
+
 
         log_ingestion_event(source_id, twin_id, "info", f"X thread indexed: {num_chunks} chunks")
 

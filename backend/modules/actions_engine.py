@@ -15,6 +15,15 @@ from datetime import datetime, timedelta
 from modules.observability import supabase
 from modules.governance import AuditLogger
 
+def _get_tenant_id(twin_id: str) -> Optional[str]:
+    """Helper to resolve tenant_id from twin_id."""
+    try:
+        res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+        return res.data.get("tenant_id") if res.data else None
+    except Exception:
+        return None
+
+
 
 # =============================================================================
 # EVENT EMITTER
@@ -269,9 +278,10 @@ class ActionDraftManager:
             
             if result.data:
                 AuditLogger.log(
-                    twin_id,
-                    "ACTION_AUTOMATION",
-                    "DRAFT_CREATED",
+                    tenant_id=_get_tenant_id(twin_id),
+                    twin_id=twin_id,
+                    event_type="ACTION_AUTOMATION",
+                    action="DRAFT_CREATED",
                     metadata={
                         "draft_id": draft_id,
                         "trigger_id": trigger_id,
@@ -279,6 +289,7 @@ class ActionDraftManager:
                     }
                 )
                 return draft_id
+
             return None
             
         except Exception as e:
@@ -356,9 +367,10 @@ class ActionDraftManager:
                 }).eq("id", draft_id).execute()
             
             AuditLogger.log(
-                draft["twin_id"],
-                "ACTION_AUTOMATION",
-                "DRAFT_APPROVED",
+                tenant_id=_get_tenant_id(draft["twin_id"]),
+                twin_id=draft["twin_id"],
+                event_type="ACTION_AUTOMATION",
+                action="DRAFT_APPROVED",
                 actor_id=approved_by,
                 metadata={
                     "draft_id": draft_id,
@@ -366,6 +378,7 @@ class ActionDraftManager:
                     "execution_id": execution_id
                 }
             )
+
             
             return True
             
@@ -393,12 +406,14 @@ class ActionDraftManager:
             }).eq("id", draft_id).execute()
             
             AuditLogger.log(
-                draft["twin_id"],
-                "ACTION_AUTOMATION",
-                "DRAFT_REJECTED",
+                tenant_id=_get_tenant_id(draft["twin_id"]),
+                twin_id=draft["twin_id"],
+                event_type="ACTION_AUTOMATION",
+                action="DRAFT_REJECTED",
                 actor_id=rejected_by,
                 metadata={"draft_id": draft_id, "reason": rejection_note}
             )
+
             
             return True
             
@@ -466,9 +481,10 @@ class ActionDraftManager:
                         print(f"Warning: Could not save as verified QnA: {e}")
             
             AuditLogger.log(
-                draft["twin_id"],
-                "ACTION_AUTOMATION",
-                "DRAFT_RESPONDED",
+                tenant_id=_get_tenant_id(draft["twin_id"]),
+                twin_id=draft["twin_id"],
+                event_type="ACTION_AUTOMATION",
+                action="DRAFT_RESPONDED",
                 actor_id=responded_by,
                 metadata={
                     "draft_id": draft_id,
@@ -476,6 +492,7 @@ class ActionDraftManager:
                     "response_preview": response_message[:100]
                 }
             )
+
             
             return result
             
@@ -756,12 +773,14 @@ class TriggerManager:
             
             if result.data:
                 AuditLogger.log(
-                    twin_id,
-                    "CONFIGURATION_CHANGE",
-                    "TRIGGER_CREATED",
+                    tenant_id=_get_tenant_id(twin_id),
+                    twin_id=twin_id,
+                    event_type="CONFIGURATION_CHANGE",
+                    action="TRIGGER_CREATED",
                     metadata={"trigger_id": trigger_id, "name": name}
                 )
                 return trigger_id
+
             return None
             
         except Exception as e:

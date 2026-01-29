@@ -251,9 +251,20 @@ async def crawl_website(
             }
         )
         
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = res.data.get("tenant_id") if res.data else None
+        except Exception:
+            pass
+
         # Audit log
         AuditLogger.log(
-            twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED",
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="KNOWLEDGE_UPDATE", 
+            action="SOURCE_INDEXED",
             metadata={
                 "source_id": source_id,
                 "filename": f"Website: {domain}",
@@ -262,6 +273,7 @@ async def crawl_website(
                 "pages": pages_crawled
             }
         )
+
         
         return {
             "success": True,

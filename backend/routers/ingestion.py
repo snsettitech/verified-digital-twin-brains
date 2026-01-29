@@ -192,19 +192,20 @@ async def extract_nodes_from_source(
     """
     from modules._core.scribe_engine import extract_from_content
     
-    # Get source and verify ownership
+    # HARDENED: Verify source ownership and tenant/twin association
+    # This ensures the source belongs to a twin owned by the user's tenant.
+    twin_id = verify_source_ownership(source_id, user)
+    
+    # Fetch source content (now that ownership is verified)
     source_result = supabase.table("sources").select(
-        "id, twin_id, content_text, filename, status"
+        "id, content_text, filename, status"
     ).eq("id", source_id).single().execute()
     
     if not source_result.data:
-        raise HTTPException(status_code=404, detail="Source not found")
+        raise HTTPException(status_code=404, detail="Source not found or access denied")
     
     source = source_result.data
-    twin_id = source["twin_id"]
-    
-    # Verify twin ownership
-    verify_twin_ownership(twin_id, user)
+
     
     content_text = source.get("content_text")
     if not content_text:

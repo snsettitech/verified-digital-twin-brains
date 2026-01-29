@@ -468,3 +468,48 @@ class EventEmitRequest(BaseModel):
     event_type: str
     payload: Dict[str, Any]
     source_context: Optional[Dict[str, Any]] = None
+
+
+# ============================================================================
+# Governance & Audit Schemas
+# ============================================================================
+
+class AuditLogSchema(BaseModel):
+    id: str
+    twin_id: Optional[str] = None
+    tenant_id: Optional[str] = None
+    actor_id: Optional[str] = None
+    event_type: str
+    action: str
+    metadata: Dict[str, Any]
+    created_at: datetime
+    
+    class Config:
+        json_encoders = {datetime: lambda v: v.isoformat()}
+
+
+class GovernancePolicySchema(BaseModel):
+    id: str
+    tenant_id: Optional[str] = None
+    twin_id: Optional[str] = None
+    policy_type: str
+    name: str
+    content: str
+    is_active: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class GovernancePolicyCreateRequest(BaseModel):
+    policy_type: str = "refusal_rule"
+    name: str
+    content: str
+
+
+class TwinVerificationRequest(BaseModel):
+    verification_method: str = "MANUAL_REVIEW"
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class DeepScrubRequest(BaseModel):
+    reason: Optional[str] = None

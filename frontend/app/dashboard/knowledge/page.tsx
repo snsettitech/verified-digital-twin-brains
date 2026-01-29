@@ -95,6 +95,15 @@ export default function KnowledgePage() {
 
   const twinId = activeTwin?.id;
 
+  // CRITICAL: Reset state when twin switches to prevent stale data
+  useEffect(() => {
+    console.log('[Knowledge] Twin switched to:', twinId);
+    setSources([]);
+    setProfile(null);
+    setLoading(true);
+    setError(null);
+  }, [twinId]);
+
   // Get auth token helper
   const getAuthToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -106,6 +115,7 @@ export default function KnowledgePage() {
     const token = await getAuthToken();
     if (!token) return;
     try {
+      console.log('[Knowledge] Fetching for twinId:', twinId);
       const [sourcesRes, profileRes] = await Promise.all([
         fetch(`${API_BASE_URL}/sources/${twinId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -115,7 +125,11 @@ export default function KnowledgePage() {
         })
       ]);
 
-      if (sourcesRes.ok) setSources(await sourcesRes.json());
+      if (sourcesRes.ok) {
+        const sourcesData = await sourcesRes.json();
+        console.log('[Knowledge] Sources received for', twinId, ':', sourcesData.length, 'items');
+        setSources(sourcesData);
+      }
       if (profileRes.ok) setProfile(await profileRes.json());
 
     } catch (error) {

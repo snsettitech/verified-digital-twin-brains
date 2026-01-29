@@ -24,7 +24,8 @@ from routers import (
     audio,
     enhanced_ingestion,
     reasoning,
-    interview
+    interview,
+    api_keys  # Tenant-scoped API keys management
 )
 from modules.specializations import get_specialization
 
@@ -69,6 +70,7 @@ app.include_router(audio.router)
 app.include_router(enhanced_ingestion.router)
 app.include_router(reasoning.router)
 app.include_router(interview.router)
+app.include_router(api_keys.router)
 
 # Conditional VC Routes (only if explicitly enabled)
 # VC routes are conditionally loaded to prevent VC files from interfering

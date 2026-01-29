@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { useTwin } from '@/lib/context/TwinContext';
 
 interface UserProfile {
   name: string;
@@ -19,33 +20,119 @@ interface TwinSettings {
   systemPrompt: string;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+
 export default function SettingsPage() {
+  const { activeTwin, user, refreshTwins, isLoading: twinLoading } = useTwin();
+  const supabase = getSupabaseClient();
+
   const [activeTab, setActiveTab] = useState<'profile' | 'twin' | 'billing' | 'danger'>('profile');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
+  // Empty defaults - will be populated from activeTwin
   const [profile, setProfile] = useState<UserProfile>({
-    name: 'John Doe',
-    email: 'john@example.com',
+    name: '',
+    email: '',
     avatarUrl: ''
   });
 
+  // Empty defaults - will be populated from activeTwin.settings
   const [twinSettings, setTwinSettings] = useState<TwinSettings>({
-    name: 'John\'s Twin',
-    handle: 'johndoe',
-    tagline: 'AI/ML Expert & Startup Advisor',
+    name: '',
+    handle: '',
+    tagline: '',
     tone: 'friendly',
     responseLength: 'balanced',
     firstPerson: true,
-    systemPrompt: 'You are a helpful AI assistant with expertise in AI/ML and startups.'
+    systemPrompt: ''
   });
 
+  // Get auth token
+  const getAuthToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token;
+  }, [supabase]);
+
+  // Initialize from activeTwin when it changes
+  useEffect(() => {
+    if (activeTwin) {
+      const settings = (activeTwin.settings || {}) as Record<string, unknown>;
+      const personality = (settings.personality || {}) as Record<string, unknown>;
+
+      setTwinSettings({
+        name: activeTwin.name || '',
+        handle: (settings.handle as string) || '',
+        tagline: (settings.tagline as string) || '',
+        tone: (personality.tone as string) || 'friendly',
+        responseLength: (personality.responseLength as string) || 'balanced',
+        firstPerson: personality.firstPerson !== false,
+        systemPrompt: (settings.system_prompt as string) || ''
+      });
+      setSettingsLoaded(true);
+      console.log('[Settings] Loaded from activeTwin:', activeTwin.id);
+    }
+  }, [activeTwin?.id]); // Re-run when twin switches
+
+  // Initialize profile from user
+  useEffect(() => {
+    if (user) {
+      setProfile({
+        name: user.full_name || '',
+        email: user.email || '',
+        avatarUrl: user.avatar_url || ''
+      });
+    }
+  }, [user]);
+
+  // Real PATCH save with TwinContext refresh
   const handleSave = async () => {
+    if (!activeTwin) return;
+
     setSaving(true);
-    await new Promise(r => setTimeout(r, 1000));
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        console.error('[Settings] No auth token');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/twins/${activeTwin.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: twinSettings.name,
+          settings: {
+            handle: twinSettings.handle,
+            tagline: twinSettings.tagline,
+            system_prompt: twinSettings.systemPrompt,
+            personality: {
+              tone: twinSettings.tone,
+              responseLength: twinSettings.responseLength,
+              firstPerson: twinSettings.firstPerson
+            }
+          }
+        })
+      });
+
+      if (response.ok) {
+        console.log('[Settings] Saved successfully, refreshing twins...');
+        // Refresh TwinContext so header + other pages reflect changes
+        await refreshTwins();
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } else {
+        console.error('[Settings] Save failed:', await response.text());
+      }
+    } catch (error) {
+      console.error('[Settings] Error saving:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [
@@ -54,6 +141,18 @@ export default function SettingsPage() {
     { id: 'billing', label: 'Billing', icon: '💳' },
     { id: 'danger', label: 'Danger Zone', icon: '⚠️' },
   ];
+
+  // Loading state
+  if (twinLoading || (activeTab === 'twin' && !settingsLoaded && activeTwin)) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-500">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -70,8 +169,8 @@ export default function SettingsPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
           >
             <span>{tab.icon}</span>
@@ -344,8 +443,8 @@ export default function SettingsPage() {
             onClick={handleSave}
             disabled={saving}
             className={`px-6 py-3 font-semibold text-sm rounded-xl transition-all ${saved
-                ? 'bg-emerald-500 text-white'
-                : 'bg-slate-900 text-white hover:bg-slate-800'
+              ? 'bg-emerald-500 text-white'
+              : 'bg-slate-900 text-white hover:bg-slate-800'
               } disabled:opacity-50`}
           >
             {saving ? 'Saving...' : saved ? 'Saved!' : 'Save Changes'}

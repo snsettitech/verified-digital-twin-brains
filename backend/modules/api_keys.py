@@ -64,8 +64,23 @@ def create_api_key(
     
     key_record = response.data[0]
     
-    # Phase 9: Log the action
-    AuditLogger.log(twin_id, "CONFIGURATION_CHANGE", "API_KEY_CREATED", metadata={"name": name, "key_id": key_record["id"]})
+    # Fetch tenant_id for audit logging
+    tenant_id = None
+    try:
+        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+        tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+    except Exception:
+        pass
+
+    # Log the action (Phase 9: Log the action)
+    AuditLogger.log(
+        tenant_id=tenant_id,
+        twin_id=twin_id, 
+        event_type="CONFIGURATION_CHANGE", 
+        action="API_KEY_CREATED", 
+        metadata={"name": name, "key_id": key_record["id"]}
+    )
+
     
     # Return the full key only once (caller should display it immediately)
     return {
@@ -205,7 +220,23 @@ def revoke_api_key(key_id: str) -> bool:
     
     if response.data:
         twin_id = response.data[0]["twin_id"]
-        AuditLogger.log(twin_id, "CONFIGURATION_CHANGE", "API_KEY_REVOKED", metadata={"key_id": key_id})
+        
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+        except Exception:
+            pass
+
+        AuditLogger.log(
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="CONFIGURATION_CHANGE", 
+            action="API_KEY_REVOKED", 
+            metadata={"key_id": key_id}
+        )
+
         
     return bool(response.data)
 
@@ -237,7 +268,23 @@ def update_api_key(key_id: str, name: Optional[str] = None, allowed_domains: Opt
     
     if response.data:
         twin_id = response.data[0]["twin_id"]
-        AuditLogger.log(twin_id, "CONFIGURATION_CHANGE", "API_KEY_UPDATED", metadata={"key_id": key_id, "updates": list(update_data.keys())})
+        
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+        except Exception:
+            pass
+
+        AuditLogger.log(
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="CONFIGURATION_CHANGE", 
+            action="API_KEY_UPDATED", 
+            metadata={"key_id": key_id, "updates": list(update_data.keys())}
+        )
+
         
     return bool(response.data)
 
