@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
-from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership
+from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership, resolve_tenant_id
 from modules.schemas import (
     TwinSettingsUpdate, GroupCreateRequest, GroupUpdateRequest,
     AssignUserRequest, ContentPermissionRequest,
@@ -26,7 +26,7 @@ router = APIRouter(tags=["twins"])
 
 class TwinCreateRequest(BaseModel):
     name: str
-    tenant_id: str
+    tenant_id: Optional[str] = None  # IGNORED: server always resolves tenant_id
     description: Optional[str] = None
     specialization: str = "vanilla"
     settings: Optional[Dict[str, Any]] = None
@@ -48,70 +48,37 @@ async def list_specializations():
 
 @router.post("/twins")
 async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)):
-    """Create a new twin. Requires authentication to ensure correct tenant association."""
+    """
+    Create a new twin.
+    
+    SECURITY: Client-provided tenant_id is IGNORED.
+    Server uses resolve_tenant_id() to determine the correct tenant.
+    """
     try:
         user_id = user.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Not authenticated")
         
-        # Get tenant_id from authenticated user
-        authenticated_tenant_id = user.get("tenant_id")
+        email = user.get("email", "")
         
-        # If user has no tenant yet (new user, sync-user not called), auto-create one
-        # CRITICAL: DO NOT use request.tenant_id as fallback - it contains the wrong ID!
-        if not authenticated_tenant_id:
-            print(f"[TWINS] User {user_id} has no tenant, auto-creating...")
-            
-            # Create a new tenant for this user
-            try:
-                email = user.get("email", "")
-                name = user.get("name") or email.split("@")[0] if email else "User"
-                
-                tenant_insert = supabase.table("tenants").insert({
-                    "name": f"{name}'s Workspace"
-                }).execute()
-                
-                if tenant_insert.data:
-                    authenticated_tenant_id = tenant_insert.data[0]["id"]
-                    print(f"[TWINS] Created tenant {authenticated_tenant_id}")
-                    
-                    # Update/create user record with this tenant
-                    user_data = {
-                        "id": user_id,
-                        "email": email,
-                        "tenant_id": authenticated_tenant_id,
-                        "full_name": name
-                    }
-                    supabase.table("users").upsert(user_data).execute()
-                    print(f"[TWINS] Linked user to tenant")
-                else:
-                    raise HTTPException(status_code=500, detail="Failed to create tenant")
-            except HTTPException:
-                raise
-            except Exception as e:
-                print(f"[TWINS] ERROR creating tenant: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to create tenant: {str(e)}")
+        # CRITICAL: Always use resolve_tenant_id - NEVER trust client tenant_id
+        # This auto-creates tenant if missing
+        tenant_id = resolve_tenant_id(user_id, email)
         
-        # Ensure tenant exists in DB (defensive check)
-        tenant_check = supabase.table("tenants").select("id").eq("id", authenticated_tenant_id).execute()
+        # Log if client sent a different tenant_id (for debugging)
+        if request.tenant_id and request.tenant_id != tenant_id:
+            print(f"[TWINS] WARNING: Ignoring client tenant_id={request.tenant_id}, using resolved={tenant_id}")
         
-        if not tenant_check.data:
-            # Tenant ID exists but tenant doesn't - create it
-            supabase.table("tenants").insert({
-                "id": authenticated_tenant_id,
-                "name": f"User-{authenticated_tenant_id[:8]}"
-            }).execute()
-        
-        # Now create the twin with the CORRECT tenant_id
+        # Create the twin with the CORRECT tenant_id
         data = {
             "name": request.name,
-            "tenant_id": authenticated_tenant_id,  # Always use authenticated tenant
+            "tenant_id": tenant_id,  # Always from resolve_tenant_id
             "description": request.description or f"{request.name}'s digital twin",
             "specialization": request.specialization,
             "settings": request.settings or {}
         }
         
-        print(f"[TWINS] Creating twin with tenant_id={authenticated_tenant_id}")
+        print(f"[TWINS] Creating twin '{request.name}' for user={user_id}, tenant={tenant_id}")
         response = supabase.table("twins").insert(data).execute()
         
         if response.data:
@@ -125,7 +92,7 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         print(f"[TWINS] ERROR: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-from modules.auth_guard import verify_twin_ownership
+
 
 @router.get("/twins")
 async def list_twins(user=Depends(get_current_user)):

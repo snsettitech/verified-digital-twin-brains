@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime
-from modules.auth_guard import verify_owner, get_current_user
+from modules.auth_guard import verify_owner, get_current_user, resolve_tenant_id
 from modules.schemas import (
     ApiKeyCreateRequest, ApiKeyUpdateRequest, UserInvitationCreateRequest,
     ApiKeySchema, UserInvitationSchema
@@ -153,6 +153,33 @@ async def sync_user(user=Depends(get_current_user)):
         needs_onboarding=True
     )
 
+
+@router.get("/auth/whoami")
+async def whoami(user=Depends(get_current_user)):
+    """
+    Debug/instrumentation endpoint: Return resolved user identity.
+    
+    Use this to verify auth is working and tenant_id is correctly resolved.
+    This endpoint uses resolve_tenant_id to ensure tenant always exists.
+    """
+    user_id = user.get("user_id")
+    email = user.get("email", "")
+    
+    # Always resolve tenant (auto-creates if missing)
+    try:
+        tenant_id = resolve_tenant_id(user_id, email)
+    except Exception as e:
+        tenant_id = None
+    
+    return {
+        "user_id": user_id,
+        "tenant_id": tenant_id,
+        "email": email,
+        "role": user.get("role"),
+        "has_tenant": tenant_id is not None,
+        "auth_method": "api_key" if user.get("api_key_id") else "jwt"
+    }
+
 @router.get("/auth/me", response_model=UserProfile)
 async def get_current_user_profile(user=Depends(get_current_user)):
     """Get current user's profile including tenant and onboarding status."""
@@ -188,60 +215,30 @@ async def get_current_user_profile(user=Depends(get_current_user)):
 
 @router.get("/auth/my-twins")
 async def get_my_twins(user=Depends(get_current_user)):
-    """Get all twins owned by the current user."""
+    """
+    Get all twins owned by the current user.
+    
+    Uses resolve_tenant_id to ensure tenant is always resolved,
+    auto-creating if necessary. Also includes auto-repair for orphaned twins.
+    """
     user_id = user.get("user_id")
-    tenant_id = user.get("tenant_id")
+    email = user.get("email", "")
     
-    # CRITICAL: Log tenant_id state for debugging
-    print(f"[MY-TWINS DEBUG] user_id={user_id}, tenant_id={tenant_id}")
+    # Use resolve_tenant_id for guaranteed tenant resolution
+    try:
+        tenant_id = resolve_tenant_id(user_id, email)
+    except Exception as e:
+        print(f"[AUTH] ERROR resolving tenant for user {user_id}: {e}")
+        return []  # Graceful fallback
     
-    # If tenant_id is null, attempt auto-recovery
-    if not tenant_id:
-        print(f"[MY-TWINS WARNING] User {user_id} has no tenant_id. Attempting auto-recovery...")
-        
-        # Check if user exists in users table
-        user_check = supabase.table("users").select("id, tenant_id, email").eq("id", user_id).execute()
-        
-        if user_check.data and len(user_check.data) > 0:
-            existing_tenant_id = user_check.data[0].get("tenant_id")
-            if existing_tenant_id:
-                # User has tenant_id in DB but auth didn't pick it up - use it
-                tenant_id = existing_tenant_id
-                print(f"[MY-TWINS DEBUG] Recovered tenant_id from DB: {tenant_id}")
-            else:
-                # User exists but has no tenant - this is a data integrity issue
-                # Auto-create tenant for the user
-                email = user_check.data[0].get("email", "unknown")
-                try:
-                    tenant_insert = supabase.table("tenants").insert({
-                        "name": f"{email.split('@')[0]}'s Workspace"
-                    }).execute()
-                    if tenant_insert.data:
-                        new_tenant_id = tenant_insert.data[0]["id"]
-                        # Update user with new tenant_id
-                        supabase.table("users").update({
-                            "tenant_id": new_tenant_id
-                        }).eq("id", user_id).execute()
-                        tenant_id = new_tenant_id
-                        print(f"[MY-TWINS DEBUG] Auto-created tenant for user: {tenant_id}")
-                except Exception as e:
-                    print(f"[MY-TWINS ERROR] Failed to auto-create tenant: {e}")
-        else:
-            print(f"[MY-TWINS WARNING] User {user_id} not found in users table - needs sync-user first")
-            # Return empty list - user needs to complete signup flow
-            return []
-    
-    # Now fetch twins with the (possibly recovered) tenant_id
-    if not tenant_id:
-        print(f"[MY-TWINS ERROR] Could not resolve tenant_id for user {user_id}")
-        return []
+    print(f"[AUTH] get_my_twins: user={user_id}, tenant={tenant_id}")
     
     # Query twins by tenant_id
-    result = supabase.table("twins").select("*").eq("tenant_id", tenant_id).execute()
+    result = supabase.table("twins").select("*").eq("tenant_id", tenant_id).order("created_at", desc=True).execute()
     twins = result.data if result.data else []
     
     # AUTO-REPAIR: Check for orphaned twins if none found
-    # Orphaned twins have tenant_id = user_id (wrong value from frontend bug)
+    # Orphaned twins have tenant_id = user_id (wrong value from old frontend bug)
     if len(twins) == 0 and user_id:
         print(f"[MY-TWINS DEBUG] No twins found, checking for orphaned twins with tenant_id={user_id}")
         orphan_check = supabase.table("twins").select("*").eq("tenant_id", user_id).execute()
@@ -261,7 +258,6 @@ async def get_my_twins(user=Depends(get_current_user)):
                     print(f"[MY-TWINS REPAIR ERROR] Failed to fix twin {orphan['id']}: {e}")
             
             # Return the orphaned twins (now repaired)
-            # Update the tenant_id in memory before returning
             for twin in orphan_twins:
                 twin["tenant_id"] = tenant_id
             twins = orphan_twins

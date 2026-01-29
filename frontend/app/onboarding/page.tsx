@@ -157,7 +157,7 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
                 method: 'POST',
                 body: JSON.stringify({
                     name: twinName,
-                    tenant_id: 'auto', // Backend determines correct tenant_id from auth
+                    // NOTE: tenant_id is resolved server-side - do NOT send from client
                     description: tagline || `${twinName}'s digital twin`,
                     specialization: selectedSpecialization,
                     settings: {

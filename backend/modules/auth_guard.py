@@ -25,6 +25,71 @@ if not SUPABASE_JWT_SECRET or len(SUPABASE_JWT_SECRET) < 32:
     print("  Copy from: Supabase Dashboard → Settings → API → JWT Secret", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
+
+def resolve_tenant_id(user_id: str, email: str = None) -> str:
+    """
+    Resolve tenant_id for a user, auto-creating tenant if needed.
+    
+    This is the SINGLE SOURCE OF TRUTH for tenant resolution.
+    Never trust client-provided tenant_id.
+    
+    Args:
+        user_id: Supabase auth user ID
+        email: Optional email for naming the auto-created tenant
+    
+    Returns:
+        The resolved tenant_id (never None for valid users)
+    
+    Raises:
+        HTTPException if tenant cannot be resolved or created
+    """
+    from modules.observability import supabase as supabase_client
+    
+    # 1. Try to lookup existing tenant from users table
+    try:
+        user_lookup = supabase_client.table("users").select("tenant_id").eq("id", user_id).execute()
+        if user_lookup.data and user_lookup.data[0].get("tenant_id"):
+            tenant_id = user_lookup.data[0]["tenant_id"]
+            print(f"[resolve_tenant_id] Found existing tenant {tenant_id} for user {user_id}")
+            return tenant_id
+    except Exception as e:
+        print(f"[resolve_tenant_id] User lookup failed: {e}")
+    
+    # 2. User exists but has no tenant, or user doesn't exist - auto-create tenant
+    print(f"[resolve_tenant_id] No tenant for user {user_id}, auto-creating...")
+    
+    try:
+        # Create tenant
+        name = email.split("@")[0] if email else f"User-{user_id[:8]}"
+        tenant_insert = supabase_client.table("tenants").insert({
+            "name": f"{name}'s Workspace"
+        }).execute()
+        
+        if not tenant_insert.data:
+            raise HTTPException(status_code=500, detail="Failed to auto-create tenant")
+        
+        tenant_id = tenant_insert.data[0]["id"]
+        print(f"[resolve_tenant_id] Created tenant {tenant_id}")
+        
+        # 3. Ensure user record exists with this tenant_id
+        user_data = {
+            "id": user_id,
+            "tenant_id": tenant_id
+        }
+        if email:
+            user_data["email"] = email
+        
+        supabase_client.table("users").upsert(user_data).execute()
+        print(f"[resolve_tenant_id] Linked user {user_id} to tenant {tenant_id}")
+        
+        return tenant_id
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[resolve_tenant_id] ERROR creating tenant: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to resolve tenant: {str(e)}")
+
 def get_current_user(
     request: Request,
     authorization: str = Header(None),
