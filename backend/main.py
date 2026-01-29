@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import sys
+import time
 
 from routers import (
     auth,
@@ -46,6 +48,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Request tracing middleware for deployment debugging
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    # Use standard print for immediate visibility in Render logs
+    print(f"DEBUG: {request.method} {request.url.path} - {response.status_code} ({duration:.3f}s) UA: {request.headers.get('user-agent')}")
+    sys.stdout.flush()
+    return response
 
 # Include Routers
 app.include_router(auth.router)
@@ -101,6 +114,11 @@ async def health_check():
         "version": "1.0.0"
     }
 
+@app.get("/", tags=["health"])
+async def root_health():
+    """Fallback health check for platforms checking the root path."""
+    return await health_check()
+
 # ============================================================================
 # P0 Deployment: Startup Validation
 # ============================================================================
@@ -139,11 +157,39 @@ def validate_required_env_vars():
         for var in missing:
             print(f"  - {var}")
         print("=" * 60)
+        sys.stdout.flush()
         exit(1)
 
+def print_startup_banner():
+    """Print the startup banner with environment info."""
+    port = os.getenv("PORT", "8000")
+    spec = get_specialization()
+    banner = f"""
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   🧠  VERIFIED DIGITAL TWIN BRAIN                            ║
+║                                                              ║
+║   Specialization: {spec.display_name:<40} ║
+║   Mode:           {spec.name:<40} ║
+║   Port:           {port:<40} ║
+║   Status:         INITIALIZING...                            ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+    print(banner)
+    sys.stdout.flush()
+
 # Run validation on import (when app starts)
+print_startup_banner()
 validate_required_env_vars()
-print("🚀 FastAPI application initialization sequence complete.")
+print(f"🚀 FastAPI initialization complete. Bound to PORT: {os.getenv('PORT', '8000')}")
+sys.stdout.flush()
+
+@app.on_event("startup")
+async def startup_event():
+    print("✅ READY: Event loop running, accepting traffic.")
+    print(f"DEBUG: Listening for Probes on: http://0.0.0.0:{os.getenv('PORT', '8000')}")
+    sys.stdout.flush()
 
 
 # Startup Logic
