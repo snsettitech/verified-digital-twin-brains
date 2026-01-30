@@ -266,6 +266,15 @@ async def get_my_twins(user=Depends(get_current_user)):
     return twins
 
 
+@router.get("/connectors")
+async def get_connectors(user=Depends(get_current_user)):
+    """
+    Stub endpoint for connectors to stop 404 logging noise.
+    Future: Will return active integrations for the tenant.
+    """
+    return []
+
+
 # API Keys
 @router.post("/api-keys")
 async def create_api_key_endpoint(request: ApiKeyCreateRequest, user=Depends(verify_owner)):

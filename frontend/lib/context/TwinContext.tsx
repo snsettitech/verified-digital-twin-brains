@@ -71,6 +71,7 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
     const requestIdRef = useRef(0);          // Race protection: ignore stale responses
     const mountedRef = useRef(true);         // Track mounted state
     const isHydratedRef = useRef(false);     // Track first successful twin load (prevents transient wipe)
+    const tokenRef = useRef<string | null>(null); // In-memory token cache to prevent getSession race
 
     const supabase = getSupabaseClient();
     const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
@@ -99,6 +100,12 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
 
     // Get auth token (with timeout and retry logic)
     const getToken = useCallback(async (): Promise<string | null> => {
+        // Priority 1: In-memory cache (prevents race condition after TOKEN_REFRESHED)
+        if (tokenRef.current) {
+            console.log('[TwinContext] Using token from in-memory cache');
+            return tokenRef.current;
+        }
+
         const maxRetries = 3;
         const baseTimeout = 5000;
 
@@ -131,10 +138,16 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
     }, [supabase]);
 
     // Sync user with backend
-    const syncUser = useCallback(async (): Promise<UserProfile | null> => {
+    const syncUser = useCallback(async (providedToken?: string): Promise<UserProfile | null> => {
         try {
-            const token = await getToken();
-            if (!token) return null;
+            const token = providedToken || await getToken();
+            if (!token) {
+                console.warn('[TwinContext] syncUser: No token available');
+                return null;
+            }
+
+            // Sync token cache if we were provided one
+            if (providedToken) tokenRef.current = providedToken;
 
             const url = `${API_URL}/auth/sync-user`;
             const correlationId = Math.random().toString(36).substring(7);
@@ -206,14 +219,17 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
     // ========================================================================
     // refreshTwins with Race Protection
     // ========================================================================
-    const refreshTwins = useCallback(async () => {
+    const refreshTwins = useCallback(async (providedToken?: string) => {
         // Race protection: increment request ID
         const thisRequestId = ++requestIdRef.current;
         console.log('[TwinContext] refreshTwins called, requestId:', thisRequestId);
         setError(null);
 
         try {
-            const token = await getToken();
+            const token = providedToken || await getToken();
+
+            // Sync token cache if we were provided one
+            if (providedToken) tokenRef.current = providedToken;
 
             // Race check after async
             if (thisRequestId !== requestIdRef.current) {
@@ -334,8 +350,9 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
                 if (!mountedRef.current) return;
 
                 if (session?.access_token) {
-                    await syncUser();
-                    await refreshTwins();
+                    tokenRef.current = session.access_token;
+                    await syncUser(session.access_token);
+                    await refreshTwins(session.access_token);
                 } else {
                     console.log(`[TwinContext][${mountId}] No session - prompting sign in`);
                     setError('Please sign in to continue');
@@ -357,17 +374,22 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
                 console.log(`[TwinContext][${mountId}] Auth event:`, event, 'Session:', session ? 'exists' : 'null');
 
                 if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && mountedRef.current) {
+                    console.log(`[TwinContext][${mountId}] Syncing for event: ${event}`);
+                    // Update cache immediately to prevent raciness
+                    tokenRef.current = session.access_token;
+
                     // TOKEN_REFRESHED: Don't set isLoading to avoid UI flicker and re-renders
                     if (event === 'SIGNED_IN') {
                         setIsLoading(true);
                     }
-                    await syncUser();
-                    await refreshTwins();
+                    await syncUser(session.access_token);
+                    await refreshTwins(session.access_token);
                     if (mountedRef.current && event === 'SIGNED_IN') {
                         setIsLoading(false);
                     }
                 } else if (event === 'SIGNED_OUT' && mountedRef.current) {
                     console.warn(`[TwinContext][${mountId}] SIGNED_OUT detected - clearing state`);
+                    tokenRef.current = null; // Clear cache
                     setUser(null);
                     setTwins([]);
                     setActiveTwinState(null);
