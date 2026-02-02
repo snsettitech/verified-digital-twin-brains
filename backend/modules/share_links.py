@@ -102,11 +102,11 @@ def validate_share_token(token: str, twin_id: str) -> bool:
             )
             return False
 
-        
         settings = twin_response.data.get("settings", {})
         widget_settings = settings.get("widget_settings", {})
         
         # Check if sharing is enabled
+        # Note: We now store 'is_public' inside settings as well, but 'public_share_enabled' is the legacy/widget key
         if not widget_settings.get("public_share_enabled", False):
             AuditLogger.log(
                 tenant_id=_get_tenant_id(twin_id),

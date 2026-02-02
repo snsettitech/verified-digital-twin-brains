@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -25,9 +26,12 @@ from routers import (
     feedback,
     audio,
     enhanced_ingestion,
+
     reasoning,
     interview,
-    api_keys  # Tenant-scoped API keys management
+    api_keys,  # Tenant-scoped API keys management
+    debug_retrieval, # New debug router
+    verify
 )
 from modules.specializations import get_specialization
 
@@ -84,6 +88,8 @@ app.include_router(enhanced_ingestion.router)
 app.include_router(reasoning.router)
 app.include_router(interview.router)
 app.include_router(api_keys.router)
+app.include_router(debug_retrieval.router)
+app.include_router(verify.router)
 
 # Conditional VC Routes (only if explicitly enabled)
 # VC routes are conditionally loaded to prevent VC files from interfering

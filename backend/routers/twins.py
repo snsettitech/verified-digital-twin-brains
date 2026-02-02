@@ -16,6 +16,9 @@ from modules.access_groups import (
 )
 from modules.observability import supabase
 from modules.specializations import get_specialization, get_all_specializations
+from modules.clients import get_pinecone_index
+from modules.graph_context import get_graph_stats
+
 
 router = APIRouter(tags=["twins"])
 
@@ -242,6 +245,74 @@ async def get_graph_job_status(twin_id: str, user=Depends(get_current_user)):
             "error": str(e)
         }
 
+@router.get("/twins/{twin_id}/verification-status")
+async def get_twin_verification_status(twin_id: str, user=Depends(get_current_user)):
+    """
+    Check twin readiness for publishing.
+    Verifies vectors, graph nodes, and basic retrieval health.
+    """
+    verify_twin_ownership(twin_id, user)
+    
+    status = {
+        "vectors_count": 0,
+        "graph_nodes": 0,
+        "is_ready": False,
+        "issues": []
+    }
+    
+    try:
+        # 1. Check Vectors in Pinecone
+        index = get_pinecone_index()
+        p_stats = index.describe_index_stats()
+        if twin_id in p_stats.get("namespaces", {}):
+            status["vectors_count"] = p_stats["namespaces"][twin_id]["vector_count"]
+        
+        if status["vectors_count"] == 0:
+            status["issues"].append("No knowledge vectors found (upload documents first)")
+
+        # 2. Check Graph Nodes
+        try:
+            g_stats = get_graph_stats(twin_id)
+            status["graph_nodes"] = g_stats.get("node_count", 0)
+        except Exception:
+            pass # Graph is optional
+            
+        # 3. Check for recent PASS verification
+        # Look for a PASS in the last 24 hours (or just latest)
+        try:
+            ver_res = supabase.table("twin_verifications") \
+                .select("*") \
+                .eq("twin_id", twin_id) \
+                .order("created_at", desc=True) \
+                .limit(1) \
+                .execute()
+                
+            last_ver = ver_res.data[0] if ver_res.data else None
+            status["last_verified_at"] = last_ver["created_at"] if last_ver else None
+            status["last_verified_status"] = last_ver["status"] if last_ver else "NONE"
+            
+            if not last_ver or last_ver["status"] != "PASS":
+                status["issues"].append("Twin has not been verified recently. Run 'Verify Retrieval' in Simulator.")
+            else:
+                # Valid PASS found
+                pass
+                
+        except Exception as e:
+            print(f"[Verification] Error fetching history: {e}")
+            status["issues"].append("Could not fetch verification history.")
+
+        # 4. Decision
+        # Ready only if vectors > 0 AND latest verification is PASS
+        if status["vectors_count"] > 0 and status.get("last_verified_status") == "PASS":
+            status["is_ready"] = True
+            
+        return status
+        
+    except Exception as e:
+        print(f"[Verification] Error checking status: {e}")
+        status["issues"].append(f"System error: {str(e)}")
+        return status
+
 @router.patch("/twins/{twin_id}")
 async def update_twin(twin_id: str, update: TwinSettingsUpdate, user=Depends(verify_owner)):
     # Verify user has access to this twin
@@ -250,7 +321,40 @@ async def update_twin(twin_id: str, update: TwinSettingsUpdate, user=Depends(ver
     update_data = {k: v for k, v in update.model_dump().items() if v is not None}
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
+
+    # NEW: Reinforce Publish Gating
+    if update_data.get("is_public") is True:
+        status = await get_twin_verification_status(twin_id, user)
+        if not status.get("is_ready"):
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "message": "Twin cannot be published. Verification required.",
+                    "issues": status.get("issues", [])
+                }
+            )
     
+    # Sync is_public with settings.widget_settings.public_share_enabled if present
+    if "is_public" in update_data:
+        # Fetch current settings 
+        twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+        current_settings = twin_res.data.get("settings", {}) if twin_res.data else {}
+        
+        if "widget_settings" not in current_settings:
+            current_settings["widget_settings"] = {}
+        
+        # Store in two places in settings for redundancy (since top-level column is missing)
+        public_val = update_data["is_public"]
+        current_settings["widget_settings"]["public_share_enabled"] = public_val
+        current_settings["is_public"] = public_val  # Virtual column in settings
+        
+        # Merge back into update_data
+        update_data["settings"] = current_settings
+        
+        # CRITICAL: Remove is_public from top-level update as column likely doesn't exist
+        # This fixes the PGRST204 error
+        del update_data["is_public"]
+
     response = supabase.table("twins").update(update_data).eq("id", twin_id).execute()
     return response.data
 

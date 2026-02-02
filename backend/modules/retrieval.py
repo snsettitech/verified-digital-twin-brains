@@ -7,7 +7,30 @@ from modules.observability import supabase
 from modules.access_groups import get_default_group
 
 # Embedding generation moved to modules.embeddings
+# Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
+
+# FlashRank for local reranking
+try:
+    from flashrank import Ranker, RerankRequest
+    _flashrank_available = True
+    # Cache the ranker instance
+    _ranker_instance = None
+except ImportError:
+    _flashrank_available = False
+    _ranker_instance = None
+
+def get_ranker():
+    """Lazy load FlashRank to avoid startup overhead."""
+    global _ranker_instance
+    if _flashrank_available and _ranker_instance is None:
+        try:
+            # Use a lightweight model
+            _ranker_instance = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.model_cache")
+        except Exception as e:
+            print(f"Failed to initialize FlashRank: {e}")
+    return _ranker_instance
+
 
 # Langfuse v3 tracing
 try:
@@ -420,8 +443,8 @@ async def retrieve_context_vectors(
     # 2. Parallel Embedding Generation (Batch)
     all_embeddings = await get_embeddings_async(search_queries)
     
-    # 3. Parallel Vector Search - P1-C: 5s timeout
-    all_results = await _execute_pinecone_queries(all_embeddings, twin_id, timeout=5.0)
+    # 3. Parallel Vector Search - P1-C: 20s timeout (increased for debugging)
+    all_results = await _execute_pinecone_queries(all_embeddings, twin_id, timeout=20.0)
     
     if not all_results:
         return []
@@ -439,9 +462,46 @@ async def retrieve_context_vectors(
     
     # 6. Filter by group permissions if group_id is provided
     contexts = _filter_by_group_permissions(contexts, group_id)
+    print(f"DEBUG: After permissions: {len(contexts)} (Group: {group_id})")
     
-    # 7. Deduplicate and limit to top_k
-    final_contexts = _deduplicate_and_limit(contexts, top_k)
+    # 7. Deduplicate (keep all candidates first)
+    unique_contexts = _deduplicate_and_limit(contexts, top_k=top_k * 3)
+    print(f"DEBUG: Unique contexts before rerank: {len(unique_contexts)}")
+    
+    # 8. Rerank
+
+    final_contexts = []
+    ranker = get_ranker()
+    # ranker = None # FORCE DISABLE
+    
+    if ranker and unique_contexts:
+        try:
+            # Prepare for reranking
+            passages = [
+                {"id": str(i), "text": c["text"], "meta": c} 
+                for i, c in enumerate(unique_contexts)
+            ]
+            
+            rerank_request = RerankRequest(query=query, passages=passages)
+            results = ranker.rerank(rerank_request)
+            
+            # Reconstruct sorted contexts
+            for res in results:
+                original_idx = int(res["id"])
+                ctx = unique_contexts[original_idx]
+                ctx["score"] = res["score"] # Update score with rerank score
+                final_contexts.append(ctx)
+                
+            # Limit to requested top_k
+            final_contexts = final_contexts[:top_k]
+            print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
+        except Exception as e:
+            print(f"[Retrieval] Reranking failed: {e}. Falling back to vector scores.")
+            final_contexts = unique_contexts[:top_k]
+    else:
+        # Fallback if no ranker
+        final_contexts = unique_contexts[:top_k]
+
     
     print(f"[Retrieval] Found {len(final_contexts)} contexts for twin_id={twin_id} (namespace={twin_id})")
     if final_contexts:
@@ -449,10 +509,14 @@ async def retrieve_context_vectors(
         print(f"[Retrieval] Top scores: {top_scores}")
     
     # Check if retrieval is too weak - signal for "I don't know" response
+    # Threshold lowered to 0.001 for calibration (FlashRank scores might be low logits or unnormalized)
     max_score = max([c.get("score", 0.0) for c in final_contexts], default=0.0)
-    if max_score < 0.5 and len(final_contexts) == 0:
-        # Return empty with flag for "I don't know"
+    if max_score < 0.001 and len(final_contexts) > 0:
+        print(f"[Retrieval] Max score {max_score} < 0.001. Triggering 'I don't know' logic.")
         return []
+    elif len(final_contexts) == 0:
+        return []
+
     
     # Add verified_qna_match flag (False since we didn't find verified match)
     for c in final_contexts:

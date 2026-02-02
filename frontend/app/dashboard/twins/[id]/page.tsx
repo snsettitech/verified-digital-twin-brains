@@ -75,6 +75,34 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
         fetchTwin();
     }, [twinId, supabase]);
 
+    const handleTogglePublic = async (isPublic: boolean) => {
+        try {
+            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+            // Use authenticated fetch (assuming Supabase session is handled by the fetch wrapper or direct useAuthFetch)
+            const { data: { session } } = await supabase.auth.getSession();
+
+            const res = await fetch(`${backendUrl}/twins/${twinId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({ is_public: isPublic })
+            });
+
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.detail?.message || 'Failed to update twin');
+            }
+
+            // Update local state
+            setTwin(prev => prev ? { ...prev, is_public: isPublic } : null);
+        } catch (error: any) {
+            console.error('Error toggling public status:', error);
+            alert(error.message || 'Failed to update public status');
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen bg-[#0a0a0f]">
@@ -134,6 +162,7 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                         twinName={twin.name}
                         isPublic={twin.is_public}
                         shareLink={twin.share_token ? `/share/${twinId}/${twin.share_token}` : undefined}
+                        onTogglePublic={handleTogglePublic}
                     />
                 );
             case 'actions':

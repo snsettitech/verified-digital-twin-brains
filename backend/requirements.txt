@@ -35,5 +35,4 @@ graphiti-core>=0.5.0
 neo4j>=5.26.0
 python-docx
 openpyxl
-
-
+flashrank

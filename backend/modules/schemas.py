@@ -61,6 +61,7 @@ class TwinSettingsUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     specialization_id: Optional[str] = None  # NEW: Gate 1
+    is_public: Optional[bool] = None  # NEW: Publish Gating
     settings: Optional[Dict[str, Any]] = None
 
 class YouTubeIngestRequest(BaseModel):

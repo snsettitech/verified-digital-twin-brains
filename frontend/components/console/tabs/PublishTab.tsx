@@ -11,6 +11,18 @@ interface PublishTabProps {
     onRegenerateLink?: () => void;
 }
 
+interface VerificationStatus {
+    is_ready: boolean;
+    issues: string[];
+    last_verified_at: string | null;
+    last_verified_status: string;
+    counts: {
+        vectors: number;
+        chunks: number;
+        live_sources: number;
+    };
+}
+
 export function PublishTab({
     twinId,
     twinName,
@@ -21,6 +33,24 @@ export function PublishTab({
 }: PublishTabProps) {
     const [copied, setCopied] = useState(false);
     const [embedCopied, setEmbedCopied] = useState(false);
+    const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
+    const [loadingStatus, setLoadingStatus] = React.useState(true);
+
+    React.useEffect(() => {
+        const fetchStatus = async () => {
+            try {
+                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+                const res = await fetch(`${backendUrl}/twins/${twinId}/verification-status`);
+                const data = await res.json();
+                setVerificationStatus(data);
+            } catch (err) {
+                console.error("Failed to fetch verification status", err);
+            } finally {
+                setLoadingStatus(false);
+            }
+        };
+        fetchStatus();
+    }, [twinId]);
 
     const defaultShareLink = shareLink || `${typeof window !== 'undefined' ? window.location.origin : ''}/share/${twinId}`;
 
@@ -46,21 +76,72 @@ export function PublishTab({
 
     return (
         <div className="p-6 space-y-6 max-w-3xl">
+            {/* Verification Status Card */}
+            <div className={`border rounded-2xl p-6 transition-colors ${loadingStatus ? 'bg-white/5 border-white/10' :
+                    verificationStatus?.is_ready
+                        ? 'bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20'
+                        : 'bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/20'
+                }`}>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-lg font-semibold text-white">Verification Status</h3>
+                            {verificationStatus?.is_ready ? (
+                                <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                    VERIFIED
+                                </span>
+                            ) : (
+                                <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    VERIFICATION REQUIRED
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-slate-300 text-sm">
+                            {verificationStatus?.is_ready
+                                ? "Your twin is ready for public access."
+                                : "You must run 'Verify Retrieval' in the Simulator before publishing."}
+                        </p>
+                        {!verificationStatus?.is_ready && verificationStatus?.issues && (
+                            <ul className="mt-2 text-xs text-yellow-200/80 list-disc list-inside">
+                                {verificationStatus.issues.map((issue, i) => (
+                                    <li key={i}>{issue}</li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* Sharing Toggle */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+            <div className={`bg-white/5 border border-white/10 rounded-2xl p-6 ${!verificationStatus?.is_ready && 'opacity-50 grayscale-[0.5]'}`}>
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-semibold text-white mb-1">Public Sharing</h3>
                         <p className="text-slate-400 text-sm">Allow anyone with the link to chat with your twin</p>
                     </div>
-                    <button
-                        onClick={() => onTogglePublic?.(!isPublic)}
-                        className={`relative w-14 h-7 rounded-full transition-colors ${isPublic ? 'bg-emerald-500' : 'bg-slate-600'
-                            }`}
-                    >
-                        <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${isPublic ? 'left-8' : 'left-1'
-                            }`} />
-                    </button>
+                    <div className="relative group">
+                        <button
+                            onClick={() => {
+                                if (verificationStatus?.is_ready) {
+                                    onTogglePublic?.(!isPublic);
+                                }
+                            }}
+                            disabled={!verificationStatus?.is_ready}
+                            className={`relative w-14 h-7 rounded-full transition-colors ${!verificationStatus?.is_ready
+                                    ? 'bg-slate-700 cursor-not-allowed'
+                                    : isPublic ? 'bg-emerald-500' : 'bg-slate-600'
+                                }`}
+                        >
+                            <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${isPublic ? 'left-8' : 'left-1'
+                                }`} />
+                        </button>
+                        {!verificationStatus?.is_ready && (
+                            <div className="absolute bottom-full right-0 mb-2 w-48 px-3 py-2 bg-black/90 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                                Capability locked. Please verify your twin first.
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {isPublic && (
@@ -76,8 +157,8 @@ export function PublishTab({
                             <button
                                 onClick={handleCopyLink}
                                 className={`px-4 py-3 text-sm font-medium rounded-xl transition-colors ${copied
-                                        ? 'bg-emerald-500/20 text-emerald-400'
-                                        : 'bg-white/10 text-white hover:bg-white/15'
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : 'bg-white/10 text-white hover:bg-white/15'
                                     }`}
                             >
                                 {copied ? '✓ Copied' : 'Copy'}
@@ -105,8 +186,8 @@ export function PublishTab({
                     <button
                         onClick={handleCopyEmbed}
                         className={`absolute top-2 right-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${embedCopied
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : 'bg-white/10 text-white hover:bg-white/15'
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-white/10 text-white hover:bg-white/15'
                             }`}
                     >
                         {embedCopied ? '✓ Copied' : 'Copy'}
@@ -128,8 +209,8 @@ export function PublishTab({
                         <div
                             key={integration.name}
                             className={`p-4 border rounded-xl ${integration.status === 'available'
-                                    ? 'bg-white/5 border-white/10 hover:bg-white/10'
-                                    : 'bg-white/[0.02] border-white/5'
+                                ? 'bg-white/5 border-white/10 hover:bg-white/10'
+                                : 'bg-white/[0.02] border-white/5'
                                 } transition-colors`}
                         >
                             <div className="flex items-center gap-3">
