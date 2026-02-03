@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 
-from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
+from modules.auth_guard import get_current_user, require_twin_access, require_tenant
 from modules.governance import AuditLogger
 
 from modules.observability import supabase, get_messages, log_interaction, create_conversation
@@ -23,7 +23,6 @@ from modules.agent import run_agent_stream
 from modules._core.host_engine import get_next_slot, get_next_question, process_turn, generate_contextual_question
 from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions, extract_for_slot
 from modules._core.response_evaluator import ResponseEvaluator
-from modules._core.interview_controller import InterviewController, InterviewStage, INTENT_QUESTIONS
 from modules._core.repair_strategies import RepairManager
 from modules._core.registry_loader import get_specialization_manifest
 from modules.specializations import get_specialization
@@ -85,10 +84,6 @@ async def cognitive_interview(
     twin = require_twin_access(twin_id, user)
     tenant_id = user["tenant_id"]
 
-    # Load specialization and policy
-    spec = get_specialization(twin_id)
-    host_policy = _load_host_policy(spec.name)
-
 
     # Get or create conversation
 
@@ -101,10 +96,10 @@ async def cognitive_interview(
     session = InterviewController.get_or_create_session(twin_id, conversation_id)
     session_id = session.get("id")
     stage = InterviewController.get_stage(session)
-    
+
     # Get conversation history
     history = get_messages(conversation_id)
-    
+
     # Fetch existing nodes
     existing_nodes = []
     intent_nodes = []
@@ -112,17 +107,17 @@ async def cognitive_interview(
     try:
         nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 100}).execute()
         existing_nodes = nodes_res.data or []
-        
+
         for node in existing_nodes:
             ntype = node.get("type", "").lower()
             nname = node.get("name", "").lower()
-            
+
             # Track intent nodes separately
             if "intent" in ntype:
                 intent_nodes.append(node)
                 if "confirmed" in ntype and node.get("description", "").lower() == "true":
                     filled_slots["intent_confirmed"] = True
-            
+
             # Map other nodes to slots
             if "thesis" in ntype or "thesis" in nname:
                 filled_slots["investment_thesis"] = node
@@ -141,38 +136,38 @@ async def cognitive_interview(
     # Include descriptions so we actually know what was learned
     knowledge_items = []
     agent_context = ""
-    
+
     if existing_nodes:
         for node in existing_nodes:
             name = node.get("name", "")
             desc = node.get("description", "")
             ntype = node.get("type", "").lower()
-            
+
             if not name:
                 continue
-            
+
             # Skip internal nodes
             if "intent" in ntype and "confirmed" in ntype:
                 continue
-            
+
             # Build knowledge item with description
             if desc and len(desc) > 5:
                 knowledge_items.append(f"- {name}: {desc}")
             else:
                 knowledge_items.append(f"- {name}")
-    
+
     # Short summary (3 items max)
     short_summary = ", ".join([k.split(":")[0].replace("- ", "") for k in knowledge_items[:3]])
     if len(knowledge_items) > 3:
         short_summary += f" (+{len(knowledge_items) - 3} more)"
-    
+
     # Full context for agent (with descriptions)
     if knowledge_items:
         agent_context = "What I know about you from our interviews:\n" + "\n".join(knowledge_items[:15])
-    
+
     # ========== COMMAND DETECTION ==========
     msg_lower = request.message.lower().strip()
-    
+
     # "What do you know?" - Show FULL knowledge with descriptions
     if any(p in msg_lower for p in ["what do you know", "what have we", "remember"]):
         if knowledge_items:
@@ -188,7 +183,7 @@ async def cognitive_interview(
                 conversation_id=conversation_id, session_id=session_id,
                 stage=InterviewStage.INTENT_CAPTURE.value
             )
-    
+
     # "Start fresh" - Clear and go
     if any(p in msg_lower for p in ["start fresh", "start over", "reset", "delete", "clear", "forget"]):
         try:
@@ -201,7 +196,7 @@ async def cognitive_interview(
             conversation_id=conversation_id, session_id=session_id,
             stage=InterviewStage.INTENT_CAPTURE.value
         )
-    
+
     # "Continue" - Just proceed
     if any(p in msg_lower for p in ["continue", "yes", "proceed", "go ahead", "next", "let's go"]):
         next_slot = get_next_slot(host_policy, filled_slots)
@@ -214,18 +209,18 @@ async def cognitive_interview(
                 stage=InterviewStage.DEEP_INTERVIEW.value,
                 suggested_question=question
             )
-            
+
         print(f"DEBUG: Continuing Interview. Next Slot: {next_slot['slot_id']}")
 
     # ========== STAGE-BASED ROUTING ==========
-    
+
     final_response = ""
     suggested_question = None
     follow_up_question = None
     intent_summary = None
     next_stage = stage.value
     scribe_result = {}  # Initialize to empty dict for return statement
-    
+
     # STAGE 0: OPENING
     if stage == InterviewStage.OPENING:
         if short_summary and len(existing_nodes) > 3:
@@ -238,22 +233,22 @@ async def cognitive_interview(
             final_response = "Let's build your twin. What's it for?"
             next_stage = InterviewStage.INTENT_CAPTURE.value
             InterviewController.update_session(session_id, new_stage=next_stage, increment_turn=True)
-    
+
     # STAGE 1: INTENT CAPTURE
     elif stage == InterviewStage.INTENT_CAPTURE:
         log_interaction(conversation_id, "user", request.message)
-        
+
         # Get current question
         next_intent_q = InterviewController.get_next_intent_question(session)
         current_question = next_intent_q if next_intent_q else INTENT_QUESTIONS[0]
-        
+
         # Evaluate response quality
         quality_result = await ResponseEvaluator.evaluate_response(
             request.message,
             current_question=current_question,
             use_llm=True
         )
-        
+
         # Track quality score
         InterviewController.append_quality_score(session_id, {
             "turn": session.get("turn_count", 0) + 1,
@@ -263,19 +258,19 @@ async def cognitive_interview(
             "tier": quality_result.tier,
             "is_substantive": quality_result.is_substantive
         })
-        
+
         # Check if response is sufficient
         if not quality_result.is_substantive or quality_result.quality_score < 0.5:
             # Response insufficient - use repair strategy
             clarification_attempts = InterviewController.get_clarification_attempts(session) + 1
             InterviewController.increment_clarification_attempts(session_id)
-            
+
             repair = RepairManager.get_repair_strategy(
                 clarification_attempts,
                 current_question=current_question,
                 user_message=request.message
             )
-            
+
             InterviewController.update_repair_strategy(session_id, repair.strategy_type)
             final_response = repair.message
             next_stage = InterviewStage.INTENT_CAPTURE.value  # Stay in same stage
@@ -284,7 +279,7 @@ async def cognitive_interview(
         else:
             # Response sufficient - extract and process
             InterviewController.reset_clarification_attempts(session_id)
-            
+
             # Extract from response using slot-aware extraction
             tenant_id = user.get("tenant_id") if user else None
             scribe_result = await extract_for_slot(
@@ -298,11 +293,11 @@ async def cognitive_interview(
                 tenant_id=tenant_id,
                 conversation_id=conversation_id
             )
-            
+
             # Check how many intent nodes we have now
             intent_count = len([n for n in (scribe_result.get("nodes") or []) if "intent" in str(n.get("type", "")).lower()])
             total_intent = len(intent_nodes) + intent_count
-            
+
             if total_intent >= 2:
                 # Enough intent captured - move to profile
                 first_slot = get_next_slot(host_policy, filled_slots)
@@ -335,13 +330,13 @@ async def cognitive_interview(
                     next_stage = InterviewStage.DEEP_INTERVIEW.value
                     InterviewController.update_session(session_id, new_stage=next_stage, new_intent_confirmed=True, increment_turn=True)
                 log_interaction(conversation_id, "assistant", final_response)
-    
+
     # STAGE 1.5: CONFIRM INTENT (simplified - mostly auto-confirm now)
     elif stage == InterviewStage.CONFIRM_INTENT:
         user_msg_lower = request.message.lower().strip()
-        
+
         log_interaction(conversation_id, "user", request.message)
-        
+
         # Unless they explicitly say "no", just continue
         if "no" in user_msg_lower and len(user_msg_lower) < 20:
             final_response = "What would you like to correct?"
@@ -349,10 +344,10 @@ async def cognitive_interview(
         else:
             # Confirmed - move to profile
             supabase.rpc("create_node_system", {
-                "t_id": twin_id, "n_name": "Intent Confirmed", 
+                "t_id": twin_id, "n_name": "Intent Confirmed",
                 "n_type": "intent.confirmed", "n_desc": "true", "n_props": {}
             }).execute()
-            
+
             next_slot = get_next_slot(host_policy, filled_slots)
             if next_slot:
                 q = get_next_question(host_policy, filled_slots, spec.name)
@@ -361,17 +356,17 @@ async def cognitive_interview(
             else:
                 final_response = "Profile complete."
             next_stage = InterviewStage.DEEP_INTERVIEW.value
-        
+
         InterviewController.update_session(session_id, new_stage=next_stage, new_intent_confirmed=True, increment_turn=True)
         log_interaction(conversation_id, "assistant", final_response)
-    
+
     # STAGE 2: DEEP INTERVIEW (concise questions)
     elif stage == InterviewStage.DEEP_INTERVIEW:
         log_interaction(conversation_id, "user", request.message)
-        
+
         # Get current slot being filled
         current_slot = get_next_slot(host_policy, filled_slots)
-        
+
         if not current_slot:
             # No more slots - we're done!
             final_response = "Profile complete. Your twin is ready."
@@ -386,7 +381,7 @@ async def cognitive_interview(
                 "id": q.get("template_id") if q else current_slot.get("slot_id"),
                 "target_node": q.get("target_node") if q else None
             }
-            
+
             # Evaluate response quality
             quality_result = await ResponseEvaluator.evaluate_response(
                 request.message,
@@ -394,7 +389,7 @@ async def cognitive_interview(
                 current_slot=current_slot,
                 use_llm=True
             )
-            
+
             # Track quality score
             InterviewController.append_quality_score(session_id, {
                 "turn": session.get("turn_count", 0) + 1,
@@ -405,22 +400,22 @@ async def cognitive_interview(
                 "is_substantive": quality_result.is_substantive,
                 "relevance_score": quality_result.relevance_score
             })
-            
+
             # Check if response is sufficient (quality > 0.5 and scribe confidence > 0.4)
             if not quality_result.is_substantive or quality_result.quality_score < 0.5:
                 # Response insufficient - use repair strategy
                 clarification_attempts = InterviewController.get_clarification_attempts(session) + 1
                 InterviewController.increment_clarification_attempts(session_id)
-                
+
                 repair = RepairManager.get_repair_strategy(
                     clarification_attempts,
                     current_question=current_question,
                     current_slot=current_slot,
                     user_message=request.message
                 )
-                
+
                 InterviewController.update_repair_strategy(session_id, repair.strategy_type)
-                
+
                 # Handle skip request
                 if repair.should_skip and RepairManager.detect_skip_request(request.message):
                     InterviewController.add_skipped_slot(session_id, current_slot.get("slot_id"))
@@ -438,12 +433,12 @@ async def cognitive_interview(
                     final_response = repair.message
                     next_stage = InterviewStage.DEEP_INTERVIEW.value  # Stay in same stage
                     InterviewController.update_session(session_id, increment_turn=True)
-                
+
                 log_interaction(conversation_id, "assistant", final_response)
             else:
                 # Response sufficient - extract and process
                 InterviewController.reset_clarification_attempts(session_id)
-                
+
                 # Extract using slot-aware extraction
                 tenant_id = user.get("tenant_id") if user else None
                 scribe_result = await extract_for_slot(
@@ -457,19 +452,19 @@ async def cognitive_interview(
                     tenant_id=tenant_id,
                     conversation_id=conversation_id
                 )
-                
+
                 # Only advance if extraction was successful (confidence > 0.4 and nodes extracted)
                 scribe_confidence = scribe_result.get("confidence", 0.0)
                 nodes_extracted = len(scribe_result.get("nodes", []))
-                
+
                 if scribe_confidence > 0.4 and nodes_extracted > 0:
                     # Extraction successful - move to next slot
                     next_slot = get_next_slot(host_policy, filled_slots)
-                    
+
                     if next_slot:
                         q = get_next_question(host_policy, filled_slots, spec.name, session.get("asked_template_ids", []))
                         question_text = q.get("question") if q else f"What's your {next_slot['slot_id'].replace('_', ' ')}?"
-                        
+
                         # Generate contextual question if we have existing nodes
                         if existing_nodes:
                             question_text = generate_contextual_question(
@@ -479,7 +474,7 @@ async def cognitive_interview(
                                 history=history,
                                 use_llm=False
                             )
-                        
+
                         final_response = question_text
                         suggested_question = question_text
                         InterviewController.update_current_question(session_id, q.get("template_id") if q else next_slot.get("slot_id"))
@@ -493,21 +488,21 @@ async def cognitive_interview(
                     # Extraction failed - ask again with repair strategy
                     clarification_attempts = InterviewController.get_clarification_attempts(session) + 1
                     InterviewController.increment_clarification_attempts(session_id)
-                    
+
                     repair = RepairManager.get_repair_strategy(
                         clarification_attempts,
                         current_question=current_question,
                         current_slot=current_slot,
                         user_message=request.message
                     )
-                    
+
                     InterviewController.update_repair_strategy(session_id, repair.strategy_type)
                     final_response = repair.message
                     next_stage = InterviewStage.DEEP_INTERVIEW.value
                     InterviewController.update_session(session_id, increment_turn=True)
-                
+
                 log_interaction(conversation_id, "assistant", final_response)
-    
+
     # STAGE 3: COMPLETE (conversational with full context)
     elif stage == InterviewStage.COMPLETE:
         # Build context-aware system prompt for agent
@@ -518,37 +513,37 @@ async def cognitive_interview(
 Use this knowledge to answer their questions intelligently.
 If they ask about something you don't know, ask them about it to learn more.
 Keep responses brief and conversational."""
-        
+
         # Use agent with context (passing as part of history)
         history_with_context = [{"role": "system", "content": context_prompt}] + history
-        
+
         async for event in run_agent_stream(twin_id, request.message, history_with_context):
             if "agent" in event:
                 msg = event["agent"]["messages"][-1]
                 if isinstance(msg, AIMessage) and msg.content:
                     final_response = msg.content
-        
+
         log_interaction(conversation_id, "user", request.message)
         if final_response:
             log_interaction(conversation_id, "assistant", final_response)
         else:
             # If agent didn't respond, ask a learning question
             final_response = "I'd like to learn more about you. What's your focus area?"
-        
+
         next_stage = InterviewStage.COMPLETE.value
-    
+
     # Calculate progress
     required_slots = host_policy.get("required_slots", [])
     slots_filled_count = len([s for s in required_slots if s.get("slot_id") in filled_slots])
     missing_slots = [s for s in required_slots if s.get("slot_id") not in filled_slots]
-    
+
     progress = {
         "intent_complete": session.get("intent_confirmed", False) or filled_slots.get("intent_confirmed", False),
         "slots_filled": slots_filled_count,
         "total_slots": len(required_slots),
         "turn_count": session.get("turn_count", 0) + 1
     }
-    
+
     return InterviewResponse(
         response=final_response,
         conversation_id=conversation_id,
@@ -578,7 +573,7 @@ async def get_cognitive_graph(twin_id: str, user=Depends(require_tenant)):
     """
     require_twin_access(twin_id, user)
 
-    
+
     # TODO: Implement actual graph store query
     # For now return a placeholder structure
     return {
@@ -614,36 +609,36 @@ class VersionResponse(BaseModel):
 async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Depends(require_tenant)):
     """
     Approve the current cognitive profile, creating an immutable version snapshot.
-    
+
     This captures all nodes and edges at the current moment, computes a diff
     from the previous version, and creates an audit trail.
     """
     require_twin_access(twin_id, user)
     tenant_id = user["tenant_id"]
 
-    
+
     from modules._core.versioning import compute_diff, create_snapshot, summarize_diff
     from datetime import datetime
-    
+
     try:
         # 1. Fetch current nodes and edges
         nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 500}).execute()
         edges_res = supabase.rpc("get_edges_system", {"t_id": twin_id, "limit_val": 500}).execute()
-        
+
         nodes = nodes_res.data or []
         edges = edges_res.data or []
-        
+
         if not nodes:
             raise HTTPException(status_code=400, detail="Cannot approve empty profile. Add some knowledge first.")
-        
+
         # 2. Create snapshot
         snapshot = create_snapshot(nodes, edges)
-        
+
         # 3. Get previous version for diff computation
         latest_ver = supabase.rpc("get_latest_version_system", {"t_id": twin_id}).execute()
         current_version = latest_ver.data if latest_ver.data else 0
         new_version = current_version + 1
-        
+
         # 4. Compute diff if not first version
         diff_json = None
         if current_version > 0:
@@ -653,11 +648,11 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
                 diff_json = compute_diff(prev_snapshot, snapshot)
         else:
             diff_json = compute_diff({}, snapshot)
-        
+
         # 5. Insert new version
         user_id = user.get("user_id") if user else None
         notes = request.notes if request else None
-        
+
         new_id = supabase.rpc("insert_profile_version_system", {
             "t_id": twin_id,
             "ver": new_version,
@@ -668,7 +663,7 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
             "approver": user_id,
             "approval_notes": notes
         }).execute()
-        
+
         # 6. Emit audit log
         try:
             AuditLogger.log(
@@ -687,7 +682,7 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
         except Exception as audit_err:
             print(f"Warning: Audit log failed: {audit_err}")
 
-        
+
         return {
             "success": True,
             "version": new_version,
@@ -696,7 +691,7 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
             "approved_at": datetime.utcnow().isoformat(),
             "diff_summary": summarize_diff(diff_json) if diff_json else "Initial version"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -710,17 +705,17 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
 async def get_versions(twin_id: str, limit: int = 10, user=Depends(require_tenant)):
     """
     Get version history for a cognitive profile.
-    
+
     Returns list of all approved versions with metadata.
     """
     require_twin_access(twin_id, user)
 
-    
+
     from modules._core.versioning import summarize_diff
-    
+
     try:
         versions_res = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": limit}).execute()
-        
+
         versions = []
         for v in (versions_res.data or []):
             diff = v.get("diff_json")
@@ -733,13 +728,13 @@ async def get_versions(twin_id: str, limit: int = 10, user=Depends(require_tenan
                 "notes": v.get("notes"),
                 "diff_summary": summarize_diff(diff) if diff else "Initial version"
             })
-        
+
         return {
             "twin_id": twin_id,
             "total_versions": len(versions),
             "versions": versions
         }
-        
+
     except Exception as e:
         print(f"Error fetching versions: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch versions: {str(e)}")
@@ -749,15 +744,15 @@ async def get_versions(twin_id: str, limit: int = 10, user=Depends(require_tenan
 async def get_version_snapshot(twin_id: str, version: int, user=Depends(require_tenant)):
     """
     Get a specific version's full snapshot.
-    
+
     Returns the complete graph state as it was when approved.
     """
     require_twin_access(twin_id, user)
 
-    
+
     try:
         versions_res = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": 100}).execute()
-        
+
         for v in (versions_res.data or []):
             if v["version"] == version:
                 return {
@@ -769,9 +764,9 @@ async def get_version_snapshot(twin_id: str, version: int, user=Depends(require_
                     "approved_at": v["approved_at"],
                     "notes": v.get("notes")
                 }
-        
+
         raise HTTPException(status_code=404, detail=f"Version {version} not found")
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -783,20 +778,20 @@ async def get_version_snapshot(twin_id: str, version: int, user=Depends(require_
 async def delete_version(twin_id: str, version: int, user=Depends(require_tenant)):
     """
     Delete a specific version (admin function).
-    
+
     Note: This should be used sparingly as versions are meant to be immutable audit records.
     """
     require_twin_access(twin_id, user)
 
-    
+
     try:
         result = supabase.rpc("delete_profile_version_system", {"t_id": twin_id, "ver": version}).execute()
-        
+
         if result.data:
             return {"success": True, "message": f"Version {version} deleted"}
         else:
             raise HTTPException(status_code=404, detail=f"Version {version} not found")
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -808,21 +803,21 @@ async def delete_version(twin_id: str, version: int, user=Depends(require_tenant
 async def delete_all_versions(twin_id: str, user=Depends(get_current_user)):
     """
     Delete ALL versions for a twin (reset/cleanup function).
-    
+
     Warning: This removes all version history and cannot be undone.
     """
     verify_twin_ownership(twin_id, user)
-    
+
     try:
         result = supabase.rpc("delete_all_versions_system", {"t_id": twin_id}).execute()
         deleted_count = result.data if result.data else 0
-        
+
         return {
-            "success": True, 
+            "success": True,
             "message": f"Deleted {deleted_count} version(s)",
             "deleted_count": deleted_count
         }
-            
+
     except Exception as e:
         print(f"Error deleting versions: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete versions: {str(e)}")

@@ -1,0 +1,29 @@
+--- backend/routers/cognitive.py
++++ backend/routers/cognitive.py
+@@ -10,7 +10,7 @@
+ from typing import List, Optional, Dict, Any
+ import json
+
+-from modules.auth_guard import get_current_user, require_twin_access, require_tenant
++from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
+ from modules.governance import AuditLogger
+
+ from modules.observability import supabase, get_messages, log_interaction, create_conversation
+@@ -18,6 +18,7 @@
+ from modules._core.host_engine import get_next_slot, get_next_question, process_turn, generate_contextual_question
+ from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions, extract_for_slot
+ from modules._core.response_evaluator import ResponseEvaluator
++from modules._core.interview_controller import InterviewController, InterviewStage, INTENT_QUESTIONS
+ from modules._core.repair_strategies import RepairManager
+ from modules._core.registry_loader import get_specialization_manifest
+ from modules.specializations import get_specialization
+@@ -83,6 +84,10 @@
+     twin = require_twin_access(twin_id, user)
+     tenant_id = user["tenant_id"]
+
++    # Load specialization and policy
++    spec = get_specialization(twin_id)
++    host_policy = _load_host_policy(spec.name)
++
+
+     # Get or create conversation
