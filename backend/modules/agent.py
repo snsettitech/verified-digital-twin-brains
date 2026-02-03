@@ -1,4 +1,5 @@
 import os
+import asyncio
 from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
@@ -55,7 +56,9 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
         # 1. Check if we already have a profile in the database
         if not force_refresh:
             # RLS Fix: Use RPC
-            twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+            twin_res = await asyncio.to_thread(
+                lambda: supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+            )
             if twin_res.data and twin_res.data.get("settings"):
                 profile = twin_res.data["settings"].get("persona_profile")
                 if profile:
@@ -67,9 +70,9 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
 
         # 2. Fetch data for analysis
         # A. Fetch verified replies
-        replies_res = supabase.table("escalation_replies").select(
+        replies_res = await asyncio.to_thread(lambda: supabase.table("escalation_replies").select(
             "content, escalations(messages(conversations(twin_id)))"
-        ).execute()
+        ).execute())
         
         analysis_texts = []
         for r in replies_res.data:
@@ -124,7 +127,9 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
             from datetime import datetime
             # Get current settings first to merge
             # RLS Fix: Use RPC
-            twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+            twin_res = await asyncio.to_thread(
+                lambda: supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+            )
             curr_settings = twin_res.data["settings"] if twin_res.data else {}
             
             curr_settings["persona_profile"] = persona_data.get("description")
@@ -138,7 +143,9 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
             # Updating style is a background task. 
             # I'll leave update as is for now, assuming RLS allows update? (Unlikely).
             # I should use update_twin_settings system RPC but I didn't create one.
-            supabase.table("twins").update({"settings": curr_settings}).eq("id", twin_id).execute()
+            await asyncio.to_thread(
+                lambda: supabase.table("twins").update({"settings": curr_settings}).eq("id", twin_id).execute()
+            )
         except Exception as se:
             print(f"Error persisting persona profile: {se}")
 
@@ -447,7 +454,9 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
 
     # 1. Fetch full twin settings for persona encoding
     # RLS Fix: Use RPC
-    twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+    twin_res = await asyncio.to_thread(
+        lambda: supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+    )
     settings = twin_res.data["settings"] if twin_res.data else {}
     
     # 2. Load group settings if group_id provided
@@ -465,7 +474,9 @@ async def run_agent_stream(twin_id: str, query: str, history: List[BaseMessage] 
         await get_owner_style_profile(twin_id)
         # Re-fetch after analysis
         # RLS Fix: Use RPC
-        twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+        twin_res = await asyncio.to_thread(
+            lambda: supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+        )
         settings = twin_res.data["settings"] if twin_res.data else {}
         # Re-merge group settings if needed
         if group_id:
