@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 
-from modules.auth_guard import get_current_user, require_twin_access, require_tenant
+from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
 from modules.governance import AuditLogger
 
 from modules.observability import supabase, get_messages, log_interaction, create_conversation
@@ -26,6 +26,7 @@ from modules._core.response_evaluator import ResponseEvaluator
 from modules._core.repair_strategies import RepairManager
 from modules._core.registry_loader import get_specialization_manifest
 from modules.specializations import get_specialization
+from modules._core.interview_controller import InterviewController, InterviewStage, INTENT_QUESTIONS
 from langchain_core.messages import AIMessage
 
 router = APIRouter(tags=["cognitive"])
@@ -84,6 +85,11 @@ async def cognitive_interview(
     twin = require_twin_access(twin_id, user)
     tenant_id = user["tenant_id"]
 
+    # Load specialization and policy
+    # Default to vanilla if not specified
+    spec_name = twin.get("specialization", "vanilla")
+    spec = get_specialization(spec_name)
+    host_policy = _load_host_policy(spec_name)
 
     # Get or create conversation
 
@@ -653,7 +659,7 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
         user_id = user.get("user_id") if user else None
         notes = request.notes if request else None
         
-        new_id = supabase.rpc("insert_profile_version_system", {
+        new_id = supabase.rpc("insert_profile_version_system", {  # noqa: F841
             "t_id": twin_id,
             "ver": new_version,
             "snapshot": snapshot,
