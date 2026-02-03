@@ -17,6 +17,7 @@ Usage:
 from fastapi import Depends, HTTPException, Request
 from typing import Optional, List
 import logging
+import asyncio
 from modules.observability import supabase
 from modules.auth_guard import get_current_user as get_auth_user
 
@@ -26,7 +27,14 @@ logger = logging.getLogger(__name__)
 # Audit Helpers
 # ---------------------------------------------------------------------------
 
-def emit_audit_event(event_type: str, user_id: str, tenant_id: str, details: dict) -> None:
+def _insert_audit_log(log_entry: dict):
+    """Helper to perform synchronous DB insert."""
+    try:
+        supabase.table("audit_logs").insert(log_entry).execute()
+    except Exception as e:
+        logger.error(f"DB Insert Failed: {e}")
+
+async def emit_audit_event(event_type: str, user_id: str, tenant_id: str, details: dict) -> None:
     """Emit an audit event for compliance and security monitoring."""
     try:
         # Log to application logger
@@ -34,7 +42,22 @@ def emit_audit_event(event_type: str, user_id: str, tenant_id: str, details: dic
             "AUDIT [%s] user=%s tenant=%s details=%s",
             event_type, user_id, tenant_id, details,
         )
-        # TODO: Async insert into audit_logs table
+
+        # Async insert into audit_logs table
+        log_entry = {
+            "tenant_id": tenant_id,
+            "event_type": event_type,
+            "action": details.get("action", event_type), # Fallback to event_type
+            "actor_id": user_id,
+            "metadata": details or {}
+        }
+
+        # Extract twin_id if present in details
+        if "twin_id" in details:
+            log_entry["twin_id"] = details["twin_id"]
+
+        await asyncio.to_thread(_insert_audit_log, log_entry)
+
     except Exception as e:
         logger.error(f"Failed to emit audit event: {e}")
 
@@ -52,7 +75,7 @@ async def verify_tenant_access(
     """
     # 1. Reject service-key bypass if marked in user context
     if user.get("is_service_key"):
-        emit_audit_event(
+        await emit_audit_event(
             "SERVICE_KEY_BYPASS_BLOCKED",
             user.get("user_id", "unknown"),
             user.get("tenant_id", "unknown"),
@@ -81,7 +104,7 @@ async def verify_twin_access(
     if allowed_twins is not None:
         # If allowed_twins is defined (even if empty), enforce it
         if twin_id not in allowed_twins:
-            emit_audit_event(
+            await emit_audit_event(
                 "TWIN_ACCESS_DENIED_DEV_TOKEN",
                 user.get("user_id", "unknown"),
                 user.get("tenant_id", "unknown"),
@@ -103,7 +126,7 @@ async def verify_twin_access(
 
         if not is_allowed:
             # We don't distinguish between "Not Found" and "Forbidden" to prevent enumeration
-            emit_audit_event(
+            await emit_audit_event(
                 "TWIN_ACCESS_DENIED",
                 user["user_id"],
                 user["tenant_id"],
@@ -111,7 +134,7 @@ async def verify_twin_access(
             )
             raise HTTPException(404, "Twin not found") 
             
-        emit_audit_event(
+        await emit_audit_event(
             "ACCESS_GRANTED",
             user["user_id"],
             user["tenant_id"],
