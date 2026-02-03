@@ -484,17 +484,22 @@ async def retrieve_context_vectors(
             
             rerank_request = RerankRequest(query=query, passages=passages)
             results = ranker.rerank(rerank_request)
-            
-            # Reconstruct sorted contexts
-            for res in results:
-                original_idx = int(res["id"])
-                ctx = unique_contexts[original_idx]
-                ctx["score"] = res["score"] # Update score with rerank score
-                final_contexts.append(ctx)
+
+            max_rerank_score = max((res.get("score", 0) for res in results), default=0)
+            if max_rerank_score < 0.001:
+                print("[Retrieval] Rerank scores too low. Using vector scores.")
+                final_contexts = unique_contexts[:top_k]
+            else:
+                # Reconstruct sorted contexts
+                for res in results:
+                    original_idx = int(res["id"])
+                    ctx = unique_contexts[original_idx]
+                    ctx["score"] = res["score"] # Update score with rerank score
+                    final_contexts.append(ctx)
                 
-            # Limit to requested top_k
-            final_contexts = final_contexts[:top_k]
-            print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
+                # Limit to requested top_k
+                final_contexts = final_contexts[:top_k]
+                print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
         except Exception as e:
             print(f"[Retrieval] Reranking failed: {e}. Falling back to vector scores.")
             final_contexts = unique_contexts[:top_k]

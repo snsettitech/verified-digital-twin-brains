@@ -300,8 +300,10 @@ def create_twin_agent(twin_id: str, group_id: Optional[str] = None, system_promp
             3. Factual Questions: For questions NOT covered by memorized knowledge, call `search_knowledge_base`.
             4. Verified QnA Priority: If search returns "verified_qna_match": true, YOUR RESPONSE MUST BE THE EXACT TEXT - COPY IT VERBATIM.
             5. Persona & Voice: Use first-person ("I", "my"). For OPINION sources, use "In my view" framing.
-            6. No Data: If no relevant information is found, respond with: "I don't have this specific information in my knowledge base." {general_knowledge_note}
-            7. Citations: Cite sources using [Source ID] when using search tool results.
+            6. Tool Results Are Binding: If `search_knowledge_base` returns any contexts, you MUST answer using them and MUST NOT respond with "I don't have this specific information in my knowledge base."
+            7. Exact Phrase Requests: If the user asks for an exact phrase/quote/line, copy it verbatim from the retrieved context text.
+            8. No Data: If no relevant information is found, respond with: "I don't have this specific information in my knowledge base." {general_knowledge_note}
+            9. Citations: Cite sources using [Source ID] when using search tool results.
 
             Current Twin ID: {twin_id}"""
             messages = [SystemMessage(content=system_prompt)] + messages

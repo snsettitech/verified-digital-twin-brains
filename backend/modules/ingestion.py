@@ -21,6 +21,7 @@ from modules.clients import get_openai_client, get_pinecone_index
 from modules.observability import supabase, log_ingestion_event
 from modules.health_checks import run_all_health_checks, calculate_content_hash
 from modules.training_jobs import create_training_job
+from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
 
 
@@ -968,6 +969,16 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
         except Exception as e:
             print(f"[Pinecone] ERROR during upsert: {e}")
             raise
+
+    # Ensure default group has access to this source (required for retrieval filtering)
+    try:
+        default_group = await get_default_group(twin_id)
+        if default_group and default_group.get("id"):
+            await add_content_permission(default_group["id"], "source", source_id, twin_id)
+            log_ingestion_event(source_id, twin_id, "info", "Default group permission granted for source")
+    except Exception as e:
+        log_ingestion_event(source_id, twin_id, "warning", f"Failed to grant default group permission: {e}")
+        print(f"[Ingestion] Warning: Failed to grant default group permission for source {source_id}: {e}")
 
     # Phase 8: Emit event for Action Engine
     from modules.actions_engine import EventEmitter

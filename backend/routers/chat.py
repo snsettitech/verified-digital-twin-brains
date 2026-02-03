@@ -14,6 +14,7 @@ from modules.observability import (
 from modules.agent import run_agent_stream
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
+import re
 import json
 
 # Langfuse v3 tracing
@@ -171,6 +172,23 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                             # Only update if there's actual content (not just tool calls)
                             if msg.content and not getattr(msg, 'tool_calls', None):
                                 full_response = msg.content
+
+            # If model fell back despite having citations, try a deterministic extract
+            fallback_message = "I don't have this specific information in my knowledge base."
+            if full_response.strip() == fallback_message and citations:
+                needs_exact = re.search(r"(exact|verbatim|only the exact).*(phrase|quote|line)", query.lower())
+                if needs_exact:
+                    try:
+                        from modules.retrieval import retrieve_context
+                        contexts = await retrieve_context(query, twin_id, group_id=group_id, top_k=1)
+                        if contexts:
+                            context_text = contexts[0].get("text", "")
+                            first_line = next((line.strip() for line in context_text.splitlines() if line.strip()), "")
+                            if first_line:
+                                full_response = first_line
+                                print("[Chat] Fallback override: extracted exact line from context")
+                    except Exception as e:
+                        print(f"[Chat] Fallback override failed: {e}")
             
             # Determine if graph was likely used (no external citations and has graph)
             graph_used = graph_stats["has_graph"] and len(citations) == 0
