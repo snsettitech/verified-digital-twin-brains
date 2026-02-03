@@ -1,20 +1,25 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import MessageList, { Message } from './MessageList';
+import { useTwin } from '@/lib/context/TwinContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const STREAM_IDLE_TIMEOUT_MS = 20000;
 
 export default function ChatInterface({
   twinId,
   conversationId,
-  onConversationStarted
+  onConversationStarted,
+  resetKey
 }: {
   twinId: string;
   conversationId?: string | null;
   onConversationStarted?: (id: string) => void;
+  resetKey?: number;
 }) {
+  const { user } = useTwin();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -24,21 +29,72 @@ export default function ChatInterface({
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
+
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const supabase = getSupabaseClient();
+  const storageKey = useMemo(() => {
+    const tenantId = user?.tenant_id || 'unknown';
+    return `simulator_chat_${tenantId}_${twinId}`;
+  }, [user?.tenant_id, twinId]);
 
   const getAuthToken = useCallback(async (): Promise<string | null> => {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token || null;
   }, [supabase]);
 
+  const persistMessages = useCallback((nextMessages: Message[]) => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextMessages));
+    } catch {
+      // ignore storage errors
+    }
+  }, [storageKey]);
+
+  const resetWatchdog = useCallback(() => {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+    }
+    watchdogRef.current = setTimeout(() => {
+      if (abortRef.current) {
+        abortRef.current.abort();
+      }
+    }, STREAM_IDLE_TIMEOUT_MS);
+  }, []);
+
+  const clearWatchdog = useCallback(() => {
+    if (watchdogRef.current) {
+      clearTimeout(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     const loadHistory = async () => {
+      setLastError(null);
       if (!conversationId) {
-        setMessages([{
-          role: 'assistant',
-          content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
-        }]);
+        let restored = false;
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Message[];
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setMessages(parsed);
+              restored = true;
+            }
+          }
+        } catch {
+          // ignore storage parse errors
+        }
+        if (!restored) {
+          setMessages([{
+            role: 'assistant',
+            content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+          }]);
+        }
         return;
       }
 
@@ -67,14 +123,38 @@ export default function ChatInterface({
       }
     };
     loadHistory();
-  }, [conversationId, getAuthToken]);
+  }, [conversationId, getAuthToken, storageKey]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  useEffect(() => {
+    persistMessages(messages);
+  }, [messages, persistMessages]);
 
-    const userMsg: Message = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+  useEffect(() => {
+    if (!resetKey) return;
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // ignore storage errors
+    }
+    setMessages([{
+      role: 'assistant',
+      content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+    }]);
+    setLastError(null);
+    setLastUserMessage(null);
+  }, [resetKey, storageKey]);
+
+  const sendMessage = async (overrideText?: string, options?: { retry?: boolean }) => {
+    const text = (overrideText ?? input).trim();
+    if (!text || loading) return;
+
+    if (!options?.retry) {
+      const userMsg: Message = { role: 'user', content: text };
+      setMessages((prev) => [...prev, userMsg]);
+      setInput('');
+    }
+    setLastUserMessage(text);
+    setLastError(null);
     setLoading(true);
     setIsSearching(true);
 
@@ -88,6 +168,9 @@ export default function ChatInterface({
       const token = await getAuthToken();
       if (!token) throw new Error('Not authenticated');
 
+      abortRef.current = new AbortController();
+      resetWatchdog();
+
       const response = await fetch(`${API_BASE_URL}/chat/${twinId}`, {
         method: 'POST',
         headers: {
@@ -95,12 +178,15 @@ export default function ChatInterface({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query: input,
+          query: text,
           conversation_id: conversationId || null,
         }),
+        signal: abortRef.current.signal
       });
 
-      if (!response.ok) throw new Error('Network response was not ok');
+      if (!response.ok) {
+        throw new Error(`Request failed (${response.status})`);
+      }
       if (!response.body) throw new Error('No response body');
 
       const reader = response.body.getReader();
@@ -111,6 +197,7 @@ export default function ChatInterface({
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
+          resetWatchdog();
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
 
@@ -151,18 +238,45 @@ export default function ChatInterface({
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
+      const message = error?.name === 'AbortError'
+        ? 'Connection stalled. Please retry.'
+        : (error?.message || "Sorry, I'm having trouble connecting to my brain right now.");
+      setLastError(message);
       setMessages((prev) => {
         const last = [...prev];
         last[last.length - 1] = {
           role: 'assistant',
-          content: "Sorry, I'm having trouble connecting to my brain right now."
+          content: message
         };
         return last;
       });
     } finally {
+      clearWatchdog();
+      abortRef.current = null;
       setLoading(false);
       setIsSearching(false);
     }
+  };
+
+  const retryLastMessage = async () => {
+    if (!lastUserMessage || loading) return;
+    await sendMessage(lastUserMessage, { retry: true });
+  };
+
+  const clearHistory = () => {
+    const confirmed = window.confirm('Clear this chat history for the current twin?');
+    if (!confirmed) return;
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      // ignore storage errors
+    }
+    setMessages([{
+      role: 'assistant',
+      content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+    }]);
+    setLastError(null);
+    setLastUserMessage(null);
   };
 
   return (
@@ -185,6 +299,12 @@ export default function ChatInterface({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={clearHistory}
+            className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all border border-slate-100"
+          >
+            Clear history
+          </button>
           <button className="p-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
           </button>
@@ -196,6 +316,17 @@ export default function ChatInterface({
 
       {/* Input */}
       <div className="p-6 bg-white/80 backdrop-blur-sm border-t border-slate-100">
+        {lastError && (
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <span>{lastError}</span>
+            <button
+              onClick={retryLastMessage}
+              className="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-100"
+            >
+              Retry
+            </button>
+          </div>
+        )}
         <div className="relative flex items-center max-w-4xl mx-auto w-full">
           <input
             type="text"
