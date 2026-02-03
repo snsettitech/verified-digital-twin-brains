@@ -7,7 +7,7 @@ Graphiti framework with Neo4j backend.
 Memory types: intent, goal, constraint, preference, boundary
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import os
 import logging
@@ -184,7 +184,7 @@ This was captured with {confidence*100:.0f}% confidence.
         user_id: str,
         task: str = "interview",
         max_tokens: int = 2000
-    ) -> str:
+    ) -> Tuple[str, int]:
         """
         Retrieve prioritized context bundle for the user.
         
@@ -196,12 +196,14 @@ This was captured with {confidence*100:.0f}% confidence.
             max_tokens: Approximate token budget for context
             
         Returns:
-            Formatted context string ready for system prompt
+            Tuple containing:
+            - Formatted context string ready for system prompt
+            - Count of memory items found
         """
         await self.initialize()
         
         if not self._initialized or not self._graphiti:
-            return ""
+            return "", 0
         
         try:
             # Search for relevant context
@@ -211,7 +213,9 @@ This was captured with {confidence*100:.0f}% confidence.
             )
             
             if not results:
-                return ""
+                return "", 0
+
+            memory_count = len(results)
             
             # Group by memory type and prioritize
             memories_by_type: Dict[str, List[str]] = {
@@ -230,7 +234,7 @@ This was captured with {confidence*100:.0f}% confidence.
                 
                 if any(w in content_lower for w in ["won't", "never", "refuse", "boundary"]):
                     memories_by_type["boundary"].append(content)
-                elif any(w in content_lower for w in ["can't", "must", "constraint", "limit"]):
+                elif any(w in content_lower for w in ["can't", "cannot", "must", "constraint", "limit"]):
                     memories_by_type["constraint"].append(content)
                 elif any(w in content_lower for w in ["want", "goal", "aim", "objective"]):
                     memories_by_type["goal"].append(content)
@@ -258,11 +262,11 @@ This was captured with {confidence*100:.0f}% confidence.
                 for item in memories_by_type["other"][:3]:
                     context_parts.append(f"- {item}")
             
-            return "\n".join(context_parts)
+            return "\n".join(context_parts), memory_count
             
         except Exception as e:
             logger.error(f"Error getting user context: {e}")
-            return ""
+            return "", 0
     
     async def mark_superseded(
         self,

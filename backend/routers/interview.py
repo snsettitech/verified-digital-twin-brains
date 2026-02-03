@@ -9,7 +9,7 @@ Manages interview sessions with:
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 import uuid
 import os
@@ -132,31 +132,34 @@ Use this context to personalize your questions and avoid re-asking things you al
     return base_prompt
 
 
-async def _get_user_context(user_id: str, task: str = "interview") -> str:
+async def _get_user_context(user_id: str, task: str = "interview") -> Tuple[str, int]:
     """
     Retrieve prioritized context bundle for the user from Zep/Graphiti.
     
     Priority order: boundaries > constraints > active goals > stable preferences > recent intent
+
+    Returns:
+        Tuple of (context_string, memory_count)
     """
     try:
         from modules.zep_memory import get_zep_client
         zep_client = get_zep_client()
         
         # This will query Graphiti for prioritized context facts
-        context = await zep_client.get_user_context(
+        context, count = await zep_client.get_user_context(
             user_id=user_id,
             task=task,
             max_tokens=2000
         )
         
         if context:
-            print(f"[Interview] Retrieved {len(context)} chars of context for user {user_id}")
+            print(f"[Interview] Retrieved {len(context)} chars of context ({count} memories) for user {user_id}")
         
-        return context
+        return context, count
         
     except Exception as e:
         print(f"Error fetching user context from Zep: {e}")
-        return ""
+        return "", 0
 
 
 async def _create_ephemeral_realtime_session(
@@ -270,7 +273,7 @@ async def create_interview_session(
             twin_id = twins_resp.data[0]["id"]
     
     # Get context from prior sessions
-    context_bundle = await _get_user_context(user_id, "interview")
+    context_bundle, memory_count = await _get_user_context(user_id, "interview")
     
     # Build system prompt
     system_prompt = _build_system_prompt(context_bundle)
@@ -286,7 +289,8 @@ async def create_interview_session(
             "started_at": datetime.utcnow().isoformat(),
             "status": "active",
             "metadata": {
-                "context_provided": bool(context_bundle)
+                "context_provided": bool(context_bundle),
+                "memory_count_at_start": memory_count
             }
         }).execute()
     except Exception as e:
@@ -300,7 +304,8 @@ async def create_interview_session(
         system_prompt=system_prompt,
         metadata={
             "twin_id": twin_id,
-            "has_prior_context": bool(context_bundle)
+            "has_prior_context": bool(context_bundle),
+            "memory_count": memory_count
         }
     )
 
@@ -386,7 +391,7 @@ async def create_realtime_session(
     # Get user context if no system prompt provided
     system_prompt = request.system_prompt
     if not system_prompt:
-        context_bundle = await _get_user_context(user_id, "interview")
+        context_bundle, _ = await _get_user_context(user_id, "interview")
         system_prompt = _build_system_prompt(context_bundle)
     
     # Create ephemeral session via OpenAI
@@ -431,10 +436,10 @@ async def get_user_context(
     if not user_id:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
-    context_bundle = await _get_user_context(user_id, task)
+    context_bundle, memory_count = await _get_user_context(user_id, task)
     
     return ContextBundleResponse(
         context_bundle=context_bundle,
-        memory_count=0,  # TODO: Return actual count from Zep
+        memory_count=memory_count,
         priority_order=["boundary", "constraint", "goal", "preference", "intent"]
     )
