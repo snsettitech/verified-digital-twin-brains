@@ -17,7 +17,8 @@ import json
 import os
 import fnmatch
 
-from modules.auth_guard import get_current_user, require_twin_access, require_tenant
+from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
+from modules._core.interview_controller import InterviewController, InterviewStage, INTENT_QUESTIONS
 from modules.governance import AuditLogger
 
 from modules.observability import supabase, get_messages, log_interaction, create_conversation
@@ -84,6 +85,9 @@ async def cognitive_interview(
 ):
     # Validate twin belongs to tenant and get user context
     twin = require_twin_access(twin_id, user)
+    # Load specialization and policy
+    spec = get_specialization(twin.get("specialization_id"))
+    host_policy = _load_host_policy(spec.name)
     tenant_id = user["tenant_id"]
 
 
