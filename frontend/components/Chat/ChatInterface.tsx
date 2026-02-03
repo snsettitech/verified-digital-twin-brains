@@ -339,7 +339,7 @@ export default function ChatInterface({
             className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-300 transition-all pr-28 font-medium placeholder:text-slate-400"
           />
           <button
-            onClick={sendMessage}
+            onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
             className="absolute right-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200/50 active:scale-95 flex items-center gap-2"
           >
