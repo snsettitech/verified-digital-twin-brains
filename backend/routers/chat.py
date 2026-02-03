@@ -15,6 +15,7 @@ from modules.agent import run_agent_stream
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import json
+import asyncio
 
 # Langfuse v3 tracing
 try:
@@ -118,7 +119,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             
             # Fetch graph stats for this twin
             from modules.graph_context import get_graph_stats
-            graph_stats = get_graph_stats(twin_id)
+            graph_stats = await asyncio.to_thread(get_graph_stats, twin_id)
             
             # DETECT REASONING INTENT (Simple Heuristic for now)
             # In production, use a classifier model
