@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
 import json
+import asyncio
 
 # Langfuse v3 tracing
 try:
@@ -150,13 +151,24 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             print(f"[Chat DEBUG] Full Query: {query}")
             
             if not is_reasoning_query:
-                async for chunk in run_agent_stream(
+                agent_iter = run_agent_stream(
                     twin_id=twin_id,
                     query=query,
                     history=langchain_history,
                     group_id=group_id,
                     conversation_id=conversation_id
-                ):
+                ).__aiter__()
+
+                while True:
+                    try:
+                        chunk = await asyncio.wait_for(agent_iter.__anext__(), timeout=10)
+                    except asyncio.TimeoutError:
+                        # Keep the SSE stream alive while the agent is still thinking.
+                        yield json.dumps({"type": "ping"}) + "\n"
+                        continue
+                    except StopAsyncIteration:
+                        break
+
                     # Capture metadata from tools
                     if "tools" in chunk:
                         data = chunk["tools"]

@@ -6,7 +6,7 @@ import MessageList, { Message } from './MessageList';
 import { useTwin } from '@/lib/context/TwinContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-const STREAM_IDLE_TIMEOUT_MS = 20000;
+const STREAM_IDLE_TIMEOUT_MS = 60000;
 
 export default function ChatInterface({
   twinId,
@@ -171,7 +171,6 @@ export default function ChatInterface({
       if (!token) throw new Error('Not authenticated');
 
       abortRef.current = new AbortController();
-      resetWatchdog();
 
       const response = await fetch(`${API_BASE_URL}/chat/${twinId}`, {
         method: 'POST',
@@ -194,11 +193,15 @@ export default function ChatInterface({
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
+      let hasReceivedBytes = false;
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
+          if (!hasReceivedBytes) {
+            hasReceivedBytes = true;
+          }
           resetWatchdog();
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
