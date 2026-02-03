@@ -48,10 +48,10 @@ const iconMap: Record<ToastType, React.ReactNode> = {
 };
 
 const bgMap: Record<ToastType, string> = {
-    success: 'bg-emerald-500/10 border-emerald-500/30',
-    error: 'bg-red-500/10 border-red-500/30',
-    warning: 'bg-amber-500/10 border-amber-500/30',
-    info: 'bg-indigo-500/10 border-indigo-500/30',
+    success: 'bg-emerald-950/90 border-emerald-500/50',
+    error: 'bg-red-950/90 border-red-500/50',
+    warning: 'bg-amber-950/90 border-amber-500/50',
+    info: 'bg-indigo-950/90 border-indigo-500/50',
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -75,10 +75,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             {children}
 
             {/* Toast Container */}
-            <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+            <div
+                className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+                role="region"
+                aria-label="Notifications"
+                aria-live="polite"
+            >
                 {toasts.map((toast) => (
                     <div
                         key={toast.id}
+                        role="status"
                         className={`
               flex items-center gap-3 px-4 py-3 
               rounded-xl border shadow-lg
@@ -91,8 +97,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                         <button
                             onClick={() => removeToast(toast.id)}
                             className="ml-2 p-1 rounded-lg hover:bg-black/5 transition-colors"
+                            aria-label="Close"
                         >
-                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
