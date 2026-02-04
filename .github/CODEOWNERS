@@ -1,53 +1,56 @@
-# CODEOWNERS
-# This file tells GitHub who should review PRs that change certain files
-# GitHub will request reviews from appropriate owners automatically
+# GitHub CODEOWNERS — Two-Agent Workflow Risk Reduction
+# 
+# This file ensures high-risk changes (auth, tenancy, contracts, routers)
+# require human review before merging, reducing regressions when two agents 
+# work in parallel (Codex + Antigravity).
+#
+# Edit @sainathsetti to match your GitHub username.
+# Refer to CONTRIBUTING.md for the full two-agent workflow playbook.
 
-# Backend API Routers
-backend/routers/*.py @backend-team
+# ============================================================================
+# CRITICAL: Multi-tenant security and authentication
+# ============================================================================
 
-# Backend Core Modules - Require Lead Architect Review
-backend/modules/_core/ @lead-architect
-backend/modules/auth_guard.py @lead-architect
-backend/modules/observability.py @lead-architect @devops-team
-backend/modules/clients.py @lead-architect
+# Auth patterns and JWT validation — always require review
+/backend/modules/auth_guard.py @sainathsetti
+/backend/modules/observability.py @sainathsetti
+/backend/modules/_core/ @sainathsetti
+/backend/routers/auth.py @sainathsetti
 
-# Backend Features
-backend/modules/retrieval.py @ai-team
-backend/modules/agent.py @ai-team
-backend/modules/embeddings.py @ai-team
-backend/modules/answering.py @ai-team
-backend/modules/memory.py @ai-team
-backend/modules/chat*.py @ai-team
+# Frontend auth context
+/frontend/lib/supabase/ @sainathsetti
+/frontend/middleware.ts @sainathsetti
 
-# Backend Database & Infrastructure
-backend/database/ @devops-team
-backend/migrations/ @devops-team @lead-architect
-backend/main.py @lead-architect
+# ============================================================================
+# API CONTRACTS: Routes, schemas, clients (prevent FE/BE drift)
+# ============================================================================
 
-# Backend Tests
-backend/tests/ @qa-team
-backend/test_*.py @qa-team
+# Backend routers — define API surface
+/backend/routers/ @sainathsetti
 
-# Frontend Components
-frontend/components/ @frontend-team
-frontend/app/ @frontend-team
-frontend/lib/ @frontend-team @lead-architect
+# Shared schemas and Pydantic models
+/backend/modules/schemas.py @sainathsetti
 
-# Frontend Auth & Security
-frontend/middleware.ts @lead-architect
-frontend/lib/supabase/ @lead-architect
+# Frontend API client
+/frontend/lib/api/ @sainathsetti
 
-# CI/CD & DevOps
-.github/workflows/ @devops-team @ci-team
-scripts/ @devops-team
-Dockerfile @devops-team
-render.yaml @devops-team
-railway.json @devops-team
+# Contract documentation (single source of truth)
+docs/CONTRACTS.md @sainathsetti
 
-# Configuration Files
-.env*.example @devops-team
-*.yaml @devops-team
-*.yml @devops-team
+# ============================================================================
+# DATABASE & MIGRATIONS
+# ============================================================================
+
+/backend/database/ @sainathsetti
+/backend/database/migrations/ @sainathsetti
+/backend/main.py @sainathsetti
+
+# ============================================================================
+# CI/CD & OPERATIONS
+# ============================================================================
+
+/.github/workflows/ @sainathsetti
+/scripts/ @sainathsetti
 requirements.txt @backend-team
 package.json @frontend-team
 
