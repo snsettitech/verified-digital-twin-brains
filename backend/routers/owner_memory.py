@@ -9,7 +9,8 @@ from modules.owner_memory_store import (
     get_clarification_thread,
     resolve_clarification_thread,
     create_owner_memory,
-    find_owner_memory_candidates
+    find_owner_memory_candidates,
+    retract_owner_memory
 )
 from modules.memory_events import create_memory_event
 
@@ -21,6 +22,39 @@ router = APIRouter(tags=["owner-memory"])
 async def list_owner_memory_endpoint(twin_id: str, status: Optional[str] = Query("active"), user=Depends(verify_owner)):
     verify_twin_ownership(twin_id, user)
     return list_owner_memories(twin_id, status=status or "active", limit=200)
+
+
+@router.delete("/twins/{twin_id}/owner-memory/{memory_id}")
+async def delete_owner_memory_endpoint(
+    twin_id: str,
+    memory_id: str,
+    user=Depends(verify_owner)
+):
+    """Retract (soft-delete) an owner memory. Idempotent."""
+    verify_twin_ownership(twin_id, user)
+    
+    success = retract_owner_memory(memory_id, reason="owner_request")
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to retract memory")
+    
+    # Audit trail
+    try:
+        await create_memory_event(
+            twin_id=twin_id,
+            tenant_id=user.get("tenant_id"),
+            event_type="owner_memory_retract",
+            payload={
+                "owner_memory_id": memory_id,
+                "retracted_by": user.get("user_id")
+            },
+            status="applied",
+            source_type="manual",
+            source_id=None
+        )
+    except Exception as e:
+        print(f"[OwnerMemory] audit log failed: {e}")
+    
+    return {"status": "retracted", "memory_id": memory_id}
 
 
 @router.get("/twins/{twin_id}/clarifications")
