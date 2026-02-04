@@ -15,12 +15,13 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 
-from modules.auth_guard import get_current_user, require_twin_access, require_tenant
+from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
 from modules.governance import AuditLogger
 
 from modules.observability import supabase, get_messages, log_interaction, create_conversation
 from modules.agent import run_agent_stream
 from modules._core.host_engine import get_next_slot, get_next_question, process_turn, generate_contextual_question
+from modules._core.interview_controller import InterviewController, InterviewStage, INTENT_QUESTIONS
 from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions, extract_for_slot
 from modules._core.response_evaluator import ResponseEvaluator
 from modules._core.repair_strategies import RepairManager
@@ -99,6 +100,15 @@ async def cognitive_interview(
     # Get or create interview session
     session = InterviewController.get_or_create_session(twin_id, conversation_id)
     session_id = session.get("id")
+
+    # Load specialization and host policy
+    # Assuming twin has 'specialization_name' or similar, defaulting to 'vanilla'
+    # In a real implementation we would fetch this from the twin metadata
+    spec_name = twin.get("specialization", "vanilla")
+    from modules.specializations import get_specialization
+    spec = get_specialization(spec_name)
+    host_policy = _load_host_policy(spec_name)
+
     stage = InterviewController.get_stage(session)
     stage_label = stage.value.upper()
     

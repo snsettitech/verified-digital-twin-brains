@@ -36,3 +36,5 @@ neo4j>=5.26.0
 python-docx
 openpyxl
 flashrank
+pydub
+imageio-ffmpeg
