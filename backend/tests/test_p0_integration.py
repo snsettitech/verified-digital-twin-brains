@@ -323,19 +323,23 @@ async def test_graph_extraction_job_processing(mock_supabase, mock_openai):
     
     mock_openai.beta.chat.completions.parse = AsyncMock(return_value=mock_response)
     
-    # Mock job updates
-    mock_supabase.table.return_value.update.return_value.eq.return_value.execute.return_value.data = [{"id": "job-1"}]
+    # Mock RPC calls for graph saving
+    mock_supabase.rpc.return_value.execute.return_value.data = [{"id": "node-1", "name": "Node1"}]
     
-    # Process job
-    result = await process_graph_extraction_job("job-1")
+    # Mock Insert (for memory events)
+    mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{"id": "evt-1"}]
     
-    # Should complete successfully
-    assert result is True
+    # Patch job operations to avoid validation errors
+    with patch('modules._core.scribe_engine.start_job') as mock_start,          patch('modules._core.scribe_engine.complete_job') as mock_complete:
 
+        # Process job
+        result = await process_graph_extraction_job("job-1")
 
-# ============================================================================
-# Security Tests
-# ============================================================================
+        # Should complete successfully
+        assert result is True
+        mock_start.assert_called_once()
+        mock_complete.assert_called_once()
+
 
 def test_security_definer_functions_hardened():
     """Test that SECURITY DEFINER functions have proper hardening."""
@@ -377,26 +381,21 @@ async def test_chat_flow_with_graph_extraction(mock_supabase, mock_openai, mock_
         "twin_id": "twin-1"
     }]
     
-    # Mock job creation
-    mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{
-        "id": "job-1",
-        "twin_id": "twin-1",
-        "job_type": "graph_extraction",
-        "status": "queued"
-    }]
-    
     # Mock idempotency check
     mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
     
-    # Enqueue graph extraction
-    job_id = enqueue_graph_extraction_job(
-        twin_id="twin-1",
-        user_message="Tell me about AI",
-        assistant_message="AI stands for Artificial Intelligence.",
-        conversation_id="conv-1",
-        tenant_id="tenant-1"
-    )
-    
-    assert job_id is not None
-    assert job_id == "job-1"
+    # Patch create_job to avoid validation errors
+    with patch('modules._core.scribe_engine.create_job') as mock_create:
+        mock_create.return_value.id = "job-1"
 
+        # Enqueue graph extraction
+        job_id = enqueue_graph_extraction_job(
+            twin_id="twin-1",
+            user_message="Tell me about AI",
+            assistant_message="AI stands for Artificial Intelligence.",
+            conversation_id="conv-1",
+            tenant_id="tenant-1"
+        )
+
+        assert job_id is not None
+        assert job_id == "job-1"
