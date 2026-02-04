@@ -74,8 +74,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <ToastContext.Provider value={{ showToast }}>
             {children}
 
-            {/* Toast Container */}
-            <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+            {/* Toast Container - aria-live region for screen readers */}
+            <div
+                className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
+                role="status"
+                aria-live="polite"
+                aria-atomic="false"
+            >
                 {toasts.map((toast) => (
                     <div
                         key={toast.id}
@@ -85,14 +90,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               animate-slideIn backdrop-blur-sm
               ${bgMap[toast.type]}
             `}
+                        role={toast.type === 'error' ? 'alert' : undefined}
                     >
-                        {iconMap[toast.type]}
+                        <span aria-hidden="true">{iconMap[toast.type]}</span>
                         <span className="text-sm font-medium text-white">{toast.message}</span>
                         <button
                             onClick={() => removeToast(toast.id)}
                             className="ml-2 p-1 rounded-lg hover:bg-black/5 transition-colors"
+                            aria-label="Dismiss notification"
                         >
-                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>

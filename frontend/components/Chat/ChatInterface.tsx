@@ -500,22 +500,44 @@ export default function ChatInterface({
             )}
           </div>
         )}
-        <div id="chat-input" className="relative flex items-center max-w-4xl mx-auto w-full pb-[env(safe-area-inset-bottom)]">
-          <input
-            type="text"
+        <div id="chat-input" className="relative flex items-start max-w-4xl mx-auto w-full pb-[env(safe-area-inset-bottom)]">
+          <textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Ask anything about your knowledge base..."
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-300 transition-all pr-28 font-medium placeholder:text-slate-400"
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-resize logic
+              e.target.style.height = 'auto';
+              e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
+            }}
+            onKeyDown={(e) => {
+              // Ctrl+Enter or Cmd+Enter to send
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                sendMessage();
+              }
+              // Enter without Shift sends (single line mode)
+              if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+              // Escape to blur/clear focus
+              if (e.key === 'Escape') {
+                e.currentTarget.blur();
+              }
+            }}
+            placeholder="Ask anything about your knowledge base... (Enter to send, Shift+Enter for new line)"
+            rows={1}
+            aria-label="Chat message input"
+            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-300 transition-all pr-28 font-medium placeholder:text-slate-400 resize-none overflow-hidden min-h-[52px] max-h-[150px]"
           />
           <button
             onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
-            className="absolute right-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200/50 active:scale-95 flex items-center gap-2"
+            aria-label="Send message"
+            className="absolute right-2 top-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200/50 active:scale-95 flex items-center gap-2"
           >
             <span>Send</span>
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
           </button>
         </div>
         <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium">
