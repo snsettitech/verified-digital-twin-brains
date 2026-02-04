@@ -66,6 +66,8 @@ async def test_verify_tenant_access_waits_for_audit():
     """
     request = MagicMock(spec=Request)
     request.url.path = "/test/path"
+    request.path_params = {"twin_id": "twin_123"}
+    request.query_params = {}
     user = {
         "user_id": "svc_key",
         "tenant_id": "default",
@@ -78,3 +80,6 @@ async def test_verify_tenant_access_waits_for_audit():
             await verify_tenant_access(request, user)
 
         mock_emit.assert_awaited_once()
+        emitted_details = mock_emit.await_args.args[3]
+        assert emitted_details["endpoint"] == "/test/path"
+        assert emitted_details["twin_id"] == "twin_123"

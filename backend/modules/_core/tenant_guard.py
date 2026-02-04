@@ -34,6 +34,17 @@ def _insert_audit_log(log_entry: dict):
     except Exception as e:
         logger.error(f"DB Insert Failed: {e}")
 
+def _resolve_twin_id_from_request(request: Request, user: dict) -> Optional[str]:
+    """Best-effort twin_id extraction for audit logging."""
+    path_params = getattr(request, "path_params", {}) or {}
+    twin_id = path_params.get("twin_id")
+    if not twin_id:
+        query_params = getattr(request, "query_params", {}) or {}
+        twin_id = query_params.get("twin_id")
+    if not twin_id:
+        twin_id = user.get("twin_id")
+    return twin_id
+
 async def emit_audit_event(event_type: str, user_id: str, tenant_id: str, details: dict) -> None:
     """Emit an audit event for compliance and security monitoring."""
     try:
@@ -75,11 +86,15 @@ async def verify_tenant_access(
     """
     # 1. Reject service-key bypass if marked in user context
     if user.get("is_service_key"):
+        twin_id = _resolve_twin_id_from_request(request, user)
+        details = {"endpoint": request.url.path}
+        if twin_id:
+            details["twin_id"] = twin_id
         await emit_audit_event(
             "SERVICE_KEY_BYPASS_BLOCKED",
             user.get("user_id", "unknown"),
             user.get("tenant_id", "unknown"),
-            {"endpoint": request.url.path},
+            details,
         )
         raise HTTPException(403, "Service-key bypass is not allowed")
 
