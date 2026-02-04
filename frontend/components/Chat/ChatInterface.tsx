@@ -500,7 +500,7 @@ export default function ChatInterface({
             )}
           </div>
         )}
-        <div className="relative flex items-center max-w-4xl mx-auto w-full">
+        <div id="chat-input" className="relative flex items-center max-w-4xl mx-auto w-full pb-[env(safe-area-inset-bottom)]">
           <input
             type="text"
             value={input}

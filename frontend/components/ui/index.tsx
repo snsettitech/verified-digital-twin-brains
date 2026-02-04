@@ -10,3 +10,4 @@ export { StatCard, StatCardCompact } from './StatCard';
 export { PremiumModal, ConfirmModal } from './PremiumModal';
 export { ErrorBoundary, withErrorBoundary } from './ErrorBoundary';
 export { PageTransition, PageLoadingOverlay, PageSkeleton } from './PageTransition';
+export { SkipNavigation, SkipNavLink, VisuallyHidden } from './SkipNavigation';
