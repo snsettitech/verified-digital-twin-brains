@@ -14,6 +14,15 @@ from modules.training_jobs import process_training_job
 # Graceful shutdown
 shutdown_event = asyncio.Event()
 
+# Ensure logs are flushed immediately
+if sys.platform != 'win32':
+    # Windows doesn't support line_buffering param in reconfigure easily in all versions, 
+    # but strictly this is for Render (Linux)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
 def handle_shutdown(sig, frame):
     print("\n[Worker] Shutdown signal received. Finishing current job and stopping...")
     shutdown_event.set()

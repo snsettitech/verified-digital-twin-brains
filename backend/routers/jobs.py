@@ -214,3 +214,46 @@ async def create_new_job(
     )
     
     return job_to_response(job)
+
+
+@router.post("/{job_id}/retry", response_model=JobResponse)
+async def retry_job_endpoint(
+    job_id: str,
+    user=Depends(get_current_user)
+):
+    """
+    Retry a failed or stuck job.
+    Resets status to 'queued' and re-enqueues it in Redis.
+    """
+    user_twin_ids = get_user_twin_ids(user)
+    
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Check authorization
+    if job.twin_id and job.twin_id not in user_twin_ids:
+        raise HTTPException(status_code=403, detail="Not authorized to retry this job")
+
+    # Re-enqueue
+    from modules.job_queue import enqueue_job
+    from modules.observability import supabase
+    
+    # Reset status in DB
+    updated_job = supabase.table("jobs").update({
+        "status": JobStatus.QUEUED.value,
+        "error_message": None,
+        "started_at": None,
+        "completed_at": None
+    }).eq("id", job_id).execute()
+    
+    if not updated_job.data:
+         raise HTTPException(status_code=500, detail="Failed to update job status")
+
+    # Add back to Redis queue
+    enqueue_job(job.id, job.job_type.value, job.priority, job.metadata)
+    
+    # Add log
+    append_log(job_id, "Job manually retried via API", LogLevel.INFO)
+    
+    return job_to_response(Job(**updated_job.data[0]))
