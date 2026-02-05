@@ -25,6 +25,7 @@ class JobType(str, Enum):
     REINDEX = "reindex"
     HEALTH_CHECK = "health_check"
     GRAPH_EXTRACTION = "graph_extraction"
+    CONTENT_EXTRACTION = "content_extraction"
     OTHER = "other"
 
 

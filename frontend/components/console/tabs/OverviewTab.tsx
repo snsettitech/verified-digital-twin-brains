@@ -7,8 +7,8 @@ interface OverviewTabProps {
     twinId: string;
     stats?: {
         totalSources: number;
-        approvedSources: number;
-        pendingReview: number;
+        indexedSources: number;
+        processingSources: number;
         totalConversations: number;
         totalMessages: number;
         avgResponseTime: string;
@@ -20,8 +20,8 @@ interface OverviewTabProps {
 export function OverviewTab({ twinId, stats }: OverviewTabProps) {
     const defaultStats = {
         totalSources: stats?.totalSources ?? 0,
-        approvedSources: stats?.approvedSources ?? 0,
-        pendingReview: stats?.pendingReview ?? 0,
+        indexedSources: stats?.indexedSources ?? 0,
+        processingSources: stats?.processingSources ?? 0,
         totalConversations: stats?.totalConversations ?? 0,
         totalMessages: stats?.totalMessages ?? 0,
         avgResponseTime: stats?.avgResponseTime ?? '--',
@@ -33,7 +33,7 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
         {
             label: 'Knowledge Sources',
             value: defaultStats.totalSources,
-            subtext: `${defaultStats.approvedSources} verified`,
+            subtext: `${defaultStats.indexedSources} indexed`,
             icon: '📚',
             color: 'from-blue-500 to-indigo-500'
         },
@@ -156,7 +156,7 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                                     stroke="url(#gradient)"
                                     strokeWidth="8"
                                     fill="none"
-                                    strokeDasharray={`${(defaultStats.approvedSources / Math.max(defaultStats.totalSources, 1)) * 251} 251`}
+                                    strokeDasharray={`${(defaultStats.indexedSources / Math.max(defaultStats.totalSources, 1)) * 251} 251`}
                                     strokeLinecap="round"
                                 />
                                 <defs>
@@ -169,7 +169,7 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <span className="text-lg font-bold text-white">
                                     {defaultStats.totalSources > 0
-                                        ? Math.round((defaultStats.approvedSources / defaultStats.totalSources) * 100)
+                                        ? Math.round((defaultStats.indexedSources / defaultStats.totalSources) * 100)
                                         : 0}%
                                 </span>
                             </div>
@@ -178,15 +178,15 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
                                 <span className="w-3 h-3 rounded-full bg-emerald-500" />
-                                <span className="text-sm text-slate-300">{defaultStats.approvedSources} Verified</span>
+                                <span className="text-sm text-slate-300">{defaultStats.indexedSources} Indexed</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="w-3 h-3 rounded-full bg-amber-500" />
-                                <span className="text-sm text-slate-300">{defaultStats.pendingReview} Pending</span>
+                                <span className="text-sm text-slate-300">{defaultStats.processingSources} Processing</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="w-3 h-3 rounded-full bg-slate-500" />
-                                <span className="text-sm text-slate-300">{defaultStats.totalSources - defaultStats.approvedSources - defaultStats.pendingReview} Processing</span>
+                                <span className="text-sm text-slate-300">{defaultStats.totalSources - defaultStats.indexedSources - defaultStats.processingSources} Other</span>
                             </div>
                         </div>
                     </div>

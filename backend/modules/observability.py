@@ -199,8 +199,8 @@ def retry_failed_ingestion(source_id: str, twin_id: str):
     
     # Reset source status
     supabase.table("sources").update({
-        "status": "staged",
-        "staging_status": "staged",
+        "status": "processing",
+        "staging_status": "processing",
         "health_status": "healthy"
     }).eq("id", source_id).execute()
     

@@ -8,7 +8,7 @@ interface Source {
     id: string;
     name: string;
     type: 'document' | 'url' | 'interview';
-    status: 'approved' | 'pending' | 'processing';
+    status: 'indexed' | 'pending' | 'processing';
     createdAt: string;
     chunks?: number;
 }
@@ -56,11 +56,11 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
             }
             const data = await res.json();
             const mapped = (Array.isArray(data) ? data : []).map((source: any) => {
-                const rawStatus = source.staging_status || source.status || 'pending';
+            const rawStatus = source.status || 'pending';
                 let status: Source['status'] = 'pending';
-                if (['live', 'approved', 'processed'].includes(rawStatus)) {
-                    status = 'approved';
-                } else if (['processing', 'training'].includes(rawStatus)) {
+                if (['live', 'processed', 'indexed'].includes(rawStatus)) {
+                    status = 'indexed';
+                } else if (['processing'].includes(rawStatus)) {
                     status = 'processing';
                 }
                 const filename = source.filename || source.file_url || 'Untitled source';
@@ -86,7 +86,7 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
 
     useEffect(() => {
         fetchSources();
-        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data } = supabase.auth.onAuthStateChange((_event: string, session: { access_token?: string } | null) => {
             if (session?.access_token) {
                 retryRef.current = 0;
                 fetchSources();
@@ -98,7 +98,7 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
     }, [fetchSources, supabase]);
 
     const statusColors = {
-        approved: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+        indexed: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
         pending: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
         processing: 'bg-blue-500/20 text-blue-400 border-blue-500/30'
     };
@@ -125,8 +125,8 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
                     <button
                         onClick={() => setActiveView('list')}
                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeView === 'list'
-                                ? 'bg-white/10 text-white'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-white/10 text-white'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <span className="flex items-center gap-2">
@@ -139,8 +139,8 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
                     <button
                         onClick={() => setActiveView('graph')}
                         className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeView === 'graph'
-                                ? 'bg-white/10 text-white'
-                                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                            ? 'bg-white/10 text-white'
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
                             }`}
                     >
                         <span className="flex items-center gap-2">

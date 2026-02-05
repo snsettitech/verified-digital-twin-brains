@@ -164,7 +164,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 setProgress(100);
                 setStatusText('Content saved (extraction pending)');
                 setStage('complete');
-                onComplete?.({ source_id: result.source_id, status: 'staged' });
+                onComplete?.({ source_id: result.source_id, status: 'live' });
             }
 
             // Reset input after success
@@ -211,9 +211,9 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
             const result = await response.json();
             setProgress(100);
-            setStatusText('File uploaded successfully!');
+            setStatusText('File uploaded and indexed!');
             setStage('complete');
-            onComplete?.({ source_id: result.source_id, status: 'staged' });
+            onComplete?.({ source_id: result.source_id, status: 'live' });
 
             setTimeout(() => {
                 resetState();
@@ -262,9 +262,9 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
             const result = await response.json();
             setProgress(100);
-            setStatusText('File uploaded successfully!');
+            setStatusText('File uploaded and indexed!');
             setStage('complete');
-            onComplete?.({ source_id: result.source_id, status: 'staged' });
+            onComplete?.({ source_id: result.source_id, status: 'live' });
 
             setTimeout(() => {
                 setStage('idle');

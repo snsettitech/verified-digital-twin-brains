@@ -10,7 +10,6 @@ interface Source {
   filename: string;
   file_size: number;
   status: string;
-  staging_status: string;
   health_status: string;
   created_at: string;
   extracted_text_length?: number;
@@ -53,7 +52,7 @@ export default function SourceDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const { activeTwin, isLoading: twinLoading } = useTwin();
-  const { get, post } = useAuthFetch();
+  const { get } = useAuthFetch();
 
   const sourceId = params.source_id as string;
   const twinId = activeTwin?.id;
@@ -115,30 +114,6 @@ export default function SourceDetailsPage() {
     }
   }, [twinId, twinLoading, fetchData]);
 
-  const handleApprove = async () => {
-    try {
-      const response = await post(`/sources/${sourceId}/approve`, {});
-      if (response.ok) {
-        fetchData();
-      }
-    } catch (error) {
-      console.error('Error approving:', error);
-    }
-  };
-
-  const handleReject = async () => {
-    const reason = prompt('Rejection reason:');
-    if (!reason) return;
-
-    try {
-      const response = await post(`/sources/${sourceId}/reject`, { reason });
-      if (response.ok) {
-        fetchData();
-      }
-    } catch (error) {
-      console.error('Error rejecting:', error);
-    }
-  };
 
   if (twinLoading || loading) {
     return (
@@ -182,22 +157,6 @@ export default function SourceDetailsPage() {
           </button>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">{source.filename}</h1>
         </div>
-        {source.staging_status === 'staged' && (
-          <div className="flex gap-3">
-            <button
-              onClick={handleApprove}
-              className="px-6 py-3 bg-green-600 text-white rounded-2xl text-sm font-black hover:bg-green-700 transition-all"
-            >
-              Approve
-            </button>
-            <button
-              onClick={handleReject}
-              className="px-6 py-3 bg-red-600 text-white rounded-2xl text-sm font-black hover:bg-red-700 transition-all"
-            >
-              Reject
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Tabs */}
@@ -222,7 +181,7 @@ export default function SourceDetailsPage() {
           <div className="grid grid-cols-2 gap-6">
             <div>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Status</h3>
-              <p className="text-lg font-black text-slate-800">{source.staging_status || source.status}</p>
+              <p className="text-lg font-black text-slate-800">{source.status}</p>
             </div>
             <div>
               <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Health</h3>

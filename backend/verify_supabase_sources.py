@@ -38,7 +38,6 @@ if response.status_code == 200:
         print(f"id:             {our_source.get('id')}")
         print(f"twin_id:        {our_source.get('twin_id')}")
         print(f"status:         {our_source.get('status')}")
-        print(f"staging_status: {our_source.get('staging_status')}")
         print(f"filename:       {our_source.get('filename')}")
         print(f"chunk_count:    {our_source.get('chunk_count')}")
         print(f"created_at:     {our_source.get('created_at')}")

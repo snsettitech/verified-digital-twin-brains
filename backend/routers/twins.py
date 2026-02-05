@@ -827,9 +827,15 @@ async def export_twin(twin_id: str, user=Depends(verify_owner)):
         sources = []
         try:
             sources_res = supabase.table("sources").select(
-                "id, filename, file_url, content_text, status, created_at, file_size, staging_status, health_status, chunk_count, extracted_text_length, author, citation_url, publish_date, keep_synced, sync_config"
+                "id, filename, file_url, content_text, status, created_at, file_size, health_status, chunk_count, extracted_text_length, author, citation_url, publish_date, keep_synced, sync_config"
             ).eq("twin_id", twin_id).execute()
             sources = sources_res.data or []
+            for source in sources:
+                status = source.get("status")
+                if status == "approved":
+                    source["status"] = "live"
+                elif status in ("staged", "training"):
+                    source["status"] = "processing"
         except Exception as e:
             print(f"[TWINS] Warning: Failed to fetch sources: {e}")
         

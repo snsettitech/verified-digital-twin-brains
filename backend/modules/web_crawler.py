@@ -230,7 +230,7 @@ async def crawl_website(
             "content_hash": content_hash,
             "file_size": len(combined_content),
             "status": "indexed",
-            "staging_status": "approved",
+            "staging_status": "live",
             "extracted_text_length": len(combined_content)
         }).eq("id", source_id).execute()
         

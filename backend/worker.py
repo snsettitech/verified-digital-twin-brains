@@ -38,6 +38,9 @@ async def process_queue():
                 if job_type == "graph_extraction":
                     from modules._core.scribe_engine import process_graph_extraction_job
                     success = await process_graph_extraction_job(job_id)
+                elif job_type == "content_extraction":
+                    from modules._core.scribe_engine import process_content_extraction_job
+                    success = await process_content_extraction_job(job_id)
                 else:
                     # Default to training job processor (ingestion, reindex, health_check)
                     success = await process_training_job(job_id)
@@ -83,6 +86,9 @@ async def process_single_job(job_id: str):
         if job_type == "graph_extraction":
             from modules._core.scribe_engine import process_graph_extraction_job
             success = await process_graph_extraction_job(job_id)
+        elif job_type == "content_extraction":
+            from modules._core.scribe_engine import process_content_extraction_job
+            success = await process_content_extraction_job(job_id)
         else:
             # Default to training job processor
             success = await process_training_job(job_id)

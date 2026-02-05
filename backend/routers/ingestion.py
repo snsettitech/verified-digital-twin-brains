@@ -61,7 +61,6 @@ async def ingest_x(twin_id: str, request: XThreadIngestRequest, user=Depends(ver
 async def ingest_file_endpoint(
     twin_id: str,
     file: UploadFile = File(...),
-    auto_index: bool = True,
     user=Depends(verify_owner)
 ):
     """
@@ -70,14 +69,13 @@ async def ingest_file_endpoint(
     Args:
         twin_id: Owner twin ID
         file: The file to upload
-        auto_index: If True (default), bypasses staging and indexes directly to Pinecone
+        Note: uploads are auto-indexed.
     """
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_file(twin_id, file, auto_index=auto_index)
-        status = "live" if auto_index else "staged"
-        return {"source_id": source_id, "status": status}
+        source_id = await ingest_file(twin_id, file)
+        return {"source_id": source_id, "status": "live"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -87,7 +85,7 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, user=Depe
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_url(twin_id, request.url, auto_index=True)
+        source_id = await ingest_url(twin_id, request.url)
         # All URL types now auto-index directly, so status will be live
         return {"source_id": source_id, "status": "live"}
     except Exception as e:
@@ -101,7 +99,6 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, user=Depe
 async def ingest_document_compat(
     file: UploadFile = File(...),
     twin_id: str = Form(...),
-    auto_index: bool = True,
     user=Depends(verify_owner)
 ):
     """
@@ -111,9 +108,8 @@ async def ingest_document_compat(
     print("[DEPRECATED] /ingest/document called. Use /ingest/file/{twin_id}.")
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_file(twin_id, file, auto_index=auto_index)
-        status = "live" if auto_index else "staged"
-        return {"source_id": source_id, "status": status}
+        source_id = await ingest_file(twin_id, file)
+        return {"source_id": source_id, "status": "live"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -127,7 +123,7 @@ async def ingest_url_compat(request: URLIngestWithTwinRequest, user=Depends(veri
     print("[DEPRECATED] /ingest/url called without twin_id in path. Use /ingest/url/{twin_id}.")
     verify_twin_ownership(request.twin_id, user)
     try:
-        source_id = await ingest_url(request.twin_id, request.url, auto_index=True)
+        source_id = await ingest_url(request.twin_id, request.url)
         return {"source_id": source_id, "status": "live"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -286,7 +282,7 @@ async def extract_nodes_from_source(
     """
     Extract graph nodes/edges from an ingested source's content.
     
-    Takes the content_text from a staged/approved source and runs it through
+    Takes the content_text from an ingested source and runs it through
     the Scribe Engine to create graph_nodes and graph_edges.
     
     This bridges content ingestion with the cognitive graph.

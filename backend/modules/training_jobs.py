@@ -232,7 +232,7 @@ async def process_training_job(job_id: str) -> bool:
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
 
         elif job_type == "health_check":
-            # Run health checks (already done during staging, but can be re-run)
+            # Run health checks (already done during ingestion, but can be re-run)
             from modules.health_checks import run_all_health_checks
             health_result = run_all_health_checks(
                 source_id,

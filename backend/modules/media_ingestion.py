@@ -94,7 +94,7 @@ class MediaIngester:
                     "content_hash": str(hash(processed_content)),
                     "file_size": content_len,
                     "status": "indexed",
-                    "staging_status": "approved",
+                    "staging_status": "live",
                     "extracted_text_length": content_len
                 }).eq("id", source_id).execute()
                 

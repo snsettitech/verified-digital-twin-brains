@@ -145,7 +145,7 @@ async def test_ingestion_retrieval_flow(mock_supabase, mock_openai, mock_pinecon
     mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{
         "id": "source-1",
         "twin_id": "twin-1",
-        "status": "staged"
+        "status": "processing"
     }]
     
     # Mock OpenAI embedding

@@ -143,7 +143,7 @@ async def scrape_single_page_endpoint(
             "content_text": content,
             "content_hash": calculate_content_hash(content),
             "status": "indexed",
-            "staging_status": "approved",
+            "staging_status": "live",
             "extracted_text_length": len(content)
         }).execute()
         

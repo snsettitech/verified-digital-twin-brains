@@ -141,7 +141,7 @@ class RSSFetcher:
                 "content_hash": content_hash,
                 "file_size": len(combined_content),
                 "status": "indexed",
-                "staging_status": "approved",
+                "staging_status": "live",
                 "extracted_text_length": len(combined_content)
             }).eq("id", source_id).execute()
             
@@ -365,7 +365,7 @@ class LinkedInScraper:
                 "content_text": combined_content,
                 "content_hash": calculate_content_hash(combined_content),
                 "status": "indexed",
-                "staging_status": "approved",
+                "staging_status": "live",
                 "extracted_text_length": len(combined_content)
             }).execute()
             
@@ -504,7 +504,7 @@ class TwitterScraper:
                 "content_text": combined_content,
                 "content_hash": calculate_content_hash(combined_content),
                 "status": "indexed",
-                "staging_status": "approved",
+                "staging_status": "live",
                 "extracted_text_length": len(combined_content)
             }).execute()
             

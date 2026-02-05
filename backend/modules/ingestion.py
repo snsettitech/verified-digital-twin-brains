@@ -20,7 +20,6 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from modules.clients import get_openai_client, get_pinecone_index
 from modules.observability import supabase, log_ingestion_event
 from modules.health_checks import run_all_health_checks, calculate_content_hash
-from modules.training_jobs import create_training_job
 from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
 
@@ -562,7 +561,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         )
 
     try:
-        # Phase 6: Direct indexing - extract, index, and approve immediately
+        # Direct indexing - extract and index immediately
         content_hash = calculate_content_hash(text)
 
         # Record source in Supabase with indexed status
@@ -574,13 +573,13 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             "content_text": text,
             "content_hash": content_hash,
             "status": "processed",
-            "staging_status": "approved",
+            "staging_status": "processing",
             "extracted_text_length": len(text)
         }).execute()
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube transcript extracted: {len(text)} characters")
 
-        # Phase 7: Direct indexing (skip staging approval)
+        # Direct indexing
         num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
             "filename": f"YouTube: {video_id}",
             "type": "youtube",
@@ -613,10 +612,26 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks, status=live")
 
+        # Enqueue async content extraction to build graph nodes/edges
+        try:
+            from modules._core.scribe_engine import enqueue_content_extraction_job
+            max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+            enqueue_content_extraction_job(
+                twin_id=twin_id,
+                source_id=source_id,
+                tenant_id=tenant_id,
+                source_type="youtube",
+                max_chunks=max_chunks
+            )
+            log_ingestion_event(source_id, twin_id, "info", f"Graph extraction queued (max_chunks={max_chunks})")
+        except Exception as e:
+            log_ingestion_event(source_id, twin_id, "warning", f"Graph extraction enqueue failed: {e}")
+            print(f"[Ingestion] Warning: Failed to enqueue graph extraction for source {source_id}: {e}")
+
         return num_chunks
     except Exception as e:
-        print(f"Error staging YouTube content: {e}")
-        log_ingestion_event(source_id, twin_id, "error", f"Error staging YouTube content: {e}")
+        print(f"Error processing YouTube content: {e}")
+        log_ingestion_event(source_id, twin_id, "error", f"Error processing YouTube content: {e}")
         supabase.table("sources").update({"status": "error", "health_status": "failed"}).eq("id", source_id).execute()
         raise e
 
@@ -652,7 +667,7 @@ async def ingest_podcast_rss(source_id: str, twin_id: str, url: str):
             with open(file_path, "wb") as f:
                 f.write(response.content)
 
-        # Transcribe and stage (ingest_source now stages instead of indexing)
+        # Transcribe and index (auto-indexed)
         num_chunks = await ingest_source(source_id, twin_id, file_path, f"Podcast: {latest_episode.title}")
         return num_chunks
     except Exception as e:
@@ -789,7 +804,7 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
             "content_text": text,
             "content_hash": content_hash,
             "status": "processed",
-            "staging_status": "approved",
+            "staging_status": "processing",
             "extracted_text_length": len(text)
         }).execute()
 
@@ -830,10 +845,26 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
 
         log_ingestion_event(source_id, twin_id, "info", f"X Thread content indexed: {num_chunks} chunks, status=live")
 
+        # Enqueue async content extraction to build graph nodes/edges
+        try:
+            from modules._core.scribe_engine import enqueue_content_extraction_job
+            max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+            enqueue_content_extraction_job(
+                twin_id=twin_id,
+                source_id=source_id,
+                tenant_id=tenant_id,
+                source_type="twitter",
+                max_chunks=max_chunks
+            )
+            log_ingestion_event(source_id, twin_id, "info", f"Graph extraction queued (max_chunks={max_chunks})")
+        except Exception as e:
+            log_ingestion_event(source_id, twin_id, "warning", f"Graph extraction enqueue failed: {e}")
+            print(f"[Ingestion] Warning: Failed to enqueue graph extraction for source {source_id}: {e}")
+
         return num_chunks
     except Exception as e:
-        print(f"Error staging X thread: {e}")
-        log_ingestion_event(source_id, twin_id, "error", f"Error staging X thread: {e}")
+        print(f"Error processing X thread: {e}")
+        log_ingestion_event(source_id, twin_id, "error", f"Error processing X thread: {e}")
         supabase.table("sources").update({"status": "error", "health_status": "failed"}).eq("id", source_id).execute()
         raise e
 
@@ -920,8 +951,8 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
         metadata = {
             "source_id": source_id,
             "twin_id": twin_id,
-            "chunk_id": chunk_id, # Link back to DB chunk row
-            "text": chunk, # Keep original text for grounding
+            "chunk_id": chunk_id,  # Link back to DB chunk row
+            "text": chunk,  # Keep original text for grounding
             "synthetic_questions": synth_questions,
             "category": analysis.get("category", "FACT"),
             "tone": analysis.get("tone", "Neutral"),
@@ -959,7 +990,7 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
             print(f"[Supabase] Persisted {len(db_chunks)} chunks for source_id={source_id}")
         except Exception as e:
             print(f"[Supabase] ERROR persisting chunks: {e}")
-            raise # Fail loudly to prevent status=live
+            raise  # Fail loudly to prevent status=live
 
     # CRITICAL: Actually upsert vectors to Pinecone (namespace = twin_id for isolation)
     if vectors:
@@ -980,36 +1011,36 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
         log_ingestion_event(source_id, twin_id, "warning", f"Failed to grant default group permission: {e}")
         print(f"[Ingestion] Warning: Failed to grant default group permission for source {source_id}: {e}")
 
-    # Phase 8: Emit event for Action Engine
-    from modules.actions_engine import EventEmitter
-    EventEmitter.emit(
-        twin_id=twin_id,
-        event_type="source_ingested",
-        payload={
-            "source_id": source_id,
-            "filename": metadata_override.get("filename") if metadata_override else "Document",
-            "type": metadata_override.get("type", "file") if metadata_override else "file",
-            "chunks_indexed": len(vectors),
-            "content_preview": text[:1000] # For trigger matching (keywords)
-        },
-        source_context={
-            "source": "ingestion_engine",
-            "method": "process_and_index_text"
-        }
-    )
-
     return len(vectors)
 
 
-async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: str = None, auto_index: bool = False):
-    """Ingest a file - extracts text and optionally indexes to Pinecone.
+def _infer_source_type(filename: str) -> str:
+    name = (filename or "").lower()
+    if "youtube" in name or "youtu.be" in name:
+        return "youtube"
+    if "podcast" in name or "rss" in name or "anchor.fm" in name or "podbean" in name:
+        return "podcast"
+    if "x thread" in name or "twitter.com" in name or "x.com" in name:
+        return "twitter"
+    if name.endswith(".pdf"):
+        return "pdf"
+    if name.endswith(".docx"):
+        return "docx"
+    if name.endswith(".xlsx"):
+        return "xlsx"
+    if name.startswith("http://") or name.startswith("https://"):
+        return "url"
+    return "ingested_content"
+
+
+async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: str = None):
+    """Ingest a file - extracts text and indexes to Pinecone.
     
     Args:
         source_id: Unique identifier for this source
         twin_id: Owner twin ID
         file_path: Path to the file to ingest
         filename: Optional display name for the file
-        auto_index: If True, bypasses staging workflow and indexes directly to Pinecone
     """
     # 0. Check for existing sources with same name to handle "update"
     has_duplicate = False
@@ -1037,8 +1068,7 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
 
     # Log after source record exists (to satisfy FK constraint)
     if has_duplicate:
-        log_ingestion_event(source_id, twin_id, "info", f"Duplicate filename detected, removed old sources")
-
+        log_ingestion_event(source_id, twin_id, "info", "Duplicate filename detected, removed old sources")
 
     # 1. Extract text (PDF, Docx, Excel, or Audio)
     if file_path.endswith('.pdf'):
@@ -1054,15 +1084,15 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             text = f.read()
 
-    # Phase 6: Staging workflow - store text, run health checks, don't index yet
+    # Extract text and run health checks before indexing
     content_hash = calculate_content_hash(text)
 
-    # Update source with extracted text and staging status
+    # Update source with extracted text and processing status
     update_data = {
         "content_text": text,
         "content_hash": content_hash,
-        "status": "staged",
-        "staging_status": "staged",
+        "status": "processing",
+        "staging_status": "processing",
         "extracted_text_length": len(text)
     }
 
@@ -1078,8 +1108,21 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
 
     log_ingestion_event(source_id, twin_id, "info", f"Text extracted: {len(text)} characters")
 
+    tenant_id = None
+    try:
+        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+        tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+    except Exception:
+        pass
+
     # Phase 9: Log the action
-    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_STAGED", metadata={"source_id": source_id, "filename": filename or "unknown", "type": "file_upload"})
+    AuditLogger.log(
+        tenant_id=tenant_id,
+        twin_id=twin_id,
+        event_type="KNOWLEDGE_UPDATE",
+        action="SOURCE_EXTRACTED",
+        metadata={"source_id": source_id, "filename": filename or "unknown", "type": "file_upload"}
+    )
 
     # Run health checks
     health_result = run_all_health_checks(
@@ -1099,34 +1142,53 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
 
     log_ingestion_event(source_id, twin_id, "info", f"Health checks completed: {health_result['overall_status']}")
 
-    # Auto-index if requested (bypasses staging approval workflow)
-    if auto_index:
-        log_ingestion_event(source_id, twin_id, "info", "Auto-indexing enabled, skipping staging workflow")
-        num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
-            "filename": filename or "unknown",
-            "type": "file"
-        })
-        
-        # Set status to live after successful Pinecone upsert
-        supabase.table("sources").update({
-            "status": "live",
-            "staging_status": "live",
-            "chunk_count": num_chunks
-        }).eq("id", source_id).execute()
-        
-        log_ingestion_event(source_id, twin_id, "info", f"Auto-indexed: {num_chunks} chunks, status=live")
-        
-        # Audit log
-        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={
+    log_ingestion_event(source_id, twin_id, "info", "Auto-indexing enabled")
+    num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
+        "filename": filename or "unknown",
+        "type": "file"
+    })
+    
+    # Set status to live after successful Pinecone upsert
+    supabase.table("sources").update({
+        "status": "live",
+        "staging_status": "live",
+        "chunk_count": num_chunks
+    }).eq("id", source_id).execute()
+    
+    log_ingestion_event(source_id, twin_id, "info", f"Auto-indexed: {num_chunks} chunks, status=live")
+
+    # Enqueue async content extraction to build graph nodes/edges
+    try:
+        from modules._core.scribe_engine import enqueue_content_extraction_job
+        max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+        source_type = _infer_source_type(filename or "")
+        enqueue_content_extraction_job(
+            twin_id=twin_id,
+            source_id=source_id,
+            tenant_id=tenant_id,
+            source_type=source_type,
+            max_chunks=max_chunks
+        )
+        log_ingestion_event(source_id, twin_id, "info", f"Graph extraction queued (max_chunks={max_chunks})")
+    except Exception as e:
+        log_ingestion_event(source_id, twin_id, "warning", f"Graph extraction enqueue failed: {e}")
+        print(f"[Ingestion] Warning: Failed to enqueue graph extraction for source {source_id}: {e}")
+    
+    # Audit log
+    AuditLogger.log(
+        tenant_id=tenant_id,
+        twin_id=twin_id,
+        event_type="KNOWLEDGE_UPDATE",
+        action="SOURCE_INDEXED",
+        metadata={
             "source_id": source_id, 
             "filename": filename or "unknown", 
             "type": "file",
             "chunks": num_chunks
-        })
-        
-        return num_chunks
-
-    return 0  # No chunks yet (staged, not indexed)
+        }
+    )
+    
+    return num_chunks
 
 
 async def delete_source(source_id: str, twin_id: str):
@@ -1150,93 +1212,23 @@ async def delete_source(source_id: str, twin_id: str):
     # 2. Delete from Supabase
     supabase.table("sources").delete().eq("id", source_id).eq("twin_id", twin_id).execute()
 
+    tenant_id = None
+    try:
+        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+        tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+    except Exception:
+        pass
+
     # Phase 9: Log the action
-    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_DELETED", metadata={"source_id": source_id})
+    AuditLogger.log(
+        tenant_id=tenant_id,
+        twin_id=twin_id,
+        event_type="KNOWLEDGE_UPDATE",
+        action="SOURCE_DELETED",
+        metadata={"source_id": source_id}
+    )
 
     return True
-
-# Phase 6: Staging workflow functions
-
-
-async def approve_source(source_id: str) -> str:
-    """
-    Approves staged source and creates training job.
-    
-    Args:
-        source_id: Source UUID
-    
-    Returns:
-        Training job ID
-    """
-    # Get source to verify it exists and get twin_id
-    source_response = supabase.table("sources").select("twin_id, staging_status").eq("id", source_id).single().execute()
-    if not source_response.data:
-        raise ValueError(f"Source {source_id} not found")
-
-    twin_id = source_response.data["twin_id"]
-
-    # Update staging status
-    supabase.table("sources").update({
-        "staging_status": "approved",
-        "status": "approved"
-    }).eq("id", source_id).execute()
-
-    log_ingestion_event(source_id, twin_id, "info", "Source approved, creating training job")
-
-    # Phase 9: Log the action
-    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_APPROVED", metadata={"source_id": source_id})
-
-    # Create training job
-    job_id = create_training_job(source_id, twin_id, job_type="ingestion", priority=0)
-
-    return job_id
-
-
-async def reject_source(source_id: str, reason: str):
-    """
-    Rejects source with reason.
-    
-    Args:
-        source_id: Source UUID
-        reason: Rejection reason
-    """
-    source_response = supabase.table("sources").select("twin_id").eq("id", source_id).single().execute()
-    if not source_response.data:
-        raise ValueError(f"Source {source_id} not found")
-
-    twin_id = source_response.data["twin_id"]
-
-    # Update staging status
-    supabase.table("sources").update({
-        "staging_status": "rejected",
-        "status": "rejected"
-    }).eq("id", source_id).execute()
-
-    log_ingestion_event(source_id, twin_id, "warning", f"Source rejected: {reason}")
-
-    # Phase 9: Log the action
-    AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_REJECTED", metadata={"source_id": source_id, "reason": reason})
-
-
-async def bulk_approve_sources(source_ids: List[str]) -> Dict[str, str]:
-    """
-    Bulk approve multiple sources.
-    
-    Args:
-        source_ids: List of source UUIDs
-    
-    Returns:
-        Dict mapping source_id to job_id
-    """
-    results = {}
-    for source_id in source_ids:
-        try:
-            job_id = await approve_source(source_id)
-            results[source_id] = job_id
-        except Exception as e:
-            print(f"Error approving source {source_id}: {e}")
-            results[source_id] = None
-    return results
 
 
 async def bulk_update_source_metadata(source_ids: List[str], metadata_updates: Dict[str, Any]):
@@ -1258,6 +1250,7 @@ async def bulk_update_source_metadata(source_ids: List[str], metadata_updates: D
             supabase.table("sources").update(update_data).eq("id", source_id).execute()
         except Exception as e:
             print(f"Error updating source {source_id}: {e}")
+
 
 # Wrapper functions for router endpoints (create source_id and call actual functions)
 
@@ -1283,13 +1276,12 @@ async def ingest_x_thread_wrapper(twin_id: str, url: str) -> str:
     return source_id
 
 
-async def ingest_file(twin_id: str, file, auto_index: bool = False) -> str:
+async def ingest_file(twin_id: str, file) -> str:
     """Wrapper that saves uploaded file and calls ingest_source.
     
     Args:
         twin_id: Owner twin ID
         file: Uploaded file object
-        auto_index: If True, bypasses staging and indexes directly to Pinecone
     """
 
     source_id = str(uuid.uuid4())
@@ -1307,7 +1299,7 @@ async def ingest_file(twin_id: str, file, auto_index: bool = False) -> str:
             f.write(content)
 
         # Call ingest_source with the file path
-        await ingest_source(source_id, twin_id, file_path, file.filename, auto_index=auto_index)
+        await ingest_source(source_id, twin_id, file_path, file.filename)
 
         # Clean up temp file
         if os.path.exists(file_path):
@@ -1321,13 +1313,12 @@ async def ingest_file(twin_id: str, file, auto_index: bool = False) -> str:
         raise e
 
 
-async def ingest_url(twin_id: str, url: str, auto_index: bool = True) -> str:
+async def ingest_url(twin_id: str, url: str) -> str:
     """Wrapper that detects URL type and routes to appropriate ingestion function.
     
     Args:
         twin_id: Owner twin ID
         url: URL to ingest
-        auto_index: If True (default), bypasses staging and indexes directly
     """
     source_id = str(uuid.uuid4())
 
@@ -1373,7 +1364,7 @@ async def ingest_url(twin_id: str, url: str, auto_index: bool = True) -> str:
                 with open(text_file_path, "w", encoding="utf-8") as f:
                     f.write(text)
 
-                await ingest_source(source_id, twin_id, text_file_path, url, auto_index=auto_index)
+                await ingest_source(source_id, twin_id, text_file_path, url)
         except Exception as e:
             raise ValueError(f"Failed to ingest URL: {e}")
         finally:

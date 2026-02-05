@@ -212,12 +212,6 @@ export default function KnowledgePage() {
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Left Brain</h1>
           <p className="text-slate-500 mt-2 font-medium">Quantify the raw knowledge (Sources) that powers your Digital Twin.</p>
         </div>
-        <a
-          href="/dashboard/knowledge/staging"
-          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 transition-all"
-        >
-          View Staging
-        </a>
       </div>
 
       {!loading && <KnowledgeInsights profile={profile} />}
@@ -301,11 +295,15 @@ export default function KnowledgePage() {
                       )}
                     </td>
                     <td className="px-8 py-6">
-                      <span className={`inline-flex items-center gap-2 text-[10px] font-black ${s.status === 'processed' ? 'text-green-600' : 'text-yellow-600 animate-pulse'
-                        }`}>
-                        <span className={`w-2 h-2 rounded-full ${s.status === 'processed' ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
-                        {s.status.toUpperCase()}
-                      </span>
+                      {(() => {
+                        const isReady = ['processed', 'live', 'indexed'].includes(s.status);
+                        return (
+                          <span className={`inline-flex items-center gap-2 text-[10px] font-black ${isReady ? 'text-green-600' : 'text-yellow-600 animate-pulse'}`}>
+                            <span className={`w-2 h-2 rounded-full ${isReady ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+                            {s.status.toUpperCase()}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-8 py-6 text-xs font-bold text-slate-400">
                       {new Date(s.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}

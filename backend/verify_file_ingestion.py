@@ -19,7 +19,7 @@ print(f"{'='*70}")
 print(f"Timestamp: {datetime.now().isoformat()}")
 print(f"Twin ID: {TWIN_ID}")
 print(f"File: {FILE_PATH}")
-print(f"Auto-Index: True")
+print(f"Auto-Index: Enabled (default)")
 
 # Read file content
 with open(FILE_PATH, 'r') as f:
@@ -27,7 +27,7 @@ with open(FILE_PATH, 'r') as f:
 print(f"\nFile content preview:\n{content[:200]}...")
 
 # Test 1: File upload with auth
-print(f"\n--- Step 1: POST /ingest/file/{TWIN_ID}?auto_index=true ---")
+print(f"\n--- Step 1: POST /ingest/file/{TWIN_ID} ---")
 headers = {
     "Authorization": f"Bearer {ACCESS_TOKEN}"
 }
@@ -36,7 +36,7 @@ try:
     with open(FILE_PATH, 'rb') as f:
         files = {'file': ('test_file_verification.txt', f, 'text/plain')}
         response = requests.post(
-            f"{BASE_URL}/ingest/file/{TWIN_ID}?auto_index=true",
+            f"{BASE_URL}/ingest/file/{TWIN_ID}",
             files=files,
             headers=headers
         )

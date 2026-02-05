@@ -222,15 +222,9 @@ class IngestionLogSchema(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
 
-class BulkApproveRequest(BaseModel):
-    source_ids: List[str]
-
 class BulkUpdateRequest(BaseModel):
     source_ids: List[str]
     metadata: Dict[str, Any]  # Can include: publish_date, author, citation_url
-
-class SourceRejectRequest(BaseModel):
-    reason: str
 
 # Phase 7: Omnichannel Distribution Schemas
 
