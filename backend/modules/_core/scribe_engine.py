@@ -13,6 +13,7 @@ from typing import List, Optional, Dict, Any
 import logging
 import json
 import hashlib
+import os
 
 from modules.clients import get_async_openai_client
 from modules.observability import supabase
@@ -531,6 +532,72 @@ def enqueue_graph_extraction_job(
     return job.id
 
 
+def _infer_source_type_from_filename(filename: str) -> str:
+    name = (filename or "").lower()
+    if "youtube" in name or "youtu.be" in name:
+        return "youtube"
+    if "podcast" in name or "rss" in name or "anchor.fm" in name or "podbean" in name:
+        return "podcast"
+    if "x thread" in name or "twitter.com" in name or "x.com" in name:
+        return "twitter"
+    if name.endswith(".pdf"):
+        return "pdf"
+    if name.endswith(".docx"):
+        return "docx"
+    if name.endswith(".xlsx"):
+        return "xlsx"
+    if name.startswith("http://") or name.startswith("https://"):
+        return "url"
+    return "ingested_content"
+
+
+def enqueue_content_extraction_job(
+    twin_id: str,
+    source_id: str,
+    tenant_id: str = None,
+    source_type: str = None,
+    max_chunks: int = None
+) -> str:
+    """
+    Enqueue a content extraction job for ingested sources.
+    This runs extract_from_content asynchronously to build the graph.
+    """
+    if not source_id:
+        print("[Content Extraction] Missing source_id, skipping enqueue")
+        return None
+
+    # Simple idempotency: avoid duplicates for the same source_id
+    try:
+        existing = supabase.table("jobs").select("id,status").eq(
+            "job_type", JobType.CONTENT_EXTRACTION.value
+        ).eq("source_id", source_id).order("created_at", desc=True).limit(1).execute()
+        if existing.data:
+            status = existing.data[0].get("status")
+            if status in [JobStatus.QUEUED.value, JobStatus.PROCESSING.value, JobStatus.COMPLETE.value]:
+                print(f"[Content Extraction] Job already exists for source {source_id} (status={status})")
+                return existing.data[0]["id"]
+    except Exception as e:
+        print(f"[Content Extraction] Idempotency check failed: {e}")
+
+    metadata = {
+        "source_id": source_id,
+        "tenant_id": tenant_id,
+        "source_type": source_type,
+        "max_chunks": max_chunks
+    }
+
+    job = create_job(
+        job_type=JobType.CONTENT_EXTRACTION,
+        twin_id=twin_id,
+        source_id=source_id,
+        priority=0,
+        metadata=metadata
+    )
+    enqueue_job(job.id, JobType.CONTENT_EXTRACTION.value, priority=0, metadata=metadata)
+    print(f"[Content Extraction] Enqueued job {job.id} for source {source_id}")
+    return job.id
+
+
 async def process_graph_extraction_job(job_id: str) -> bool:
     """
     Process a graph extraction job (called by worker).
@@ -611,6 +678,91 @@ async def process_graph_extraction_job(job_id: str) -> bool:
                 return False
     
     return False
+
+
+async def process_content_extraction_job(job_id: str) -> bool:
+    """
+    Process a content extraction job (called by worker).
+    Extracts graph nodes/edges from ingested source content.
+    """
+    # Fetch job
+    job_result = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+    if not job_result.data:
+        print(f"[Content Extraction] Job {job_id} not found")
+        return False
+
+    job = job_result.data
+    metadata = job.get("metadata", {}) or {}
+    twin_id = job.get("twin_id")
+    source_id = metadata.get("source_id") or job.get("source_id")
+    tenant_id = metadata.get("tenant_id")
+    max_chunks = metadata.get("max_chunks")
+
+    if not source_id or not twin_id:
+        fail_job(job_id, "Missing source_id or twin_id")
+        return False
+
+    # Start job
+    start_job(job_id)
+    append_log(job_id, f"Starting content extraction for source {source_id}", LogLevel.INFO)
+
+    try:
+        # Load source content
+        source_res = supabase.table("sources").select(
+            "id, content_text, filename"
+        ).eq("id", source_id).single().execute()
+        if not source_res.data:
+            raise ValueError("Source not found")
+
+        source = source_res.data
+        content_text = source.get("content_text") or ""
+        filename = source.get("filename") or ""
+
+        if not content_text or len(content_text.strip()) < 50:
+            # Short content: complete with no nodes
+            complete_job(job_id, metadata={"nodes_created": 0, "edges_created": 0, "chunks_processed": 0})
+            append_log(job_id, "Content too short for extraction", LogLevel.WARNING)
+            return True
+
+        # Resolve source type + chunk limit
+        source_type = metadata.get("source_type") or _infer_source_type_from_filename(filename)
+        if not max_chunks:
+            try:
+                max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+            except Exception:
+                max_chunks = 6
+
+        # Run extraction
+        result = await extract_from_content(
+            twin_id=twin_id,
+            content_text=content_text,
+            source_id=source_id,
+            source_type=source_type,
+            max_chunks=max_chunks,
+            tenant_id=tenant_id
+        )
+
+        if result.get("error"):
+            raise ValueError(result.get("error"))
+
+        nodes_created = len(result.get("all_nodes", []))
+        edges_created = len(result.get("all_edges", []))
+        chunks_processed = result.get("chunks_processed", 0)
+        confidence = result.get("total_confidence", 0.0)
+
+        complete_job(job_id, metadata={
+            "nodes_created": nodes_created,
+            "edges_created": edges_created,
+            "chunks_processed": chunks_processed,
+            "confidence": confidence
+        })
+        append_log(job_id, f"Content extraction complete: {nodes_created} nodes, {edges_created} edges", LogLevel.INFO)
+        return True
+
+    except Exception as e:
+        fail_job(job_id, f"Content extraction failed: {e}")
+        append_log(job_id, f"Content extraction failed: {e}", LogLevel.ERROR)
+        return False
 
 
 # --- Content Ingestion Integration ---

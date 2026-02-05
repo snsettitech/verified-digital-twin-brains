@@ -612,6 +612,22 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks, status=live")
 
+        # Enqueue async content extraction to build graph nodes/edges
+        try:
+            from modules._core.scribe_engine import enqueue_content_extraction_job
+            max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+            enqueue_content_extraction_job(
+                twin_id=twin_id,
+                source_id=source_id,
+                tenant_id=tenant_id,
+                source_type="youtube",
+                max_chunks=max_chunks
+            )
+            log_ingestion_event(source_id, twin_id, "info", f"Graph extraction queued (max_chunks={max_chunks})")
+        except Exception as e:
+            log_ingestion_event(source_id, twin_id, "warning", f"Graph extraction enqueue failed: {e}")
+            print(f"[Ingestion] Warning: Failed to enqueue graph extraction for source {source_id}: {e}")
+
         return num_chunks
     except Exception as e:
         print(f"Error processing YouTube content: {e}")
@@ -829,6 +845,22 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
 
         log_ingestion_event(source_id, twin_id, "info", f"X Thread content indexed: {num_chunks} chunks, status=live")
 
+        # Enqueue async content extraction to build graph nodes/edges
+        try:
+            from modules._core.scribe_engine import enqueue_content_extraction_job
+            max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+            enqueue_content_extraction_job(
+                twin_id=twin_id,
+                source_id=source_id,
+                tenant_id=tenant_id,
+                source_type="twitter",
+                max_chunks=max_chunks
+            )
+            log_ingestion_event(source_id, twin_id, "info", f"Graph extraction queued (max_chunks={max_chunks})")
+        except Exception as e:
+            log_ingestion_event(source_id, twin_id, "warning", f"Graph extraction enqueue failed: {e}")
+            print(f"[Ingestion] Warning: Failed to enqueue graph extraction for source {source_id}: {e}")
+
         return num_chunks
     except Exception as e:
         print(f"Error processing X thread: {e}")
@@ -982,6 +1014,25 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
     return len(vectors)
 
 
+def _infer_source_type(filename: str) -> str:
+    name = (filename or "").lower()
+    if "youtube" in name or "youtu.be" in name:
+        return "youtube"
+    if "podcast" in name or "rss" in name or "anchor.fm" in name or "podbean" in name:
+        return "podcast"
+    if "x thread" in name or "twitter.com" in name or "x.com" in name:
+        return "twitter"
+    if name.endswith(".pdf"):
+        return "pdf"
+    if name.endswith(".docx"):
+        return "docx"
+    if name.endswith(".xlsx"):
+        return "xlsx"
+    if name.startswith("http://") or name.startswith("https://"):
+        return "url"
+    return "ingested_content"
+
+
 async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: str = None):
     """Ingest a file - extracts text and indexes to Pinecone.
     
@@ -1105,6 +1156,23 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
     }).eq("id", source_id).execute()
     
     log_ingestion_event(source_id, twin_id, "info", f"Auto-indexed: {num_chunks} chunks, status=live")
+
+    # Enqueue async content extraction to build graph nodes/edges
+    try:
+        from modules._core.scribe_engine import enqueue_content_extraction_job
+        max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
+        source_type = _infer_source_type(filename or "")
+        enqueue_content_extraction_job(
+            twin_id=twin_id,
+            source_id=source_id,
+            tenant_id=tenant_id,
+            source_type=source_type,
+            max_chunks=max_chunks
+        )
+        log_ingestion_event(source_id, twin_id, "info", f"Graph extraction queued (max_chunks={max_chunks})")
+    except Exception as e:
+        log_ingestion_event(source_id, twin_id, "warning", f"Graph extraction enqueue failed: {e}")
+        print(f"[Ingestion] Warning: Failed to enqueue graph extraction for source {source_id}: {e}")
     
     # Audit log
     AuditLogger.log(
