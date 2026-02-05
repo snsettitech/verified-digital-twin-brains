@@ -138,7 +138,7 @@ async def re_extract_source(source_id: str, user=Depends(verify_owner)):
     try:
         # Reset status to trigger re-processing
         supabase.table("sources").update({
-            "staging_status": "processing",
+            "staging_status": "training",
             "status": "processing"
         }).eq("id", source_id).execute()
 
