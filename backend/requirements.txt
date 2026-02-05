@@ -38,3 +38,4 @@ openpyxl
 flashrank
 pydub
 imageio-ffmpeg
+redis
