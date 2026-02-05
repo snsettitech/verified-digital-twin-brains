@@ -19,6 +19,7 @@ from modules.clients import get_async_openai_client
 from modules.observability import supabase
 from modules.jobs import create_job, JobType, JobStatus, start_job, complete_job, fail_job, append_log, LogLevel
 from modules.job_queue import enqueue_job
+from modules.ingestion import _infer_source_type
 
 logger = logging.getLogger(__name__)
 
@@ -532,25 +533,6 @@ def enqueue_graph_extraction_job(
     return job.id
 
 
-def _infer_source_type_from_filename(filename: str) -> str:
-    name = (filename or "").lower()
-    if "youtube" in name or "youtu.be" in name:
-        return "youtube"
-    if "podcast" in name or "rss" in name or "anchor.fm" in name or "podbean" in name:
-        return "podcast"
-    if "x thread" in name or "twitter.com" in name or "x.com" in name:
-        return "twitter"
-    if name.endswith(".pdf"):
-        return "pdf"
-    if name.endswith(".docx"):
-        return "docx"
-    if name.endswith(".xlsx"):
-        return "xlsx"
-    if name.startswith("http://") or name.startswith("https://"):
-        return "url"
-    return "ingested_content"
-
-
 def enqueue_content_extraction_job(
     twin_id: str,
     source_id: str,
@@ -720,7 +702,7 @@ async def process_content_extraction_job(job_id: str) -> bool:
             append_log(job_id, "Content too short for extraction", LogLevel.WARNING)
             return True
 
-        source_type = metadata.get("source_type") or _infer_source_type_from_filename(filename)
+        source_type = metadata.get("source_type") or _infer_source_type(filename)
         if not max_chunks:
             try:
                 max_chunks = int(os.getenv("CONTENT_EXTRACT_MAX_CHUNKS", "6"))
