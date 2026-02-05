@@ -76,7 +76,7 @@ async def create_twin(request: TwinCreateRequest):
         else:
             raise HTTPException(status_code=400, detail="Failed to create twin")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 from modules.auth_guard import verify_twin_ownership
 
@@ -93,7 +93,7 @@ async def list_twins(user=Depends(get_current_user)):
         response = supabase.table("twins").select("*").eq("tenant_id", tenant_id).order("created_at", desc=True).execute()
         return response.data if response.data else []
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/twins/{twin_id}")
 async def get_twin(twin_id: str, user=Depends(get_current_user)):
@@ -247,7 +247,7 @@ async def list_access_groups(twin_id: str, user=Depends(verify_owner)):
         groups = await list_groups(twin_id)
         return groups
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/twins/{twin_id}/access-groups")
 async def create_access_group(twin_id: str, request: GroupCreateRequest, user=Depends(verify_owner)):
@@ -266,7 +266,7 @@ async def create_access_group(twin_id: str, request: GroupCreateRequest, user=De
         group = await get_group(group_id)
         return group
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Bad Request: {e}"); raise HTTPException(status_code=400, detail="Invalid request")
 
 @router.get("/access-groups/{group_id}")
 async def get_access_group(group_id: str, user=Depends(get_current_user)):
@@ -279,7 +279,7 @@ async def get_access_group(group_id: str, user=Depends(get_current_user)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.patch("/access-groups/{group_id}")
 async def update_access_group(group_id: str, request: GroupUpdateRequest, user=Depends(verify_owner)):
@@ -295,7 +295,7 @@ async def update_access_group(group_id: str, request: GroupUpdateRequest, user=D
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.delete("/access-groups/{group_id}")
 async def delete_access_group(group_id: str, user=Depends(verify_owner)):
@@ -304,9 +304,9 @@ async def delete_access_group(group_id: str, user=Depends(verify_owner)):
         await delete_group(group_id)
         return {"message": "Access group deleted successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Bad Request: {e}"); raise HTTPException(status_code=400, detail="Invalid request")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/access-groups/{group_id}/members")
 async def list_group_members(group_id: str, user=Depends(get_current_user)):
@@ -315,7 +315,7 @@ async def list_group_members(group_id: str, user=Depends(get_current_user)):
         members = await get_group_members(group_id)
         return members
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/twins/{twin_id}/group-memberships")
 async def assign_user_to_group_endpoint(twin_id: str, request: AssignUserRequest, user=Depends(verify_owner)):
@@ -327,7 +327,7 @@ async def assign_user_to_group_endpoint(twin_id: str, request: AssignUserRequest
         await assign_user_to_group(request.user_id, twin_id, request.group_id)
         return {"message": "User assigned to group successfully"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Bad Request: {e}"); raise HTTPException(status_code=400, detail="Invalid request")
 
 @router.delete("/group-memberships/{membership_id}")
 async def remove_group_membership(membership_id: str, user=Depends(verify_owner)):
@@ -336,7 +336,7 @@ async def remove_group_membership(membership_id: str, user=Depends(verify_owner)
         supabase.table("group_memberships").update({"is_active": False}).eq("id", membership_id).execute()
         return {"message": "User removed from group successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/access-groups/{group_id}/permissions")
 async def grant_content_permissions(group_id: str, request: ContentPermissionRequest, user=Depends(verify_owner)):
@@ -356,7 +356,7 @@ async def grant_content_permissions(group_id: str, request: ContentPermissionReq
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Bad Request: {e}"); raise HTTPException(status_code=400, detail="Invalid request")
 
 @router.delete("/access-groups/{group_id}/permissions/{content_type}/{content_id}")
 async def revoke_content_permission(group_id: str, content_type: str, content_id: str, user=Depends(verify_owner)):
@@ -365,7 +365,7 @@ async def revoke_content_permission(group_id: str, content_type: str, content_id
         await remove_content_permission(group_id, content_type, content_id)
         return {"message": "Permission revoked successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/access-groups/{group_id}/permissions")
 async def list_group_permissions(group_id: str, user=Depends(get_current_user)):
@@ -374,7 +374,7 @@ async def list_group_permissions(group_id: str, user=Depends(get_current_user)):
         permissions = await get_group_permissions(group_id)
         return permissions
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/content/{content_type}/{content_id}/groups")
 async def get_content_groups(content_type: str, content_id: str, user=Depends(get_current_user)):
@@ -389,7 +389,7 @@ async def get_content_groups(content_type: str, content_id: str, user=Depends(ge
                 groups.append(group)
         return groups
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/access-groups/{group_id}/limits")
 async def set_group_limit_endpoint(
@@ -403,7 +403,7 @@ async def set_group_limit_endpoint(
         await set_group_limit(group_id, limit_type, limit_value)
         return {"message": f"Limit {limit_type} set to {limit_value}"}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Bad Request: {e}"); raise HTTPException(status_code=400, detail="Invalid request")
 
 @router.get("/access-groups/{group_id}/limits")
 async def list_group_limits(group_id: str, user=Depends(get_current_user)):
@@ -412,7 +412,7 @@ async def list_group_limits(group_id: str, user=Depends(get_current_user)):
         limits = await get_group_limits(group_id)
         return limits
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/access-groups/{group_id}/overrides")
 async def set_group_override_endpoint(group_id: str, request: Dict[str, Any], user=Depends(verify_owner)):
@@ -431,7 +431,7 @@ async def set_group_override_endpoint(group_id: str, request: Dict[str, Any], us
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        print(f"Bad Request: {e}"); raise HTTPException(status_code=400, detail="Invalid request")
 
 @router.get("/access-groups/{group_id}/overrides")
 async def list_group_overrides(group_id: str, user=Depends(get_current_user)):
@@ -440,4 +440,4 @@ async def list_group_overrides(group_id: str, user=Depends(get_current_user)):
         overrides = await get_group_overrides(group_id)
         return overrides
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")

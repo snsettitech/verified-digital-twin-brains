@@ -143,7 +143,8 @@ async def get_dashboard_stats(twin_id: str, days: int = Query(30, ge=1, le=90)):
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error in metrics endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -194,7 +195,7 @@ async def get_conversations_list(twin_id: str, limit: int = Query(20, ge=1, le=1
         return summaries
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -295,7 +296,7 @@ async def get_activity_feed(twin_id: str, limit: int = Query(10, ge=1, le=50)):
         return activities[:limit]
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -353,7 +354,7 @@ async def get_daily_metrics(twin_id: str, days: int = Query(7, ge=1, le=30)):
         return result
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -423,7 +424,7 @@ async def get_top_questions(twin_id: str, limit: int = Query(5, ge=1, le=20)):
         ]
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -475,7 +476,7 @@ async def get_user_events(
         return {"events": result.data or []}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -501,7 +502,7 @@ async def get_system_metrics(days: int = Query(7, ge=1, le=30)):
             "period_days": days
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/usage/{twin_id}")
@@ -517,7 +518,7 @@ async def get_twin_usage(twin_id: str, days: int = Query(7, ge=1, le=30)):
         summary = get_metrics_summary(twin_id=twin_id, days=days)
         return summary
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================
@@ -651,7 +652,7 @@ async def get_quota_status(tenant_id: str):
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/quota/{tenant_id}/set")
@@ -673,5 +674,5 @@ async def set_quota(tenant_id: str, quota_type: str, limit_value: int):
         
         return {"success": True, "data": result.data}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error: {e}"); raise HTTPException(status_code=500, detail="Internal server error")
 

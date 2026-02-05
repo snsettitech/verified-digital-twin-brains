@@ -32,10 +32,20 @@ def mock_supabase():
 @pytest.fixture
 def mock_openai():
     """Mock OpenAI client."""
-    with patch('modules.clients.get_async_openai_client') as mock:
-        client = AsyncMock()
-        mock.return_value = client
-        yield client
+    # Mock both sync and async clients
+    with patch('modules.clients.get_async_openai_client') as mock_async, \
+         patch('modules.clients.get_openai_client') as mock_sync:
+
+        async_client = AsyncMock()
+        sync_client = MagicMock()
+
+        mock_async.return_value = async_client
+        mock_sync.return_value = sync_client
+
+        # Return both or just one, tests can configure them
+        # We attach the sync client to the async one for convenience if tests need access
+        async_client.sync_client = sync_client
+        yield async_client
 
 
 @pytest.fixture
@@ -148,8 +158,8 @@ async def test_ingestion_retrieval_flow(mock_supabase, mock_openai, mock_pinecon
         "status": "staged"
     }]
     
-    # Mock OpenAI embedding
-    mock_openai.embeddings.create.return_value = MagicMock(
+    # Mock OpenAI embedding (sync client)
+    mock_openai.sync_client.embeddings.create.return_value = MagicMock(
         data=[MagicMock(embedding=[0.1] * 3072)]
     )
     
@@ -184,8 +194,8 @@ async def test_chat_retrieval_fallback(mock_supabase, mock_openai, mock_pinecone
         ]
     }
     
-    # Mock OpenAI embedding for query
-    mock_openai.embeddings.create.return_value = MagicMock(
+    # Mock OpenAI embedding for query (sync client used by retrieval)
+    mock_openai.sync_client.embeddings.create.return_value = MagicMock(
         data=[MagicMock(embedding=[0.1] * 3072)]
     )
     
@@ -210,10 +220,11 @@ def test_graph_extraction_job_enqueue(mock_supabase):
     from modules.jobs import JobType, JobStatus
     from datetime import datetime
     
-    # Mock job creation
-    mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{
+    # Mock job creation - ensure all fields required by Pydantic model are present
+    job_data = {
         "id": "job-1",
         "twin_id": "twin-1",
+        "source_id": None,
         "job_type": JobType.GRAPH_EXTRACTION.value,
         "status": JobStatus.QUEUED.value,
         "priority": 0,
@@ -223,7 +234,17 @@ def test_graph_extraction_job_enqueue(mock_supabase):
         "started_at": None,
         "completed_at": None,
         "error_message": None
-    }]
+    }
+
+    # Ensure the mock chain returns this data
+    # supabase.table("jobs").insert(data).execute() -> result.data = [job_data]
+    insert_mock = MagicMock()
+    execute_mock = MagicMock()
+    execute_mock.data = [job_data]
+    insert_mock.execute.return_value = execute_mock
+
+    # Configure table().insert() to return our insert_mock
+    mock_supabase.table.return_value.insert.return_value = insert_mock
     
     # Mock idempotency check (no existing jobs)
     mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
@@ -378,12 +399,56 @@ async def test_chat_flow_with_graph_extraction(mock_supabase, mock_openai, mock_
     }]
     
     # Mock job creation
-    mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{
+    from datetime import datetime
+    job_data = {
         "id": "job-1",
         "twin_id": "twin-1",
+        "source_id": None,
         "job_type": "graph_extraction",
-        "status": "queued"
-    }]
+        "status": "queued",
+        "priority": 0,
+        "metadata": {},
+        "created_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.utcnow().isoformat(),
+        "started_at": None,
+        "completed_at": None,
+        "error_message": None
+    }
+
+    # Configure mock chain explicitly for job creation
+    insert_mock = MagicMock()
+    execute_mock = MagicMock()
+    execute_mock.data = [job_data]
+    insert_mock.execute.return_value = execute_mock
+
+    # We need to handle multiple calls to table().insert() (one for convo, one for job)
+    # This is tricky with MagicMock default behavior.
+    # Simpler approach: update the default return value for insert().execute().data
+    # But that might affect the conversation creation check if it relies on specific return data.
+    #
+    # Let's try side_effect on insert() to return different mocks or data based on table call?
+    # No, table() is called first.
+    #
+    # Let's just update the default return data to include fields for Job,
+    # as Conversation creation result usually just needs ID which Job also has.
+    # But Conversation doesn't have job_type...
+    #
+    # Actually, `enqueue_graph_extraction_job` calls `create_job` which expects `Job` model fields.
+    # So `insert` return must satisfy `Job`.
+    #
+    # If I just update the return data for ALL inserts to include Job fields, it should be fine
+    # as long as Conversation creation doesn't validate against a strict schema in the test.
+    #
+    # Wait, `enqueue_graph_extraction_job` is the one failing.
+    # The conversation creation is `mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{ "id": "conv-1", ... }]`
+    #
+    # I will set the return value to be the Job data, because `enqueue_graph_extraction_job` is what we are testing here.
+    # The conversation creation mock earlier in the function might be overwritten, but that's fine if it's already "happened" in the test logic or if we don't care about its result.
+    # Actually, `test_chat_flow_with_graph_extraction` doesn't call `create_conversation`, it just sets up the mock.
+    # Then it calls `enqueue_graph_extraction_job`.
+    # So we just need to ensure the mock returns Job data.
+
+    mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [job_data]
 
     # Mock idempotency check
     mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []

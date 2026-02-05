@@ -32,3 +32,4 @@ elevenlabs
 firecrawl-py
 apscheduler
 httpx
+pydub

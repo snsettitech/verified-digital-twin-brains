@@ -108,7 +108,7 @@ def get_current_user(
         # DEBUG: Print token info
         print(f"[JWT DEBUG] Token length: {len(token)}")
         print(f"[JWT DEBUG] Secret length: {len(SUPABASE_JWT_SECRET)}")
-        print(f"[JWT DEBUG] Secret first 10: {SUPABASE_JWT_SECRET[:10]}...")
+        # print(f"[JWT DEBUG] Secret first 10: {SUPABASE_JWT_SECRET[:10]}...")
         
         # Verify and decode JWT signature (this validates expiry too)
         # NOTE: Supabase tokens have aud="authenticated" but jose library's audience
