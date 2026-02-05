@@ -1,0 +1,10 @@
+{
+  "localStorage": {
+    "activeTwinId": "d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+    "simulator_chat_d04f186f-d843-45a3-a017-07a5cbc593b0_d367d669-03cf-4ab8-b34a-90e1ed8fc88c": "[{\"role\":\"assistant\",\"content\":\"Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.\"},{\"role\":\"user\",\"content\":\"Scenario D: message after re-login\"},{\"role\":\"assistant\",\"content\":\"It appears there is no specific information available in the provided documents regarding \\\"Scenario D: message after re-login.\\\" If you have more details or a different query, please let me know, and I'll be happy to assist further.\",\"confidence_score\":0,\"citations\":[],\"graph_used\":false}]",
+    "cachedUserProfile": "{\"id\":\"e419b23a-c330-4951-a73a-24e404fa94b7\",\"email\":\"sainsetti@gmail.com\",\"full_name\":null,\"avatar_url\":null,\"tenant_id\":\"d04f186f-d843-45a3-a017-07a5cbc593b0\",\"onboarding_completed\":true,\"created_at\":\"2026-02-03T15:45:34.133049+00:00\"}",
+    "vdt_feature_flags": "{\"cognitiveMode\":true,\"splitBrainLayout\":true,\"knowledgeGraphPreview\":true,\"advancedAnalytics\":false,\"customBranding\":false,\"teamCollaboration\":false,\"voiceCloning\":false,\"realTimeSync\":false,\"aiSuggestions\":false}"
+  },
+  "sessionStorage": {},
+  "url": "https://digitalbrains.vercel.app/dashboard/simulator"
+}

@@ -1,0 +1,416 @@
+{
+  "scenario": "scenario_A",
+  "startTime": "2026-02-03T23:31:11.366Z",
+  "console": [
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] MOUNTED",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8692
+      },
+      "at": "2026-02-03T23:31:13.493Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] Starting initialization...",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8857
+      },
+      "at": "2026-02-03T23:31:13.494Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] Initial session: exists (expires: 2026-02-04T00:31:13.000Z)",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8980
+      },
+      "at": "2026-02-03T23:31:13.532Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] syncUser sync_start {correlationId: gr3qk, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T23:31:13.533Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 1",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T23:31:13.534Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] refreshTwins [3rfpmy] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T23:31:13.534Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] Auth event: INITIAL_SESSION Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T23:31:13.534Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] syncUser sync_response {correlationId: gr3qk, status: 200}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T23:31:15.664Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] syncUser sync_success {correlationId: gr3qk}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T23:31:15.668Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins received: 3 twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 7522
+      },
+      "at": "2026-02-03T23:31:15.668Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] First hydration complete.",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 7894
+      },
+      "at": "2026-02-03T23:31:15.668Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] Initialization complete",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 9483
+      },
+      "at": "2026-02-03T23:31:15.668Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] selectActiveTwin: Using default (first): 6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 6488
+      },
+      "at": "2026-02-03T23:31:15.668Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] Persisted activeTwinId: 6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1219
+      },
+      "at": "2026-02-03T23:31:15.668Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][5kkt5l] refreshTwins complete. Active: 6e5855c8-da56-4d8a-b806-4004d2923a24 Total: 3",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8096
+      },
+      "at": "2026-02-03T23:31:15.669Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] MOUNTED",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8692
+      },
+      "at": "2026-02-03T23:31:39.893Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] Starting initialization...",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8857
+      },
+      "at": "2026-02-03T23:31:39.893Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] Initial session: exists (expires: 2026-02-04T00:31:13.000Z)",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8980
+      },
+      "at": "2026-02-03T23:31:39.907Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] syncUser sync_start {correlationId: amzk8w, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T23:31:39.909Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 1",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T23:31:39.914Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] refreshTwins [dc3pof] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T23:31:39.914Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] Auth event: INITIAL_SESSION Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T23:31:39.942Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] syncUser sync_response {correlationId: amzk8w, status: 200}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T23:31:41.507Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] syncUser sync_success {correlationId: amzk8w}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T23:31:41.518Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins received: 3 twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 7522
+      },
+      "at": "2026-02-03T23:31:41.520Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] First hydration complete.",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 7894
+      },
+      "at": "2026-02-03T23:31:41.520Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] Initialization complete",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 9483
+      },
+      "at": "2026-02-03T23:31:41.520Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] selectActiveTwin: Using localStorage: 6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 6399
+      },
+      "at": "2026-02-03T23:31:41.521Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] Persisted activeTwinId: 6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 1219
+      },
+      "at": "2026-02-03T23:31:41.521Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][wmp22] refreshTwins complete. Active: 6e5855c8-da56-4d8a-b806-4004d2923a24 Total: 3",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_9NwuvKqocYBfR9J79zSz3ipXkwME",
+        "lineNumber": 0,
+        "columnNumber": 8096
+      },
+      "at": "2026-02-03T23:31:41.521Z"
+    }
+  ],
+  "network": [
+    {
+      "type": "request",
+      "url": "https://verified-digital-twin-brains.onrender.com/chat/6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "method": "POST",
+      "postData": "{\"query\":\"Scenario A: initial message\",\"conversation_id\":null}",
+      "headers": {
+        "content-type": "application/json"
+      },
+      "at": "2026-02-03T23:31:42.004Z"
+    },
+    {
+      "type": "response",
+      "url": "https://verified-digital-twin-brains.onrender.com/chat/6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "status": 200,
+      "statusText": "",
+      "headers": {
+        "access-control-expose-headers": "x-correlation-id",
+        "cf-cache-status": "DYNAMIC",
+        "access-control-allow-credentials": "true",
+        "cf-ray": "9c85b9304bb58af6-YYZ",
+        "access-control-allow-origin": "https://digitalbrains.vercel.app",
+        "rndr-id": "18eca4fd-3216-47a2",
+        "x-render-origin-server": "uvicorn",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "date": "Tue, 03 Feb 2026 23:31:43 GMT",
+        "content-type": "text/event-stream; charset=utf-8",
+        "vary": "Origin",
+        "server": "cloudflare"
+      },
+      "at": "2026-02-03T23:31:43.177Z",
+      "bodySnippet": "{\"type\": \"metadata\", \"citations\": [], \"confidence_score\": 1.0, \"conversation_id\": null, \"graph_context\": {\"has_graph\": false, \"node_count\": 0, \"graph_used\": false}, \"decision_trace\": null}\n{\"type\": \"content\", \"content\": \"How can I assist you with Scenario A? Please provide me with more details or let me know what specific information or help you need.\"}\n",
+      "conversation_id": null,
+      "citations": [],
+      "confidence_score": 1
+    },
+    {
+      "type": "request",
+      "url": "https://verified-digital-twin-brains.onrender.com/chat/6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "method": "POST",
+      "postData": "{\"query\":\"Scenario A: second message after switch\",\"conversation_id\":null}",
+      "headers": {
+        "content-type": "application/json"
+      },
+      "at": "2026-02-03T23:32:56.347Z"
+    },
+    {
+      "type": "response",
+      "url": "https://verified-digital-twin-brains.onrender.com/chat/6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "status": 200,
+      "statusText": "",
+      "headers": {
+        "access-control-expose-headers": "x-correlation-id",
+        "cf-cache-status": "DYNAMIC",
+        "access-control-allow-credentials": "true",
+        "cf-ray": "9c85bb019bc5f80e-YYZ",
+        "access-control-allow-origin": "https://digitalbrains.vercel.app",
+        "rndr-id": "c6643c99-c218-4b6d",
+        "x-render-origin-server": "uvicorn",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "date": "Tue, 03 Feb 2026 23:32:58 GMT",
+        "content-type": "text/event-stream; charset=utf-8",
+        "vary": "Origin",
+        "server": "cloudflare"
+      },
+      "at": "2026-02-03T23:32:57.920Z",
+      "bodySnippet": "{\"type\": \"metadata\", \"citations\": [], \"confidence_score\": 1.0, \"conversation_id\": null, \"graph_context\": {\"has_graph\": false, \"node_count\": 0, \"graph_used\": false}, \"decision_trace\": null}\n{\"type\": \"content\", \"content\": \"It seems like you're referring to a specific scenario or context that might have been discussed earlier. Could you provide more details or clarify what information or assistance you need regarding \\\"Scenario A\\\"?\"}\n",
+      "conversation_id": null,
+      "citations": [],
+      "confidence_score": 1
+    }
+  ],
+  "uiEvents": [
+    {
+      "type": "send",
+      "text": "Scenario A: initial message",
+      "at": "2026-02-03T23:31:41.968Z"
+    },
+    {
+      "type": "wait_response",
+      "spinnerVisible": false,
+      "timedOut": false,
+      "at": "2026-02-03T23:31:49.065Z"
+    },
+    {
+      "type": "send",
+      "text": "Scenario A: second message after switch",
+      "at": "2026-02-03T23:32:56.388Z"
+    },
+    {
+      "type": "wait_response",
+      "spinnerVisible": false,
+      "timedOut": false,
+      "at": "2026-02-03T23:33:02.381Z"
+    }
+  ],
+  "messagesBefore": [
+    "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+    "Scenario A: initial message",
+    "How can I assist you with Scenario A? Please provide me with more details or let me know what specific information or help you need."
+  ],
+  "messagesAfter": [
+    "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+    "Scenario A: initial message",
+    "How can I assist you with Scenario A? Please provide me with more details or let me know what specific information or help you need.",
+    "Scenario A: second message after switch",
+    "It seems like you're referring to a specific scenario or context that might have been discussed earlier. Could you provide more details or clarify what information or assistance you need regarding \"Scenario A\"?"
+  ],
+  "endTime": "2026-02-03T23:33:02.381Z",
+  "errorBanner": null
+}

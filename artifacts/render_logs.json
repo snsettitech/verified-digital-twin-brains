@@ -1,0 +1,499 @@
+{
+    "hasMore":  true,
+    "logs":  [
+                 {
+                     "id":  "3094e08e-4d8e-4c12-b4ef-efce9047991f",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "method",
+                                        "value":  "GET"
+                                    },
+                                    {
+                                        "name":  "statusCode",
+                                        "value":  "200"
+                                    },
+                                    {
+                                        "name":  "host",
+                                        "value":  "verified-digital-twin-brains.onrender.com"
+                                    },
+                                    {
+                                        "name":  "path",
+                                        "value":  "/auth/my-twins"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "request"
+                                    }
+                                ],
+                     "message":  "clientIP=\"130.63.248.108\" requestID=\"ba790b03-209e-47d5\" responseTimeMS=1239 responseBytes=1285 userAgent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36\"",
+                     "timestamp":  "2026-02-03T19:29:15Z"
+                 },
+                 {
+                     "id":  "3ba3204f-040a-431d-916a-bbaa79b4e77c",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "method",
+                                        "value":  "POST"
+                                    },
+                                    {
+                                        "name":  "statusCode",
+                                        "value":  "200"
+                                    },
+                                    {
+                                        "name":  "host",
+                                        "value":  "verified-digital-twin-brains.onrender.com"
+                                    },
+                                    {
+                                        "name":  "path",
+                                        "value":  "/auth/sync-user"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "request"
+                                    }
+                                ],
+                     "message":  "clientIP=\"130.63.248.108\" requestID=\"7e1dcedc-b53c-4346\" responseTimeMS=1246 responseBytes=602 userAgent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36\"",
+                     "timestamp":  "2026-02-03T19:29:15Z"
+                 },
+                 {
+                     "id":  "b02081dd-c266-4dc0-9933-fdbc3ccde141",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "[AUTH] get_my_twins: user=94ffb06e-647c-43a6-aabc-a4ea77e619bb, tenant=0d85c61a-c8c9-4646-8a7b-182b884eec83",
+                     "timestamp":  "2026-02-03T19:29:15.585259219Z"
+                 },
+                 {
+                     "id":  "4f7922c1-f6d2-4709-85a0-c255b98142fe",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "[MY-TWINS DEBUG] Returning 1 twins for tenant 0d85c61a-c8c9-4646-8a7b-182b884eec83",
+                     "timestamp":  "2026-02-03T19:29:15.585263249Z"
+                 },
+                 {
+                     "id":  "e84ffc8e-bbe5-4a0c-bed7-726192003aee",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "DEBUG: POST /auth/sync-user - 200 (1.244s) corr=l1oc0d UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+                     "timestamp":  "2026-02-03T19:29:15.585267279Z"
+                 },
+                 {
+                     "id":  "16e5b443-4462-41b9-ae53-475a1830d844",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "INFO:     130.63.248.108:0 - \"POST /auth/sync-user HTTP/1.1\" 200 OK",
+                     "timestamp":  "2026-02-03T19:29:15.58532497Z"
+                 },
+                 {
+                     "id":  "ed7c3465-a42e-4c77-8f6a-b0cd25da7997",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "DEBUG: GET /auth/my-twins - 200 (1.235s) corr=none UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+                     "timestamp":  "2026-02-03T19:29:15.585651397Z"
+                 },
+                 {
+                     "id":  "ac5d225c-8fe6-4ce3-9617-33f5f60769ae",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "INFO:     130.63.248.108:0 - \"GET /auth/my-twins HTTP/1.1\" 200 OK",
+                     "timestamp":  "2026-02-03T19:29:15.585729918Z"
+                 },
+                 {
+                     "id":  "024ffafa-59ca-48f0-b84d-3b79ea0c6e25",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "method",
+                                        "value":  "GET"
+                                    },
+                                    {
+                                        "name":  "statusCode",
+                                        "value":  "200"
+                                    },
+                                    {
+                                        "name":  "host",
+                                        "value":  "verified-digital-twin-brains.onrender.com"
+                                    },
+                                    {
+                                        "name":  "path",
+                                        "value":  "/twins/ad1eeace-26d1-4eff-9560-39643832d0f2/graph-stats"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "request"
+                                    }
+                                ],
+                     "message":  "clientIP=\"130.63.248.108\" requestID=\"45f3de18-2515-4e5c\" responseTimeMS=675 responseBytes=428 userAgent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36\"",
+                     "timestamp":  "2026-02-03T19:29:16Z"
+                 },
+                 {
+                     "id":  "b9c08cfa-75cc-4d94-a0fc-489719a652cc",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "[JWT DEBUG] Token length: 1318",
+                     "timestamp":  "2026-02-03T19:29:16.475916301Z"
+                 },
+                 {
+                     "id":  "a7071957-bba4-4e3b-89ab-2493ca728341",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "[JWT DEBUG] Secret length: 88",
+                     "timestamp":  "2026-02-03T19:29:16.475942862Z"
+                 },
+                 {
+                     "id":  "3d946319-d53f-4168-a5ea-2049c17ea601",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "[JWT DEBUG] Secret first 10: yNHpVZTDOX...",
+                     "timestamp":  "2026-02-03T19:29:16.475949202Z"
+                 },
+                 {
+                     "id":  "20fe4ff0-6551-447e-979a-329a2f903e5a",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "[AUTH DEBUG] tenant_id from direct lookup: 0d85c61a-c8c9-4646-8a7b-182b884eec83",
+                     "timestamp":  "2026-02-03T19:29:16.475954742Z"
+                 },
+                 {
+                     "id":  "3b94fd95-20bd-4555-aad9-b829b1709d59",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "DEBUG: GET /twins/ad1eeace-26d1-4eff-9560-39643832d0f2/graph-stats - 200 (0.673s) corr=none UA: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+                     "timestamp":  "2026-02-03T19:29:16.475959372Z"
+                 },
+                 {
+                     "id":  "bbe60ec2-e6d0-4d2f-a739-46418793e3ea",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "INFO:     130.63.248.108:0 - \"GET /twins/ad1eeace-26d1-4eff-9560-39643832d0f2/graph-stats HTTP/1.1\" 200 OK",
+                     "timestamp":  "2026-02-03T19:29:16.475982073Z"
+                 },
+                 {
+                     "id":  "accc9d88-1fc2-45b9-956b-0bc6eddbbaf0",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "method",
+                                        "value":  "GET"
+                                    },
+                                    {
+                                        "name":  "statusCode",
+                                        "value":  "200"
+                                    },
+                                    {
+                                        "name":  "host",
+                                        "value":  "verified-digital-twin-brains.onrender.com"
+                                    },
+                                    {
+                                        "name":  "path",
+                                        "value":  "/health"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "request"
+                                    }
+                                ],
+                     "message":  "clientIP=\"130.63.248.108\" requestID=\"364927a9-6684-4565\" responseTimeMS=5033 responseBytes=452 userAgent=\"node\"",
+                     "timestamp":  "2026-02-03T19:30:10Z"
+                 },
+                 {
+                     "id":  "aa3f2640-1214-4bec-a43b-1428fa1ed880",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "debug"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "DEBUG: GET /health - 200 (5.030s) corr=corr-expose-test UA: node",
+                     "timestamp":  "2026-02-03T19:30:10.303681731Z"
+                 },
+                 {
+                     "id":  "a0d83467-3420-49a3-9ed6-54939e07ceca",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "instance",
+                                        "value":  "srv-d55qmb95pdvs73cagk60-5nl97"
+                                    },
+                                    {
+                                        "name":  "level",
+                                        "value":  "info"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "INFO:     130.63.248.108:0 - \"GET /health HTTP/1.1\" 200 OK",
+                     "timestamp":  "2026-02-03T19:30:10.303806193Z"
+                 },
+                 {
+                     "id":  "d614t08gjchc73ce1mf0",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "\u001b[0;32m\u001b[1m==\u003e \u001b[0m\u001b[1mDetected service running on port 8000\u001b[0m",
+                     "timestamp":  "2026-02-03T19:32:32.555396862Z"
+                 },
+                 {
+                     "id":  "d614t08gjchc73ce1meg",
+                     "labels":  [
+                                    {
+                                        "name":  "resource",
+                                        "value":  "srv-d55qmb95pdvs73cagk60"
+                                    },
+                                    {
+                                        "name":  "type",
+                                        "value":  "app"
+                                    }
+                                ],
+                     "message":  "\u001b[0;32m\u001b[1m==\u003e \u001b[0m\u001b[1mDocs on specifying a port: https://render.com/docs/web-services#port-binding\u001b[0m",
+                     "timestamp":  "2026-02-03T19:32:32.817155421Z"
+                 }
+             ],
+    "nextEndTime":  "2026-02-03T19:29:15.585259219Z",
+    "nextStartTime":  "2026-01-27T19:37:37.728209237Z"
+}

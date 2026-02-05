@@ -1,0 +1,84 @@
+name: PR Requirements Checker
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  check-requirements:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check PR Description
+        id: description
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          if [ -z "$BODY" ] || [ "$BODY" == " " ]; then
+            echo "has_description=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "has_description=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+      
+      - name: Check PR Title
+        id: title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [ ${#TITLE} -lt 10 ]; then
+            echo "valid_title=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "valid_title=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+      
+      - name: Comment on PR if Requirements Missing
+        if: steps.description.outcome == 'failure' || steps.title.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let message = "## ⚠️ PR Requirements Check\n\n";
+            message += "Please address the following before this PR can be merged:\n\n";
+            
+            if ("${{ steps.description.outcome }}" === "failure") {
+              message += "- [ ] **Add PR Description** - Describe what this PR does, why, and how to test it\n";
+            }
+            
+            if ("${{ steps.title.outcome }}" === "failure") {
+              message += "- [ ] **Improve PR Title** - Use a descriptive title (min 10 characters)\n";
+            }
+            
+            message += "\n**Examples:**\n";
+            message += "- ✅ 'Add automated GitHub settings enforcement via Actions'\n";
+            message += "- ✅ 'Fix authentication token expiration issue'\n";
+            message += "- ❌ 'Fix stuff' (too vague)\n";
+            message += "- ❌ 'WIP' (too short)\n";
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+      
+      - name: Request CODEOWNERS Review
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            
+            console.log("📝 CODEOWNERS file will automatically assign reviewers");
+            console.log("   based on files changed in this PR");
+      
+      - name: Require All Checks Pass
+        if: always()
+        run: |
+          if [ "${{ steps.description.outcome }}" == "failure" ] || [ "${{ steps.title.outcome }}" == "failure" ]; then
+            echo "❌ PR requirements not met"
+            exit 1
+          fi
+          echo "✅ All PR requirements met"

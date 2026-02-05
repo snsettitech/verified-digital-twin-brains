@@ -53,6 +53,13 @@ export default function RightBrainPage() {
                 return;
             }
 
+            // CRITICAL: user.tenant_id comes from the synced user record (tenants table UUID)
+            // DO NOT use session.user.id - that's the auth UUID which is DIFFERENT
+            if (!user?.tenant_id) {
+                setCreateError('No tenant associated. Please refresh the page.');
+                return;
+            }
+
             const response = await fetch(`${API_BASE_URL}/twins`, {
                 method: 'POST',
                 headers: {
@@ -61,8 +68,8 @@ export default function RightBrainPage() {
                 },
                 body: JSON.stringify({
                     name: user?.full_name ? `${user.full_name}'s Twin` : 'My Digital Twin',
-                    tenant_id: session.user.id,  // Use user's auth ID as tenant_id
-                    specialization: 'vc-brain',  // Field is 'specialization', not 'specialization_id'
+                    tenant_id: user.tenant_id,  // FIX: Use actual tenant UUID, not auth user ID
+                    specialization: 'vc-brain',
                     settings: {}
                 })
             });

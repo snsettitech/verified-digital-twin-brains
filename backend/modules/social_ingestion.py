@@ -162,9 +162,20 @@ class RSSFetcher:
                 f"RSS feed indexed: {num_chunks} chunks from {len(feed_data.get('entries', []))} entries"
             )
             
+            # Fetch tenant_id
+            tenant_id = None
+            try:
+                res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+                tenant_id = res.data.get("tenant_id") if res.data else None
+            except Exception:
+                pass
+
             # Audit log
             AuditLogger.log(
-                twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED",
+                tenant_id=tenant_id,
+                twin_id=twin_id, 
+                event_type="KNOWLEDGE_UPDATE", 
+                action="SOURCE_INDEXED",
                 metadata={
                     "source_id": source_id,
                     "filename": f"RSS: {feed_title}",
@@ -172,6 +183,7 @@ class RSSFetcher:
                     "chunks": num_chunks
                 }
             )
+
             
             return {
                 "success": True,

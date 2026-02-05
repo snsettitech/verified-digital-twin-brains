@@ -25,6 +25,71 @@ if not SUPABASE_JWT_SECRET or len(SUPABASE_JWT_SECRET) < 32:
     print("  Copy from: Supabase Dashboard → Settings → API → JWT Secret", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
+
+def resolve_tenant_id(user_id: str, email: str = None) -> str:
+    """
+    Resolve tenant_id for a user, auto-creating tenant if needed.
+    
+    This is the SINGLE SOURCE OF TRUTH for tenant resolution.
+    Never trust client-provided tenant_id.
+    
+    Args:
+        user_id: Supabase auth user ID
+        email: Optional email for naming the auto-created tenant
+    
+    Returns:
+        The resolved tenant_id (never None for valid users)
+    
+    Raises:
+        HTTPException if tenant cannot be resolved or created
+    """
+    from modules.observability import supabase as supabase_client
+    
+    # 1. Try to lookup existing tenant from users table
+    try:
+        user_lookup = supabase_client.table("users").select("tenant_id").eq("id", user_id).execute()
+        if user_lookup.data and user_lookup.data[0].get("tenant_id"):
+            tenant_id = user_lookup.data[0]["tenant_id"]
+            print(f"[resolve_tenant_id] Found existing tenant {tenant_id} for user {user_id}")
+            return tenant_id
+    except Exception as e:
+        print(f"[resolve_tenant_id] User lookup failed: {e}")
+    
+    # 2. User exists but has no tenant, or user doesn't exist - auto-create tenant
+    print(f"[resolve_tenant_id] No tenant for user {user_id}, auto-creating...")
+    
+    try:
+        # Create tenant
+        name = email.split("@")[0] if email else f"User-{user_id[:8]}"
+        tenant_insert = supabase_client.table("tenants").insert({
+            "name": f"{name}'s Workspace"
+        }).execute()
+        
+        if not tenant_insert.data:
+            raise HTTPException(status_code=500, detail="Failed to auto-create tenant")
+        
+        tenant_id = tenant_insert.data[0]["id"]
+        print(f"[resolve_tenant_id] Created tenant {tenant_id}")
+        
+        # 3. Ensure user record exists with this tenant_id
+        user_data = {
+            "id": user_id,
+            "tenant_id": tenant_id
+        }
+        if email:
+            user_data["email"] = email
+        
+        supabase_client.table("users").upsert(user_data).execute()
+        print(f"[resolve_tenant_id] Linked user {user_id} to tenant {tenant_id}")
+        
+        return tenant_id
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[resolve_tenant_id] ERROR creating tenant: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to resolve tenant: {str(e)}")
+
 def get_current_user(
     request: Request,
     authorization: str = Header(None),
@@ -135,16 +200,47 @@ def get_current_user(
         user_metadata = payload.get("user_metadata", {})
         
         # Lookup tenant_id from database (not in JWT)
+        # PRIMARY: Try direct tenant_id column (more reliable)
+        # FALLBACK: Try join through tenants table
         tenant_id = None
         try:
-            user_lookup = supabase_client.table("users").select("tenants(id)").eq("id", user_id).execute()
+            # First try direct tenant_id column
+            user_lookup = supabase_client.table("users").select("tenant_id").eq("id", user_id).execute()
             if user_lookup.data and len(user_lookup.data) > 0:
-                tenants_data = user_lookup.data[0].get("tenants")
-                if isinstance(tenants_data, dict):
-                    tenant_id = tenants_data.get("id")
+                tenant_id = user_lookup.data[0].get("tenant_id")
+                print(f"[AUTH DEBUG] tenant_id from direct lookup: {tenant_id}")
+
+            # Check if user is deleted/anonymized (block all access)
+            try:
+                user_record = supabase_client.table("users").select("email").eq("id", user_id).single().execute()
+                if user_record.data:
+                    email_in_db = (user_record.data.get("email") or "").lower()
+                    if email_in_db.startswith("deleted_") or email_in_db.endswith("@deleted.local"):
+                        raise HTTPException(status_code=401, detail="Account has been deleted")
+            except HTTPException:
+                raise
+            except Exception as e:
+                # If the user lookup fails, do not hard fail (preserve availability)
+                print(f"[AUTH WARNING] User deletion check failed: {e}")
+            
+            # Fallback: try join through tenants table
+            if not tenant_id:
+                user_lookup = supabase_client.table("users").select("tenants(id)").eq("id", user_id).execute()
+                if user_lookup.data and len(user_lookup.data) > 0:
+                    tenants_data = user_lookup.data[0].get("tenants")
+                    if isinstance(tenants_data, dict):
+                        tenant_id = tenants_data.get("id")
+                        print(f"[AUTH DEBUG] tenant_id from join: {tenant_id}")
+            
+            # CRITICAL: Log if tenant_id is still null for debugging
+            if not tenant_id:
+                print(f"[AUTH WARNING] User {user_id} has NO tenant_id - twins will return empty")
+        except HTTPException:
+            # Preserve explicit auth failures (e.g., deleted account)
+            raise
         except Exception as e:
             # User might not exist yet (first login) - sync-user will create them
-            print(f"Tenant lookup failed (expected for new users): {e}")
+            print(f"[AUTH ERROR] Tenant lookup failed for user {user_id}: {e}")
 
         # Update user activity timestamp (best effort)
         try:
@@ -173,10 +269,93 @@ def get_current_user(
         print(f"[JWT DEBUG] ERROR: {str(e)}")
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
+
+# ============================================================================
+# SCOPE ENFORCEMENT DEPENDENCIES (SINGLE SOURCE OF TRUTH)
+# Use these in all endpoints for consistent auth + scope validation
+# ============================================================================
+
 def verify_owner(user=Depends(get_current_user)):
-    if user.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+    """Require authenticated user (not API key visitor)."""
+    if user.get("role") == "visitor":
+        raise HTTPException(status_code=403, detail="API key cannot access this endpoint")
+    if not user.get("user_id"):
+        raise HTTPException(status_code=401, detail="Authentication required")
     return user
+
+
+def require_tenant(user=Depends(get_current_user)):
+    """
+    Require authenticated user with a valid tenant_id.
+    Returns the user dict (Principal) with guaranteed tenant_id.
+    """
+    if user.get("role") == "visitor":
+        raise HTTPException(status_code=403, detail="API key cannot access tenant-scoped resources")
+    
+    tenant_id = user.get("tenant_id")
+    if not tenant_id:
+        print(f"[require_tenant] Access denied: User {user.get('user_id')} has no tenant_id")
+        raise HTTPException(status_code=403, detail="User has no tenant association. Please contact support.")
+    
+    return user
+
+
+def require_admin(user=Depends(require_tenant)):
+    """
+    Require admin/owner/support role for tenant control plane operations.
+    """
+    from modules.observability import supabase as supabase_client
+    
+    user_id = user.get("user_id")
+    
+    try:
+        user_lookup = supabase_client.table("users").select("role").eq("id", user_id).single().execute()
+        actual_role = user_lookup.data.get("role", "viewer") if user_lookup.data else "viewer"
+    except Exception as e:
+        print(f"[require_admin] Role lookup failed: {e}")
+        actual_role = "viewer"
+    
+    if actual_role not in {"owner", "admin", "support"}:
+        raise HTTPException(status_code=403, detail="Administrator privileges required")
+    
+    user["actual_role"] = actual_role
+    return user
+
+
+def require_twin_access(twin_id: str, user: dict = Depends(require_tenant)) -> dict:
+    """
+    Verifies that the requested twin belongs to the user's tenant.
+    This is the primary dependency for twin-scoped endpoints.
+    
+    Returns: Minimal twin record if authorized.
+    """
+    from modules.observability import supabase as supabase_client
+    
+    tenant_id = user["tenant_id"]
+    
+    try:
+        # HARDENED: Filter by both id AND tenant_id at DB read level
+        # HARDENED: Select minimal columns only
+        twin_res = supabase_client.table("twins")\
+            .select("id, name, tenant_id")\
+            .eq("id", twin_id)\
+            .eq("tenant_id", tenant_id)\
+            .single().execute()
+            
+        if not twin_res.data:
+            # Metadata probe prevention: return 404 for missing scoped resource
+            raise HTTPException(status_code=404, detail="Twin not found or access denied")
+            
+        return twin_res.data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Never throw 500 on malformed/random UUIDs; return controlled error
+        print(f"[require_twin_access] Access validation failed for twin {twin_id}: {e}")
+        raise HTTPException(status_code=404, detail="Twin not found or access denied")
+
+
 
 def verify_twin_ownership(twin_id: str, user: dict) -> None:
     """
@@ -187,7 +366,6 @@ def verify_twin_ownership(twin_id: str, user: dict) -> None:
     For visitors (API key): checks if twin_id matches their allowed twin
     
     Raises HTTPException if access is denied.
-    Returns None if access is allowed.
     """
     from modules.observability import supabase
     
@@ -199,15 +377,14 @@ def verify_twin_ownership(twin_id: str, user: dict) -> None:
         raise HTTPException(status_code=403, detail="API key not authorized for this twin")
     
     # Authenticated users: verify twin belongs to their tenant
-    user_id = user.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="User not authenticated")
-    
-    # Get user's tenant_id (may already be in user dict from auth)
     user_tenant_id = user.get("tenant_id")
     
-    # If not in user dict, look it up from database
     if not user_tenant_id:
+        # Fallback to lookup (should be rare if require_tenant is used)
+        user_id = user.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="User not authenticated")
+            
         try:
             user_lookup = supabase.table("users").select("tenant_id").eq("id", user_id).single().execute()
             if user_lookup.data:
@@ -218,34 +395,35 @@ def verify_twin_ownership(twin_id: str, user: dict) -> None:
     if not user_tenant_id:
         raise HTTPException(status_code=403, detail="User has no tenant association")
     
-    # Check if twin belongs to user's tenant
+    # HARDENED: Filter by both id AND tenant_id at DB read level
     try:
-        twin_check = supabase.table("twins").select("id, tenant_id").eq("id", twin_id).single().execute()
-        if not twin_check.data:
-            raise HTTPException(status_code=404, detail="Twin not found or access denied")
-        
-        twin_tenant_id = twin_check.data.get("tenant_id")
-        if twin_tenant_id == user_tenant_id:
+        twin_check = supabase.table("twins")\
+            .select("id, tenant_id")\
+            .eq("id", twin_id)\
+            .eq("tenant_id", user_tenant_id)\
+            .single().execute()
+            
+        if twin_check.data:
             return
             
-        print(f"[verify_twin_ownership] Access denied: user tenant {user_tenant_id} != twin tenant {twin_tenant_id}")
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"[verify_twin_ownership] Error checking twin access: {e}")
+        print(f"[verify_twin_ownership] Access check failed for twin {twin_id}: {e}")
     
     raise HTTPException(status_code=404, detail="Twin not found or access denied")
 
-def verify_source_ownership(source_id: str, user: dict) -> str:
+
+def verify_source_ownership(source_id: str, user: dict, expected_twin_id: str = None) -> str:
     """
     Verify that the user has access to the specified source.
     Returns the twin_id of the source if access is allowed.
     
+    Args:
+        source_id: Source UUID
+        user: Principal dict
+        expected_twin_id: Optional. If provided, verifies source belongs to THIS specific twin (pairing check).
+        
     For owners: checks if source belongs to a twin in their tenant
     For visitors (API key): checks if source belongs to their allowed twin
-    
-    Raises HTTPException if access is denied.
-    Returns twin_id if access is allowed.
     """
     from modules.observability import supabase
     
@@ -258,10 +436,16 @@ def verify_source_ownership(source_id: str, user: dict) -> str:
         source_twin_id = source_check.data.get("twin_id")
         if not source_twin_id:
             raise HTTPException(status_code=404, detail="Source not found or access denied")
+            
+        # HARDENED: Prevent cross-twin pairing (Deep Scrub protection)
+        if expected_twin_id and source_twin_id != expected_twin_id:
+            print(f"[SECURITY] Cross-twin pairing attempt: source {source_id} (twin {source_twin_id}) != expected twin {expected_twin_id}")
+            raise HTTPException(status_code=403, detail="Resource pairing violation: Source does not belong to the specified twin")
+            
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[verify_source_ownership] Error checking source: {e}")
+        print(f"[verify_source_ownership] Access check failed for source {source_id}: {e}")
         raise HTTPException(status_code=404, detail="Source not found or access denied")
     
     # Verify twin ownership (reuse existing logic)
@@ -301,4 +485,32 @@ def verify_conversation_ownership(conversation_id: str, user: dict) -> str:
     verify_twin_ownership(conv_twin_id, user)
     
     return conv_twin_id
+
+
+# ============================================================================
+# Twin Lifecycle Guards
+# ============================================================================
+
+def ensure_twin_active(twin_id: str) -> None:
+    """
+    Raise 410 Gone if the twin is archived/deleted.
+    
+    NOTE: Allowlist callers (export/delete endpoints) should skip this guard.
+    """
+    from modules.observability import supabase as supabase_client
+    
+    try:
+        twin_res = supabase_client.table("twins").select("settings").eq("id", twin_id).single().execute()
+        if not twin_res.data:
+            raise HTTPException(status_code=404, detail="Twin not found")
+        
+        settings = twin_res.data.get("settings") or {}
+        if settings.get("deleted_at"):
+            raise HTTPException(status_code=410, detail="Twin is archived or deleted")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ensure_twin_active] Failed to check twin state: {e}")
+        # Fail closed: avoid serving deleted twins if we cannot verify state
+        raise HTTPException(status_code=410, detail="Twin is unavailable")
 

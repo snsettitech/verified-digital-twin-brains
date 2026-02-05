@@ -15,6 +15,7 @@ import {
     PreviewTwinStep,
     LaunchStep
 } from '@/components/onboarding';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 // 9-Step Delphi-Style Onboarding with Specialization
 const WIZARD_STEPS = [
@@ -79,17 +80,22 @@ export default function OnboardingPage() {
     // Check if should skip onboarding (returning user with existing twins)
     useEffect(() => {
         const checkExistingTwins = async () => {
-            const { data: twins } = await supabase
-                .from('twins')
-                .select('id')
-                .limit(1);
-
-            if (twins && twins.length > 0) {
-                router.push('/dashboard');
+            try {
+                // Use API instead of direct Supabase query to ensure consistent tenant_id lookup
+                const response = await authFetchStandalone('/auth/my-twins');
+                if (response.ok) {
+                    const twins = await response.json();
+                    if (twins && twins.length > 0) {
+                        router.push('/dashboard');
+                    }
+                }
+            } catch (error) {
+                console.log('[Onboarding] Error checking twins, continuing with onboarding:', error);
             }
         };
         checkExistingTwins();
     }, []);
+
 
     const handleFileUpload = (files: File[]) => {
         setUploadedFiles(prev => [...prev, ...files]);
@@ -128,6 +134,11 @@ export default function OnboardingPage() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
+            // Ensure user is synced with backend (creates tenant if missing)
+            // This prevents race conditions where the twin is created before the tenant
+            console.log('[Onboarding] Syncing user before twin creation...');
+            await authFetchStandalone('/auth/sync-user', { method: 'POST' });
+
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
             const expertiseText = [...selectedDomains, ...customExpertise].join(', ');
 
@@ -141,12 +152,12 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             console.log('Creating twin with specialization:', selectedSpecialization);
 
             // Call backend API to create twin (bypasses RLS)
-            const response = await fetch(`${backendUrl}/twins`, {
+            // Note: tenant_id is determined server-side from authentication context
+            const response = await authFetchStandalone('/twins', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     name: twinName,
-                    tenant_id: user.id,
+                    // NOTE: tenant_id is resolved server-side - do NOT send from client
                     description: tagline || `${twinName}'s digital twin`,
                     specialization: selectedSpecialization,
                     settings: {
@@ -158,6 +169,7 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
                     }
                 })
             });
+
 
             if (response.ok) {
                 const data = await response.json();
@@ -184,7 +196,7 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             formData.append('twin_id', twinId);
 
             try {
-                await fetch(`${backendUrl}/ingest/document`, {
+                await authFetchStandalone('/ingest/document', {
                     method: 'POST',
                     body: formData,
                 });
@@ -196,9 +208,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
         // Submit URLs
         for (const url of pendingUrls) {
             try {
-                await fetch(`${backendUrl}/ingest/url`, {
+                await authFetchStandalone('/ingest/url', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url, twin_id: twinId }),
                 });
             } catch (error) {
@@ -216,9 +227,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
         for (const faq of faqs) {
             if (faq.question && faq.answer) {
                 try {
-                    await fetch(`${backendUrl}/twins/${twinId}/verified-qna`, {
+                    await authFetchStandalone(`/twins/${twinId}/verified-qna`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             question: faq.question,
                             answer: faq.answer,
@@ -246,9 +256,8 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
 
         try {
             // Use backend PATCH endpoint
-            await fetch(`${backendUrl}/twins/${twinId}`, {
+            await authFetchStandalone(`/twins/${twinId}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     description: tagline || `${twinName}'s digital twin`,
                     settings: {

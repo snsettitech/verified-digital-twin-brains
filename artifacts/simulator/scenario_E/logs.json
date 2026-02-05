@@ -1,0 +1,670 @@
+{
+  "scenario": "scenario_E",
+  "startTime": "2026-02-03T22:12:06.177Z",
+  "console": [
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] MOUNTED",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8692
+      },
+      "at": "2026-02-03T22:12:08.344Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] Starting initialization...",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8857
+      },
+      "at": "2026-02-03T22:12:08.344Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] Initial session: exists (expires: 2026-02-03T23:12:08.000Z)",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8980
+      },
+      "at": "2026-02-03T22:12:08.361Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] syncUser sync_start {correlationId: ws5czr, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:08.361Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 1",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T22:12:08.361Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] refreshTwins [ywiyjh] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T22:12:08.362Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] Auth event: INITIAL_SESSION Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T22:12:08.362Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] syncUser sync_response {correlationId: ws5czr, status: 200}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:09.824Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins received: 2 twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7522
+      },
+      "at": "2026-02-03T22:12:09.824Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] First hydration complete.",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7894
+      },
+      "at": "2026-02-03T22:12:09.825Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] Initialization complete",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9483
+      },
+      "at": "2026-02-03T22:12:09.825Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] selectActiveTwin: Using default (first): d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6488
+      },
+      "at": "2026-02-03T22:12:09.826Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] Persisted activeTwinId: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1219
+      },
+      "at": "2026-02-03T22:12:09.826Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] refreshTwins complete. Active: d367d669-03cf-4ab8-b34a-90e1ed8fc88c Total: 2",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8096
+      },
+      "at": "2026-02-03T22:12:09.826Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][bcd1gm] syncUser sync_success {correlationId: ws5czr}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:09.904Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] MOUNTED",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8692
+      },
+      "at": "2026-02-03T22:12:33.015Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] Starting initialization...",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8857
+      },
+      "at": "2026-02-03T22:12:33.015Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] Auth event: SIGNED_IN Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T22:12:33.016Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] Syncing for event: SIGNED_IN",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9755
+      },
+      "at": "2026-02-03T22:12:33.016Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] syncUser sync_start {correlationId: yydvy, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:33.016Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 1",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T22:12:33.016Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] refreshTwins [uixdgr] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T22:12:33.016Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] syncUser sync_response {correlationId: yydvy, status: 200}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:34.297Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] syncUser sync_success {correlationId: yydvy}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:34.297Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins received: 2 twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7522
+      },
+      "at": "2026-02-03T22:12:34.313Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] First hydration complete.",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7894
+      },
+      "at": "2026-02-03T22:12:34.313Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] selectActiveTwin: Using localStorage: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6399
+      },
+      "at": "2026-02-03T22:12:34.313Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] Persisted activeTwinId: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1219
+      },
+      "at": "2026-02-03T22:12:34.313Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] refreshTwins complete. Active: d367d669-03cf-4ab8-b34a-90e1ed8fc88c Total: 2",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8096
+      },
+      "at": "2026-02-03T22:12:34.313Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] Initial session: exists (expires: 2026-02-03T23:12:08.000Z)",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8980
+      },
+      "at": "2026-02-03T22:12:34.314Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] syncUser sync_start {correlationId: rf8csg, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:34.314Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 2",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T22:12:34.314Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] refreshTwins [6v0spd] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T22:12:34.314Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] Auth event: INITIAL_SESSION Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T22:12:34.314Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] syncUser sync_response {correlationId: rf8csg, status: 200}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:35.878Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] syncUser sync_success {correlationId: rf8csg}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:35.878Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins received: 2 twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7522
+      },
+      "at": "2026-02-03T22:12:35.878Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] Initialization complete",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9483
+      },
+      "at": "2026-02-03T22:12:35.878Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] selectActiveTwin: Keeping current state: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6281
+      },
+      "at": "2026-02-03T22:12:35.878Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] Persisted activeTwinId: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1219
+      },
+      "at": "2026-02-03T22:12:35.878Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][gipams] refreshTwins complete. Active: d367d669-03cf-4ab8-b34a-90e1ed8fc88c Total: 2",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8096
+      },
+      "at": "2026-02-03T22:12:35.879Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] MOUNTED",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8692
+      },
+      "at": "2026-02-03T22:12:43.153Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] Starting initialization...",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8857
+      },
+      "at": "2026-02-03T22:12:43.153Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] Auth event: SIGNED_IN Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T22:12:43.159Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] Syncing for event: SIGNED_IN",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9755
+      },
+      "at": "2026-02-03T22:12:43.159Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] syncUser sync_start {correlationId: xaxame, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:43.161Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 1",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T22:12:43.161Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] refreshTwins [tcj28] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T22:12:43.162Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] syncUser sync_response {correlationId: xaxame, status: 200}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:44.316Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins received: 2 twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7522
+      },
+      "at": "2026-02-03T22:12:44.322Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] First hydration complete.",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7894
+      },
+      "at": "2026-02-03T22:12:44.322Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] syncUser sync_success {correlationId: xaxame}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:44.327Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] selectActiveTwin: Using localStorage: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6399
+      },
+      "at": "2026-02-03T22:12:44.327Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] Persisted activeTwinId: d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1219
+      },
+      "at": "2026-02-03T22:12:44.328Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] refreshTwins complete. Active: d367d669-03cf-4ab8-b34a-90e1ed8fc88c Total: 2",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8096
+      },
+      "at": "2026-02-03T22:12:44.328Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] Initial session: exists (expires: 2026-02-03T23:12:08.000Z)",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 8980
+      },
+      "at": "2026-02-03T22:12:44.351Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] syncUser sync_start {correlationId: 2v4w6r, attempt: 1}",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 1476
+      },
+      "at": "2026-02-03T22:12:44.352Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext] refreshTwins called, requestId: 2",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 6622
+      },
+      "at": "2026-02-03T22:12:44.352Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] refreshTwins [wcotcc] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 7089
+      },
+      "at": "2026-02-03T22:12:44.352Z"
+    },
+    {
+      "type": "log",
+      "text": "[TwinContext][de3zhs] Auth event: INITIAL_SESSION Session: exists",
+      "location": {
+        "url": "https://digitalbrains.vercel.app/_next/static/chunks/3c616f837d6c1eec.js?dpl=dpl_BZame3KNSc2UxnJDy8hBh3Zoewnt",
+        "lineNumber": 0,
+        "columnNumber": 9622
+      },
+      "at": "2026-02-03T22:12:44.360Z"
+    }
+  ],
+  "network": [
+    {
+      "type": "request",
+      "url": "https://verified-digital-twin-brains.onrender.com/chat/d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "method": "POST",
+      "postData": "{\"query\":\"Scenario E: message before clear\",\"conversation_id\":null}",
+      "headers": {
+        "content-type": "application/json"
+      },
+      "at": "2026-02-03T22:12:35.398Z"
+    },
+    {
+      "type": "response",
+      "url": "https://verified-digital-twin-brains.onrender.com/chat/d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "status": 200,
+      "statusText": "",
+      "headers": {
+        "access-control-expose-headers": "x-correlation-id",
+        "cf-cache-status": "DYNAMIC",
+        "access-control-allow-credentials": "true",
+        "cf-ray": "9c854550cdee9dab-YYZ",
+        "access-control-allow-origin": "https://digitalbrains.vercel.app",
+        "rndr-id": "12b90d1a-40da-4f02",
+        "x-render-origin-server": "uvicorn",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "date": "Tue, 03 Feb 2026 22:12:38 GMT",
+        "content-type": "text/event-stream; charset=utf-8",
+        "vary": "Origin",
+        "server": "cloudflare"
+      },
+      "at": "2026-02-03T22:12:38.036Z",
+      "bodySnippet": "{\"type\": \"metadata\", \"citations\": [], \"confidence_score\": 1.0, \"conversation_id\": null, \"graph_context\": {\"has_graph\": false, \"node_count\": 0, \"graph_used\": false}, \"decision_trace\": null}\n{\"type\": \"content\", \"content\": \"It seems like you're referring to a specific scenario or context, but I need a bit more detail to assist you effectively. Could you please provide more information or clarify what you're asking for?\"}\n",
+      "conversation_id": null,
+      "citations": [],
+      "confidence_score": 1
+    }
+  ],
+  "uiEvents": [
+    {
+      "type": "send",
+      "text": "Scenario E: message before clear",
+      "at": "2026-02-03T22:12:35.340Z"
+    },
+    {
+      "type": "wait_response",
+      "spinnerVisible": false,
+      "timedOut": false,
+      "at": "2026-02-03T22:12:41.631Z"
+    },
+    {
+      "type": "clear_history",
+      "at": "2026-02-03T22:12:42.978Z"
+    }
+  ],
+  "messagesBefore": [
+    "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+    "Scenario E: message before clear",
+    "It seems like you're referring to a specific scenario or context, but I need a bit more detail to assist you effectively. Could you please provide more information or clarify what you're asking for?"
+  ],
+  "messagesAfter": [
+    "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents."
+  ],
+  "endTime": "2026-02-03T22:12:45.116Z",
+  "errorBanner": null
+}

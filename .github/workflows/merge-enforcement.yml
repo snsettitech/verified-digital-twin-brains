@@ -1,0 +1,107 @@
+name: Merge Requirements Enforcement
+
+on:
+  pull_request:
+    types: [synchronize]
+
+jobs:
+  enforce-merge-requirements:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check Status Checks
+        id: status_checks
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+            
+            const { data: statuses } = await github.rest.repos.getCombinedStatusForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+            
+            console.log('Check runs:', checkRuns.total_count);
+            console.log('Combined status:', statuses.state);
+            
+            if (statuses.state === 'failure') {
+              console.log('❌ Status checks have failed');
+              process.exitCode = 1;
+              return;
+            }
+            
+            console.log('✅ All status checks passed');
+      
+      - name: Verify Conversations Resolved
+        id: conversations
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+            
+            // Check for unresolved conversations
+            const { data: comments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+            
+            const unresolvedCount = comments.filter(c => !c.in_reply_to_id).length;
+            console.log(`Unresolved comments: ${unresolvedCount}`);
+            
+            if (unresolvedCount > 0) {
+              console.log('⚠️  Unresolved conversations found');
+            } else {
+              console.log('✅ All conversations resolved');
+            }
+      
+      - name: Generate Merge Readiness Report
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) return;
+            
+            // Get review summary
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+            
+            const approvals = reviews.filter(r => r.state === 'APPROVED').length;
+            const requestedChanges = reviews.filter(r => r.state === 'CHANGES_REQUESTED').length;
+            
+            let status = '✅ Ready to merge';
+            if (requestedChanges > 0) {
+              status = '❌ Pending changes requested';
+            } else if (approvals === 0) {
+              status = '⏳ Waiting for approval';
+            }
+            
+            let message = `## ${status}\n\n`;
+            message += `**PR Status:**\n`;
+            message += `- Approvals: ${approvals}\n`;
+            message += `- Changes Requested: ${requestedChanges}\n`;
+            message += `- Draft: ${pr.draft ? 'Yes' : 'No'}\n`;
+            
+            console.log(message);

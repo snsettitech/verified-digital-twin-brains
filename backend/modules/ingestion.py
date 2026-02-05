@@ -14,11 +14,14 @@ from typing import List, Dict, Optional, Any, Tuple
 from modules.transcription import transcribe_audio_multi
 from modules.embeddings import get_embedding
 from PyPDF2 import PdfReader
+import docx
+import openpyxl
 from youtube_transcript_api import YouTubeTranscriptApi
 from modules.clients import get_openai_client, get_pinecone_index
 from modules.observability import supabase, log_ingestion_event
 from modules.health_checks import run_all_health_checks, calculate_content_hash
 from modules.training_jobs import create_training_job
+from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
 
 
@@ -154,6 +157,30 @@ def extract_text_from_pdf(file_path: str) -> str:
     for page in reader.pages:
         text += page.extract_text()
     return text
+
+
+def extract_text_from_docx(file_path: str) -> str:
+    """Extract text from a Word document."""
+    doc = docx.Document(file_path)
+    text = []
+    for para in doc.paragraphs:
+        text.append(para.text)
+    return "\n".join(text)
+
+
+def extract_text_from_excel(file_path: str) -> str:
+    """Extract text from all sheets in an Excel file."""
+    wb = openpyxl.load_workbook(file_path, data_only=True)
+    text = []
+    for sheet_name in wb.sheetnames:
+        sheet = wb[sheet_name]
+        text.append(f"--- Sheet: {sheet_name} ---")
+        for row in sheet.iter_rows(values_only=True):
+            # Filter out None values and convert to string
+            row_text = [str(cell) for cell in row if cell is not None]
+            if row_text:
+                text.append(" | ".join(row_text))
+    return "\n".join(text)
 
 
 def extract_video_id(url: str) -> str:
@@ -560,10 +587,31 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             "video_id": video_id
         })
 
-        # Phase 8: Log the action
-        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube", "chunks": num_chunks})
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+        except Exception:
+            pass
 
-        log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks")
+        # Phase 8: Log the action
+        AuditLogger.log(
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="KNOWLEDGE_UPDATE", 
+            action="SOURCE_INDEXED", 
+            metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube", "chunks": num_chunks}
+        )
+
+        # Set status to live after successful Pinecone upsert
+        supabase.table("sources").update({
+            "status": "live",
+            "staging_status": "live",
+            "chunk_count": num_chunks
+        }).eq("id", source_id).execute()
+
+        log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks, status=live")
 
         return num_chunks
     except Exception as e:
@@ -757,9 +805,30 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
             "tweet_id": tweet_id
         })
 
-        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks})
+        # Fetch tenant_id
+        tenant_id = None
+        try:
+            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
+        except Exception:
+            pass
 
-        log_ingestion_event(source_id, twin_id, "info", f"X thread indexed: {num_chunks} chunks")
+        AuditLogger.log(
+            tenant_id=tenant_id,
+            twin_id=twin_id, 
+            event_type="KNOWLEDGE_UPDATE", 
+            action="SOURCE_INDEXED", 
+            metadata={"source_id": source_id, "filename": f"X Thread: {tweet_id} by {user}", "type": "x_thread", "chunks": num_chunks}
+        )
+
+        # Set status to live after successful Pinecone upsert
+        supabase.table("sources").update({
+            "status": "live",
+            "staging_status": "live",
+            "chunk_count": num_chunks
+        }).eq("id", source_id).execute()
+
+        log_ingestion_event(source_id, twin_id, "info", f"X Thread content indexed: {num_chunks} chunks, status=live")
 
         return num_chunks
     except Exception as e:
@@ -824,11 +893,21 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
     # 2. Chunk text
     chunks = chunk_text(text)
 
+    # 0. Cleanup existing chunks for this source (idempotency)
+    from modules.observability import supabase
+    try:
+        supabase.table("chunks").delete().eq("source_id", source_id).execute()
+    except Exception as e:
+        print(f"[Ingestion] Warning: Failed to clean old chunks for source {source_id}: {e}")
+
     # 3. Generate embeddings and upsert to Pinecone
     index = get_pinecone_index()
     vectors = []
+    db_chunks = []
+    
     for i, chunk in enumerate(chunks):
         vector_id = str(uuid.uuid4())
+        chunk_id = str(uuid.uuid4()) # Supabase primary key
 
         # Analyze chunk for enrichment
         analysis = await analyze_chunk_content(chunk)
@@ -841,6 +920,7 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
         metadata = {
             "source_id": source_id,
             "twin_id": twin_id,
+            "chunk_id": chunk_id, # Link back to DB chunk row
             "text": chunk, # Keep original text for grounding
             "synthetic_questions": synth_questions,
             "category": analysis.get("category", "FACT"),
@@ -863,15 +943,74 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
             "values": embedding,
             "metadata": metadata
         })
+        
+        db_chunks.append({
+            "id": chunk_id,
+            "source_id": source_id,
+            "content": chunk,
+            "vector_id": vector_id,
+            "metadata": metadata
+        })
 
-    # Upsert in batches of 100
-    for i in range(0, len(vectors), 100):
-        index.upsert(vectors[i:i + 100], namespace=twin_id)
+    # Persist chunks to Supabase for citation grounding
+    if db_chunks:
+        try:
+            supabase.table("chunks").insert(db_chunks).execute()
+            print(f"[Supabase] Persisted {len(db_chunks)} chunks for source_id={source_id}")
+        except Exception as e:
+            print(f"[Supabase] ERROR persisting chunks: {e}")
+            raise # Fail loudly to prevent status=live
+
+    # CRITICAL: Actually upsert vectors to Pinecone (namespace = twin_id for isolation)
+    if vectors:
+        try:
+            index.upsert(vectors=vectors, namespace=twin_id)
+            print(f"[Pinecone] Upserted {len(vectors)} vectors to namespace={twin_id}")
+        except Exception as e:
+            print(f"[Pinecone] ERROR during upsert: {e}")
+            raise
+
+    # Ensure default group has access to this source (required for retrieval filtering)
+    try:
+        default_group = await get_default_group(twin_id)
+        if default_group and default_group.get("id"):
+            await add_content_permission(default_group["id"], "source", source_id, twin_id)
+            log_ingestion_event(source_id, twin_id, "info", "Default group permission granted for source")
+    except Exception as e:
+        log_ingestion_event(source_id, twin_id, "warning", f"Failed to grant default group permission: {e}")
+        print(f"[Ingestion] Warning: Failed to grant default group permission for source {source_id}: {e}")
+
+    # Phase 8: Emit event for Action Engine
+    from modules.actions_engine import EventEmitter
+    EventEmitter.emit(
+        twin_id=twin_id,
+        event_type="source_ingested",
+        payload={
+            "source_id": source_id,
+            "filename": metadata_override.get("filename") if metadata_override else "Document",
+            "type": metadata_override.get("type", "file") if metadata_override else "file",
+            "chunks_indexed": len(vectors),
+            "content_preview": text[:1000] # For trigger matching (keywords)
+        },
+        source_context={
+            "source": "ingestion_engine",
+            "method": "process_and_index_text"
+        }
+    )
 
     return len(vectors)
 
 
-async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: str = None):
+async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: str = None, auto_index: bool = False):
+    """Ingest a file - extracts text and optionally indexes to Pinecone.
+    
+    Args:
+        source_id: Unique identifier for this source
+        twin_id: Owner twin ID
+        file_path: Path to the file to ingest
+        filename: Optional display name for the file
+        auto_index: If True, bypasses staging workflow and indexes directly to Pinecone
+    """
     # 0. Check for existing sources with same name to handle "update"
     has_duplicate = False
     if filename:
@@ -901,9 +1040,13 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
         log_ingestion_event(source_id, twin_id, "info", f"Duplicate filename detected, removed old sources")
 
 
-    # 1. Extract text (PDF or Audio)
+    # 1. Extract text (PDF, Docx, Excel, or Audio)
     if file_path.endswith('.pdf'):
         text = extract_text_from_pdf(file_path)
+    elif file_path.endswith('.docx'):
+        text = extract_text_from_docx(file_path)
+    elif file_path.endswith('.xlsx'):
+        text = extract_text_from_excel(file_path)
     elif file_path.endswith(('.mp3', '.wav', '.m4a', '.webm')):
         text = await transcribe_audio(file_path)
     else:
@@ -955,6 +1098,33 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
     }).eq("id", source_id).execute()
 
     log_ingestion_event(source_id, twin_id, "info", f"Health checks completed: {health_result['overall_status']}")
+
+    # Auto-index if requested (bypasses staging approval workflow)
+    if auto_index:
+        log_ingestion_event(source_id, twin_id, "info", "Auto-indexing enabled, skipping staging workflow")
+        num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
+            "filename": filename or "unknown",
+            "type": "file"
+        })
+        
+        # Set status to live after successful Pinecone upsert
+        supabase.table("sources").update({
+            "status": "live",
+            "staging_status": "live",
+            "chunk_count": num_chunks
+        }).eq("id", source_id).execute()
+        
+        log_ingestion_event(source_id, twin_id, "info", f"Auto-indexed: {num_chunks} chunks, status=live")
+        
+        # Audit log
+        AuditLogger.log(twin_id, "KNOWLEDGE_UPDATE", "SOURCE_INDEXED", metadata={
+            "source_id": source_id, 
+            "filename": filename or "unknown", 
+            "type": "file",
+            "chunks": num_chunks
+        })
+        
+        return num_chunks
 
     return 0  # No chunks yet (staged, not indexed)
 
@@ -1113,8 +1283,14 @@ async def ingest_x_thread_wrapper(twin_id: str, url: str) -> str:
     return source_id
 
 
-async def ingest_file(twin_id: str, file) -> str:
-    """Wrapper that saves uploaded file and calls ingest_source"""
+async def ingest_file(twin_id: str, file, auto_index: bool = False) -> str:
+    """Wrapper that saves uploaded file and calls ingest_source.
+    
+    Args:
+        twin_id: Owner twin ID
+        file: Uploaded file object
+        auto_index: If True, bypasses staging and indexes directly to Pinecone
+    """
 
     source_id = str(uuid.uuid4())
     temp_dir = "temp_uploads"
@@ -1131,7 +1307,7 @@ async def ingest_file(twin_id: str, file) -> str:
             f.write(content)
 
         # Call ingest_source with the file path
-        await ingest_source(source_id, twin_id, file_path, file.filename)
+        await ingest_source(source_id, twin_id, file_path, file.filename, auto_index=auto_index)
 
         # Clean up temp file
         if os.path.exists(file_path):
@@ -1145,8 +1321,14 @@ async def ingest_file(twin_id: str, file) -> str:
         raise e
 
 
-async def ingest_url(twin_id: str, url: str) -> str:
-    """Wrapper that detects URL type and routes to appropriate ingestion function"""
+async def ingest_url(twin_id: str, url: str, auto_index: bool = True) -> str:
+    """Wrapper that detects URL type and routes to appropriate ingestion function.
+    
+    Args:
+        twin_id: Owner twin ID
+        url: URL to ingest
+        auto_index: If True (default), bypasses staging and indexes directly
+    """
     source_id = str(uuid.uuid4())
 
     # Detect URL type and route accordingly
@@ -1191,7 +1373,7 @@ async def ingest_url(twin_id: str, url: str) -> str:
                 with open(text_file_path, "w", encoding="utf-8") as f:
                     f.write(text)
 
-                await ingest_source(source_id, twin_id, text_file_path, url)
+                await ingest_source(source_id, twin_id, text_file_path, url, auto_index=auto_index)
         except Exception as e:
             raise ValueError(f"Failed to ingest URL: {e}")
         finally:

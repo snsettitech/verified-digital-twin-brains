@@ -72,6 +72,10 @@ class MetricsCollector:
     def record_request(self):
         """Record a request count."""
         self._add_metric("request_count", 1)
+
+    def record_metric(self, metric_type: str, value: float = 1, metadata: Optional[Dict] = None):
+        """Record a custom metric."""
+        self._add_metric(metric_type, value, metadata)
     
     def _add_metric(self, metric_type: str, value: float, metadata: Optional[Dict] = None):
         """Add metric to buffer."""

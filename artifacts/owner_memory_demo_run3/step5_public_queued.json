@@ -1,0 +1,26 @@
+{
+  "status": "queued",
+  "message": "Queued for owner confirmation.",
+  "clarification_id": "d03aa167-1f2e-4eee-bd64-8c493c6c2853",
+  "question": "What's your stance on adopt a four-day workweek for engineering? Choose one (or answer in one sentence).",
+  "options": [
+    {
+      "label": "Support",
+      "stance": "positive",
+      "intensity": 7,
+      "value": "I generally support adopt a four-day workweek for engineering."
+    },
+    {
+      "label": "Oppose",
+      "stance": "negative",
+      "intensity": 7,
+      "value": "I generally oppose adopt a four-day workweek for engineering."
+    },
+    {
+      "label": "Neutral / depends",
+      "stance": "neutral",
+      "intensity": 4,
+      "value": "My stance on adopt a four-day workweek for engineering depends on context."
+    }
+  ]
+}

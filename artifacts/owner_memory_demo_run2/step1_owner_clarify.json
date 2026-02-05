@@ -1,0 +1,36 @@
+[
+  {
+    "type": "clarify",
+    "clarification_id": "cc49dad4-daa2-45e4-aa73-ff590be0dc8a",
+    "question": "What's your stance on for the team? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "stance": "positive",
+        "intensity": 7,
+        "value": "I generally support for the team."
+      },
+      {
+        "label": "Oppose",
+        "stance": "negative",
+        "intensity": 7,
+        "value": "I generally oppose for the team."
+      },
+      {
+        "label": "Neutral / depends",
+        "stance": "neutral",
+        "intensity": 4,
+        "value": "My stance on for the team depends on context."
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "for the team",
+      "memory_type": "stance",
+      "value_template": "I generally support for the team.",
+      "confidence": 0.7,
+      "source": "owner_clarification"
+    },
+    "status": "pending_owner",
+    "conversation_id": "430377e9-a786-4e28-966a-a1fc502a2aac"
+  }
+]

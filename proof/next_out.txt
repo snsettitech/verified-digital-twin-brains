@@ -1,0 +1,56 @@
+
+> frontend_new@0.1.0 dev
+> next dev
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://130.63.248.108:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 4.2s
+ GET /auth/login 200 in 2.4s (compile: 1373ms, proxy.ts: 278ms, render: 729ms)
+ GET /dashboard 200 in 525ms (compile: 363ms, proxy.ts: 39ms, render: 124ms)
+ GET /dashboard 200 in 399ms (compile: 79ms, proxy.ts: 21ms, render: 299ms)
+ GET /auth/login 200 in 212ms (compile: 7ms, proxy.ts: 11ms, render: 194ms)
+ GET /dashboard 200 in 108ms (compile: 17ms, proxy.ts: 21ms, render: 70ms)
+ GET /dashboard 200 in 104ms (compile: 14ms, proxy.ts: 17ms, render: 73ms)
+ GET /auth/login 200 in 135ms (compile: 6ms, proxy.ts: 9ms, render: 121ms)
+ GET /dashboard 200 in 206ms (compile: 13ms, proxy.ts: 20ms, render: 173ms)
+ GET /dashboard 200 in 177ms (compile: 68ms, proxy.ts: 24ms, render: 86ms)
+ GET /dashboard/twins/8837c300-826d-4504-a6f2-49e1e1ae0678?tab=knowledge 500 in 3.7s (compile: 2.8s, proxy.ts: 19ms, render: 864ms)
+ GET /share/8837c300-826d-4504-a6f2-49e1e1ae0678/f22b2bd2-d92f-4d7b-b9f1-c002a2288d39 200 in 2.8s (compile: 2.5s, proxy.ts: 17ms, render: 233ms)
+ GET /auth/login 200 in 971ms (compile: 430ms, proxy.ts: 13ms, render: 529ms)
+ GET /dashboard 200 in 602ms (compile: 268ms, proxy.ts: 21ms, render: 313ms)
+ GET /dashboard 200 in 394ms (compile: 116ms, proxy.ts: 49ms, render: 228ms)
+ GET /dashboard/twins/8837c300-826d-4504-a6f2-49e1e1ae0678?tab=knowledge 200 in 1419ms (compile: 514ms, proxy.ts: 16ms, render: 890ms)
+ GET /share/8837c300-826d-4504-a6f2-49e1e1ae0678/f22b2bd2-d92f-4d7b-b9f1-c002a2288d39 200 in 833ms (compile: 355ms, proxy.ts: 21ms, render: 456ms)
+ GET /auth/login 200 in 298ms (compile: 8ms, proxy.ts: 10ms, render: 280ms)
+ GET /dashboard 200 in 126ms (compile: 10ms, proxy.ts: 19ms, render: 97ms)
+ GET /dashboard 200 in 263ms (compile: 20ms, proxy.ts: 16ms, render: 226ms)
+ GET /dashboard/twins/003eb646-362e-4dad-a116-f478ea620b19?tab=knowledge 200 in 370ms (compile: 32ms, proxy.ts: 15ms, render: 323ms)
+ GET /share/003eb646-362e-4dad-a116-f478ea620b19/a2909ea0-7518-460f-88c1-b7df395c9ad3 200 in 341ms (compile: 31ms, proxy.ts: 17ms, render: 294ms)
+ GET /auth/login?redirect=%2Fdashboard 200 in 75ms (compile: 5ms, proxy.ts: 5ms, render: 65ms)
+ GET /auth/login?redirect=%2Fdashboard 200 in 74ms (compile: 5ms, proxy.ts: 5ms, render: 64ms)
+ GET /auth/login?redirect=%2Fdashboard 200 in 156ms (compile: 7ms, proxy.ts: 6ms, render: 143ms)
+ GET /auth/signup 200 in 1281ms (compile: 1062ms, proxy.ts: 7ms, render: 211ms)
+ GET /auth/login?redirect=%2Fdashboard%2Fsettings 200 in 347ms (compile: 11ms, proxy.ts: 7ms, render: 328ms)
+ GET /auth/login?redirect=%2Fdashboard 200 in 203ms (compile: 8ms, proxy.ts: 11ms, render: 183ms)
+[Callback] Sync response: exists needs_onboarding: false
+ GET /auth/callback?code=a401a3c6-9742-4ddc-acb8-3bddb556070f&redirect=%2Fdashboard%2Fsettings 307 in 4.1s (compile: 2.9s, proxy.ts: 16ms, render: 1237ms)
+ GET /dashboard 200 in 622ms (compile: 12ms, proxy.ts: 24ms, render: 585ms)
+ GET /auth/login?redirect=%2Fdashboard 200 in 393ms (compile: 12ms, proxy.ts: 35ms, render: 346ms)
+ GET /dashboard 200 in 127ms (compile: 7ms, proxy.ts: 17ms, render: 103ms)
+ GET /dashboard 200 in 327ms (compile: 7ms, proxy.ts: 18ms, render: 301ms)
+ GET /dashboard/simulator 200 in 3.0s (compile: 2.6s, proxy.ts: 14ms, render: 409ms)
+ GET /dashboard/simulator 200 in 256ms (compile: 6ms, proxy.ts: 16ms, render: 234ms)
+ GET /dashboard/simulator 200 in 462ms (compile: 8ms, proxy.ts: 17ms, render: 437ms)
+ GET /dashboard 200 in 220ms (compile: 10ms, proxy.ts: 18ms, render: 192ms)
+ GET /dashboard 200 in 431ms (compile: 9ms, proxy.ts: 18ms, render: 404ms)
+ GET /dashboard/simulator 200 in 240ms (compile: 7ms, proxy.ts: 24ms, render: 208ms)
+ GET /dashboard/settings 200 in 1824ms (compile: 1406ms, proxy.ts: 16ms, render: 401ms)
+ GET /dashboard 200 in 466ms (compile: 7ms, proxy.ts: 17ms, render: 443ms)
+ GET /dashboard 200 in 660ms (compile: 17ms, proxy.ts: 25ms, render: 618ms)
+ GET /dashboard 200 in 188ms (compile: 12ms, proxy.ts: 19ms, render: 156ms)
+ GET /dashboard 200 in 237ms (compile: 10ms, proxy.ts: 16ms, render: 211ms)
+ GET /dashboard 200 in 334ms (compile: 9ms, proxy.ts: 17ms, render: 308ms)

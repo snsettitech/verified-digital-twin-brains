@@ -1,0 +1,26 @@
+{
+  "status": "queued",
+  "message": "Queued for owner confirmation.",
+  "clarification_id": "c69f2843-4724-469e-8b17-4f8d6d50c9ec",
+  "question": "What's your stance on default to remote-first for our team? Choose one (or answer in one sentence).",
+  "options": [
+    {
+      "label": "Support",
+      "stance": "positive",
+      "intensity": 7,
+      "value": "I generally support default to remote-first for our team."
+    },
+    {
+      "label": "Oppose",
+      "stance": "negative",
+      "intensity": 7,
+      "value": "I generally oppose default to remote-first for our team."
+    },
+    {
+      "label": "Neutral / depends",
+      "stance": "neutral",
+      "intensity": 4,
+      "value": "My stance on default to remote-first for our team depends on context."
+    }
+  ]
+}

@@ -1,0 +1,370 @@
+[
+  {
+    "id": "7241e30f-f60b-4f38-8c67-15b3c9819045",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": null,
+    "source_message_id": null,
+    "mode": "public",
+    "status": "answered",
+    "original_query": "Should we prioritize enterprise customers over SMB this quarter?",
+    "question": "What's your stance on prioritize enterprise customers over smb this quarter? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support prioritize enterprise customers over smb this quarter.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose prioritize enterprise customers over smb this quarter.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on prioritize enterprise customers over smb this quarter depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "prioritize enterprise customers over smb this quarter",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support prioritize enterprise customers over smb this quarter."
+    },
+    "owner_memory_id": "24f3518f-fd19-4fc9-b775-307dde578362",
+    "requested_by": "public",
+    "created_by": null,
+    "answered_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answer_text": "Support",
+    "answered_at": "2026-02-04T01:02:06.939324+00:00",
+    "created_at": "2026-02-04T01:02:03.370221+00:00",
+    "updated_at": "2026-02-04T01:02:06.939324+00:00"
+  },
+  {
+    "id": "cc49dad4-daa2-45e4-aa73-ff590be0dc8a",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": "430377e9-a786-4e28-966a-a1fc502a2aac",
+    "source_message_id": null,
+    "mode": "owner",
+    "status": "answered",
+    "original_query": "Should we default to async-first communication for the team?",
+    "question": "What's your stance on for the team? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support for the team.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose for the team.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on for the team depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "for the team",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support for the team."
+    },
+    "owner_memory_id": "459558ab-e4c1-440a-91d8-1a6c42450168",
+    "requested_by": "owner",
+    "created_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answered_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answer_text": "Support",
+    "answered_at": "2026-02-04T01:01:13.067238+00:00",
+    "created_at": "2026-02-04T01:01:09.384179+00:00",
+    "updated_at": "2026-02-04T01:01:13.067238+00:00"
+  },
+  {
+    "id": "c633c0bc-c7fa-4864-a4b2-df09c8446930",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": null,
+    "source_message_id": null,
+    "mode": "public",
+    "status": "pending_owner",
+    "original_query": "Should we prioritize growth over profitability this year?",
+    "question": "What's your stance on prioritize growth over profitability this year? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support prioritize growth over profitability this year.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose prioritize growth over profitability this year.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on prioritize growth over profitability this year depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "prioritize growth over profitability this year",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support prioritize growth over profitability this year."
+    },
+    "owner_memory_id": null,
+    "requested_by": "public",
+    "created_by": null,
+    "answered_by": null,
+    "answer_text": null,
+    "answered_at": null,
+    "created_at": "2026-02-04T00:58:47.674215+00:00",
+    "updated_at": "2026-02-04T00:58:46.817168+00:00"
+  },
+  {
+    "id": "56ee3d66-9ddd-4feb-b127-271d60da2ebe",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": null,
+    "source_message_id": null,
+    "mode": "public",
+    "status": "answered",
+    "original_query": "Should we prioritize growth over profitability this year?",
+    "question": "What's your stance on prioritize growth over profitability this year? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support prioritize growth over profitability this year.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose prioritize growth over profitability this year.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on prioritize growth over profitability this year depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "prioritize growth over profitability this year",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support prioritize growth over profitability this year."
+    },
+    "owner_memory_id": "ec3f2e7a-d6ab-4798-85ba-7d845ea54a72",
+    "requested_by": "public",
+    "created_by": null,
+    "answered_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answer_text": "Support",
+    "answered_at": "2026-02-04T00:58:42.996306+00:00",
+    "created_at": "2026-02-04T00:58:39.989534+00:00",
+    "updated_at": "2026-02-04T00:58:42.996306+00:00"
+  },
+  {
+    "id": "c69f2843-4724-469e-8b17-4f8d6d50c9ec",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": null,
+    "source_message_id": null,
+    "mode": "public",
+    "status": "pending_owner",
+    "original_query": "Should we default to remote-first for our team?",
+    "question": "What's your stance on default to remote-first for our team? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support default to remote-first for our team.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose default to remote-first for our team.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on default to remote-first for our team depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "default to remote-first for our team",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support default to remote-first for our team."
+    },
+    "owner_memory_id": null,
+    "requested_by": "public",
+    "created_by": null,
+    "answered_by": null,
+    "answer_text": null,
+    "answered_at": null,
+    "created_at": "2026-02-04T00:58:35.835023+00:00",
+    "updated_at": "2026-02-04T00:58:34.809334+00:00"
+  },
+  {
+    "id": "ee5a2fd9-4939-4109-93df-33dc22d37834",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": "10c3a47b-16bd-4008-8aee-25d5f59dcf29",
+    "source_message_id": null,
+    "mode": "owner",
+    "status": "pending_owner",
+    "original_query": "Should we default to remote-first for our team?",
+    "question": "What's your stance on default to remote-first for our team? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support default to remote-first for our team.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose default to remote-first for our team.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on default to remote-first for our team depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "default to remote-first for our team",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support default to remote-first for our team."
+    },
+    "owner_memory_id": null,
+    "requested_by": "owner",
+    "created_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answered_by": null,
+    "answer_text": null,
+    "answered_at": null,
+    "created_at": "2026-02-04T00:58:31.498814+00:00",
+    "updated_at": "2026-02-04T00:58:30.639826+00:00"
+  },
+  {
+    "id": "be849538-d431-40da-b5d3-19df6f96f136",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": "10c3a47b-16bd-4008-8aee-25d5f59dcf29",
+    "source_message_id": null,
+    "mode": "owner",
+    "status": "answered",
+    "original_query": "Should we default to remote-first for our team?",
+    "question": "What's your stance on default to remote-first for our team? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support default to remote-first for our team.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose default to remote-first for our team.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on default to remote-first for our team depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "default to remote-first for our team",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support default to remote-first for our team."
+    },
+    "owner_memory_id": "56a90436-9dfc-4231-b8b9-dcc6a7a033a5",
+    "requested_by": "owner",
+    "created_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answered_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answer_text": "Support",
+    "answered_at": "2026-02-04T00:58:26.295848+00:00",
+    "created_at": "2026-02-04T00:58:22.280924+00:00",
+    "updated_at": "2026-02-04T00:58:26.295848+00:00"
+  },
+  {
+    "id": "129ea238-d535-4449-a9ca-604cd5476502",
+    "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+    "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+    "conversation_id": "f8d3a9be-ecfa-4e2e-94eb-8552e9e30976",
+    "source_message_id": null,
+    "mode": "owner",
+    "status": "answered",
+    "original_query": "Should I invest in crypto?",
+    "question": "What's your stance on invest in crypto? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "value": "I generally support invest in crypto.",
+        "stance": "positive",
+        "intensity": 7
+      },
+      {
+        "label": "Oppose",
+        "value": "I generally oppose invest in crypto.",
+        "stance": "negative",
+        "intensity": 7
+      },
+      {
+        "label": "Neutral / depends",
+        "value": "My stance on invest in crypto depends on context.",
+        "stance": "neutral",
+        "intensity": 4
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "invest in crypto",
+      "source": "owner_clarification",
+      "confidence": 0.7,
+      "memory_type": "stance",
+      "value_template": "I generally support invest in crypto."
+    },
+    "owner_memory_id": "400422de-3405-4ec0-bae6-d8751f267d47",
+    "requested_by": "owner",
+    "created_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answered_by": "e419b23a-c330-4951-a73a-24e404fa94b7",
+    "answer_text": "I generally oppose crypto as an investment.",
+    "answered_at": "2026-02-04T00:52:28.273182+00:00",
+    "created_at": "2026-02-04T00:52:23.090437+00:00",
+    "updated_at": "2026-02-04T00:52:28.273182+00:00"
+  }
+]

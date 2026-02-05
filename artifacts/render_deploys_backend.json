@@ -1,0 +1,339 @@
+[
+    {
+        "deploy":  {
+                       "id":  "dep-d61a65tuiags73e7hrq0",
+                       "commit":  {
+                                      "id":  "53dc3993f3db637176d50247d1563cccc124bbde",
+                                      "message":  "feat: owner memory + public clarification flows",
+                                      "createdAt":  "2026-02-04T01:37:26Z"
+                                  },
+                       "status":  "queued",
+                       "trigger":  "api",
+                       "createdAt":  "2026-02-04T01:38:32.310344Z",
+                       "updatedAt":  "2026-02-04T01:38:32.310344Z"
+                   },
+        "cursor":  "-49GKHnMz8w2NXR1aWFnczczZTdocnEw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d61a5pdactks73e0fplg",
+                       "commit":  {
+                                      "id":  "53dc3993f3db637176d50247d1563cccc124bbde",
+                                      "message":  "feat: owner memory + public clarification flows",
+                                      "createdAt":  "2026-02-04T01:37:26Z"
+                                  },
+                       "status":  "build_in_progress",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-04T01:37:42.824506Z",
+                       "updatedAt":  "2026-02-04T01:37:42.824506Z",
+                       "startedAt":  "2026-02-04T01:37:42.781409Z"
+                   },
+        "cursor":  "-49GKHnMz8w1cGRhY3RrczczZTBmcGxn"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d619c915pdvs73cahe10",
+                       "commit":  {
+                                      "id":  "20b4e109abe4215c9dd6697dd1500e4479dc3af7",
+                                      "message":  "Normalize chat metadata and align SSE types",
+                                      "createdAt":  "2026-02-04T00:42:54Z"
+                                  },
+                       "status":  "update_failed",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-04T00:43:17.658963Z",
+                       "updatedAt":  "2026-02-04T00:46:35.689694Z",
+                       "startedAt":  "2026-02-04T00:43:17.602835Z",
+                       "finishedAt":  "2026-02-04T00:46:35.689122Z"
+                   },
+        "cursor":  "ivBKeDj5mYNjOTE1cGR2czczY2FoZTEw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d6187bumcj7s73cpvtng",
+                       "commit":  {
+                                      "id":  "c900179285c66aa5866d2cf1711b4a54b625a75a",
+                                      "message":  "Keep chat SSE alive without cancelling agent",
+                                      "createdAt":  "2026-02-03T23:24:24Z"
+                                  },
+                       "status":  "live",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T23:24:32.977202Z",
+                       "updatedAt":  "2026-02-04T00:46:40.253232Z",
+                       "startedAt":  "2026-02-03T23:24:32.638738Z",
+                       "finishedAt":  "2026-02-03T23:30:32.82157Z"
+                   },
+        "cursor":  "KT-c5ZM8kYw3YnVtY2o3czczY3B2dG5n"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d6184uruibrs73d3i16g",
+                       "commit":  {
+                                      "id":  "c3f5a6dbdb3bb48d1bb181fe0f935b45038ba9fb",
+                                      "message":  "Keep chat stream alive and delay watchdog",
+                                      "createdAt":  "2026-02-03T23:19:15Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T23:19:24.732007Z",
+                       "updatedAt":  "2026-02-03T23:30:32.818776Z",
+                       "startedAt":  "2026-02-03T23:19:24.678934Z",
+                       "finishedAt":  "2026-02-03T23:22:42.380677Z"
+                   },
+        "cursor":  "KT-c5ZM8kYw0dXJ1aWJyczczZDNpMTZn"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d614minfte5s739j1g80",
+                       "commit":  {
+                                      "id":  "643e1867d9569e9e199ee9f18ce644ca06ce495c",
+                                      "message":  "Expose correlation header and add sync-user runbook",
+                                      "createdAt":  "2026-02-03T19:23:45Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T19:23:56.705114Z",
+                       "updatedAt":  "2026-02-03T23:22:42.373028Z",
+                       "startedAt":  "2026-02-03T19:23:56.652424Z",
+                       "finishedAt":  "2026-02-03T19:27:37.751802Z"
+                   },
+        "cursor":  "frxnIV9dCQltaW5mdGU1czczOWoxZzgw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d6147a2dbo4c73ag6a70",
+                       "commit":  {
+                                      "id":  "f2e194d2823f28475c7b7d9300b3801c7b08c018",
+                                      "message":  "Harden auth sync resilience with retry banner",
+                                      "createdAt":  "2026-02-03T18:51:05Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T18:51:24.682063Z",
+                       "updatedAt":  "2026-02-03T19:27:37.750635Z",
+                       "startedAt":  "2026-02-03T18:51:24.289031Z",
+                       "finishedAt":  "2026-02-03T18:54:59.944182Z"
+                   },
+        "cursor":  "frxnIV9dCQk3YTJkYm80YzczYWc2YTcw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d61458h4tr6s73b6hh2g",
+                       "commit":  {
+                                      "id":  "ed0b3972b0ea0c1ac266df84f89636f9d1dbbdd3",
+                                      "message":  "Fix ingestion permissions and retrieval fallbacks",
+                                      "createdAt":  "2026-02-03T18:46:46Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T18:47:04.209473Z",
+                       "updatedAt":  "2026-02-03T18:54:59.939612Z",
+                       "startedAt":  "2026-02-03T18:47:02.731167Z",
+                       "finishedAt":  "2026-02-03T18:50:14.341596Z"
+                   },
+        "cursor":  "frxnIV9dCQk1OGg0dHI2czczYjZoaDJn"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d60sjour433s73fidoa0",
+                       "commit":  {
+                                      "id":  "8545e5a4d97ec276de5205824054b707ff375410",
+                                      "message":  "feat: complete Settings danger zone export/delete flows",
+                                      "createdAt":  "2026-02-03T10:11:39Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T10:11:48.792415Z",
+                       "updatedAt":  "2026-02-03T18:50:14.340257Z",
+                       "startedAt":  "2026-02-03T10:11:48.743306Z",
+                       "finishedAt":  "2026-02-03T10:14:37.604759Z"
+                   },
+        "cursor":  "BBCQvK2HfmVqb3VyNDMzczczZmlkb2Ew"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d60m9p6mcj7s73b0rl5g",
+                       "commit":  {
+                                      "id":  "a118790b179debf720676c04dea4595cf63dc792",
+                                      "message":  "feat: Add Delete Twin functionality with soft/hard delete\n\n- Add POST /twins/{twin_id}/archive for soft delete (archive)\n- Add DELETE /twins/{twin_id}?hard=true for permanent deletion\n- Add DeleteTwinModal component with two-step confirmation UX\n- Update Settings page Danger Zone with delete twin button\n- Handle Pinecone namespace cleanup on hard delete\n- Add audit logging for deletion events\n- Clean up debug code from main.py and twins.py",
+                                      "createdAt":  "2026-02-03T03:00:52Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-03T03:00:54.023197Z",
+                       "updatedAt":  "2026-02-03T10:14:37.603554Z",
+                       "startedAt":  "2026-02-03T03:00:53.966499Z",
+                       "finishedAt":  "2026-02-03T03:05:10.58788Z"
+                   },
+        "cursor":  "7AQpUzvc4OE5cDZtY2o3czczYjBybDVn"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d60gm4k9c44c73ea9h9g",
+                       "commit":  {
+                                      "id":  "9817c21e1f9431fb60dec3f7b2f86bb9ce5d6c7d",
+                                      "message":  "Hardening: Hardened Publish Flow with Retrieval Verification gating and schema-flexible status storage",
+                                      "createdAt":  "2026-02-02T20:37:18Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-02T20:37:39.432451Z",
+                       "updatedAt":  "2026-02-03T03:05:10.586775Z",
+                       "startedAt":  "2026-02-02T20:37:39.374245Z",
+                       "finishedAt":  "2026-02-02T20:54:17.583139Z"
+                   },
+        "cursor":  "_0uuw-XuTfltNGs5YzQ0YzczZWE5aDln"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d60dv9lactks738397tg",
+                       "commit":  {
+                                      "id":  "7c7a20246926d0ab327160c98b286e208b8a71e2",
+                                      "message":  "fix(deploy): add python-docx and openpyxl to requirements.txt",
+                                      "createdAt":  "2026-02-02T17:32:17Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-02T17:32:24.037287Z",
+                       "updatedAt":  "2026-02-02T20:54:17.581026Z",
+                       "startedAt":  "2026-02-02T17:32:23.881709Z",
+                       "finishedAt":  "2026-02-02T17:35:20.845943Z"
+                   },
+        "cursor":  "Qj6NW_KBA-B2OWxhY3RrczczODM5N3Rn"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d60dtdqli9vc739bt0l0",
+                       "commit":  {
+                                      "id":  "9410c407bc906d86faf76f5bfb8b1e26e92c077b",
+                                      "message":  "feat(knowledge): add docx/excel support and upload button\n\n- Add python-docx and openpyxl dependencies\n- Implement extract_text_from_docx and extract_text_from_excel in backend\n- Add Upload File button to UnifiedIngestion.tsx\n- Support .pdf, .docx, .xlsx, .txt file types via UI",
+                                      "createdAt":  "2026-02-02T17:28:18Z"
+                                  },
+                       "status":  "update_failed",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-02T17:28:25.910665Z",
+                       "updatedAt":  "2026-02-02T17:31:39.142257Z",
+                       "startedAt":  "2026-02-02T17:28:25.794168Z",
+                       "finishedAt":  "2026-02-02T17:31:39.1417Z"
+                   },
+        "cursor":  "Qj6NW_KBA-B0ZHFsaTl2YzczOWJ0MGww"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d60djk1r0fns73en5lbg",
+                       "commit":  {
+                                      "id":  "c537c060324eaa9099884a18877bcc4f4aceeeac",
+                                      "message":  "fix(rag): implement chunk persistence and refine retrieval grounding\n\n- Persist ingestion chunks to public.chunks for citation grounding\n- Fix rrf_merge TypeError in retrieval pipeline\n- Guarantee non-empty SSE streams in chat router\n- Harden specializations.py with verify_twin_ownership guards\n- Update ai-verify-governance.py with missing security guards\n- All E2E verification tests passed",
+                                      "createdAt":  "2026-02-02T17:07:20Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-02-02T17:07:32.001733Z",
+                       "updatedAt":  "2026-02-02T17:35:20.844871Z",
+                       "startedAt":  "2026-02-02T17:07:31.379154Z",
+                       "finishedAt":  "2026-02-02T17:10:20.088091Z"
+                   },
+        "cursor":  "Qj6NW_KBA-BqazFyMGZuczczZW41bGJn"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d5u2t9k9c44c73b7v5p0",
+                       "commit":  {
+                                      "id":  "1c9b662775dbae79a1804ce12cbabb02f20de7bd",
+                                      "message":  "fix: resolve production auth regression after TOKEN_REFRESHED\n\n- Add tokenRef in-memory cache to prevent race condition between TOKEN_REFRESHED event and getSession() availability\n- Update syncUser() and refreshTwins() to accept providedToken for direct session injection\n- Sync tokenRef immediately on auth events to eliminate null token window\n- Add stub /connectors endpoint to eliminate 404 noise\n- Preserve twin state during transient auth failures (already protected by isHydratedRef)\n\nRoot cause: onAuthStateChange provides refreshed session immediately, but supabase.auth.getSession() reads from storage which has not yet synchronized (cookie persistence latency in production).\n\nFix: Cache token in memory and use event-provided session directly, bypassing storage dependency during critical refresh window.",
+                                      "createdAt":  "2026-01-30T04:07:55Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-01-30T04:08:07.959672Z",
+                       "updatedAt":  "2026-02-02T17:10:20.084218Z",
+                       "startedAt":  "2026-01-30T04:08:07.896672Z",
+                       "finishedAt":  "2026-01-30T04:10:59.463976Z"
+                   },
+        "cursor":  "rbHqJBJYuFx0OWs5YzQ0YzczYjd2NXAw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d5u08si4d50c73belbr0",
+                       "commit":  {
+                                      "id":  "da281d5950863323f014ba4f7b10a9c7308980c1",
+                                      "message":  "fix: stabilize twin state and eliminate redundant fetches to prevent disappearance",
+                                      "createdAt":  "2026-01-30T00:18:58Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "manual",
+                       "createdAt":  "2026-01-30T01:08:03.625941Z",
+                       "updatedAt":  "2026-01-30T04:10:59.462122Z",
+                       "startedAt":  "2026-01-30T01:08:03.178618Z",
+                       "finishedAt":  "2026-01-30T01:15:22.005066Z"
+                   },
+        "cursor":  "eeL089h9SoA4c2k0ZDUwYzczYmVsYnIw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d5tsrd6mcj7s7395lms0",
+                       "commit":  {
+                                      "id":  "46baca845f20922140fe03805571b3005c300362",
+                                      "message":  "fix: hardened deployment diagnostics and health check paths",
+                                      "createdAt":  "2026-01-29T21:14:19Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-01-29T21:14:30.177898Z",
+                       "updatedAt":  "2026-01-30T01:15:22.003877Z",
+                       "startedAt":  "2026-01-29T21:14:30.102582Z",
+                       "finishedAt":  "2026-01-29T21:17:21.420349Z"
+                   },
+        "cursor":  "onDt1py8AZhyZDZtY2o3czczOTVsbXMw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d5tsbi9r0fns73amk4p0",
+                       "commit":  {
+                                      "id":  "f4d6f51134f0a8fd710cfb174077c3bebc5e047e",
+                                      "message":  "Fix: Resolved Render deployment timeout by removing heavy redundant dependencies (openai-whisper/pytorch) and optimizing startup sequence",
+                                      "createdAt":  "2026-01-29T20:40:34Z"
+                                  },
+                       "status":  "update_failed",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-01-29T20:40:43.786941Z",
+                       "updatedAt":  "2026-01-29T20:57:29.08347Z",
+                       "startedAt":  "2026-01-29T20:40:43.589882Z",
+                       "finishedAt":  "2026-01-29T20:57:29.081607Z"
+                   },
+        "cursor":  "onDt1py8AZhiaTlyMGZuczczYW1rNHAw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d5trunvdiees73etfcf0",
+                       "commit":  {
+                                      "id":  "15f170c998e3b3e094e9dff126c2da34aa41dc12",
+                                      "message":  "Deploy: Hardened backend scope enforcement, applied V2 migrations, and verified production build readiness",
+                                      "createdAt":  "2026-01-29T20:13:14Z"
+                                  },
+                       "status":  "update_failed",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-01-29T20:13:20.462281Z",
+                       "updatedAt":  "2026-01-29T20:34:15.526943Z",
+                       "startedAt":  "2026-01-29T20:13:20.410038Z",
+                       "finishedAt":  "2026-01-29T20:34:15.52648Z"
+                   },
+        "cursor":  "WW6iU-FABmt1bnZkaWVlczczZXRmY2Yw"
+    },
+    {
+        "deploy":  {
+                       "id":  "dep-d5tfi0d6ubrc7382n14g",
+                       "commit":  {
+                                      "id":  "3257992bf0017bd6f63f10b8e9629729a1d61783",
+                                      "message":  "fix: Twin selection loop and 401 auth errors\n\n- Add resolve_tenant_id() helper with auto-create tenant fallback\n- Add /auth/whoami instrumentation endpoint\n- Fix get_my_twins to use resolve_tenant_id\n- Make TwinCreateRequest.tenant_id optional (ignored server-side)\n- Remove client-side tenant_id assignment in onboarding\n- Add check_orphaned_twins.py DB integrity script",
+                                      "createdAt":  "2026-01-29T03:53:59Z"
+                                  },
+                       "status":  "deactivated",
+                       "trigger":  "new_commit",
+                       "createdAt":  "2026-01-29T06:06:58.451817Z",
+                       "updatedAt":  "2026-01-29T21:17:21.418669Z",
+                       "startedAt":  "2026-01-29T06:06:58.412854Z",
+                       "finishedAt":  "2026-01-29T06:16:32.009038Z"
+                   },
+        "cursor":  "b9_u3Ws5JyppMGQ2dWJyYzczODJuMTRn"
+    }
+]

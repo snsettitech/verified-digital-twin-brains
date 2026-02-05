@@ -11,10 +11,14 @@ from modules.observability import supabase
 def get_window_start(timestamp: datetime, limit_type: str) -> datetime:
     """
     Calculate the window start time for a given limit type.
+    For requests_per_minute: rounds down to the minute
     For requests_per_hour: rounds down to the hour
     For requests_per_day: rounds down to midnight UTC
     """
-    if limit_type == "requests_per_hour":
+    if limit_type == "requests_per_minute":
+        # Round down to the minute
+        return timestamp.replace(second=0, microsecond=0)
+    elif limit_type == "requests_per_hour":
         # Round down to the hour
         return timestamp.replace(minute=0, second=0, microsecond=0)
     elif limit_type == "requests_per_day":
@@ -55,7 +59,9 @@ def check_rate_limit(
         remaining = max(0, limit_value - current_count)
         
         # Calculate reset time (next window start)
-        if limit_type == "requests_per_hour":
+        if limit_type == "requests_per_minute":
+            reset_at = window_start + timedelta(minutes=1)
+        elif limit_type == "requests_per_hour":
             reset_at = window_start + timedelta(hours=1)
         elif limit_type == "requests_per_day":
             reset_at = window_start + timedelta(days=1)

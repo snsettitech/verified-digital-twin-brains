@@ -1,0 +1,57 @@
+[log] [TwinContext][d3eia] MOUNTED
+[log] [TwinContext][d3eia] Starting initialization...
+[log] [TwinContext][d3eia] Initial session: exists (expires: 2026-02-03T20:46:38.000Z)
+[log] [TwinContext][d3eia] syncUser sync_start {correlationId: x6y9s, attempt: 1}
+[log] [TwinContext] refreshTwins called, requestId: 1
+[log] [TwinContext][d3eia] refreshTwins [4kitew] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins
+[log] [TwinContext][d3eia] Auth event: INITIAL_SESSION Session: exists
+[error] Failed to load resource: the server responded with a status of 401 ()
+[error] [TwinContext] API error 401: {"detail":"Account has been deleted"}
+[log] [TwinContext][d3eia] Initialization complete
+[error] Failed to load resource: the server responded with a status of 401 ()
+[log] [TwinContext][d3eia] syncUser sync_response {correlationId: x6y9s, status: 401}
+[log] [TwinContext][d3eia] syncUser account_deleted {correlationId: x6y9s}
+[log] [TwinContext][d3eia] Auth event: SIGNED_OUT Session: null
+[warning] [TwinContext][d3eia] SIGNED_OUT detected - clearing state
+[log] [TwinContext][t5ksxl] MOUNTED
+[log] [TwinContext][t5ksxl] Starting initialization...
+[log] [TwinContext][t5ksxl] Initial session: exists (expires: 2026-02-03T21:54:44.000Z)
+[log] [TwinContext][t5ksxl] syncUser sync_start {correlationId: cpv0y, attempt: 1}
+[log] [TwinContext] refreshTwins called, requestId: 1
+[log] [TwinContext][t5ksxl] refreshTwins [fb9bof] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins
+[log] [TwinContext][t5ksxl] Auth event: INITIAL_SESSION Session: exists
+[log] [TwinContext][t5ksxl] syncUser sync_response {correlationId: cpv0y, status: 200}
+[log] [TwinContext][t5ksxl] syncUser sync_success {correlationId: cpv0y}
+[log] [TwinContext] refreshTwins received: 0 twins
+[log] [TwinContext][t5ksxl] First hydration complete.
+[log] [TwinContext][t5ksxl] Initialization complete
+[log] [TwinContext] selectActiveTwin: No twins available
+[log] [TwinContext][t5ksxl] refreshTwins complete. Active: undefined Total: 0
+[log] [TwinContext][i4wbf] MOUNTED
+[log] [TwinContext][i4wbf] Starting initialization...
+[log] [TwinContext][i4wbf] Initial session: exists (expires: 2026-02-03T21:55:00.000Z)
+[log] [TwinContext][i4wbf] syncUser sync_start {correlationId: wwsqig, attempt: 1}
+[log] [TwinContext] refreshTwins called, requestId: 1
+[log] [TwinContext][i4wbf] refreshTwins [hpx8fu] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins
+[log] [TwinContext][i4wbf] Auth event: INITIAL_SESSION Session: exists
+[log] [TwinContext][i4wbf] syncUser sync_response {correlationId: wwsqig, status: 200}
+[log] [TwinContext][i4wbf] syncUser sync_success {correlationId: wwsqig}
+[log] [TwinContext] refreshTwins received: 0 twins
+[log] [TwinContext][i4wbf] First hydration complete.
+[log] [TwinContext][i4wbf] Initialization complete
+[log] [TwinContext] selectActiveTwin: No twins available
+[log] [TwinContext][i4wbf] refreshTwins complete. Active: undefined Total: 0
+[log] [TwinContext][l06w] MOUNTED
+[log] [TwinContext][l06w] Starting initialization...
+[log] [TwinContext][l06w] Initial session: exists (expires: 2026-02-03T21:55:32.000Z)
+[log] [TwinContext][l06w] syncUser sync_start {correlationId: l6o0c, attempt: 1}
+[log] [TwinContext] refreshTwins called, requestId: 1
+[log] [TwinContext][l06w] refreshTwins [1ur3n] fetching: https://verified-digital-twin-brains.onrender.com/auth/my-twins
+[log] [TwinContext][l06w] Auth event: INITIAL_SESSION Session: exists
+[log] [TwinContext] refreshTwins received: 0 twins
+[log] [TwinContext][l06w] First hydration complete.
+[log] [TwinContext][l06w] Initialization complete
+[log] [TwinContext] selectActiveTwin: No twins available
+[log] [TwinContext][l06w] refreshTwins complete. Active: undefined Total: 0
+[log] [TwinContext][l06w] syncUser sync_response {correlationId: l6o0c, status: 200}
+[log] [TwinContext][l06w] syncUser sync_success {correlationId: l6o0c}

@@ -24,11 +24,11 @@ async def verify_youtube(twin_id: str):
         # Verify in DB
         res = supabase.table("sources").select("id, status, content_text").eq("id", source_id).single().execute()
         if res.data and len(res.data.get("content_text", "")) > 100:
-            print(f"✅ DB Verification SUCCESS: Content found ({len(res.data['content_text'])} chars)")
+            print(f"[SUCCESS] DB Verification SUCCESS: Content found ({len(res.data['content_text'])} chars)")
         else:
-            print(f"❌ DB Verification FAILED: Content empty or missing")
+            print(f"[FAILED] DB Verification FAILED: Content empty or missing")
     except Exception as e:
-        print(f"❌ YouTube Ingestion FAILED: {e}")
+        print(f"[FAILED] YouTube Ingestion FAILED: {e}")
 
 async def verify_x(twin_id: str):
     print("\n--- Testing X Thread Resilience (4 Fallbacks) ---")
@@ -38,16 +38,16 @@ async def verify_x(twin_id: str):
     try:
         print(f"Ingesting X Thread: {x_url} for source_id: {source_id}")
         chunks = await ingest_x_thread(source_id, twin_id, x_url)
-        print(f"✅ X Ingestion SUCCESS: Developed {chunks} chunks")
+        print(f"[SUCCESS] X Ingestion SUCCESS: Developed {chunks} chunks")
         
         # Verify in DB
         res = supabase.table("sources").select("id, status, content_text").eq("id", source_id).single().execute()
         if res.data and len(res.data.get("content_text", "")) > 50:
-            print(f"✅ DB Verification SUCCESS: Content found ({len(res.data['content_text'])} chars)")
+            print(f"[SUCCESS] DB Verification SUCCESS: Content found ({len(res.data['content_text'])} chars)")
         else:
-            print(f"❌ DB Verification FAILED: Content empty or missing")
+            print(f"[FAILED] DB Verification FAILED: Content empty or missing")
     except Exception as e:
-        print(f"❌ X Ingestion FAILED: {e}")
+        print(f"[FAILED] X Ingestion FAILED: {e}")
 
 async def main():
     load_dotenv()

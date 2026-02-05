@@ -1,0 +1,36 @@
+[
+  {
+    "type": "clarify",
+    "clarification_id": "e0c077a0-43ec-4635-a6bf-13819b917ad7",
+    "question": "What's your stance on adopt the helios-7 planning cadence for engineering ref 1770169728? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "stance": "positive",
+        "intensity": 7,
+        "value": "I generally support adopt the helios-7 planning cadence for engineering ref 1770169728."
+      },
+      {
+        "label": "Oppose",
+        "stance": "negative",
+        "intensity": 7,
+        "value": "I generally oppose adopt the helios-7 planning cadence for engineering ref 1770169728."
+      },
+      {
+        "label": "Neutral / depends",
+        "stance": "neutral",
+        "intensity": 4,
+        "value": "My stance on adopt the helios-7 planning cadence for engineering ref 1770169728 depends on context."
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "adopt the helios-7 planning cadence for engineering ref 1770169728",
+      "memory_type": "stance",
+      "value_template": "I generally support adopt the helios-7 planning cadence for engineering ref 1770169728.",
+      "confidence": 0.7,
+      "source": "owner_clarification"
+    },
+    "status": "pending_owner",
+    "conversation_id": "7a90a1e3-03af-47d1-addf-010f570f3862"
+  }
+]

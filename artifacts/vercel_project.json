@@ -1,0 +1,465 @@
+{
+    "accountId":  "team_089B927pMqpQwivzqc1Hzr4f",
+    "speedInsights":  {
+                          "id":  "TiZqnNgwNh3mylchR2qCkJgL9mI",
+                          "hasData":  false
+                      },
+    "autoExposeSystemEnvs":  true,
+    "autoAssignCustomDomains":  true,
+    "autoAssignCustomDomainsUpdatedBy":  "system",
+    "buildCommand":  null,
+    "createdAt":  1766560885711,
+    "crons":  {
+                  "enabledAt":  1766560897433,
+                  "disabledAt":  null,
+                  "updatedAt":  1770144732627,
+                  "deploymentId":  "dpl_GYjcpZFjMXCPhMVAeb1DS267mbX2",
+                  "definitions":  [
+
+                                  ]
+              },
+    "devCommand":  null,
+    "directoryListing":  false,
+    "env":  [
+                {
+                    "type":  "encrypted",
+                    "value":  "yG3wr6bmDmR6qT5RK8nM1n3kboMbqJT3AnygKUJOoQEMpdZQIxqdCTYDK3k43FkoAtHot3idebiVVKUdhj2nWw==",
+                    "target":  [
+                                   "development",
+                                   "preview",
+                                   "production"
+                               ],
+                    "configurationId":  null,
+                    "comment":  "Obtained from Supabase Dashboard \u003e Settings \u003e API. It identifies your specific database instance and allows the frontend to route requests to your Supabase project.",
+                    "customEnvironmentIds":  [
+
+                                             ],
+                    "id":  "vj4UCYyQtyIXZFbw",
+                    "key":  "NEXT_PUBLIC_SUPABASE_URL",
+                    "createdAt":  1766566280365,
+                    "updatedAt":  1766566280365,
+                    "createdBy":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                    "updatedBy":  null
+                },
+                {
+                    "type":  "encrypted",
+                    "value":  "55M7LYma7fx3/aOVB9PRXOWb3kCUWZfGqURO8hrE1JHDa8eBlWeoF1z0gmbG3olzPfUAD/X8Vtzia6NFLw226ZoGK8n5ORiRNXeEWIlO0OByJYMXA7qwhovoVy/wylic1dW3g31GCJ6rFHWK8c13dTljKSCQxeEGiNCkVtqmZziwCNV6nxEePILsHClAslmzRmzCPaNNWPKO0++Mh9Cz0OCbPxRspJJaRGYHjffososoLi8e/dtCL4jFujogVY3cNbpr0eALwg74iRQ3lCBocG0atLis1YhUCZiqHpT5EcjCmm6RE1FUH07RQiQywL5w",
+                    "target":  [
+                                   "development",
+                                   "preview",
+                                   "production"
+                               ],
+                    "configurationId":  null,
+                    "comment":  "t is used by the frontend to safely interact with your database and authentication system within the limits of your Row Level Security (RLS) policies.",
+                    "customEnvironmentIds":  [
+
+                                             ],
+                    "id":  "WPQwRIxKUifCmRsm",
+                    "key":  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+                    "createdAt":  1766566280365,
+                    "updatedAt":  1766566280365,
+                    "createdBy":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                    "updatedBy":  null
+                },
+                {
+                    "type":  "encrypted",
+                    "value":  "ZMgIZnx7YVZqMAF4jVzUmRnIwyqPijowyJKfSFO+mzuW5kC6uPUyg75hdFDGxPlpraJGDZ/znLmrvaqErmgYiCKJQxb+lVG1aG/4hPgqdgg=",
+                    "target":  [
+                                   "production",
+                                   "preview",
+                                   "development"
+                               ],
+                    "configurationId":  null,
+                    "comment":  "Set to the URL of the hosted FastAPI backend (e.g., on Render). It tells the frontend where to find your logic",
+                    "customEnvironmentIds":  [
+
+                                             ],
+                    "id":  "F0g0cRK0a1b3EJ1d",
+                    "key":  "NEXT_PUBLIC_BACKEND_URL",
+                    "createdAt":  1766566280365,
+                    "updatedAt":  1766567025054,
+                    "createdBy":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                    "updatedBy":  "kvjVe6Zm8GlnCsCxiLD1HgTl"
+                }
+            ],
+    "framework":  "nextjs",
+    "gitForkProtection":  true,
+    "gitLFS":  true,
+    "id":  "prj_tye8zjjKLvhdjH2pyBXno8JaylYk",
+    "installCommand":  null,
+    "lastRollbackTarget":  null,
+    "lastAliasRequest":  null,
+    "name":  "verified-digital-twin-brains",
+    "nodeVersion":  "24.x",
+    "outputDirectory":  null,
+    "productionDeploymentsFastLane":  true,
+    "publicSource":  null,
+    "defaultResourceConfig":  {
+                                  "fluid":  true,
+                                  "functionDefaultRegions":  [
+                                                                 "iad1"
+                                                             ],
+                                  "functionDefaultTimeout":  300,
+                                  "functionDefaultMemoryType":  "standard",
+                                  "functionZeroConfigFailover":  false,
+                                  "elasticConcurrencyEnabled":  true
+                              },
+    "resourceConfig":  {
+                           "fluid":  true,
+                           "functionDefaultRegions":  [
+                                                          "iad1"
+                                                      ],
+                           "elasticConcurrencyEnabled":  true
+                       },
+    "rootDirectory":  "frontend",
+    "serverlessFunctionRegion":  "iad1",
+    "skewProtectionBoundaryAt":  1766568453699,
+    "skewProtectionMaxAge":  43200,
+    "sourceFilesOutsideRootDirectory":  true,
+    "enableAffectedProjectsDeployments":  true,
+    "ssoProtection":  {
+                          "deploymentType":  "all_except_custom_domains"
+                      },
+    "updatedAt":  1770155189399,
+    "live":  false,
+    "gitComments":  {
+                        "onPullRequest":  true,
+                        "onCommit":  true
+                    },
+    "gitProviderOptions":  {
+                               "createDeployments":  "enabled",
+                               "requireVerifiedCommits":  false
+                           },
+    "webAnalytics":  {
+                         "id":  "fZY6QCajOc1QjnxXmMzjnLsxa"
+                     },
+    "oidcTokenConfig":  {
+                            "enabled":  true,
+                            "issuerMode":  "team"
+                        },
+    "hasDeployments":  true,
+    "link":  {
+                 "type":  "github",
+                 "repo":  "verified-digital-twin-brains",
+                 "repoId":  1122149313,
+                 "org":  "snsettitech",
+                 "repoOwnerId":  207021081,
+                 "gitCredentialId":  "cred_9a28b02af29011405b1d5c017c2e360f3d2023fc",
+                 "productionBranch":  "main",
+                 "createdAt":  1768144412705,
+                 "updatedAt":  1768144412705,
+                 "deployHooks":  [
+                                     {
+                                         "createdAt":  1770140527443,
+                                         "id":  "87F5LM5yFg",
+                                         "name":  "codex",
+                                         "ref":  "main",
+                                         "url":  "https://api.vercel.com/v1/integrations/deploy/prj_tye8zjjKLvhdjH2pyBXno8JaylYk/87F5LM5yFg"
+                                     }
+                                 ]
+             },
+    "latestDeployments":  [
+                              {
+                                  "alias":  [
+                                                "verified-digital-twin-brains-sainaths-projects-3794e992.vercel.app",
+                                                "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app"
+                                            ],
+                                  "aliasAssigned":  null,
+                                  "automaticAliases":  [
+                                                           "verified-digital-twin-brains-sainaths-projects-3794e992.vercel.app",
+                                                           "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app"
+                                                       ],
+                                  "builds":  [
+
+                                             ],
+                                  "createdAt":  1770155188912,
+                                  "createdIn":  "sfo1",
+                                  "creator":  {
+                                                  "uid":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                                  "email":  "sainat.setti@gmail.com",
+                                                  "username":  "snsettitech"
+                                              },
+                                  "deploymentHostname":  "verified-digital-twin-brains-85nuhu49s",
+                                  "forced":  false,
+                                  "id":  "dpl_F6xMTamHhJ35vVwq63JUYLe5Lp3T",
+                                  "meta":  {
+                                               "githubCommitAuthorName":  "Verified Digital Twin CI",
+                                               "githubCommitAuthorEmail":  "ci@verified-digital-twin.local",
+                                               "githubCommitMessage":  "Scope simulator chat storage to tenant",
+                                               "githubCommitOrg":  "snsettitech",
+                                               "githubCommitRef":  "main",
+                                               "githubCommitRepo":  "verified-digital-twin-brains",
+                                               "githubCommitSha":  "de577efce022203adc961ac7837d46bb3c95e58f",
+                                               "githubDeployment":  "1",
+                                               "githubOrg":  "snsettitech",
+                                               "githubRepo":  "verified-digital-twin-brains",
+                                               "githubRepoOwnerType":  "User",
+                                               "githubCommitRepoId":  "1122149313",
+                                               "githubRepoId":  "1122149313",
+                                               "githubRepoVisibility":  "private",
+                                               "githubHost":  "github.com",
+                                               "deployHookId":  "87F5LM5yFg",
+                                               "deployHookRef":  "main",
+                                               "deployHookName":  "codex",
+                                               "branchAlias":  "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app",
+                                               "bundler":  "turbopack"
+                                           },
+                                  "name":  "verified-digital-twin-brains",
+                                  "plan":  "pro",
+                                  "private":  true,
+                                  "readyState":  "ERROR",
+                                  "target":  "production",
+                                  "teamId":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                  "type":  "LAMBDAS",
+                                  "url":  "verified-digital-twin-brains-85nuhu49s.vercel.app",
+                                  "userId":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                  "withCache":  true,
+                                  "buildingAt":  1770155190232,
+                                  "readyAt":  1770155228073,
+                                  "previewCommentsEnabled":  true,
+                                  "oidcTokenClaims":  {
+                                                          "sub":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:production",
+                                                          "iss":  "https://oidc.vercel.com/sainaths-projects-3794e992",
+                                                          "scope":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:production",
+                                                          "aud":  "https://vercel.com/sainaths-projects-3794e992",
+                                                          "owner":  "sainaths-projects-3794e992",
+                                                          "owner_id":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                                          "project":  "verified-digital-twin-brains",
+                                                          "project_id":  "prj_tye8zjjKLvhdjH2pyBXno8JaylYk",
+                                                          "environment":  "production",
+                                                          "plan":  "pro"
+                                                      }
+                              },
+                              {
+                                  "alias":  [
+                                                "digitalbrains.vercel.app",
+                                                "verified-digital-twin-brains-sainaths-projects-3794e992.vercel.app",
+                                                "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app"
+                                            ],
+                                  "aliasAssigned":  1770144732456,
+                                  "aliasError":  null,
+                                  "automaticAliases":  [
+                                                           "verified-digital-twin-brains-sainaths-projects-3794e992.vercel.app",
+                                                           "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app"
+                                                       ],
+                                  "builds":  [
+
+                                             ],
+                                  "createdAt":  1770144687250,
+                                  "createdIn":  "sfo1",
+                                  "creator":  {
+                                                  "uid":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                                  "email":  "sainat.setti@gmail.com",
+                                                  "username":  "snsettitech"
+                                              },
+                                  "deploymentHostname":  "verified-digital-twin-brains-1iys7c0jv",
+                                  "forced":  false,
+                                  "id":  "dpl_GYjcpZFjMXCPhMVAeb1DS267mbX2",
+                                  "meta":  {
+                                               "githubCommitAuthorName":  "Verified Digital Twin CI",
+                                               "githubCommitAuthorEmail":  "ci@verified-digital-twin.local",
+                                               "githubCommitMessage":  "Harden auth sync resilience with retry banner",
+                                               "githubCommitOrg":  "snsettitech",
+                                               "githubCommitRef":  "main",
+                                               "githubCommitRepo":  "verified-digital-twin-brains",
+                                               "githubCommitSha":  "f2e194d2823f28475c7b7d9300b3801c7b08c018",
+                                               "githubDeployment":  "1",
+                                               "githubOrg":  "snsettitech",
+                                               "githubRepo":  "verified-digital-twin-brains",
+                                               "githubRepoOwnerType":  "User",
+                                               "githubCommitRepoId":  "1122149313",
+                                               "githubRepoId":  "1122149313",
+                                               "githubRepoVisibility":  "private",
+                                               "githubHost":  "github.com",
+                                               "deployHookId":  "87F5LM5yFg",
+                                               "deployHookRef":  "main",
+                                               "deployHookName":  "codex",
+                                               "branchAlias":  "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app",
+                                               "lambdaRuntimeStats":  "{\"nodejs\":5}",
+                                               "bundler":  "turbopack"
+                                           },
+                                  "name":  "verified-digital-twin-brains",
+                                  "plan":  "pro",
+                                  "private":  true,
+                                  "readyState":  "READY",
+                                  "readySubstate":  "PROMOTED",
+                                  "target":  "production",
+                                  "teamId":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                  "type":  "LAMBDAS",
+                                  "url":  "verified-digital-twin-brains-1iys7c0jv.vercel.app",
+                                  "userId":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                  "withCache":  true,
+                                  "buildingAt":  1770144688288,
+                                  "readyAt":  1770144732258,
+                                  "previewCommentsEnabled":  true,
+                                  "oidcTokenClaims":  {
+                                                          "sub":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:production",
+                                                          "iss":  "https://oidc.vercel.com/sainaths-projects-3794e992",
+                                                          "scope":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:production",
+                                                          "aud":  "https://vercel.com/sainaths-projects-3794e992",
+                                                          "owner":  "sainaths-projects-3794e992",
+                                                          "owner_id":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                                          "project":  "verified-digital-twin-brains",
+                                                          "project_id":  "prj_tye8zjjKLvhdjH2pyBXno8JaylYk",
+                                                          "environment":  "production",
+                                                          "plan":  "pro"
+                                                      }
+                              }
+                          ],
+    "targets":  {
+                    "production":  {
+                                       "alias":  [
+                                                     "verified-digital-twin-brains-sainaths-projects-3794e992.vercel.app",
+                                                     "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app"
+                                                 ],
+                                       "aliasAssigned":  null,
+                                       "automaticAliases":  [
+                                                                "verified-digital-twin-brains-sainaths-projects-3794e992.vercel.app",
+                                                                "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app"
+                                                            ],
+                                       "builds":  [
+
+                                                  ],
+                                       "createdAt":  1770155188912,
+                                       "createdIn":  "sfo1",
+                                       "creator":  {
+                                                       "uid":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                                       "email":  "sainat.setti@gmail.com",
+                                                       "username":  "snsettitech"
+                                                   },
+                                       "deploymentHostname":  "verified-digital-twin-brains-85nuhu49s",
+                                       "forced":  false,
+                                       "id":  "dpl_F6xMTamHhJ35vVwq63JUYLe5Lp3T",
+                                       "meta":  {
+                                                    "githubCommitAuthorName":  "Verified Digital Twin CI",
+                                                    "githubCommitAuthorEmail":  "ci@verified-digital-twin.local",
+                                                    "githubCommitMessage":  "Scope simulator chat storage to tenant",
+                                                    "githubCommitOrg":  "snsettitech",
+                                                    "githubCommitRef":  "main",
+                                                    "githubCommitRepo":  "verified-digital-twin-brains",
+                                                    "githubCommitSha":  "de577efce022203adc961ac7837d46bb3c95e58f",
+                                                    "githubDeployment":  "1",
+                                                    "githubOrg":  "snsettitech",
+                                                    "githubRepo":  "verified-digital-twin-brains",
+                                                    "githubRepoOwnerType":  "User",
+                                                    "githubCommitRepoId":  "1122149313",
+                                                    "githubRepoId":  "1122149313",
+                                                    "githubRepoVisibility":  "private",
+                                                    "githubHost":  "github.com",
+                                                    "deployHookId":  "87F5LM5yFg",
+                                                    "deployHookRef":  "main",
+                                                    "deployHookName":  "codex",
+                                                    "branchAlias":  "verified-digital-twin-bra-git-8b21e6-sainaths-projects-3794e992.vercel.app",
+                                                    "bundler":  "turbopack"
+                                                },
+                                       "name":  "verified-digital-twin-brains",
+                                       "plan":  "pro",
+                                       "private":  true,
+                                       "readyState":  "ERROR",
+                                       "target":  "production",
+                                       "teamId":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                       "type":  "LAMBDAS",
+                                       "url":  "verified-digital-twin-brains-85nuhu49s.vercel.app",
+                                       "userId":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                       "withCache":  true,
+                                       "buildingAt":  1770155190232,
+                                       "readyAt":  1770155228073,
+                                       "previewCommentsEnabled":  true,
+                                       "oidcTokenClaims":  {
+                                                               "sub":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:production",
+                                                               "iss":  "https://oidc.vercel.com/sainaths-projects-3794e992",
+                                                               "scope":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:production",
+                                                               "aud":  "https://vercel.com/sainaths-projects-3794e992",
+                                                               "owner":  "sainaths-projects-3794e992",
+                                                               "owner_id":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                                               "project":  "verified-digital-twin-brains",
+                                                               "project_id":  "prj_tye8zjjKLvhdjH2pyBXno8JaylYk",
+                                                               "environment":  "production",
+                                                               "plan":  "pro"
+                                                           }
+                                   },
+                    "preview":  {
+                                    "alias":  [
+                                                  "verified-digital-twin-bra-git-21e75d-sainaths-projects-3794e992.vercel.app"
+                                              ],
+                                    "aliasAssigned":  1770143106372,
+                                    "aliasError":  null,
+                                    "automaticAliases":  [
+                                                             "verified-digital-twin-bra-git-21e75d-sainaths-projects-3794e992.vercel.app"
+                                                         ],
+                                    "builds":  [
+
+                                               ],
+                                    "createdAt":  1770143063439,
+                                    "createdIn":  "sfo1",
+                                    "creator":  {
+                                                    "uid":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                                    "email":  "sainat.setti@gmail.com",
+                                                    "username":  "snsettitech",
+                                                    "githubLogin":  "google-labs-jules[bot]"
+                                                },
+                                    "deploymentHostname":  "verified-digital-twin-brains-jwkkwocem",
+                                    "forced":  false,
+                                    "id":  "dpl_9ex7jFpoUvy1X2Uhhg8fbZcSxYPy",
+                                    "meta":  {
+                                                 "githubCommitAuthorName":  "google-labs-jules[bot]",
+                                                 "githubCommitAuthorEmail":  "161369871+google-labs-jules[bot]@users.noreply.github.com",
+                                                 "githubCommitMessage":  "Fix CI dependencies and test mocks\n\nCo-authored-by: snsettitech \u003c207021081+snsettitech@users.noreply.github.com\u003e",
+                                                 "githubCommitOrg":  "snsettitech",
+                                                 "githubCommitRef":  "feature/calendar-connector-12029700485592923046",
+                                                 "githubCommitRepo":  "verified-digital-twin-brains",
+                                                 "githubCommitSha":  "fe88e7b8ebced017c692620ff4f0896865cb209f",
+                                                 "githubDeployment":  "1",
+                                                 "githubOrg":  "snsettitech",
+                                                 "githubRepo":  "verified-digital-twin-brains",
+                                                 "githubRepoOwnerType":  "User",
+                                                 "githubCommitRepoId":  "1122149313",
+                                                 "githubRepoId":  "1122149313",
+                                                 "githubRepoVisibility":  "private",
+                                                 "githubHost":  "github.com",
+                                                 "githubCommitAuthorLogin":  "google-labs-jules[bot]",
+                                                 "githubPrId":  "5",
+                                                 "repoPushedAt":  "1770143059000",
+                                                 "branchAlias":  "verified-digital-twin-bra-git-21e75d-sainaths-projects-3794e992.vercel.app",
+                                                 "lambdaRuntimeStats":  "{\"nodejs\":5}",
+                                                 "bundler":  "turbopack"
+                                             },
+                                    "name":  "verified-digital-twin-brains",
+                                    "plan":  "pro",
+                                    "private":  true,
+                                    "readyState":  "READY",
+                                    "readySubstate":  "STAGED",
+                                    "target":  null,
+                                    "teamId":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                    "type":  "LAMBDAS",
+                                    "url":  "verified-digital-twin-brains-jwkkwocem.vercel.app",
+                                    "userId":  "kvjVe6Zm8GlnCsCxiLD1HgTl",
+                                    "withCache":  false,
+                                    "buildingAt":  1770143064423,
+                                    "readyAt":  1770143106215,
+                                    "previewCommentsEnabled":  true,
+                                    "oidcTokenClaims":  {
+                                                            "sub":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:preview",
+                                                            "iss":  "https://oidc.vercel.com/sainaths-projects-3794e992",
+                                                            "scope":  "owner:sainaths-projects-3794e992:project:verified-digital-twin-brains:environment:preview",
+                                                            "aud":  "https://vercel.com/sainaths-projects-3794e992",
+                                                            "owner":  "sainaths-projects-3794e992",
+                                                            "owner_id":  "team_089B927pMqpQwivzqc1Hzr4f",
+                                                            "project":  "verified-digital-twin-brains",
+                                                            "project_id":  "prj_tye8zjjKLvhdjH2pyBXno8JaylYk",
+                                                            "environment":  "preview",
+                                                            "plan":  "pro"
+                                                        }
+                                }
+                },
+    "deploymentExpiration":  {
+                                 "expirationDays":  180,
+                                 "expirationDaysProduction":  365,
+                                 "expirationDaysCanceled":  30,
+                                 "expirationDaysErrored":  90,
+                                 "deploymentsToKeep":  10
+                             },
+    "features":  {
+                     "webAnalytics":  false
+                 }
+}

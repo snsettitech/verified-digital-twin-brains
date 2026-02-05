@@ -1,0 +1,25 @@
+{
+  "id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+  "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+  "name": "Simulator E2E Twin B",
+  "description": "Second twin for switch test",
+  "created_at": "2026-02-03T22:13:36.647326+00:00",
+  "settings": {
+    "handle": "sim-e2e-1770156815308",
+    "tagline": "Simulator repro",
+    "expertise": [
+      "general"
+    ],
+    "personality": {
+      "tone": "neutral",
+      "firstPerson": true,
+      "responseLength": "medium"
+    },
+    "system_prompt": "You are a helpful assistant."
+  },
+  "is_verified": false,
+  "verification_status": "unverified",
+  "specialization_id": "vanilla",
+  "specialization_version": "1.0.0",
+  "specialization": "vanilla"
+}

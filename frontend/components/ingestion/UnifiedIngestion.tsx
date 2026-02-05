@@ -68,12 +68,22 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
     const [extractedNodes, setExtractedNodes] = useState<ExtractedNode[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [dragActive, setDragActive] = useState(false);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     // Get auth token
     const getAuthToken = useCallback(async () => {
         const { data: { session } } = await supabase.auth.getSession();
         return session?.access_token;
     }, [supabase]);
+
+    const resetState = () => {
+        setInput('');
+        setDetectedType('unknown');
+        setStage('idle');
+        setProgress(0);
+        setExtractedNodes([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
 
     // Handle input change with auto-detection
     const handleInputChange = (value: string) => {
@@ -159,17 +169,60 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
             // Reset input after success
             setTimeout(() => {
-                setInput('');
-                setDetectedType('unknown');
-                setStage('idle');
-                setProgress(0);
-                setExtractedNodes([]);
+                resetState();
             }, 3000);
 
         } catch (err: any) {
             setError(err.message || 'Something went wrong');
             setStage('error');
             onError?.(err.message);
+        }
+    };
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const token = await getAuthToken();
+        if (!token) {
+            setError('Not authenticated');
+            return;
+        }
+
+        setDetectedType('file');
+        setStage('ingesting');
+        setProgress(20);
+        setStatusText(`Uploading ${file.name}...`);
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/ingest/file/${twinId}`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.detail || 'Upload failed');
+            }
+
+            const result = await response.json();
+            setProgress(100);
+            setStatusText('File uploaded successfully!');
+            setStage('complete');
+            onComplete?.({ source_id: result.source_id, status: 'staged' });
+
+            setTimeout(() => {
+                resetState();
+            }, 2000);
+
+        } catch (err: any) {
+            setError(err.message);
+            setStage('error');
+            resetState(); // Reset on error too so user can try again
         }
     };
 
@@ -244,6 +297,15 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 onDrop={handleDrop}
             >
                 <div className="flex gap-3">
+                    {/* Hidden file input */}
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept=".pdf,.docx,.doc,.xlsx,.xls,.txt"
+                    />
+
                     {/* Type indicator */}
                     {detectedType !== 'unknown' && (
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-${config.color}-100`}>
@@ -267,6 +329,17 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                             </span>
                         )}
                     </div>
+
+                    {/* Upload File Button */}
+                    <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isProcessing || !!input}
+                        className="px-4 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50 transition-all flex items-center gap-2"
+                        title="Upload PDF, Docx, Excel"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <span className="hidden sm:inline">Upload</span>
+                    </button>
 
                     {/* Action button */}
                     <button

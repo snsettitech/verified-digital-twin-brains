@@ -1,0 +1,13 @@
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+⨯ Error: useTheme must be used within a ThemeProvider
+    at useTheme (lib\context\ThemeContext.tsx:21:15)
+    at ThemeToggle (lib\context\ThemeContext.tsx:107:44)
+  19 |     const context = useContext(ThemeContext);
+  20 |     if (!context) {
+> 21 |         throw new Error('useTheme must be used within a ThemeProvider');
+     |               ^
+  22 |     }
+  23 |     return context;
+  24 | } {
+  digest: '2582419635'
+}

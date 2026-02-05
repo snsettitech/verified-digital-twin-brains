@@ -24,6 +24,7 @@ class YouTubeRetryStrategy:
         self.max_retries = max_retries
         self.verbose = verbose
         self.attempts = 0
+        self.last_error: Optional[str] = None  # Track the last error message
         self.errors: List[Tuple[int, str, str]] = []  # (attempt, category, message)
         self.metrics = {
             "auth_failures": 0,
@@ -93,6 +94,7 @@ class YouTubeRetryStrategy:
     def log_attempt(self, error_msg: str):
         """Log a failed download attempt."""
         self.attempts += 1
+        self.last_error = error_msg  # Track the last error
         category, user_msg, is_retryable = self.classify_error(error_msg)
         
         self.errors.append((self.attempts, category, user_msg))

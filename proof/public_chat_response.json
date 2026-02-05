@@ -1,0 +1,13 @@
+{
+  "status": "answer",
+  "response": "The unique phrase in the critical path proof file is **CRITICAL_PATH_PROOF_1770201158**.",
+  "citations": [
+    "graph-e65a5e2c",
+    "1ce88e61-6087-4e3a-8c11-a1c2fad5aa53",
+    "ab57d0b0-6595-4e8f-86fb-181600ee04d5",
+    "graph-b867d453"
+  ],
+  "owner_memory_refs": [],
+  "owner_memory_topics": [],
+  "used_owner_memory": false
+}

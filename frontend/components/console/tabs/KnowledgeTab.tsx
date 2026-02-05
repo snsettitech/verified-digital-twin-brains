@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { getSupabaseClient } from '@/lib/supabase/client';
+import { resolveApiBaseUrl } from '@/lib/api';
 
 interface Source {
     id: string;
@@ -19,9 +21,81 @@ interface KnowledgeTabProps {
 }
 
 export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: KnowledgeTabProps) {
+    const supabase = getSupabaseClient();
     const [activeView, setActiveView] = useState<'list' | 'graph'>('list');
     const [showUploadModal, setShowUploadModal] = useState(false);
     const [url, setUrl] = useState('');
+    const [loadedSources, setLoadedSources] = useState<Source[]>(sources);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const retryRef = useRef(0);
+
+    const fetchSources = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (!token) {
+                if (retryRef.current < 5) {
+                    retryRef.current += 1;
+                    setTimeout(fetchSources, 600);
+                } else {
+                    setError('Not authenticated.');
+                    setLoadedSources([]);
+                }
+                return;
+            }
+            const backendUrl = resolveApiBaseUrl();
+            const res = await fetch(`${backendUrl}/sources/${twinId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText || 'Failed to load sources');
+            }
+            const data = await res.json();
+            const mapped = (Array.isArray(data) ? data : []).map((source: any) => {
+                const rawStatus = source.staging_status || source.status || 'pending';
+                let status: Source['status'] = 'pending';
+                if (['live', 'approved', 'processed'].includes(rawStatus)) {
+                    status = 'approved';
+                } else if (['processing', 'training'].includes(rawStatus)) {
+                    status = 'processing';
+                }
+                const filename = source.filename || source.file_url || 'Untitled source';
+                const isUrl = typeof filename === 'string' && (filename.startsWith('http://') || filename.startsWith('https://'));
+                return {
+                    id: source.id,
+                    name: filename,
+                    type: isUrl ? 'url' : 'document',
+                    status,
+                    createdAt: source.created_at ? new Date(source.created_at).toLocaleDateString() : '',
+                    chunks: source.chunk_count || undefined
+                } as Source;
+            });
+            setLoadedSources(mapped);
+        } catch (err: any) {
+            console.error(err);
+            setError('Failed to load sources.');
+            setLoadedSources([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [supabase, twinId]);
+
+    useEffect(() => {
+        fetchSources();
+        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.access_token) {
+                retryRef.current = 0;
+                fetchSources();
+            }
+        });
+        return () => {
+            data?.subscription?.unsubscribe();
+        };
+    }, [fetchSources, supabase]);
 
     const statusColors = {
         approved: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
@@ -125,7 +199,11 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
 
                     {/* Table Body */}
                     <div className="divide-y divide-white/5">
-                        {sources.length === 0 ? (
+                        {loading ? (
+                            <div className="px-6 py-8 text-sm text-slate-400">Loading sources...</div>
+                        ) : error ? (
+                            <div className="px-6 py-8 text-sm text-rose-300">{error}</div>
+                        ) : loadedSources.length === 0 ? (
                             <div className="px-6 py-12 text-center">
                                 <div className="w-16 h-16 mx-auto mb-4 bg-white/5 rounded-2xl flex items-center justify-center">
                                     <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,7 +220,7 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
                                 </button>
                             </div>
                         ) : (
-                            sources.map((source) => (
+                            loadedSources.map((source) => (
                                 <div key={source.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-white/5 transition-colors">
                                     <div className="col-span-5 flex items-center gap-3">
                                         <span className="text-xl">{typeIcons[source.type]}</span>

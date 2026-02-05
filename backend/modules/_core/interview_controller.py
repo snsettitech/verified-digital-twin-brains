@@ -12,6 +12,7 @@ The Host uses templates but enhances them with context awareness.
 """
 
 from typing import Dict, Any, List, Optional
+import uuid
 from enum import Enum
 import json
 import os
@@ -71,7 +72,7 @@ class InterviewController:
             
             # Fallback if RPC not available
             return {
-                "id": None,
+                "id": conversation_id or str(uuid.uuid4()),
                 "twin_id": twin_id,
                 "conversation_id": conversation_id,
                 "stage": InterviewStage.OPENING.value,
@@ -84,7 +85,7 @@ class InterviewController:
             print(f"Error getting session: {e}")
             # Return a default session structure
             return {
-                "id": None,
+                "id": conversation_id or str(uuid.uuid4()),
                 "twin_id": twin_id,
                 "conversation_id": conversation_id,
                 "stage": InterviewStage.OPENING.value,

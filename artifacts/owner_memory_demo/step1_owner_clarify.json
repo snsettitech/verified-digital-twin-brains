@@ -1,0 +1,36 @@
+[
+  {
+    "type": "clarify",
+    "clarification_id": "129ea238-d535-4449-a9ca-604cd5476502",
+    "question": "What's your stance on invest in crypto? Choose one (or answer in one sentence).",
+    "options": [
+      {
+        "label": "Support",
+        "stance": "positive",
+        "intensity": 7,
+        "value": "I generally support invest in crypto."
+      },
+      {
+        "label": "Oppose",
+        "stance": "negative",
+        "intensity": 7,
+        "value": "I generally oppose invest in crypto."
+      },
+      {
+        "label": "Neutral / depends",
+        "stance": "neutral",
+        "intensity": 4,
+        "value": "My stance on invest in crypto depends on context."
+      }
+    ],
+    "memory_write_proposal": {
+      "topic": "invest in crypto",
+      "memory_type": "stance",
+      "value_template": "I generally support invest in crypto.",
+      "confidence": 0.7,
+      "source": "owner_clarification"
+    },
+    "status": "pending_owner",
+    "conversation_id": "f8d3a9be-ecfa-4e2e-94eb-8552e9e30976"
+  }
+]

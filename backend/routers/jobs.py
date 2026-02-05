@@ -58,9 +58,16 @@ class JobLogResponse(BaseModel):
 # Helper Functions
 # ============================================================================
 
-def get_user_twin_ids(user_id: str) -> List[str]:
-    """Get list of twin IDs owned by the user."""
-    result = supabase.table("twins").select("id").eq("tenant_id", user_id).execute()
+def get_user_twin_ids(user: dict) -> List[str]:
+    """Get list of twin IDs owned by the user.
+    
+    CRITICAL: Uses user['tenant_id'] (actual tenant UUID from tenants table),
+    NOT user['user_id'] (auth UUID). These are different!
+    """
+    tenant_id = user.get("tenant_id")
+    if not tenant_id:
+        return []
+    result = supabase.table("twins").select("id").eq("tenant_id", tenant_id).execute()
     return [row["id"] for row in result.data] if result.data else []
 
 
@@ -112,8 +119,7 @@ async def list_user_jobs(
     
     Filters jobs to only show those belonging to the user's twins.
     """
-    user_id = user.get("user_id")
-    user_twin_ids = get_user_twin_ids(user_id)
+    user_twin_ids = get_user_twin_ids(user)
     
     # Build query
     query = supabase.table("jobs").select("*")
@@ -145,8 +151,7 @@ async def get_job_details(
     user=Depends(get_current_user)
 ):
     """Get details of a specific job."""
-    user_id = user.get("user_id")
-    user_twin_ids = get_user_twin_ids(user_id)
+    user_twin_ids = get_user_twin_ids(user)
     
     job = get_job(job_id)
     if not job:
@@ -167,8 +172,7 @@ async def get_job_logs(
     user=Depends(get_current_user)
 ):
     """Get logs for a specific job."""
-    user_id = user.get("user_id")
-    user_twin_ids = get_user_twin_ids(user_id)
+    user_twin_ids = get_user_twin_ids(user)
     
     job = get_job(job_id)
     if not job:
@@ -195,8 +199,7 @@ async def create_new_job(
     Note: This is primarily for internal/admin use. Most jobs are created
     automatically by the system (e.g., during ingestion).
     """
-    user_id = user.get("user_id")
-    user_twin_ids = get_user_twin_ids(user_id)
+    user_twin_ids = get_user_twin_ids(user)
     
     # Check authorization for twin_id
     if request.twin_id and request.twin_id not in user_twin_ids:

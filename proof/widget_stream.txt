@@ -1,0 +1,4 @@
+{"type": "content", "token": "", "content": ""}
+{"type": "metadata", "confidence_score": 0.6749473290167771, "citations": ["graph-e65a5e2c", "1ce88e61-6087-4e3a-8c11-a1c2fad5aa53", "ab57d0b0-6595-4e8f-86fb-181600ee04d5", "graph-b867d453"], "conversation_id": "c38540b0-ddb1-4a1a-8fc5-05d07608743d", "owner_memory_refs": [], "owner_memory_topics": [], "session_id": "59c2b0ce-298b-4d9c-9222-ede48c5b49d8"}
+{"type": "content", "token": "The unique phrase in the critical path proof file is **CRITICAL_PATH_PROOF_1770201158**.", "content": "The unique phrase in the critical path proof file is **CRITICAL_PATH_PROOF_1770201158**."}
+{"type": "done", "escalated": true}

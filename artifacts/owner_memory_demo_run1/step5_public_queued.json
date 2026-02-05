@@ -1,0 +1,26 @@
+{
+  "status": "queued",
+  "message": "Queued for owner confirmation.",
+  "clarification_id": "56ee3d66-9ddd-4feb-b127-271d60da2ebe",
+  "question": "What's your stance on prioritize growth over profitability this year? Choose one (or answer in one sentence).",
+  "options": [
+    {
+      "label": "Support",
+      "stance": "positive",
+      "intensity": 7,
+      "value": "I generally support prioritize growth over profitability this year."
+    },
+    {
+      "label": "Oppose",
+      "stance": "negative",
+      "intensity": 7,
+      "value": "I generally oppose prioritize growth over profitability this year."
+    },
+    {
+      "label": "Neutral / depends",
+      "stance": "neutral",
+      "intensity": 4,
+      "value": "My stance on prioritize growth over profitability this year depends on context."
+    }
+  ]
+}

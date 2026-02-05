@@ -8,9 +8,11 @@ import { useTwin } from '@/lib/context/TwinContext';
 export default function SimulatorPage() {
     const { activeTwin: contextTwin, isLoading } = useTwin();
     const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+    const [resetCounter, setResetCounter] = useState(0);
 
     const startNewSession = () => {
         setCurrentConversationId(null);
+        setResetCounter((prev) => prev + 1);
     };
 
     // Show loading state while fetching twin
@@ -60,8 +62,10 @@ export default function SimulatorPage() {
             <div className="flex-1 shadow-2xl rounded-2xl overflow-hidden bg-white border border-slate-200">
                 <ChatInterface
                     twinId={contextTwin.id}
+                    tenantId={contextTwin.tenant_id}
                     conversationId={currentConversationId}
                     onConversationStarted={setCurrentConversationId}
+                    resetKey={resetCounter}
                 />
             </div>
         </div>

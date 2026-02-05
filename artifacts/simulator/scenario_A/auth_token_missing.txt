@@ -1,0 +1,1 @@
+No auth token found in localStorage
