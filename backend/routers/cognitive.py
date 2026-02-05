@@ -15,18 +15,14 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import json
 
-from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
-from modules.governance import AuditLogger
-
+from modules.auth_guard import get_current_user, verify_twin_ownership
 from modules.observability import supabase, get_messages, log_interaction, create_conversation
 from modules.agent import run_agent_stream
 from modules._core.host_engine import get_next_slot, get_next_question, process_turn, generate_contextual_question
-from modules._core.interview_controller import InterviewController, InterviewStage, INTENT_QUESTIONS
 from modules._core.scribe_engine import extract_structured_output, score_confidence, detect_contradictions, extract_for_slot
 from modules._core.response_evaluator import ResponseEvaluator
 from modules._core.repair_strategies import RepairManager
 from modules._core.registry_loader import get_specialization_manifest
-from modules._core.interview_controller import InterviewController, InterviewStage
 from modules.specializations import get_specialization
 from langchain_core.messages import AIMessage
 
@@ -80,18 +76,28 @@ def _load_host_policy(spec_name: str) -> Dict[str, Any]:
 async def cognitive_interview(
     twin_id: str,
     request: InterviewRequest,
-    user=Depends(require_tenant)
+    user=Depends(get_current_user)
 ):
+    """
+    Process a cognitive interview turn with intent-first podcast flow.
+
+    Stages:
+    1. OPENING: Welcome message, set expectations
+    2. INTENT_CAPTURE: Ask 3 intent questions
+    3. CONFIRM_INTENT: Summarize and confirm understanding
+    4. DEEP_INTERVIEW: Slot-driven with podcast-style questions
+    5. COMPLETE: All required slots filled
+    """
+    from modules._core.interview_controller import (
+        InterviewController, InterviewStage,
+        generate_podcast_question, INTENT_QUESTIONS
+    )
+    from modules._core.scribe_engine import process_interaction
+
     spec = get_specialization()
     host_policy = _load_host_policy(spec.name)
 
-    # Validate twin belongs to tenant and get user context
-    twin = require_twin_access(twin_id, user)
-    tenant_id = user["tenant_id"]
-
-
     # Get or create conversation
-
     conversation_id = request.conversation_id
     if not conversation_id:
         conv_obj = create_conversation(twin_id, user.get("user_id") if user else None)
@@ -100,17 +106,7 @@ async def cognitive_interview(
     # Get or create interview session
     session = InterviewController.get_or_create_session(twin_id, conversation_id)
     session_id = session.get("id")
-
-    # Load specialization and host policy
-    # Assuming twin has 'specialization_name' or similar, defaulting to 'vanilla'
-    # In a real implementation we would fetch this from the twin metadata
-    spec_name = twin.get("specialization", "vanilla")
-    from modules.specializations import get_specialization
-    spec = get_specialization(spec_name)
-    host_policy = _load_host_policy(spec_name)
-
     stage = InterviewController.get_stage(session)
-    stage_label = stage.value.upper()
     
     # Get conversation history
     history = get_messages(conversation_id)
@@ -190,13 +186,13 @@ async def cognitive_interview(
             return InterviewResponse(
                 response=f"Here's what I've learned about you:\n\n{full_knowledge}\n\nWhat would you like to explore or add?",
                 conversation_id=conversation_id, session_id=session_id,
-                stage=stage_label, progress={"slots_filled": len(knowledge_items)}
+                stage=stage.value, progress={"slots_filled": len(knowledge_items)}
             )
         else:
             return InterviewResponse(
                 response="Nothing yet. Let's start — what's this twin for?",
                 conversation_id=conversation_id, session_id=session_id,
-                stage=InterviewStage.INTENT_CAPTURE.value.upper()
+                stage=InterviewStage.INTENT_CAPTURE.value
             )
     
     # "Start fresh" - Clear and go
@@ -209,7 +205,7 @@ async def cognitive_interview(
         return InterviewResponse(
             response="Done. Starting fresh.\n\nWhat's this twin for?",
             conversation_id=conversation_id, session_id=session_id,
-            stage=InterviewStage.INTENT_CAPTURE.value.upper()
+            stage=InterviewStage.INTENT_CAPTURE.value
         )
     
     # "Continue" - Just proceed
@@ -221,7 +217,7 @@ async def cognitive_interview(
             return InterviewResponse(
                 response=question,
                 conversation_id=conversation_id, session_id=session_id,
-                stage=InterviewStage.DEEP_INTERVIEW.value.upper(),
+                stage=InterviewStage.DEEP_INTERVIEW.value,
                 suggested_question=question
             )
             
@@ -563,7 +559,7 @@ Keep responses brief and conversational."""
         response=final_response,
         conversation_id=conversation_id,
         session_id=session_id,
-        stage=next_stage.upper() if isinstance(next_stage, str) else stage_label,
+        stage=next_stage,
         intent_summary=intent_summary or session.get("intent_summary"),
         next_slot=get_next_slot(host_policy, filled_slots),
         suggested_question=suggested_question,
@@ -577,7 +573,7 @@ Keep responses brief and conversational."""
 
 
 @router.get("/cognitive/graph/{twin_id}")
-async def get_cognitive_graph(twin_id: str, user=Depends(require_tenant)):
+async def get_cognitive_graph(twin_id: str, user=Depends(get_current_user)):
     """
     Get the current cognitive graph state for a twin.
 
@@ -586,8 +582,7 @@ async def get_cognitive_graph(twin_id: str, user=Depends(require_tenant)):
         - edges: List of cognitive graph edges
         - clusters: Cluster completion percentages
     """
-    require_twin_access(twin_id, user)
-
+    verify_twin_ownership(twin_id, user)
     
     # TODO: Implement actual graph store query
     # For now return a placeholder structure
@@ -602,7 +597,6 @@ async def get_cognitive_graph(twin_id: str, user=Depends(require_tenant)):
             "comms": {"completion": 0.0, "node_count": 0},
         },
     }
-
 
 
 class ApproveRequest(BaseModel):
@@ -621,16 +615,14 @@ class VersionResponse(BaseModel):
 
 
 @router.post("/cognitive/profiles/{twin_id}/approve")
-async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Depends(require_tenant)):
+async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Depends(get_current_user)):
     """
     Approve the current cognitive profile, creating an immutable version snapshot.
     
     This captures all nodes and edges at the current moment, computes a diff
     from the previous version, and creates an audit trail.
     """
-    require_twin_access(twin_id, user)
-    tenant_id = user["tenant_id"]
-
+    verify_twin_ownership(twin_id, user)
     
     from modules._core.versioning import compute_diff, create_snapshot, summarize_diff
     from datetime import datetime
@@ -681,13 +673,12 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
         
         # 6. Emit audit log
         try:
-            AuditLogger.log(
-                tenant_id=tenant_id,
+            from modules.audit import AuditLogger
+            AuditLogger.log_critical_action(
                 twin_id=twin_id,
-                event_type="CONFIGURATION_CHANGE",
-                action="PROFILE_APPROVED",
-                actor_id=user_id,
-                metadata={
+                action="profile_approved",
+                user_id=user_id,
+                details={
                     "version": new_version,
                     "node_count": len(nodes),
                     "edge_count": len(edges),
@@ -696,7 +687,6 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
             )
         except Exception as audit_err:
             print(f"Warning: Audit log failed: {audit_err}")
-
         
         return {
             "success": True,
@@ -717,14 +707,13 @@ async def approve_profile(twin_id: str, request: ApproveRequest = None, user=Dep
 
 
 @router.get("/cognitive/profiles/{twin_id}/versions")
-async def get_versions(twin_id: str, limit: int = 10, user=Depends(require_tenant)):
+async def get_versions(twin_id: str, limit: int = 10, user=Depends(get_current_user)):
     """
     Get version history for a cognitive profile.
     
     Returns list of all approved versions with metadata.
     """
-    require_twin_access(twin_id, user)
-
+    verify_twin_ownership(twin_id, user)
     
     from modules._core.versioning import summarize_diff
     
@@ -756,14 +745,13 @@ async def get_versions(twin_id: str, limit: int = 10, user=Depends(require_tenan
 
 
 @router.get("/cognitive/profiles/{twin_id}/versions/{version}")
-async def get_version_snapshot(twin_id: str, version: int, user=Depends(require_tenant)):
+async def get_version_snapshot(twin_id: str, version: int, user=Depends(get_current_user)):
     """
     Get a specific version's full snapshot.
     
     Returns the complete graph state as it was when approved.
     """
-    require_twin_access(twin_id, user)
-
+    verify_twin_ownership(twin_id, user)
     
     try:
         versions_res = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": 100}).execute()
@@ -790,14 +778,13 @@ async def get_version_snapshot(twin_id: str, version: int, user=Depends(require_
 
 
 @router.delete("/cognitive/profiles/{twin_id}/versions/{version}")
-async def delete_version(twin_id: str, version: int, user=Depends(require_tenant)):
+async def delete_version(twin_id: str, version: int, user=Depends(get_current_user)):
     """
     Delete a specific version (admin function).
     
     Note: This should be used sparingly as versions are meant to be immutable audit records.
     """
-    require_twin_access(twin_id, user)
-
+    verify_twin_ownership(twin_id, user)
     
     try:
         result = supabase.rpc("delete_profile_version_system", {"t_id": twin_id, "ver": version}).execute()

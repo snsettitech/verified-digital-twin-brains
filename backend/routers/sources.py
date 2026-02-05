@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
-from typing import Optional, List, Any
+from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional, List
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership
 from modules.observability import supabase
 from modules.ingestion import delete_source, approve_source, reject_source
-from modules.schemas import SourceRejectRequest
 
 router = APIRouter(tags=["sources"])
 
@@ -27,46 +26,6 @@ async def list_sources(twin_id: str, status: Optional[str] = None, user=Depends(
         return response.data or []
     except Exception as e:
         print(f"Error listing sources: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/sources/{source_id}/health")
-async def get_source_health(source_id: str, user=Depends(get_current_user)):
-    """Get health check results for a source."""
-    try:
-        # First get source to verify ownership
-        source = supabase.table("sources").select("twin_id, health_status, staging_status").eq("id", source_id).single().execute()
-        if not source.data:
-            raise HTTPException(status_code=404, detail="Source not found")
-
-        # Verify user owns this twin
-        verify_twin_ownership(source.data["twin_id"], user)
-
-        # Get health checks from ingestion_logs
-        response = supabase.table("ingestion_logs").select("*").eq("source_id", source_id).order("created_at", desc=True).limit(20).execute()
-        logs = response.data or []
-        checks = [
-            {
-                "id": log.get("id"),
-                "check_type": "ingestion_log",
-                "status": log.get("log_level", "info"),
-                "message": log.get("message"),
-                "metadata": log.get("metadata"),
-                "created_at": log.get("created_at")
-            }
-            for log in logs
-        ]
-
-        return {
-            "health_status": source.data.get("health_status"),
-            "staging_status": source.data.get("staging_status"),
-            "logs": logs,
-            "checks": checks
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting source health: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -97,6 +56,33 @@ async def delete_source_endpoint(twin_id: str, source_id: str, user=Depends(veri
         return {"status": "success", "message": "Source deleted"}
     except Exception as e:
         print(f"Error deleting source: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sources/{source_id}/health")
+async def get_source_health(source_id: str, user=Depends(get_current_user)):
+    """Get health check results for a source."""
+    try:
+        # First get source to verify ownership
+        source = supabase.table("sources").select("twin_id, health_status, staging_status").eq("id", source_id).single().execute()
+        if not source.data:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        # Verify user owns this twin
+        verify_twin_ownership(source.data["twin_id"], user)
+
+        # Get health checks from ingestion_logs
+        response = supabase.table("ingestion_logs").select("*").eq("source_id", source_id).order("created_at", desc=True).limit(20).execute()
+
+        return {
+            "health_status": source.data.get("health_status"),
+            "staging_status": source.data.get("staging_status"),
+            "logs": response.data or []
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting source health: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -135,16 +121,10 @@ async def approve_source_endpoint(source_id: str, user=Depends(verify_owner)):
 
 
 @router.post("/sources/{source_id}/reject")
-async def reject_source_endpoint(
-    source_id: str,
-    reason: Optional[str] = None,
-    request: Optional[SourceRejectRequest] = Body(None),
-    user=Depends(verify_owner)
-):
+async def reject_source_endpoint(source_id: str, reason: Optional[str] = None, user=Depends(verify_owner)):
     """Reject a staged source."""
     try:
-        final_reason = reason or (request.reason if request else None) or "Rejected by owner"
-        await reject_source(source_id, final_reason)
+        await reject_source(source_id, reason or "Rejected by owner")
         return {"status": "success", "message": "Source rejected"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -170,18 +150,10 @@ async def re_extract_source(source_id: str, user=Depends(verify_owner)):
 
 
 @router.post("/sources/bulk-approve")
-async def bulk_approve_sources(payload: Any = Body(...), user=Depends(verify_owner)):
+async def bulk_approve_sources(source_ids: List[str], user=Depends(verify_owner)):
     """Bulk approve multiple sources."""
     try:
         from modules.ingestion import bulk_approve_sources as bulk_approve
-        if isinstance(payload, list):
-            source_ids = payload
-        elif isinstance(payload, dict):
-            source_ids = payload.get("source_ids", [])
-        else:
-            source_ids = []
-        if not isinstance(source_ids, list) or not source_ids:
-            raise HTTPException(status_code=422, detail="source_ids must be a non-empty list")
         results = await bulk_approve(source_ids)
         return {"status": "success", "results": results}
     except Exception as e:

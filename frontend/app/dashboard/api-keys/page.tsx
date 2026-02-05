@@ -7,10 +7,6 @@ import { Modal } from '@/components/ui/Modal';
 import { useTwin } from '@/lib/context/TwinContext';
 import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 
-/**
- * API Key interface - tenant-scoped with optional twin restrictions
- * NOTE: No single twin_id - keys are tenant-owned with optional allowed_twin_ids
- */
 interface ApiKey {
   id: string;
   key_prefix: string;
@@ -21,14 +17,12 @@ interface ApiKey {
   last_used_at?: string;
   expires_at?: string;
   group_id?: string;
-  // OPTIONAL RESTRICTIONS (tenant-scoped, not tied to single twin)
-  allowed_twin_ids?: string[] | null;  // Restrict to specific twins (null = all twins)
-  scopes?: string[] | null;            // API scopes (e.g., ['read', 'write', 'chat'])
 }
 
 export default function ApiKeysPage() {
-  const { isLoading: twinLoading } = useTwin();
-  const { getTenant, postTenant, delTenant } = useAuthFetch();
+  const { activeTwin, isLoading: twinLoading } = useTwin();
+  const { get, post, del } = useAuthFetch();
+  const twinId = activeTwin?.id;
 
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,9 +34,9 @@ export default function ApiKeysPage() {
   const [copied, setCopied] = useState(false);
 
   const fetchApiKeys = useCallback(async () => {
+    if (!twinId) return;
     try {
-      // TENANT-SCOPED: Backend filters by tenant_id from JWT
-      const response = await getTenant('/api-keys');
+      const response = await get(`/api-keys?twin_id=${twinId}`);
       if (response.ok) {
         const data = await response.json();
         setApiKeys(data);
@@ -52,24 +46,25 @@ export default function ApiKeysPage() {
     } finally {
       setLoading(false);
     }
-  }, [getTenant]);
+  }, [twinId, get]);
 
   useEffect(() => {
-    if (!twinLoading) {
-      // Tenant-scoped: fetch immediately, no twinId dependency
+    if (twinId) {
       fetchApiKeys();
+    } else if (!twinLoading) {
+      setLoading(false);
     }
-  }, [twinLoading, fetchApiKeys]);
+  }, [twinId, twinLoading, fetchApiKeys]);
 
   const handleCreateKey = async () => {
-    if (!newKeyName.trim()) return;
+    if (!newKeyName.trim() || !twinId) return;
 
     setCreating(true);
     try {
       const domains = newKeyDomains.split(',').map(d => d.trim()).filter(d => d);
 
-      // TENANT-SCOPED: No twin_id in body, backend uses JWT tenant_id
-      const response = await postTenant('/api-keys', {
+      const response = await post('/api-keys', {
+        twin_id: twinId,
         name: newKeyName,
         allowed_domains: domains.length > 0 ? domains : undefined
       });
@@ -97,8 +92,7 @@ export default function ApiKeysPage() {
     if (!confirm('Are you sure you want to revoke this API key? It will stop working immediately.')) return;
 
     try {
-      // TENANT-SCOPED: Backend validates tenant ownership
-      const response = await delTenant(`/api-keys/${keyId}`);
+      const response = await del(`/api-keys/${keyId}`);
 
       if (response.ok) {
         await fetchApiKeys();
@@ -125,7 +119,24 @@ export default function ApiKeysPage() {
     );
   }
 
-  // TENANT-SCOPED: No twin required for API keys, removed "No Twin Found" block
+  if (!twinId) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center max-w-md p-8">
+          <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
+          <p className="text-slate-400 mb-6">Create a digital twin first to manage API keys.</p>
+          <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+            Create Your Twin
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

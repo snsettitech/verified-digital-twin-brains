@@ -2,14 +2,12 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { resolveApiBaseUrl } from '@/lib/api';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   citations?: string[];
   confidence_score?: number;
-  owner_memory_refs?: string[];
 }
 
 interface ChatWidgetProps {
@@ -29,7 +27,7 @@ export default function ChatWidget({
   apiBaseUrl,
   theme
 }: ChatWidgetProps) {
-  const baseUrl = apiBaseUrl || resolveApiBaseUrl();
+  const baseUrl = apiBaseUrl || process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
   const primaryColor = theme?.primaryColor || '#2563eb';
   const headerColor = theme?.headerColor || primaryColor;
   const headerTextColor = theme?.headerTextColor || '#ffffff';
@@ -141,14 +139,7 @@ export default function ChatWidget({
             if (!line.trim()) continue;
             try {
               const data = JSON.parse(line);
-              if (data.type === 'clarify') {
-                setLoading(false);
-                setMessages((prev) => {
-                  const last = [...prev];
-                  last[last.length - 1].content = `${data.question || 'Clarification needed.'} (Queued for owner confirmation.)`;
-                  return last;
-                });
-              } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
+              if (data.type === 'metadata') {
                 if (data.conversation_id && !conversationId) {
                   setConversationId(data.conversation_id);
                 }
@@ -157,11 +148,10 @@ export default function ChatWidget({
                   const lastMsg = { ...last[last.length - 1] };
                   lastMsg.confidence_score = data.confidence_score;
                   lastMsg.citations = data.citations;
-                  lastMsg.owner_memory_refs = data.owner_memory_refs || [];
                   last[last.length - 1] = lastMsg;
                   return last;
                 });
-              } else if (data.type === 'answer_token' || data.type === 'content') {
+              } else if (data.type === 'content') {
                 setMessages((prev) => {
                   const last = [...prev];
                   const lastMsg = { ...last[last.length - 1] };

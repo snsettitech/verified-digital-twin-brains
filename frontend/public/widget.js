@@ -213,13 +213,8 @@
                                 sessionId = data.session_id;
                                 localStorage.setItem('dt_brain_session_id', sessionId);
                             }
-                            if (data.type === 'metadata' && data.session_id) {
-                                sessionId = data.session_id;
-                                localStorage.setItem('dt_brain_session_id', sessionId);
-                            }
                             if (data.type === 'content') {
-                                const token = data.token ?? data.content ?? '';
-                                fullContent += token;
+                                fullContent += data.content;
                                 aiMsgEl.innerText = fullContent;
                                 msgList.scrollTop = msgList.scrollHeight;
                             }

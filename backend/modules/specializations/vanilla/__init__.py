@@ -66,29 +66,26 @@ Guidelines:
         return {
             "sections": [
                 {
-                    "title": "Build",
+                    "title": "Core",
                     "items": [
                         {"name": "Dashboard", "href": "/dashboard", "icon": "home"},
-                        {"name": "Interview Mode", "href": "/dashboard/interview", "icon": "activity"},
-                        {"name": "Knowledge", "href": "/dashboard/knowledge", "icon": "book"},
-                        {"name": "Right Brain", "href": "/dashboard/right-brain", "icon": "chart"}
+                        {"name": "Left Brain (Sources)", "href": "/dashboard/knowledge", "icon": "book"},
+                        {"name": "Right Brain (Interview)", "href": "/dashboard/right-brain", "icon": "activity"},
+                        {"name": "Simulator", "href": "/dashboard/simulator", "icon": "chat"}
                     ]
                 },
                 {
-                    "title": "Train",
+                    "title": "Management",
                     "items": [
-                        {"name": "Simulator", "href": "/dashboard/simulator", "icon": "chat"},
-                        {"name": "Verified Q&A", "href": "/dashboard/verified-qna", "icon": "check"},
                         {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
-                        {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"}
+                        {"name": "Verified Q&A", "href": "/dashboard/verified-qna", "icon": "check"},
+                        {"name": "Access Groups", "href": "/dashboard/access-groups", "icon": "users"}
                     ]
                 },
                 {
-                    "title": "Share",
+                    "title": "Automation",
                     "items": [
-                        {"name": "Access Groups", "href": "/dashboard/access-groups", "icon": "users"},
-                        {"name": "Widget", "href": "/dashboard/widget", "icon": "code"},
-                        {"name": "API Keys", "href": "/dashboard/api-keys", "icon": "key"}
+                        {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"}
                     ]
                 },
                 {

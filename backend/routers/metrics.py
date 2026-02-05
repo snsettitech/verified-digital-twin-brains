@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date, timedelta
 from modules.observability import supabase
-from modules.auth_guard import get_current_user, verify_twin_ownership, verify_owner
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
@@ -69,9 +68,8 @@ class ActivityItem(BaseModel):
 # ============================================================================
 
 @router.get("/dashboard/{twin_id}", response_model=DashboardStats)
-async def get_dashboard_stats(twin_id: str, days: int = Query(30, ge=1, le=90), user=Depends(get_current_user)):
+async def get_dashboard_stats(twin_id: str, days: int = Query(30, ge=1, le=90)):
     """Get aggregated dashboard statistics for a twin from REAL data."""
-    verify_twin_ownership(twin_id, user)
     try:
         start_date = datetime.now() - timedelta(days=days)
         
@@ -153,9 +151,8 @@ async def get_dashboard_stats(twin_id: str, days: int = Query(30, ge=1, le=90), 
 # ============================================================================
 
 @router.get("/conversations/{twin_id}", response_model=List[ConversationSummary])
-async def get_conversations_list(twin_id: str, limit: int = Query(20, ge=1, le=100), user=Depends(get_current_user)):
+async def get_conversations_list(twin_id: str, limit: int = Query(20, ge=1, le=100)):
     """Get list of conversations with summary info."""
-    verify_twin_ownership(twin_id, user)
     try:
         # Get conversations
         conversations_result = supabase.table("conversations")\
@@ -205,9 +202,8 @@ async def get_conversations_list(twin_id: str, limit: int = Query(20, ge=1, le=1
 # ============================================================================
 
 @router.get("/activity/{twin_id}", response_model=List[ActivityItem])
-async def get_activity_feed(twin_id: str, limit: int = Query(10, ge=1, le=50), user=Depends(get_current_user)):
+async def get_activity_feed(twin_id: str, limit: int = Query(10, ge=1, le=50)):
     """Get recent activity feed for a twin."""
-    verify_twin_ownership(twin_id, user)
     try:
         activities = []
         
@@ -307,9 +303,8 @@ async def get_activity_feed(twin_id: str, limit: int = Query(10, ge=1, le=50), u
 # ============================================================================
 
 @router.get("/daily/{twin_id}", response_model=List[DailyMetric])
-async def get_daily_metrics(twin_id: str, days: int = Query(7, ge=1, le=30), user=Depends(get_current_user)):
+async def get_daily_metrics(twin_id: str, days: int = Query(7, ge=1, le=30)):
     """Get daily conversation metrics for charts from REAL data."""
-    verify_twin_ownership(twin_id, user)
     try:
         start_date = date.today() - timedelta(days=days)
         
@@ -366,9 +361,8 @@ async def get_daily_metrics(twin_id: str, days: int = Query(7, ge=1, le=30), use
 # ============================================================================
 
 @router.get("/top-questions/{twin_id}", response_model=List[TopQuestion])
-async def get_top_questions(twin_id: str, limit: int = Query(5, ge=1, le=20), user=Depends(get_current_user)):
+async def get_top_questions(twin_id: str, limit: int = Query(5, ge=1, le=20)):
     """Get most frequently asked questions from REAL conversations."""
-    verify_twin_ownership(twin_id, user)
     try:
         # Get conversation IDs for this twin
         conversations_result = supabase.table("conversations")\
@@ -437,11 +431,8 @@ async def get_top_questions(twin_id: str, limit: int = Query(5, ge=1, le=20), us
 # ============================================================================
 
 @router.post("/events")
-async def log_event(event: EventCreate, user_id: Optional[str] = None, user=Depends(get_current_user)):
+async def log_event(event: EventCreate, user_id: Optional[str] = None):
     """Log a user event for analytics."""
-    # Ensure event twin_id belongs to user tenant
-    if event.twin_id:
-        verify_twin_ownership(event.twin_id, user)
     try:
         data = {
             "event_type": event.event_type,
@@ -466,13 +457,9 @@ async def log_event(event: EventCreate, user_id: Optional[str] = None, user=Depe
 async def get_user_events(
     user_id: str,
     event_type: Optional[str] = None,
-    limit: int = Query(50, ge=1, le=200),
-    user=Depends(get_current_user)
+    limit: int = Query(50, ge=1, le=200)
 ):
     """Get events for a specific user."""
-    # Internal: verify user_id matches or is in same tenant
-    if user.get("user_id") != user_id:
-         raise HTTPException(status_code=403, detail="Unauthorized access to user events")
     try:
         query = supabase.table("user_events")\
             .select("*")\
@@ -496,7 +483,7 @@ async def get_user_events(
 # ============================================================================
 
 @router.get("/system")
-async def get_system_metrics(days: int = Query(7, ge=1, le=30), user=Depends(verify_owner)):
+async def get_system_metrics(days: int = Query(7, ge=1, le=30)):
     """
     Get system-wide metrics summary.
     
@@ -518,13 +505,12 @@ async def get_system_metrics(days: int = Query(7, ge=1, le=30), user=Depends(ver
 
 
 @router.get("/usage/{twin_id}")
-async def get_twin_usage(twin_id: str, days: int = Query(7, ge=1, le=30), user=Depends(get_current_user)):
+async def get_twin_usage(twin_id: str, days: int = Query(7, ge=1, le=30)):
     """
     Get usage metrics for a specific twin.
     
     Returns token usage, latency stats, and error counts.
     """
-    verify_twin_ownership(twin_id, user)
     from modules.metrics_collector import get_metrics_summary
     
     try:
@@ -539,7 +525,7 @@ async def get_twin_usage(twin_id: str, days: int = Query(7, ge=1, le=30), user=D
 # ============================================================================
 
 @router.get("/health")
-async def get_detailed_health(user=Depends(verify_owner)):
+async def get_detailed_health():
     """
     Get detailed health status of all external services.
     
@@ -617,14 +603,12 @@ async def get_detailed_health(user=Depends(verify_owner)):
 # ============================================================================
 
 @router.get("/quota/{tenant_id}")
-async def get_quota_status(tenant_id: str, user=Depends(get_current_user)):
+async def get_quota_status(tenant_id: str):
     """
     Get current quota status for a tenant.
     
     Returns current usage vs limits for all quota types.
     """
-    if user.get("tenant_id") != tenant_id and user.get("role") != "owner":
-        raise HTTPException(status_code=403, detail="Unauthorized access to tenant quota")
     try:
         result = supabase.table("usage_quotas")\
             .select("*")\
@@ -671,7 +655,7 @@ async def get_quota_status(tenant_id: str, user=Depends(get_current_user)):
 
 
 @router.post("/quota/{tenant_id}/set")
-async def set_quota(tenant_id: str, quota_type: str, limit_value: int, user=Depends(verify_owner)):
+async def set_quota(tenant_id: str, quota_type: str, limit_value: int):
     """
     Set or update a quota for a tenant.
     

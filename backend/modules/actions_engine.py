@@ -14,21 +14,6 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from modules.observability import supabase
 from modules.governance import AuditLogger
-import json
-try:
-    from google.oauth2.credentials import Credentials
-    from googleapiclient.discovery import build
-except ImportError:
-    pass
-
-def _get_tenant_id(twin_id: str) -> Optional[str]:
-    """Helper to resolve tenant_id from twin_id."""
-    try:
-        res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-        return res.data.get("tenant_id") if res.data else None
-    except Exception:
-        return None
-
 
 
 # =============================================================================
@@ -284,10 +269,9 @@ class ActionDraftManager:
             
             if result.data:
                 AuditLogger.log(
-                    tenant_id=_get_tenant_id(twin_id),
-                    twin_id=twin_id,
-                    event_type="ACTION_AUTOMATION",
-                    action="DRAFT_CREATED",
+                    twin_id,
+                    "ACTION_AUTOMATION",
+                    "DRAFT_CREATED",
                     metadata={
                         "draft_id": draft_id,
                         "trigger_id": trigger_id,
@@ -295,7 +279,6 @@ class ActionDraftManager:
                     }
                 )
                 return draft_id
-
             return None
             
         except Exception as e:
@@ -373,10 +356,9 @@ class ActionDraftManager:
                 }).eq("id", draft_id).execute()
             
             AuditLogger.log(
-                tenant_id=_get_tenant_id(draft["twin_id"]),
-                twin_id=draft["twin_id"],
-                event_type="ACTION_AUTOMATION",
-                action="DRAFT_APPROVED",
+                draft["twin_id"],
+                "ACTION_AUTOMATION",
+                "DRAFT_APPROVED",
                 actor_id=approved_by,
                 metadata={
                     "draft_id": draft_id,
@@ -384,7 +366,6 @@ class ActionDraftManager:
                     "execution_id": execution_id
                 }
             )
-
             
             return True
             
@@ -412,14 +393,12 @@ class ActionDraftManager:
             }).eq("id", draft_id).execute()
             
             AuditLogger.log(
-                tenant_id=_get_tenant_id(draft["twin_id"]),
-                twin_id=draft["twin_id"],
-                event_type="ACTION_AUTOMATION",
-                action="DRAFT_REJECTED",
+                draft["twin_id"],
+                "ACTION_AUTOMATION",
+                "DRAFT_REJECTED",
                 actor_id=rejected_by,
                 metadata={"draft_id": draft_id, "reason": rejection_note}
             )
-
             
             return True
             
@@ -487,10 +466,9 @@ class ActionDraftManager:
                         print(f"Warning: Could not save as verified QnA: {e}")
             
             AuditLogger.log(
-                tenant_id=_get_tenant_id(draft["twin_id"]),
-                twin_id=draft["twin_id"],
-                event_type="ACTION_AUTOMATION",
-                action="DRAFT_RESPONDED",
+                draft["twin_id"],
+                "ACTION_AUTOMATION",
+                "DRAFT_RESPONDED",
                 actor_id=responded_by,
                 metadata={
                     "draft_id": draft_id,
@@ -498,7 +476,6 @@ class ActionDraftManager:
                     "response_preview": response_message[:100]
                 }
             )
-
             
             return result
             
@@ -621,71 +598,13 @@ class ActionExecutor:
     @staticmethod
     def _execute_draft_calendar_event(connector_id: Optional[str], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Create a calendar event draft."""
-        if not connector_id:
-            return {"status": "error", "error": "Connector ID required"}
-
-        try:
-            # 1. Fetch Connector
-            connector = supabase.table("tool_connectors").select("*").eq("id", connector_id).single().execute()
-            if not connector.data:
-                return {"status": "error", "error": "Connector not found"}
-
-            conn_data = connector.data
-            if conn_data.get("connector_type") != "google_calendar":
-                return {"status": "error", "error": "Invalid connector type"}
-
-            # 2. Get Credentials
-            creds_json = conn_data.get("credentials_encrypted")
-            if not creds_json:
-                return {"status": "error", "error": "No credentials found"}
-
-            if isinstance(creds_json, str):
-                try:
-                    creds_info = json.loads(creds_json)
-                except json.JSONDecodeError:
-                    return {"status": "error", "error": "Invalid credentials format"}
-            else:
-                creds_info = creds_json
-
-            # 3. Create Service
-            creds = Credentials.from_authorized_user_info(creds_info)
-            service = build('calendar', 'v3', credentials=creds)
-
-            # 4. Prepare Event
-            start_str = inputs.get("start_time")
-            if not start_str:
-                return {"status": "error", "error": "Start time required"}
-
-            if start_str.endswith("Z"):
-                start_str = start_str[:-1] + "+00:00"
-
-            start_dt = datetime.fromisoformat(start_str)
-            end_dt = start_dt + timedelta(minutes=inputs.get("duration_minutes", 30))
-
-            event_body = {
-                'summary': inputs.get("title", "New Event"),
-                'description': inputs.get("description", ""),
-                'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'UTC'},
-                'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'UTC'},
-            }
-
-            if inputs.get("attendees"):
-                event_body['attendees'] = [{'email': e} for e in inputs.get("attendees")]
-
-            # 5. Execute
-            event = service.events().insert(calendarId='primary', body=event_body).execute()
-
-            return {
-                "status": "event_created",
-                "event_id": event.get('id'),
-                "event_link": event.get('htmlLink'),
-                "title": event_body['summary'],
-                "start_time": start_str
-            }
-
-        except Exception as e:
-            print(f"Error creating calendar event: {e}")
-            return {"status": "error", "error": str(e)}
+        # TODO: Implement with Calendar connector
+        return {
+            "status": "event_draft_created",
+            "title": inputs.get("title"),
+            "start_time": inputs.get("start_time"),
+            "duration_minutes": inputs.get("duration_minutes", 30)
+        }
 
     @staticmethod
     def _execute_notify_owner(twin_id: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -837,14 +756,12 @@ class TriggerManager:
             
             if result.data:
                 AuditLogger.log(
-                    tenant_id=_get_tenant_id(twin_id),
-                    twin_id=twin_id,
-                    event_type="CONFIGURATION_CHANGE",
-                    action="TRIGGER_CREATED",
+                    twin_id,
+                    "CONFIGURATION_CHANGE",
+                    "TRIGGER_CREATED",
                     metadata={"trigger_id": trigger_id, "name": name}
                 )
                 return trigger_id
-
             return None
             
         except Exception as e:

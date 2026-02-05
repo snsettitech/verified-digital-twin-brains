@@ -7,30 +7,7 @@ from modules.observability import supabase
 from modules.access_groups import get_default_group
 
 # Embedding generation moved to modules.embeddings
-# Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
-
-# FlashRank for local reranking
-try:
-    from flashrank import Ranker, RerankRequest
-    _flashrank_available = True
-    # Cache the ranker instance
-    _ranker_instance = None
-except ImportError:
-    _flashrank_available = False
-    _ranker_instance = None
-
-def get_ranker():
-    """Lazy load FlashRank to avoid startup overhead."""
-    global _ranker_instance
-    if _flashrank_available and _ranker_instance is None:
-        try:
-            # Use a lightweight model
-            _ranker_instance = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.model_cache")
-        except Exception as e:
-            print(f"Failed to initialize FlashRank: {e}")
-    return _ranker_instance
-
 
 # Langfuse v3 tracing
 try:
@@ -128,25 +105,9 @@ def rrf_merge(results_list: List[List[Dict[str, Any]]], k: int = 60) -> List[Dic
     # Build final results with RRF scores
     final_results = []
     for doc_id, rrf_score in sorted_docs:
-        raw_hit = doc_map[doc_id]
-        if raw_hit is None:
-            print(f"DEBUG: doc_id {doc_id} has NONE hit in doc_map")
-            continue
-        
-        try:
-            if hasattr(raw_hit, "to_dict"):
-                hit = raw_hit.to_dict()
-            elif isinstance(raw_hit, dict):
-                hit = raw_hit.copy()
-            else:
-                print(f"DEBUG: doc_id {doc_id} has unknown type {type(raw_hit)}")
-                hit = dict(raw_hit)
-            
-            hit["rrf_score"] = rrf_score
-            final_results.append(hit)
-        except Exception as e:
-            print(f"DEBUG ERROR in rrf_merge loop for doc_id {doc_id}: {e} (type: {type(raw_hit)})")
-            continue
+        hit = doc_map[doc_id].copy()
+        hit["rrf_score"] = rrf_score
+        final_results.append(hit)
         
     return final_results
 
@@ -303,7 +264,6 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
             "score": match.get("score", 0.0),
             "rrf_score": match.get("rrf_score", 0.0),
             "source_id": match["metadata"].get("source_id", "unknown"),
-            "chunk_id": match["metadata"].get("chunk_id", "unknown"),
             "is_verified": False,
             "category": match["metadata"].get("category", "FACT"),
             "tone": match["metadata"].get("tone", "Neutral"),
@@ -443,8 +403,8 @@ async def retrieve_context_vectors(
     # 2. Parallel Embedding Generation (Batch)
     all_embeddings = await get_embeddings_async(search_queries)
     
-    # 3. Parallel Vector Search - P1-C: 20s timeout (increased for debugging)
-    all_results = await _execute_pinecone_queries(all_embeddings, twin_id, timeout=20.0)
+    # 3. Parallel Vector Search - P1-C: 5s timeout
+    all_results = await _execute_pinecone_queries(all_embeddings, twin_id, timeout=5.0)
     
     if not all_results:
         return []
@@ -462,66 +422,17 @@ async def retrieve_context_vectors(
     
     # 6. Filter by group permissions if group_id is provided
     contexts = _filter_by_group_permissions(contexts, group_id)
-    print(f"DEBUG: After permissions: {len(contexts)} (Group: {group_id})")
     
-    # 7. Deduplicate (keep all candidates first)
-    unique_contexts = _deduplicate_and_limit(contexts, top_k=top_k * 3)
-    print(f"DEBUG: Unique contexts before rerank: {len(unique_contexts)}")
+    # 7. Deduplicate and limit to top_k
+    final_contexts = _deduplicate_and_limit(contexts, top_k)
     
-    # 8. Rerank
-
-    final_contexts = []
-    ranker = get_ranker()
-    # ranker = None # FORCE DISABLE
-    
-    if ranker and unique_contexts:
-        try:
-            # Prepare for reranking
-            passages = [
-                {"id": str(i), "text": c["text"], "meta": c} 
-                for i, c in enumerate(unique_contexts)
-            ]
-            
-            rerank_request = RerankRequest(query=query, passages=passages)
-            results = ranker.rerank(rerank_request)
-
-            max_rerank_score = max((res.get("score", 0) for res in results), default=0)
-            if max_rerank_score < 0.001:
-                print("[Retrieval] Rerank scores too low. Using vector scores.")
-                final_contexts = unique_contexts[:top_k]
-            else:
-                # Reconstruct sorted contexts
-                for res in results:
-                    original_idx = int(res["id"])
-                    ctx = unique_contexts[original_idx]
-                    ctx["score"] = res["score"] # Update score with rerank score
-                    final_contexts.append(ctx)
-                
-                # Limit to requested top_k
-                final_contexts = final_contexts[:top_k]
-                print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
-        except Exception as e:
-            print(f"[Retrieval] Reranking failed: {e}. Falling back to vector scores.")
-            final_contexts = unique_contexts[:top_k]
-    else:
-        # Fallback if no ranker
-        final_contexts = unique_contexts[:top_k]
-
-    
-    print(f"[Retrieval] Found {len(final_contexts)} contexts for twin_id={twin_id} (namespace={twin_id})")
-    if final_contexts:
-        top_scores = [round(c.get("score", 0.0), 3) for c in final_contexts[:3]]
-        print(f"[Retrieval] Top scores: {top_scores}")
+    print(f"Found {len(final_contexts)} contexts for {twin_id}")
     
     # Check if retrieval is too weak - signal for "I don't know" response
-    # Threshold lowered to 0.001 for calibration (FlashRank scores might be low logits or unnormalized)
     max_score = max([c.get("score", 0.0) for c in final_contexts], default=0.0)
-    if max_score < 0.001 and len(final_contexts) > 0:
-        print(f"[Retrieval] Max score {max_score} < 0.001. Triggering 'I don't know' logic.")
+    if max_score < 0.5 and len(final_contexts) == 0:
+        # Return empty with flag for "I don't know"
         return []
-    elif len(final_contexts) == 0:
-        return []
-
     
     # Add verified_qna_match flag (False since we didn't find verified match)
     for c in final_contexts:

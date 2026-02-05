@@ -35,7 +35,7 @@ interface Source {
 export default function GovernancePage() {
     const { showToast } = useToast();
     const { activeTwin, isLoading: twinLoading } = useTwin();
-    const { get, getTenant, postTenant, getTwin, postTwin, delTwin } = useAuthFetch();
+    const { get, post, del } = useAuthFetch();
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [policies, setPolicies] = useState<Policy[]>([]);
     const [sources, setSources] = useState<Source[]>([]);
@@ -46,11 +46,6 @@ export default function GovernancePage() {
     const [newPolicy, setNewPolicy] = useState({ name: '', type: 'refusal_rule', content: '' });
     const [selectedSourceId, setSelectedSourceId] = useState('');
 
-    // CORRECTION 4: Deep scrub safety states
-    const [deepScrubInProgress, setDeepScrubInProgress] = useState(false);
-    const [deepScrubConfirmText, setDeepScrubConfirmText] = useState('');
-    const [verifyInProgress, setVerifyInProgress] = useState(false);
-
     // Guardrail toggle states
     const [promptShieldEnabled, setPromptShieldEnabled] = useState(true);
     const [consentLayerEnabled, setConsentLayerEnabled] = useState(true);
@@ -58,20 +53,13 @@ export default function GovernancePage() {
     const twinId = activeTwin?.id;
 
     const fetchData = useCallback(async () => {
+        if (!twinId) return;
         try {
-            // Mock empty response for when twinId is not available
-            const emptyResponse = { ok: false, json: async () => null } as Response;
-
-            // Parallel fetch: tenant-scoped for policies/logs, twin-scoped for twin/sources
             const [logsRes, policiesRes, twinRes, sourcesRes] = await Promise.all([
-                // TENANT-SCOPED: Audit logs are tenant-wide (optionally filter by twin_id)
-                getTenant(twinId ? `/governance/audit-logs?twin_id=${twinId}` : '/governance/audit-logs'),
-                // TENANT-SCOPED: Policies are tenant-wide
-                getTenant('/governance/policies'),
-                // TWIN-SCOPED: Get twin status
-                twinId ? getTwin(twinId, `/twins/{twinId}`) : emptyResponse,
-                // TWIN-SCOPED: Sources belong to a specific twin
-                twinId ? getTwin(twinId, `/twins/{twinId}/sources`) : emptyResponse
+                get(`/governance/audit-logs?twin_id=${twinId}`),
+                get(`/governance/policies?twin_id=${twinId}`),
+                get(`/twins/${twinId}`),
+                get(`/sources?twin_id=${twinId}`)
             ]);
 
             if (logsRes.ok) setLogs(await logsRes.json());
@@ -86,50 +74,34 @@ export default function GovernancePage() {
         } finally {
             setLoading(false);
         }
-    }, [twinId, getTenant, getTwin]);
+    }, [twinId, get]);
 
     useEffect(() => {
-        // Fetch tenant-scoped data immediately, some fetches need twinId for context
-        if (!twinLoading) {
+        if (twinId) {
             fetchData();
+        } else if (!twinLoading) {
+            setLoading(false);
         }
     }, [twinId, twinLoading, fetchData]);
 
     const handleRequestVerification = async () => {
-        if (!twinId || verifyInProgress) return;
-
-        setVerifyInProgress(true);
-        console.log('[GOVERNANCE] Verify request initiated:', { twinId, action: 'request_verification' });
-
+        if (!twinId) return;
         try {
-            // TWIN-SCOPED: Verification is per-twin
-            // Endpoint: POST /twins/{twinId}/governance/verify
-            const res = await postTwin(twinId, `/twins/{twinId}/governance/verify`, { verification_method: 'MANUAL_REVIEW' });
-
+            const res = await post(`/governance/verify?twin_id=${twinId}`, { verification_method: 'MANUAL_REVIEW' });
             if (res.ok) {
                 setVStatus('pending');
                 setShowVerifyModal(false);
                 showToast('Verification request submitted! Our team will review within 48 hours.', 'success');
-            } else if (res.status === 409) {
-                showToast('Verification request already pending', 'warning');
-            } else if (res.status === 429) {
-                showToast('Too many requests. Please try again later.', 'error');
-            } else {
-                const data = await res.json().catch(() => ({}));
-                showToast(data.detail || 'Failed to submit request', 'error');
             }
         } catch (err) {
-            console.error('[GOVERNANCE] Verify request failed:', err);
             showToast('Failed to submit request', 'error');
-        } finally {
-            setVerifyInProgress(false);
         }
     };
 
     const handleCreatePolicy = async () => {
+        if (!twinId) return;
         try {
-            // TENANT-SCOPED: Policies are tenant-wide
-            const res = await postTenant('/governance/policies', {
+            const res = await post(`/governance/policies?twin_id=${twinId}`, {
                 policy_type: newPolicy.type,
                 name: newPolicy.name,
                 content: newPolicy.content
@@ -146,41 +118,22 @@ export default function GovernancePage() {
     };
 
     const handleDeepScrub = async () => {
-        if (!selectedSourceId || !twinId || deepScrubInProgress) return;
-
-        // SAFETY: Require typing "DELETE" to confirm
-        if (deepScrubConfirmText !== 'DELETE') {
-            showToast('You must type DELETE to confirm', 'error');
-            return;
-        }
-
+        if (!selectedSourceId) return;
         const source = sources.find(s => s.id === selectedSourceId);
-        console.log('[GOVERNANCE] Deep scrub initiated:', { twinId, sourceId: selectedSourceId, filename: source?.filename });
+        if (!confirm(`Are you sure you want to permanently delete "${source?.filename}"? This will remove it from the database AND the vector index. This action is IRREVERSIBLE.`)) return;
 
-        setDeepScrubInProgress(true);
         try {
-            // TWIN-SCOPED: Sources belong to a specific twin
-            // Endpoint: DELETE /twins/{twinId}/sources/{sourceId}/deep-scrub
-            const res = await delTwin(twinId, `/twins/{twinId}/sources/${selectedSourceId}/deep-scrub`);
-
+            const res = await del(`/sources/${selectedSourceId}/deep-scrub`);
             if (res.ok) {
                 showToast('Deep scrub completed successfully', 'success');
                 setSelectedSourceId('');
-                setDeepScrubConfirmText('');
                 fetchData();
-            } else if (res.status === 409) {
-                showToast('Source is currently being processed. Try again later.', 'warning');
-            } else if (res.status === 429) {
-                showToast('Too many requests. Please wait before trying again.', 'error');
             } else {
-                const data = await res.json().catch(() => ({}));
+                const data = await res.json();
                 showToast(data.detail || 'Deep scrub failed', 'error');
             }
         } catch (err) {
-            console.error('[GOVERNANCE] Deep scrub failed:', err);
             showToast('Connection error', 'error');
-        } finally {
-            setDeepScrubInProgress(false);
         }
     };
 
@@ -387,36 +340,19 @@ export default function GovernancePage() {
                             </select>
                             {selectedSourceId && (
                                 <div className="p-4 bg-rose-950/30 border border-rose-500/20 rounded-2xl">
-                                    <p className="text-xs text-rose-400 font-bold">⚠️ Danger Zone</p>
+                                    <p className="text-xs text-rose-400 font-bold">⚠️ Warning</p>
                                     <p className="text-xs text-rose-300/70 mt-1">
                                         This will permanently delete the selected file and all associated vector embeddings.
                                         The data cannot be recovered after deletion.
                                     </p>
-                                    <p className="text-xs text-rose-300 font-bold mt-3">
-                                        Type <span className="font-mono bg-rose-950 px-1 rounded">DELETE</span> to confirm:
-                                    </p>
-                                    <input
-                                        type="text"
-                                        value={deepScrubConfirmText}
-                                        onChange={(e) => setDeepScrubConfirmText(e.target.value.toUpperCase())}
-                                        placeholder="DELETE"
-                                        className="mt-2 w-full px-4 py-2 bg-slate-900 border border-rose-500/30 rounded-xl text-rose-400 text-sm font-mono outline-none focus:ring-2 focus:ring-rose-500 transition-all"
-                                        disabled={deepScrubInProgress}
-                                    />
                                 </div>
                             )}
                             <button
                                 onClick={handleDeepScrub}
-                                disabled={!selectedSourceId || deepScrubConfirmText !== 'DELETE' || deepScrubInProgress}
+                                disabled={!selectedSourceId}
                                 className="w-full px-6 py-3.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl text-xs font-black transition-all shadow-lg shadow-rose-900/20"
                             >
-                                {deepScrubInProgress ? (
-                                    <>
-                                        <span className="animate-pulse">🗑️ DELETING...</span>
-                                    </>
-                                ) : (
-                                    '🗑️ PERMANENTLY DELETE SELECTED SOURCE'
-                                )}
+                                🗑️ PERMANENTLY DELETE SELECTED SOURCE
                             </button>
                         </div>
                     </CardContent>

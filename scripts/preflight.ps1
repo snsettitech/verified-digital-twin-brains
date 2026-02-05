@@ -26,19 +26,19 @@ Write-Host "==========================================" -ForegroundColor Yellow
 Set-Location "$RepoRoot/frontend"
 
 Write-Host "→ Installing dependencies (npm ci)..."
-cmd /c "npm ci --silent"
+npm ci --silent
 if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
 
 Write-Host "→ Running lint..."
-cmd /c "npm run lint"
+npm run lint
 if ($LASTEXITCODE -ne 0) { throw "npm run lint failed" }
 
 Write-Host "→ Running typecheck..."
-cmd /c "npm run typecheck"
+npm run typecheck
 if ($LASTEXITCODE -ne 0) { throw "npm run typecheck failed" }
 
 Write-Host "→ Running build..."
-cmd /c "npm run build"
+npm run build
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
 
 Write-Host "✅ Frontend preflight passed!" -ForegroundColor Green

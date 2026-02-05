@@ -64,23 +64,8 @@ def create_api_key(
     
     key_record = response.data[0]
     
-    # Fetch tenant_id for audit logging
-    tenant_id = None
-    try:
-        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-        tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-    except Exception:
-        pass
-
-    # Log the action (Phase 9: Log the action)
-    AuditLogger.log(
-        tenant_id=tenant_id,
-        twin_id=twin_id, 
-        event_type="CONFIGURATION_CHANGE", 
-        action="API_KEY_CREATED", 
-        metadata={"name": name, "key_id": key_record["id"]}
-    )
-
+    # Phase 9: Log the action
+    AuditLogger.log(twin_id, "CONFIGURATION_CHANGE", "API_KEY_CREATED", metadata={"name": name, "key_id": key_record["id"]})
     
     # Return the full key only once (caller should display it immediately)
     return {
@@ -112,32 +97,26 @@ def validate_api_key(key: str) -> Optional[Dict[str, Any]]:
         if not response.data:
             return None
         
-        # Check each key hash (skip malformed rows)
+        # Check each key hash
         for key_record in response.data:
-            stored_hash = key_record.get("key_hash")
-            if not stored_hash or not isinstance(stored_hash, str):
-                continue
-            try:
-                if bcrypt.checkpw(key.encode('utf-8'), stored_hash.encode('utf-8')):
-                    # Key matches, check expiration
-                    expires_at = key_record.get("expires_at")
-                    if expires_at:
-                        expires_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-                        if datetime.now(expires_dt.tzinfo) > expires_dt:
-                            return None  # Expired
-                    
-                    # Update last_used_at
-                    record_api_key_usage(key_record["id"])
-                    
-                    return {
-                        "id": key_record["id"],
-                        "twin_id": key_record["twin_id"],
-                        "group_id": key_record.get("group_id"),
-                        "allowed_domains": key_record.get("allowed_domains", [])
-                    }
-            except Exception as e:
-                print(f"Error validating API key: {e}")
-                continue
+            stored_hash = key_record["key_hash"]
+            if bcrypt.checkpw(key.encode('utf-8'), stored_hash.encode('utf-8')):
+                # Key matches, check expiration
+                expires_at = key_record.get("expires_at")
+                if expires_at:
+                    expires_dt = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    if datetime.now(expires_dt.tzinfo) > expires_dt:
+                        return None  # Expired
+
+                # Update last_used_at
+                record_api_key_usage(key_record["id"])
+
+                return {
+                    "id": key_record["id"],
+                    "twin_id": key_record["twin_id"],
+                    "group_id": key_record.get("group_id"),
+                    "allowed_domains": key_record.get("allowed_domains", [])
+                }
     except Exception as e:
         print(f"Error validating API key: {e}")
         return None
@@ -226,23 +205,7 @@ def revoke_api_key(key_id: str) -> bool:
     
     if response.data:
         twin_id = response.data[0]["twin_id"]
-        
-        # Fetch tenant_id
-        tenant_id = None
-        try:
-            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-        except Exception:
-            pass
-
-        AuditLogger.log(
-            tenant_id=tenant_id,
-            twin_id=twin_id, 
-            event_type="CONFIGURATION_CHANGE", 
-            action="API_KEY_REVOKED", 
-            metadata={"key_id": key_id}
-        )
-
+        AuditLogger.log(twin_id, "CONFIGURATION_CHANGE", "API_KEY_REVOKED", metadata={"key_id": key_id})
         
     return bool(response.data)
 
@@ -274,23 +237,7 @@ def update_api_key(key_id: str, name: Optional[str] = None, allowed_domains: Opt
     
     if response.data:
         twin_id = response.data[0]["twin_id"]
-        
-        # Fetch tenant_id
-        tenant_id = None
-        try:
-            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-        except Exception:
-            pass
-
-        AuditLogger.log(
-            tenant_id=tenant_id,
-            twin_id=twin_id, 
-            event_type="CONFIGURATION_CHANGE", 
-            action="API_KEY_UPDATED", 
-            metadata={"key_id": key_id, "updates": list(update_data.keys())}
-        )
-
+        AuditLogger.log(twin_id, "CONFIGURATION_CHANGE", "API_KEY_UPDATED", metadata={"key_id": key_id, "updates": list(update_data.keys())})
         
     return bool(response.data)
 

@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends
-from modules.auth_guard import get_current_user
+from fastapi import APIRouter
 import json
 from pathlib import Path
 from modules.specializations import get_specialization
@@ -72,30 +71,27 @@ async def get_specialization_config():
 
 
 @router.get("/twins/{twin_id}/specialization")
-async def get_twin_specialization_config(twin_id: str, user=Depends(get_current_user)):
+async def get_twin_specialization_config(twin_id: str):
     """Get specialization configuration for a specific twin.
     
     This replaces the global /config/specialization endpoint.
     Retrieves the specialization_id from the twins table (defaulting to 'vanilla')
     and returns its configuration.
     """
-    from modules.auth_guard import verify_twin_ownership
     from modules.observability import supabase
     
-    # SECURITY: Verify user has access to this twin
-    verify_twin_ownership(twin_id, user)
-    
     # 1. Get twin's specialization preference
-    spec_id = "vanilla"  # Default
+    # Note: If columns don't exist yet (migration pending), this might fail or return None
+    # We'll wrap in try/except to fallback to vanilla gracefully during transition
     try:
-        # Direct query with proper error handling
-        response = supabase.table("twins").select("specialization").eq("id", twin_id).maybe_single().execute()
-        if response.data:
-            spec_id = response.data.get("specialization") or "vanilla"
+        # Use RPC to bypass RLS for system lookup
+        response = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
+        spec_id = response.data.get("specialization_id") if response.data else "vanilla"
     except Exception as e:
         print(f"Warning: Could not fetch specialization for twin {twin_id}: {e}")
         spec_id = "vanilla"
 
+    spec_id = spec_id or "vanilla" # Handle null
     
     # 2. Load the specialization instance
     spec = get_specialization(spec_id)

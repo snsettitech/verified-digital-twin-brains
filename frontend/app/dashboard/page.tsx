@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useTwin } from '@/lib/context/TwinContext';
-import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -48,9 +46,6 @@ export default function DashboardPage() {
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Use TwinContext as single source of truth for active twin
-  const { activeTwin, isLoading: twinsLoading } = useTwin();
-
   // Modal states
   const [showConversationsModal, setShowConversationsModal] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
@@ -91,20 +86,37 @@ export default function DashboardPage() {
   };
 
   // Get twin ID and fetch real stats
-  // REFACTORED: Now uses activeTwin from TwinContext instead of redundant fetch
   useEffect(() => {
     const fetchData = async () => {
-      // Wait for TwinContext to hydrate
-      if (twinsLoading) return;
-
       setLoading(true);
-      const currentTwinId = activeTwin?.id || null;
-      setTwinId(currentTwinId);
 
-      if (currentTwinId) {
+      // Get active twin ID from localStorage or fetch default
+      let activeTwinId = localStorage.getItem('activeTwinId');
+
+      // If no twin ID, try to get the first twin
+      if (!activeTwinId) {
+        try {
+          const twinsResponse = await fetch(`${API_BASE_URL}/twins`);
+          if (twinsResponse.ok) {
+            const twins = await twinsResponse.json();
+            if (twins && twins.length > 0) {
+              activeTwinId = twins[0].id;
+              if (activeTwinId) {
+                localStorage.setItem('activeTwinId', activeTwinId);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch twins:', error);
+        }
+      }
+
+      setTwinId(activeTwinId);
+
+      if (activeTwinId) {
         // Fetch real dashboard stats
         try {
-          const statsResponse = await fetch(`${API_BASE_URL}/metrics/dashboard/${currentTwinId}?days=30`);
+          const statsResponse = await fetch(`${API_BASE_URL}/metrics/dashboard/${activeTwinId}?days=30`);
           if (statsResponse.ok) {
             const data = await statsResponse.json();
             setStats({
@@ -123,7 +135,7 @@ export default function DashboardPage() {
 
         // Fetch real activity feed
         try {
-          const activityResponse = await fetch(`${API_BASE_URL}/metrics/activity/${currentTwinId}?limit=5`);
+          const activityResponse = await fetch(`${API_BASE_URL}/metrics/activity/${activeTwinId}?limit=5`);
           if (activityResponse.ok) {
             const data = await activityResponse.json();
             setRecentActivity(data.map((item: any) => ({
@@ -143,7 +155,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, [activeTwin?.id, twinsLoading]);
+  }, []);
 
 
 
@@ -262,7 +274,7 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div className="grid md:grid-cols-3 gap-6">
         {/* Train Twin */}
-        <Link href="/dashboard/interview" className="group">
+        <Link href="/dashboard/right-brain" className="group">
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-2xl text-white shadow-xl shadow-indigo-200 hover:shadow-2xl transition-all duration-300 h-full relative overflow-hidden">
             <div className="absolute top-0 right-0 p-6 opacity-10">
               <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20">

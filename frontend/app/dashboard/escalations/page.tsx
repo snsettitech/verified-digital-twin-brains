@@ -1,13 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
-import { useTwin } from '@/lib/context/TwinContext';
 
 export default function EscalationsPage() {
-  const { getTwin, getTenant, post } = useAuthFetch();
-  const { activeTwin, isLoading: twinLoading, user } = useTwin();
+  const { get, post } = useAuthFetch();
   const [escalations, setEscalations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -15,28 +13,9 @@ export default function EscalationsPage() {
   const [citations, setCitations] = useState<Record<string, string>>({});
   const [showPreview, setShowPreview] = useState<Record<string, boolean>>({});
 
-  // RBAC: Check if user has admin privileges (owner role)
-  const isAdmin = useMemo(() => {
-    return user?.role === 'owner';
-  }, [user?.role]);
-
-  // HYBRID: Toggle between per-twin view (default) and tenant-wide admin rollup
-  // RBAC: Force false for non-admins
-  const [showAllTwinsRaw, setShowAllTwinsRaw] = useState(false);
-  const showAllTwins = isAdmin ? showAllTwinsRaw : false;
-
-  const twinId = activeTwin?.id;
-
   const fetchEscalations = useCallback(async () => {
     try {
-      let response;
-      if (showAllTwins || !twinId) {
-        // TENANT-SCOPED: Admin rollup of all escalations
-        response = await getTenant('/escalations');
-      } else {
-        // TWIN-SCOPED: Escalations for current twin only
-        response = await getTwin(twinId, '/twins/{twinId}/escalations');
-      }
+      const response = await get('/escalations');
       if (response.ok) {
         const data = await response.json();
         setEscalations(data);
@@ -46,13 +25,11 @@ export default function EscalationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getTwin, getTenant, twinId, showAllTwins]);
+  }, [get]);
 
   useEffect(() => {
-    if (!twinLoading) {
-      fetchEscalations();
-    }
-  }, [twinLoading, fetchEscalations, showAllTwins]);
+    fetchEscalations();
+  }, [fetchEscalations]);
 
   const handleResolve = async (id: string) => {
     const answer = ownerAnswers[id];

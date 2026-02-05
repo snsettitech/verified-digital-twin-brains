@@ -80,12 +80,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 role="region"
                 aria-label="Notifications"
                 aria-live="polite"
-            {/* Toast Container - aria-live region for screen readers */}
-            <div
-                className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2"
-                role="status"
-                aria-live="polite"
-                aria-atomic="false"
             >
                 {toasts.map((toast) => (
                     <div
@@ -97,20 +91,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               animate-slideIn backdrop-blur-sm
               ${bgMap[toast.type]}
             `}
-                        role={toast.type === 'error' ? 'alert' : undefined}
                     >
-                        <span aria-hidden="true">{iconMap[toast.type]}</span>
+                        {iconMap[toast.type]}
                         <span className="text-sm font-medium text-white">{toast.message}</span>
                         <button
                             onClick={() => removeToast(toast.id)}
-                            className="ml-2 p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                            className="ml-2 p-1 rounded-lg hover:bg-black/5 transition-colors"
                             aria-label="Close"
                         >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            className="ml-2 p-1 rounded-lg hover:bg-black/5 transition-colors"
-                            aria-label="Dismiss notification"
-                        >
-                            <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
@@ -118,7 +107,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
                 ))}
             </div>
 
-            <style jsx>{`
+            <style jsx global>{`
         @keyframes slideIn {
           from { opacity: 0; transform: translateX(100%); }
           to { opacity: 1; transform: translateX(0); }

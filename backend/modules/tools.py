@@ -33,19 +33,6 @@ def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversatio
         Returns a JSON string containing the relevant context snippets with metadata.
         """
         import json
-        def _normalize(value):
-            if isinstance(value, (str, int, float, bool)) or value is None:
-                return value
-            if hasattr(value, "item"):
-                try:
-                    return value.item()
-                except Exception:
-                    pass
-            if isinstance(value, list):
-                return [_normalize(v) for v in value]
-            if isinstance(value, dict):
-                return {k: _normalize(v) for k, v in value.items()}
-            return str(value)
         
         # Auto-expand ambiguous queries using conversation history
         expanded_query = query
@@ -118,7 +105,7 @@ def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversatio
         
         # Merge: Graph results first (higher priority), then vector results
         all_results = graph_results + contexts
-        return json.dumps(_normalize(all_results))
+        return json.dumps(all_results)
     
     return search_knowledge_base
 

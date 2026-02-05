@@ -36,7 +36,7 @@ interface PendingDraft {
 export default function ActionsPage() {
     const { showToast } = useToast();
     const { activeTwin, isLoading: twinLoading } = useTwin();
-    const { getTwin, getTenant } = useAuthFetch();
+    const { get } = useAuthFetch();
     const [stats, setStats] = useState<ActionStats>({
         pending_drafts: 0,
         active_triggers: 0,
@@ -54,12 +54,10 @@ export default function ActionsPage() {
         if (!twinId) return;
         try {
             const [triggersRes, execsRes, draftsRes, connectorsRes] = await Promise.all([
-                // TWIN-SCOPED: Triggers, executions, drafts belong to specific twin
-                getTwin(twinId, '/twins/{twinId}/triggers'),
-                getTwin(twinId, '/twins/{twinId}/executions?limit=5'),
-                getTwin(twinId, '/twins/{twinId}/action-drafts'),
-                // TENANT-SCOPED: Connectors are shared across all twins in tenant
-                getTenant('/connectors')
+                get(`/twins/${twinId}/triggers`),
+                get(`/twins/${twinId}/executions?limit=5`),
+                get(`/twins/${twinId}/action-drafts`),
+                get(`/twins/${twinId}/connectors`)
             ]);
 
             const triggers = triggersRes.ok ? await triggersRes.json() : [];
@@ -84,7 +82,7 @@ export default function ActionsPage() {
         } finally {
             setLoading(false);
         }
-    }, [twinId, getTwin, getTenant]);
+    }, [twinId, get]);
 
     useEffect(() => {
         if (twinId) {

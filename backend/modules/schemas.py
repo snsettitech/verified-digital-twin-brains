@@ -7,9 +7,6 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     group_id: Optional[str] = None  # NEW: Allow group override
     metadata: Optional[Dict[str, Any]] = None
-    mode: Optional[str] = None  # "owner" | "public"
-    # Compatibility: accept legacy {message} payloads for one release window
-    message: Optional[str] = None
 
 class ChatMetadata(BaseModel):
     type: str = "metadata"
@@ -64,7 +61,6 @@ class TwinSettingsUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     specialization_id: Optional[str] = None  # NEW: Gate 1
-    is_public: Optional[bool] = None  # NEW: Publish Gating
     settings: Optional[Dict[str, Any]] = None
 
 class YouTubeIngestRequest(BaseModel):
@@ -306,44 +302,10 @@ class ChatWidgetRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
     api_key: str
-    # Compatibility: accept legacy {message} payloads for one release window
-    message: Optional[str] = None
 
 class PublicChatRequest(BaseModel):
     message: str
-    conversation_history: Optional[List[Dict[str, Any]]] = None
-
-# Owner Memory + Clarifications
-
-class OwnerMemorySchema(BaseModel):
-    id: str
-    twin_id: str
-    tenant_id: str
-    topic_normalized: str
-    memory_type: str
-    value: str
-    stance: Optional[str] = None
-    intensity: Optional[int] = None
-    confidence: Optional[float] = None
-    status: str
-    created_at: Optional[datetime] = None
-
-class ClarificationThreadSchema(BaseModel):
-    id: str
-    twin_id: str
-    tenant_id: str
-    status: str
-    mode: str
-    original_query: Optional[str] = None
-    question: str
-    options: Optional[List[Dict[str, Any]]] = None
-    memory_write_proposal: Optional[Dict[str, Any]] = None
-    owner_memory_id: Optional[str] = None
-    created_at: Optional[datetime] = None
-
-class ClarificationResolveRequest(BaseModel):
-    answer: str
-    selected_option: Optional[str] = None
+    conversation_history: Optional[List[Dict[str, str]]] = None
 
 # Phase 9: Verification & Governance Schemas
 
@@ -506,48 +468,3 @@ class EventEmitRequest(BaseModel):
     event_type: str
     payload: Dict[str, Any]
     source_context: Optional[Dict[str, Any]] = None
-
-
-# ============================================================================
-# Governance & Audit Schemas
-# ============================================================================
-
-class AuditLogSchema(BaseModel):
-    id: str
-    twin_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    actor_id: Optional[str] = None
-    event_type: str
-    action: str
-    metadata: Dict[str, Any]
-    created_at: datetime
-    
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
-
-
-class GovernancePolicySchema(BaseModel):
-    id: str
-    tenant_id: Optional[str] = None
-    twin_id: Optional[str] = None
-    policy_type: str
-    name: str
-    content: str
-    is_active: bool
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-
-
-class GovernancePolicyCreateRequest(BaseModel):
-    policy_type: str = "refusal_rule"
-    name: str
-    content: str
-
-
-class TwinVerificationRequest(BaseModel):
-    verification_method: str = "MANUAL_REVIEW"
-    metadata: Optional[Dict[str, Any]] = None
-
-
-class DeepScrubRequest(BaseModel):
-    reason: Optional[str] = None

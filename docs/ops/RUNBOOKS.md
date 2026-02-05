@@ -2,35 +2,6 @@
 
 > Build/deploy troubleshooting, env var checklist, and request tracing.
 
-## /auth/sync-user intermittent failures
-
-**Symptoms**
-- Banner: "Sync temporarily unavailable. Retrying..."
-- Brief UI hiccups, but dashboard still renders
-- Occasional "Failed to fetch" in console for /auth/sync-user
-
-**Likely causes**
-- Backend cold starts or brief deploy restarts
-- Token refresh timing races on initial load
-- Transient network/CORS blips
-
-**What to check**
-- Browser Network: /auth/sync-user status codes and retry timing
-- Response headers: x-correlation-id and Access-Control-Expose-Headers
-- Backend logs: search by correlation id
-
-**Safe mitigations**
-- Client auto-retries with backoff and shows a banner
-- Keep last-known-good user/twin state (no destructive resets)
-- Sign out only on definitive "Account has been deleted" 401
-
-**Escalation triggers**
-- Sustained 5xx on /auth/sync-user >5 minutes
-- Spike in 401 "Account has been deleted" across multiple users
-- Repeated failures without recovery despite retries
-
----
-
 ## Vercel Troubleshooting
 
 ### Build Fails with "Module not found"

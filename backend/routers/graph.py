@@ -28,40 +28,25 @@ async def get_twin_graph(
     """Retrieve the cognitive graph for visualization."""
     try:
         # Fetch nodes via RPC (System Privileges)
-        nodes = []
-        edges = []
-        try:
-            nodes_res = supabase.rpc("get_nodes_system", {
-                "t_id": twin_id,
-                "limit_val": limit
-            }).execute()
-            if getattr(nodes_res, "error", None):
-                raise Exception(nodes_res.error)
-            nodes = nodes_res.data or []
-        except Exception as e:
-            # Fallback: direct table query if RPC is missing/out of date
-            nodes_res = supabase.table("nodes").select("*").eq("twin_id", twin_id).limit(limit).execute()
-            nodes = nodes_res.data or []
+        nodes_res = supabase.rpc("get_nodes_system", {
+            "t_id": twin_id,
+            "limit_val": limit
+        }).execute()
 
         # Fetch edges via RPC
-        if nodes:
-            try:
-                edges_res = supabase.rpc("get_edges_system", {
-                    "t_id": twin_id,
-                    "limit_val": limit * 2
-                }).execute()
-                if getattr(edges_res, "error", None):
-                    raise Exception(edges_res.error)
-                edges = edges_res.data or []
-            except Exception as e:
-                edges_res = supabase.table("edges").select("*").eq("twin_id", twin_id).limit(limit * 2).execute()
-                edges = edges_res.data or []
+        edges = []
+        if nodes_res.data:
+            edges_res = supabase.rpc("get_edges_system", {
+                "t_id": twin_id,
+                "limit_val": limit * 2
+            }).execute()
+            edges = edges_res.data
 
         return {
-            "nodes": nodes,
+            "nodes": nodes_res.data,
             "edges": edges,
             "stats": {
-                "node_count": len(nodes),
+                "node_count": len(nodes_res.data),
                 "edge_count": len(edges)
             }
         }

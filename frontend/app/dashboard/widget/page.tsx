@@ -1,21 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useTwin } from '@/lib/context/TwinContext';
 
 export default function WidgetPage() {
-  const { activeTwin, isLoading: twinLoading } = useTwin();
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>('bottom-right');
   const [primaryColor, setPrimaryColor] = useState('#6366f1');
   const [copied, setCopied] = useState(false);
 
-  // TWIN-SCOPED: Auto-populate activeTwinId in embed code
-  const twinIdDisplay = activeTwin?.id || 'YOUR_TWIN_ID';
   const widgetCode = `<script src="https://cdn.verifiedtwin.com/widget.js"></script>
 <script>
   VerifiedTwin.init({
-    twinId: '${twinIdDisplay}',
+    twinId: 'your-twin-id',
     theme: '${theme}',
     position: '${position}',
     primaryColor: '${primaryColor}'
@@ -51,8 +47,8 @@ export default function WidgetPage() {
                     key={t}
                     onClick={() => setTheme(t)}
                     className={`flex-1 p-4 rounded-xl border-2 transition-all capitalize ${theme === t
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300'
                       }`}
                   >
                     <div className={`w-full h-8 rounded-lg mb-2 ${t === 'dark' ? 'bg-slate-800' : 'bg-white border'
@@ -72,8 +68,8 @@ export default function WidgetPage() {
                     key={p}
                     onClick={() => setPosition(p)}
                     className={`flex-1 p-4 rounded-xl border-2 transition-all ${position === p
-                      ? 'border-indigo-500 bg-indigo-50'
-                      : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-indigo-500 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300'
                       }`}
                   >
                     <div className="w-full h-8 relative border rounded-lg bg-slate-50">
@@ -115,8 +111,8 @@ export default function WidgetPage() {
               <button
                 onClick={copyCode}
                 className={`px-4 py-2 text-sm font-medium rounded-xl transition-all ${copied
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   }`}
               >
                 {copied ? 'Copied!' : 'Copy Code'}

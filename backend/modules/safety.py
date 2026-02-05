@@ -11,21 +11,12 @@ class GuardrailEngine:
     
     def __init__(self, twin_id: str):
         self.twin_id = twin_id
-        self.tenant_id = None
-        from modules.observability import supabase
-        
         try:
-            # Fetch policies and tenant_id concurrently if possible, or sequentially
-            # sequential for safety
-            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-            if twin_res.data:
-                self.tenant_id = twin_res.data.get("tenant_id")
-                
             self.policies = get_governance_policies(twin_id)
         except Exception as e:
-            print(f"[Guardrails] Warning: Could not initialize guardrails for twin {twin_id}: {e}")
+            # Graceful fallback if governance tables don't exist or query fails
+            print(f"[Guardrails] Warning: Could not load governance policies: {e}")
             self.policies = []
-
     
     def check_prompt(self, prompt: str) -> Optional[str]:
         """
@@ -42,14 +33,7 @@ class GuardrailEngine:
         
         for pattern in injection_patterns:
             if re.search(pattern, prompt, re.IGNORECASE):
-                AuditLogger.log(
-                    tenant_id=self.tenant_id,
-                    twin_id=self.twin_id, 
-                    event_type="SAFETY_VIOLATION", 
-                    action="PROMPT_INJECTION_DETECTED", 
-                    metadata={"prompt_fragment": prompt[:50]}
-                )
-
+                AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "PROMPT_INJECTION_DETECTED", metadata={"prompt_fragment": prompt[:50]})
                 return "I'm sorry, I cannot process this request as it violates my security guardrails."
         
         # 2. Refusal Rules from Policies
@@ -60,14 +44,7 @@ class GuardrailEngine:
                     pattern = policy.get("content", "")
                     if pattern and re.search(pattern, prompt, re.IGNORECASE):
                         try:
-                            AuditLogger.log(
-                                tenant_id=self.tenant_id,
-                                twin_id=self.twin_id, 
-                                event_type="SAFETY_VIOLATION", 
-                                action="REFUSAL_RULE_TRIGGERED", 
-                                metadata={"policy_name": policy.get("name", "unknown")}
-                            )
-
+                            AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "REFUSAL_RULE_TRIGGERED", metadata={"policy_name": policy.get("name", "unknown")})
                         except Exception:
                             # Fallback if audit logging fails
                             pass
@@ -90,14 +67,7 @@ class GuardrailEngine:
                     content = policy.get("content", "")
                     if tool_name in content:
                         try:
-                            AuditLogger.log(
-                                tenant_id=self.tenant_id,
-                                twin_id=self.twin_id, 
-                                event_type="SAFETY_VIOLATION", 
-                                action="TOOL_ACCESS_DENIED", 
-                                metadata={"tool": tool_name}
-                            )
-
+                            AuditLogger.log(self.twin_id, "SAFETY_VIOLATION", "TOOL_ACCESS_DENIED", metadata={"tool": tool_name})
                         except Exception:
                             # Fallback if audit logging fails
                             pass

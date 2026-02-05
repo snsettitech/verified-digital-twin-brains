@@ -1,0 +1,3 @@
+## 2026-02-05 - [CI/CD Discrepancies and Security Patches]
+**Learning:** CI pipelines may run different linting rules or versions than local environments, leading to discrepancies (e.g., `prefer-const` reported in CI but not locally). Additionally, security vulnerabilities in dependencies like `next` require proactive updates even if they don't break the build immediately.
+**Action:** Always check CI logs carefully for exact file versions and line numbers. When local reproduction fails, trust the CI report but verify if the file content matches. For security alerts, update dependencies promptly.

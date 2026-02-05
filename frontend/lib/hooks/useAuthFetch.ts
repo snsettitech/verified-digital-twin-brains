@@ -47,30 +47,12 @@ export function useAuthFetch() {
             headers['Content-Type'] = 'application/json';
         }
 
-        const correlationId = Math.random().toString(36).substring(7);
         const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-        console.log(`[useAuthFetch] [${correlationId}] ${options.method || 'GET'} ${url} START (Auth: ${token ? 'Bearer' : 'None'})`);
-        const startTime = Date.now();
-
-        try {
-            const response = await fetch(url, {
-                ...options,
-                headers,
-            });
-            const duration = Date.now() - startTime;
-            console.log(`[useAuthFetch] [${correlationId}] ${options.method || 'GET'} ${url} END [${response.status}] (${duration}ms)`);
-
-            if (response.status === 401 || response.status === 403) {
-                console.warn(`[useAuthFetch] [${correlationId}] AUTH ERROR ${response.status} on ${url}`);
-            }
-
-            return response;
-        } catch (error) {
-            const duration = Date.now() - startTime;
-            console.error(`[useAuthFetch] [${correlationId}] ${url} ERROR after ${duration}ms:`, error);
-            throw error;
-        }
+        return fetch(url, {
+            ...options,
+            headers,
+        });
     }, [getAuthToken]);
 
     /**
@@ -131,121 +113,6 @@ export function useAuthFetch() {
         });
     }, [authFetch]);
 
-    // ========================================================================
-    // SCOPE-ENFORCED METHODS
-    // Use these for type-safe scope enforcement in React components
-    // ========================================================================
-
-    /**
-     * ALLOWLIST: Endpoints that may accept ?twin_id= for optional filtering.
-     * All other tenant endpoints MUST NOT use twin_id parameter.
-     */
-    const TWIN_FILTER_ALLOWLIST = [
-        '/governance/audit-logs',  // Admin can filter audit logs by twin
-    ];
-
-    /**
-     * Check if endpoint is in the allowlist for optional twin_id filtering
-     */
-    const isTwinFilterAllowed = (endpoint: string): boolean => {
-        const basePath = endpoint.split('?')[0];
-        return TWIN_FILTER_ALLOWLIST.some(allowed => basePath === allowed || basePath.startsWith(allowed + '?'));
-    };
-
-    /**
-     * Validate tenant endpoint - blocks /twins/ paths AND twin_id params (except allowlist)
-     */
-    const validateTenantEndpointHook = (endpoint: string, method: string): void => {
-        // Block /twins/{id}/ path patterns
-        if (/\/twins\/[^/]+/.test(endpoint)) {
-            console.error(`[SCOPE VIOLATION] Tenant ${method} contains /twins/ path:`, endpoint);
-            throw new Error(`Tenant-scoped endpoint cannot use /twins/{id} path: ${endpoint}`);
-        }
-        // Block twin_id query params unless allowlisted
-        if (/[?&]twin_id=/.test(endpoint) && !isTwinFilterAllowed(endpoint)) {
-            console.error(`[SCOPE VIOLATION] Tenant ${method} contains twin_id param (not allowlisted):`, endpoint);
-            throw new Error(`Tenant-scoped endpoint cannot use twin_id param: ${endpoint}. Allowlisted: ${TWIN_FILTER_ALLOWLIST.join(', ')}`);
-        }
-    };
-
-    /**
-     * Tenant-scoped GET - validates no twin references (except allowlist)
-     */
-    const getTenant = useCallback(async (endpoint: string): Promise<Response> => {
-        validateTenantEndpointHook(endpoint, 'GET');
-        return authFetch(endpoint, { method: 'GET' });
-    }, [authFetch]);
-
-    /**
-     * Tenant-scoped POST - validates no twin references
-     */
-    const postTenant = useCallback(async (endpoint: string, body?: any): Promise<Response> => {
-        validateTenantEndpointHook(endpoint, 'POST');
-        const options: RequestInit = { method: 'POST' };
-        if (body instanceof FormData) {
-            options.body = body;
-        } else if (body) {
-            options.body = JSON.stringify(body);
-        }
-        return authFetch(endpoint, options);
-    }, [authFetch]);
-
-    /**
-     * Tenant-scoped DELETE - validates no twin references
-     */
-    const delTenant = useCallback(async (endpoint: string): Promise<Response> => {
-        validateTenantEndpointHook(endpoint, 'DELETE');
-        return authFetch(endpoint, { method: 'DELETE' });
-    }, [authFetch]);
-
-    /**
-     * Twin-scoped GET - validates twinId present and substitutes template
-     */
-    const getTwin = useCallback(async (twinId: string, endpointTemplate: string): Promise<Response> => {
-        if (!twinId) throw new Error('Twin-scoped fetch requires twinId');
-        const endpoint = endpointTemplate.replace('{twinId}', twinId);
-        const hasTwin = endpoint.includes(`/twins/${twinId}`) || endpoint.includes(`twin_id=${twinId}`);
-        if (!hasTwin) {
-            console.error('[SCOPE VIOLATION] Twin GET missing twinId:', endpoint);
-            throw new Error(`Twin-scoped endpoint must include twinId: ${endpoint}`);
-        }
-        return authFetch(endpoint, { method: 'GET' });
-    }, [authFetch]);
-
-    /**
-     * Twin-scoped POST - validates twinId present and substitutes template
-     */
-    const postTwin = useCallback(async (twinId: string, endpointTemplate: string, body?: any): Promise<Response> => {
-        if (!twinId) throw new Error('Twin-scoped fetch requires twinId');
-        const endpoint = endpointTemplate.replace('{twinId}', twinId);
-        const hasTwin = endpoint.includes(`/twins/${twinId}`) || endpoint.includes(`twin_id=${twinId}`);
-        if (!hasTwin) {
-            console.error('[SCOPE VIOLATION] Twin POST missing twinId:', endpoint);
-            throw new Error(`Twin-scoped endpoint must include twinId: ${endpoint}`);
-        }
-        const options: RequestInit = { method: 'POST' };
-        if (body instanceof FormData) {
-            options.body = body;
-        } else if (body) {
-            options.body = JSON.stringify(body);
-        }
-        return authFetch(endpoint, options);
-    }, [authFetch]);
-
-    /**
-     * Twin-scoped DELETE - validates twinId present and substitutes template
-     */
-    const delTwin = useCallback(async (twinId: string, endpointTemplate: string): Promise<Response> => {
-        if (!twinId) throw new Error('Twin-scoped fetch requires twinId');
-        const endpoint = endpointTemplate.replace('{twinId}', twinId);
-        const hasTwin = endpoint.includes(`/twins/${twinId}`) || endpoint.includes(`twin_id=${twinId}`);
-        if (!hasTwin) {
-            console.error('[SCOPE VIOLATION] Twin DELETE missing twinId:', endpoint);
-            throw new Error(`Twin-scoped endpoint must include twinId: ${endpoint}`);
-        }
-        return authFetch(endpoint, { method: 'DELETE' });
-    }, [authFetch]);
-
     return {
         authFetch,
         get,
@@ -255,13 +122,6 @@ export function useAuthFetch() {
         patch,
         getAuthToken,
         API_BASE_URL,
-        // Scope-enforced methods
-        getTenant,
-        postTenant,
-        delTenant,
-        getTwin,
-        postTwin,
-        delTwin,
     };
 }
 
@@ -289,19 +149,12 @@ export async function authFetchStandalone(
     const authHeaders = await getAuthHeaders();
     const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-    const headers: Record<string, string> = {
-        ...authHeaders,
-        ...(options.headers as Record<string, string> || {}),
-    };
-
-    // Add Content-Type for JSON requests if body is present and not FormData
-    if (options.body && !(options.body instanceof FormData)) {
-        headers['Content-Type'] = 'application/json';
-    }
-
     return fetch(url, {
         ...options,
-        headers,
+        headers: {
+            ...authHeaders,
+            ...(options.headers as Record<string, string> || {}),
+        },
     });
 }
 
@@ -317,93 +170,6 @@ export async function getAuthToken(): Promise<string | null> {
         console.error('Failed to get auth token:', error);
         return null;
     }
-}
-
-// ============================================================================
-// SCOPE ENFORCEMENT PRIMITIVES
-// These functions enforce correct twin-scoped vs tenant-scoped behavior.
-// Use these instead of raw authFetch to prevent cross-scope data leakage.
-// ============================================================================
-
-/**
- * ALLOWLIST: Endpoints that may accept ?twin_id= for optional filtering.
- * All other tenant endpoints MUST NOT use twin_id parameter.
- */
-const TWIN_FILTER_ALLOWLIST_STANDALONE = [
-    '/governance/audit-logs',  // Admin can filter audit logs by twin
-];
-
-/**
- * Check if endpoint is in the allowlist for optional twin_id filtering
- */
-function isTwinFilterAllowedStandalone(endpoint: string): boolean {
-    const basePath = endpoint.split('?')[0];
-    return TWIN_FILTER_ALLOWLIST_STANDALONE.some(allowed => basePath === allowed);
-}
-
-/**
- * Validates that an endpoint is tenant-scoped:
- * - Blocks /twins/{id}/ paths
- * - Blocks ?twin_id= params EXCEPT for allowlisted endpoints
- */
-function validateTenantEndpoint(endpoint: string): void {
-    // Block /twins/{id}/ path patterns
-    if (/\/twins\/[^/]+/.test(endpoint)) {
-        console.error('[SCOPE VIOLATION] Tenant endpoint contains /twins/ path:', endpoint);
-        throw new Error(`Tenant-scoped endpoint cannot use /twins/{id} path: ${endpoint}`);
-    }
-    // Block twin_id query params unless allowlisted
-    if (/[?&]twin_id=/.test(endpoint) && !isTwinFilterAllowedStandalone(endpoint)) {
-        console.error('[SCOPE VIOLATION] Tenant endpoint contains twin_id param (not allowlisted):', endpoint);
-        throw new Error(`Tenant-scoped endpoint cannot use twin_id param: ${endpoint}. Allowlisted: ${TWIN_FILTER_ALLOWLIST_STANDALONE.join(', ')}`);
-    }
-}
-
-/**
- * Validates that an endpoint is twin-scoped (requires twin reference)
- */
-function validateTwinEndpoint(endpoint: string, twinId: string): void {
-    if (!twinId) {
-        throw new Error('Twin-scoped fetch requires twinId');
-    }
-
-    // Endpoint must contain the twinId in path or as a template placeholder
-    const hasTwinInPath = endpoint.includes(`/twins/${twinId}`) ||
-        endpoint.includes(`twin_id=${twinId}`) ||
-        endpoint.includes('{twinId}');
-
-    if (!hasTwinInPath) {
-        console.error('[SCOPE VIOLATION] Twin endpoint missing twinId:', endpoint);
-        throw new Error(`Twin-scoped endpoint must include twinId: ${endpoint}`);
-    }
-}
-
-/**
- * Standalone tenant-scoped fetch - NEVER includes twinId
- * Use for: /api-keys, /access-groups, /governance/policies, /connectors
- */
-export async function authFetchTenant(
-    endpoint: string,
-    options: RequestInit = {}
-): Promise<Response> {
-    validateTenantEndpoint(endpoint);
-    return authFetchStandalone(endpoint, options);
-}
-
-/**
- * Standalone twin-scoped fetch - REQUIRES twinId in endpoint
- * Supports {twinId} template replacement
- * Use for: /twins/{twinId}/..., /metrics/dashboard/{twinId}, etc.
- */
-export async function authFetchTwin(
-    twinId: string,
-    endpointTemplate: string,
-    options: RequestInit = {}
-): Promise<Response> {
-    // Replace {twinId} template placeholder if present
-    const endpoint = endpointTemplate.replace('{twinId}', twinId);
-    validateTwinEndpoint(endpoint, twinId);
-    return authFetchStandalone(endpoint, options);
 }
 
 export { API_BASE_URL };

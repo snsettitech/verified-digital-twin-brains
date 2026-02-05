@@ -1,19 +1,16 @@
 'use client';
 
-import { useSearchParams, useRouter, useParams } from 'next/navigation';
-import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { ConsoleLayout } from '@/components/console/ConsoleLayout';
 import { OverviewTab } from '@/components/console/tabs/OverviewTab';
 import { KnowledgeTab } from '@/components/console/tabs/KnowledgeTab';
 import { ChatTab } from '@/components/console/tabs/ChatTab';
-import { TrainingTab } from '@/components/console/tabs/TrainingTab';
 import { EscalationsTab } from '@/components/console/tabs/EscalationsTab';
 import { PublishTab } from '@/components/console/tabs/PublishTab';
-import { PublicChatTab } from '@/components/console/tabs/PublicChatTab';
 import { ActionsTab } from '@/components/console/tabs/ActionsTab';
 import { SettingsTab } from '@/components/console/tabs/SettingsTab';
-import { resolveApiBaseUrl } from '@/lib/api';
 
 interface Twin {
     id: string;
@@ -24,20 +21,12 @@ interface Twin {
     specialization_id: string;
 }
 
-interface ShareLinkInfo {
-    twin_id: string;
-    share_token: string | null;
-    share_url: string | null;
-    public_share_enabled: boolean;
-}
-
 function TwinConsoleContent({ twinId }: { twinId: string }) {
     const searchParams = useSearchParams();
     const router = useRouter();
     const supabase = getSupabaseClient();
 
     const [twin, setTwin] = useState<Twin | null>(null);
-    const [shareInfo, setShareInfo] = useState<ShareLinkInfo | null>(null);
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         sources: 0,
@@ -47,140 +36,44 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
 
     const activeTab = searchParams.get('tab') || 'overview';
 
-    const retryRef = useRef(0);
-    const fetchTwin = useCallback(async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token;
-            if (!token) {
-                if (retryRef.current < 5) {
-                    retryRef.current += 1;
-                    setTimeout(fetchTwin, 600);
-                } else {
-                    throw new Error('Not authenticated');
-                }
-                return;
-            }
-            const backendUrl = resolveApiBaseUrl();
-            const response = await fetch(`${backendUrl}/twins/${twinId}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(errText || 'Failed to fetch twin');
-            }
-            const data = await response.json();
-            setTwin(data);
-
-            // Fetch share link info (canonical)
-            try {
-                const shareRes = await fetch(`${backendUrl}/twins/${twinId}/share-link`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                if (shareRes.ok) {
-                    const shareData = await shareRes.json();
-                    setShareInfo(shareData);
-                }
-            } catch (shareErr) {
-                console.warn('Failed to fetch share link info:', shareErr);
-            }
-
-            // Fetch stats
-            const { count: sourceCount } = await supabase
-                .from('sources')
-                .select('*', { count: 'exact', head: true })
-                .eq('twin_id', twinId);
-
-            const { count: escalationCount } = await supabase
-                .from('escalations')
-                .select('*', { count: 'exact', head: true })
-                .eq('twin_id', twinId)
-                .eq('status', 'pending');
-
-            setStats({
-                sources: sourceCount || 0,
-                conversations: 0, // Would need sessions table
-                escalations: escalationCount || 0
-            });
-        } catch (error) {
-            console.error('Error fetching twin:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, [supabase, twinId]);
-
     useEffect(() => {
-        fetchTwin();
-        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session?.access_token) {
-                retryRef.current = 0;
-                fetchTwin();
+        const fetchTwin = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('twins')
+                    .select('*')
+                    .eq('id', twinId)
+                    .single();
+
+                if (error) throw error;
+                setTwin(data);
+
+                // Fetch stats
+                const { count: sourceCount } = await supabase
+                    .from('sources')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('twin_id', twinId);
+
+                const { count: escalationCount } = await supabase
+                    .from('escalations')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('twin_id', twinId)
+                    .eq('status', 'pending');
+
+                setStats({
+                    sources: sourceCount || 0,
+                    conversations: 0, // Would need sessions table
+                    escalations: escalationCount || 0
+                });
+            } catch (error) {
+                console.error('Error fetching twin:', error);
+            } finally {
+                setLoading(false);
             }
-        });
-        return () => {
-            data?.subscription?.unsubscribe();
         };
-    }, [fetchTwin, supabase]);
 
-    const handleTogglePublic = async (isPublic: boolean) => {
-        try {
-            const backendUrl = resolveApiBaseUrl();
-            // Use authenticated fetch (assuming Supabase session is handled by the fetch wrapper or direct useAuthFetch)
-            const { data: { session } } = await supabase.auth.getSession();
-
-            const res = await fetch(`${backendUrl}/twins/${twinId}/sharing`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                },
-                body: JSON.stringify({ is_public: isPublic })
-            });
-
-            if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.detail?.message || 'Failed to update twin');
-            }
-
-            // Update local share state
-            setShareInfo(prev => prev ? { ...prev, public_share_enabled: isPublic } : prev);
-
-            // If enabling and no token exists, regenerate
-            if (isPublic && !shareInfo?.share_token) {
-                await handleRegenerateLink();
-            }
-        } catch (error: any) {
-            console.error('Error toggling public status:', error);
-            alert(error.message || 'Failed to update public status');
-        }
-    };
-
-    const handleRegenerateLink = async () => {
-        try {
-            const backendUrl = resolveApiBaseUrl();
-            const { data: { session } } = await supabase.auth.getSession();
-            const res = await fetch(`${backendUrl}/twins/${twinId}/share-link`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${session?.access_token}`
-                }
-            });
-            if (!res.ok) {
-                const errorData = await res.json();
-                throw new Error(errorData.detail?.message || 'Failed to regenerate share link');
-            }
-            const data = await res.json();
-            setShareInfo(data);
-        } catch (error: any) {
-            console.error('Error regenerating share link:', error);
-            alert(error.message || 'Failed to regenerate share link');
-        }
-    };
+        fetchTwin();
+    }, [twinId, supabase]);
 
     if (loading) {
         return (
@@ -210,27 +103,6 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
         );
     }
 
-    const isArchived = (twin as any)?.settings?.deleted_at;
-    if (isArchived) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-[#0a0a0f]">
-                <div className="text-center max-w-md">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-red-500/20 flex items-center justify-center">
-                        <svg className="w-8 h-8 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                    </div>
-                    <h2 className="text-xl font-bold text-white mb-2">This twin is archived</h2>
-                    <p className="text-slate-400">Chat, publish, and verification are disabled for archived twins.</p>
-                </div>
-            </div>
-        );
-    }
-
-    const effectiveIsPublic = shareInfo?.public_share_enabled ?? twin?.is_public ?? false;
-    const effectiveShareLink = shareInfo?.share_url || undefined;
-    const effectiveShareToken = shareInfo?.share_token || null;
-
     const renderTab = () => {
         switch (activeTab) {
             case 'overview':
@@ -253,8 +125,6 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                 return <KnowledgeTab twinId={twinId} />;
             case 'chat':
                 return <ChatTab twinId={twinId} twinName={twin.name} />;
-            case 'training':
-                return <TrainingTab twinId={twinId} />;
             case 'escalations':
                 return <EscalationsTab twinId={twinId} />;
             case 'publish':
@@ -262,18 +132,8 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                     <PublishTab
                         twinId={twinId}
                         twinName={twin.name}
-                        isPublic={effectiveIsPublic}
-                        shareLink={effectiveShareLink}
-                        onTogglePublic={handleTogglePublic}
-                        onRegenerateLink={handleRegenerateLink}
-                    />
-                );
-            case 'public-chat':
-                return (
-                    <PublicChatTab
-                        twinId={twinId}
-                        shareToken={effectiveShareToken}
-                        isPublic={effectiveIsPublic}
+                        isPublic={twin.is_public}
+                        shareLink={twin.share_token ? `/share/${twinId}/${twin.share_token}` : undefined}
                     />
                 );
             case 'actions':
@@ -305,17 +165,14 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
     );
 }
 
-export default function TwinConsolePage() {
-    const params = useParams();
-    const twinId = (params?.id as string) || '';
-
+export default function TwinConsolePage({ params }: { params: { id: string } }) {
     return (
         <Suspense fallback={
             <div className="flex items-center justify-center h-screen bg-[#0a0a0f]">
                 <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
             </div>
         }>
-            <TwinConsoleContent twinId={twinId} />
+            <TwinConsoleContent twinId={params.id} />
         </Suspense>
     );
 }

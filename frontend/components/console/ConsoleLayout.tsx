@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { resolveApiHostLabel } from '@/lib/api';
 import { TabNavigation, Tab } from './TabNavigation';
 
 interface ConsoleLayoutProps {
@@ -46,15 +45,6 @@ const CONSOLE_TABS: Tab[] = [
         )
     },
     {
-        id: 'training',
-        label: 'Training',
-        icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-        )
-    },
-    {
         id: 'escalations',
         label: 'Escalations',
         icon: (
@@ -69,15 +59,6 @@ const CONSOLE_TABS: Tab[] = [
         icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-            </svg>
-        )
-    },
-    {
-        id: 'public-chat',
-        label: 'Public Chat',
-        icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2m-4 0H7a2 2 0 01-2-2V10a2 2 0 012-2h6m0-4h.01M12 20h.01M8 4h.01M16 4h.01" />
             </svg>
         )
     },
@@ -110,8 +91,6 @@ export function ConsoleLayout({
     children,
     stats
 }: ConsoleLayoutProps) {
-    const apiHostLabel = resolveApiHostLabel();
-
     // Add badges to tabs based on stats
     const tabsWithBadges = CONSOLE_TABS.map(tab => ({
         ...tab,
@@ -140,9 +119,6 @@ export function ConsoleLayout({
                                 </span>
                                 <span className="text-xs text-slate-500">
                                     {stats?.sources || 0} sources • {stats?.conversations || 0} conversations
-                                </span>
-                                <span className="text-[10px] text-slate-500">
-                                    API: {apiHostLabel} • Twin: {twinId}
                                 </span>
                             </div>
                         </div>

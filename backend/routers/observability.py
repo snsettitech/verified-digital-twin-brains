@@ -3,7 +3,7 @@ from modules.clients import get_pinecone_index, get_openai_client
 
 router = APIRouter(tags=["observability"])
 
-@router.get("/observability/health")
+@router.get("/health")
 async def health_check():
     health_status = {
         "status": "online",

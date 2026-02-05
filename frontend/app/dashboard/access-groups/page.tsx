@@ -16,8 +16,8 @@ interface AccessGroup {
 }
 
 export default function AccessGroupsPage() {
-  const { isLoading: twinLoading } = useTwin();
-  const { getTenant, postTenant, delTenant } = useAuthFetch();
+  const { activeTwin, isLoading: twinLoading } = useTwin();
+  const { get, post, del } = useAuthFetch();
   const [groups, setGroups] = useState<AccessGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -26,10 +26,12 @@ export default function AccessGroupsPage() {
   const [newGroupIsPublic, setNewGroupIsPublic] = useState(false);
   const [creating, setCreating] = useState(false);
 
+  const twinId = activeTwin?.id;
+
   const fetchGroups = useCallback(async () => {
+    if (!twinId) return;
     try {
-      // TENANT-SCOPED: Access groups are shared across all twins in tenant
-      const response = await getTenant('/access-groups');
+      const response = await get(`/twins/${twinId}/access-groups`);
       if (response.ok) {
         const data = await response.json();
         setGroups(data);
@@ -39,22 +41,22 @@ export default function AccessGroupsPage() {
     } finally {
       setLoading(false);
     }
-  }, [getTenant]);
+  }, [twinId, get]);
 
   useEffect(() => {
-    if (!twinLoading) {
-      // Tenant-scoped: fetch immediately, no twinId dependency
+    if (twinId) {
       fetchGroups();
+    } else if (!twinLoading) {
+      setLoading(false);
     }
-  }, [twinLoading, fetchGroups]);
+  }, [twinId, twinLoading, fetchGroups]);
 
   const handleCreateGroup = async () => {
-    if (!newGroupName.trim()) return;
+    if (!newGroupName.trim() || !twinId) return;
 
     setCreating(true);
     try {
-      // TENANT-SCOPED: Group belongs to tenant, not specific twin
-      const response = await postTenant('/access-groups', {
+      const response = await post(`/twins/${twinId}/access-groups`, {
         name: newGroupName,
         description: newGroupDescription || null,
         is_public: newGroupIsPublic
@@ -89,8 +91,7 @@ export default function AccessGroupsPage() {
     }
 
     try {
-      // TENANT-SCOPED: Backend validates tenant ownership of group
-      const response = await delTenant(`/access-groups/${groupId}`);
+      const response = await del(`/access-groups/${groupId}`);
 
       if (response.ok) {
         fetchGroups();
@@ -108,7 +109,24 @@ export default function AccessGroupsPage() {
     return <div className="p-8">Loading...</div>;
   }
 
-  // TENANT-SCOPED: No twin required for access groups, removed "No Twin Found" block
+  if (!twinId) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center max-w-md p-8">
+          <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
+          <p className="text-slate-500 mb-6">Create a digital twin first to manage access groups.</p>
+          <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+            Create Your Twin
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8">
