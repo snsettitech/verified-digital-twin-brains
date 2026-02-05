@@ -229,12 +229,12 @@ def create_twin_agent(
             # Check for general_knowledge_allowed setting
             general_knowledge_allowed = settings.get("general_knowledge_allowed", False)
             
-            # Load graph context from nodes table (Right Brain interview data)
-            graph_context = ""
+            # Load node context from nodes table (Right Brain interview - High-level Identity)
+            node_context = ""
             try:
-                nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 50}).execute()
+                # Reducing limit to avoid prompt pollution; focusing on top 10 core concepts
+                nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 10}).execute()
                 if nodes_res.data and len(nodes_res.data) > 0:
-                    graph_items = []
                     intent_items = []
                     profile_items = []
                     
@@ -254,14 +254,23 @@ def create_twin_agent(
                             profile_items.append(f"- {name}: {desc}")
                     
                     if intent_items or profile_items:
-                        graph_context = "\n\n            MEMORIZED KNOWLEDGE (Right Brain interview - Preliminary Context):"
                         if intent_items:
-                            graph_context += "\n            **Your Purpose:**\n            " + "\n            ".join(intent_items[:5])
+                            node_context += "\n            **Your Purpose:**\n            " + "\n            ".join(intent_items)
                         if profile_items:
-                            graph_context += "\n            **Your Profile:**\n            " + "\n            ".join(profile_items[:20])
+                            node_context += "\n            **Your Profile:**\n            " + "\n            ".join(profile_items)
             except Exception as ge:
-                print(f"Error loading graph context: {ge}")
-                graph_context = ""
+                print(f"Error loading node context: {ge}")
+                node_context = ""
+            
+            # Combine query-relevant graph context with high-level identity nodes
+            final_graph_context = ""
+            if graph_context:
+                final_graph_context += f"SPECIFIC KNOWLEDGE (Query-Relevant):\n{graph_context}\n\n"
+            
+            if node_context:
+                final_graph_context += f"GENERAL IDENTITY NODES (High-Level Concepts):{node_context}"
+            
+            graph_context_for_prompt = final_graph_context.strip()
             
             # Check for group-specific system prompt override
             # Use the outer function's system_prompt_override, or fall back to group settings
@@ -311,7 +320,7 @@ def create_twin_agent(
             {persona_section}
             {brevity_instruction}
 
-            {graph_context}
+            {graph_context_for_prompt}
 
             {owner_memory_block}
 
