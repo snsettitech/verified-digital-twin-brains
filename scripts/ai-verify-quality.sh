@@ -16,7 +16,7 @@ python -m flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127
 
 echo "Testing (pytest)..."
 # Exclude network tests for speed and reliability in gate
-python -m pytest -v --tb=short -m "not network" 2>&1 | tail -n 20
+python -m pytest -v -s --tb=short -m "not network" 2>&1 | tail -n 20
 
 cd ..
 

@@ -24,9 +24,10 @@ from datetime import datetime
 def mock_supabase():
     """Mock Supabase client."""
     with patch('modules.observability.supabase') as mock:
-        mock.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
-        mock.table.return_value.insert.return_value.execute.return_value.data = [{"id": "test-id"}]
-        yield mock
+        with patch('modules.jobs.supabase', new=mock):
+            mock.table.return_value.select.return_value.eq.return_value.execute.return_value.data = []
+            mock.table.return_value.insert.return_value.execute.return_value.data = [{"id": "test-id"}]
+            yield mock
 
 
 @pytest.fixture
@@ -63,10 +64,8 @@ def test_tenant_isolation(mock_supabase):
     }
     
     # Twin belongs to tenant B
-    mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
-        "id": "twin-1",
-        "tenant_id": "tenant-b"
-    }
+    # Tenant mismatch should result in no record due to tenant_id filter in query
+    mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = None
     
     # Should raise 404 (not found or access denied)
     with pytest.raises(HTTPException) as exc_info:
@@ -87,18 +86,21 @@ def test_source_ownership_verification(mock_supabase):
     }
     
     # Source belongs to twin in different tenant
-    mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+    sources_query = MagicMock()
+    sources_query.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
         "id": "source-1",
         "twin_id": "twin-2"
     }
-    
-    # Twin belongs to different tenant
-    def side_effect(*args, **kwargs):
-        if "sources" in str(args):
-            return MagicMock(execute=MagicMock(return_value=MagicMock(data={"id": "source-1", "twin_id": "twin-2"})))
-        elif "twins" in str(args):
-            return MagicMock(select=MagicMock(return_value=MagicMock(eq=MagicMock(return_value=MagicMock(single=MagicMock(return_value=MagicMock(execute=MagicMock(return_value=MagicMock(data={"id": "twin-2", "tenant_id": "tenant-2"})))))))))
-    
+    twins_query = MagicMock()
+    twins_query.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = None
+
+    def side_effect(table_name):
+        if table_name == "sources":
+            return sources_query
+        if table_name == "twins":
+            return twins_query
+        return MagicMock()
+
     mock_supabase.table.side_effect = side_effect
     
     with pytest.raises(HTTPException) as exc_info:
@@ -330,7 +332,9 @@ async def test_graph_extraction_job_processing(mock_supabase, mock_openai):
     mock_supabase.table.return_value.insert.return_value.execute.return_value.data = [{"id": "evt-1"}]
     
     # Patch job operations to avoid validation errors
-    with patch('modules._core.scribe_engine.start_job') as mock_start,          patch('modules._core.scribe_engine.complete_job') as mock_complete:
+    with patch('modules._core.scribe_engine.start_job') as mock_start, \
+         patch('modules._core.scribe_engine.complete_job') as mock_complete, \
+         patch('modules._core.scribe_engine.append_log') as mock_append:
 
         # Process job
         result = await process_graph_extraction_job("job-1")
@@ -384,9 +388,11 @@ async def test_chat_flow_with_graph_extraction(mock_supabase, mock_openai, mock_
     # Mock idempotency check
     mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value.data = []
     
-    # Patch create_job to avoid validation errors
-    with patch('modules._core.scribe_engine.create_job') as mock_create:
+    # Patch create_job and enqueue_job to avoid validation errors / in-memory queue collisions
+    with patch('modules._core.scribe_engine.create_job') as mock_create, \
+         patch('modules._core.scribe_engine.enqueue_job') as mock_enqueue:
         mock_create.return_value.id = "job-1"
+        mock_enqueue.return_value = None
 
         # Enqueue graph extraction
         job_id = enqueue_graph_extraction_job(

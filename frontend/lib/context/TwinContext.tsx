@@ -251,7 +251,7 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
         }
 
         const runSync = (async () => {
-            let token = providedToken || await getToken();
+            const token = providedToken || await getToken();
             if (!token) {
                 logSyncEvent('sync_no_token');
                 setSyncStatus('error');

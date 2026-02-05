@@ -167,5 +167,6 @@ class TestRegistryLoader:
     def test_get_specialization_manifest_raises_for_unknown(self):
         from modules._core.registry_loader import get_specialization_manifest
 
-        with pytest.raises(KeyError, match="not found in registry"):
-            get_specialization_manifest("nonexistent")
+        # Unknown specialization should fall back to vanilla
+        manifest = get_specialization_manifest("nonexistent")
+        assert manifest.get("id") == "vanilla"

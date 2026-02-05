@@ -90,30 +90,31 @@ async def get_graph_snapshot(
     twin_id: str,
     query: str = None,
     max_nodes: int = MAX_NODES,
-    max_edges: int = MAX_EDGES
+    max_edges: int = MAX_EDGES,
+    max_hops: int = 2
 ) -> Dict[str, Any]:
     """
     Build bounded, query-relevant Graph Snapshot for chat context.
     
     Algorithm:
-    1. Seed selection via ILIKE match on name/description
-    2. 1-hop expansion via edges table
-    3. Optional 2-hop if seeds < 3 and under budget
-    4. Rank by seed relevance, connectedness, recency
-    5. Cap to max_nodes, max_edges
-    6. Compress to prompt-ready text
+    1. Seed selection via keyword match + semantic fallback
+    2. N-hop expansion via edges table (configurable)
+    3. Rank by seed relevance, connectedness, recency
+    4. Cap to max_nodes, max_edges
+    5. Compress to prompt-ready text
     
     Args:
         twin_id: Twin UUID
         query: User query for seed selection
         max_nodes: Maximum nodes in snapshot (default 12)
         max_edges: Maximum edges in snapshot (default 24)
+        max_hops: Maximum hops for graph expansion (default 2)
     
     Returns:
         Dict with context_text, nodes, edges, metadata
     """
     try:
-        # 1. Seed Selection
+        # 1. Seed Selection (keywords + semantic fallback)
         seed_nodes = await _select_seeds(twin_id, query)
         seed_ids = [n['id'] for n in seed_nodes]
         
@@ -122,38 +123,43 @@ async def get_graph_snapshot(
             all_nodes = await _get_all_nodes(twin_id, limit=max_nodes)
             return _format_snapshot(all_nodes, [], query)
         
-        # 2. 1-hop expansion
-        neighbor_nodes, edges = await _expand_one_hop(twin_id, seed_ids)
-        
-        # Combine seeds + neighbors
-        all_node_ids = set(seed_ids)
+        # Initialize with seeds
         all_nodes = {n['id']: n for n in seed_nodes}
+        all_edges = []
+        current_frontier = set(seed_ids)
+        visited = set(seed_ids)
         
-        for node in neighbor_nodes:
-            if len(all_nodes) < max_nodes:
-                all_node_ids.add(node['id'])
-                all_nodes[node['id']] = node
+        # 2. N-hop expansion (configurable)
+        for hop in range(max_hops):
+            if len(all_nodes) >= max_nodes or not current_frontier:
+                break
+            
+            # Expand from current frontier
+            neighbor_nodes, hop_edges = await _expand_one_hop(twin_id, list(current_frontier))
+            all_edges.extend(hop_edges)
+            
+            # Add new neighbors to our node set
+            new_frontier = set()
+            for node in neighbor_nodes:
+                node_id = node['id']
+                if node_id not in visited and len(all_nodes) < max_nodes:
+                    all_nodes[node_id] = node
+                    new_frontier.add(node_id)
+                    visited.add(node_id)
+            
+            # Move to next hop frontier
+            current_frontier = new_frontier
         
-        # 3. Optional 2-hop if under budget
-        if len(seed_nodes) < 3 and len(all_nodes) < max_nodes:
-            new_neighbor_ids = [n['id'] for n in neighbor_nodes if n['id'] not in seed_ids]
-            if new_neighbor_ids:
-                hop2_nodes, hop2_edges = await _expand_one_hop(twin_id, new_neighbor_ids[:3])
-                for node in hop2_nodes:
-                    if len(all_nodes) < max_nodes and node['id'] not in all_nodes:
-                        all_nodes[node['id']] = node
-                edges.extend(hop2_edges)
-        
-        # 4. Filter edges to only those within our node set
+        # 3. Filter edges to only those within our node set
         final_nodes = list(all_nodes.values())
         final_node_ids = set(all_nodes.keys())
         final_edges = [
-            e for e in edges 
+            e for e in all_edges 
             if e.get('from_node_id') in final_node_ids 
             and e.get('to_node_id') in final_node_ids
         ][:max_edges]
         
-        # 5. Rank nodes (seeds first, then by recency)
+        # 4. Rank nodes (seeds first, then by recency)
         ranked_nodes = _rank_nodes(final_nodes, seed_ids)
         
         return _format_snapshot(ranked_nodes[:max_nodes], final_edges, query)
@@ -172,7 +178,7 @@ async def get_graph_snapshot(
 
 
 async def _select_seeds(twin_id: str, query: str) -> List[Dict[str, Any]]:
-    """Select seed nodes via ILIKE match on query."""
+    """Select seed nodes via ILIKE match on query, with semantic fallback."""
     if not query:
         return []
     
@@ -214,10 +220,122 @@ async def _select_seeds(twin_id: str, query: str) -> List[Dict[str, Any]]:
         
         # Sort by score descending, take top seeds
         scored_nodes.sort(key=lambda x: x[0], reverse=True)
-        return [n for _, n in scored_nodes[:MAX_SEED_NODES]]
+        keyword_seeds = [n for _, n in scored_nodes[:MAX_SEED_NODES]]
+        
+        # If keyword matching found < 3 seeds, try semantic fallback
+        if len(keyword_seeds) < 3:
+            semantic_seeds = await _select_seeds_semantic(twin_id, query, nodes)
+            # Merge keyword + semantic, deduplicate by ID
+            seen_ids = {s['id'] for s in keyword_seeds}
+            for s in semantic_seeds:
+                if s['id'] not in seen_ids and len(keyword_seeds) < MAX_SEED_NODES:
+                    keyword_seeds.append(s)
+                    seen_ids.add(s['id'])
+        
+        return keyword_seeds
         
     except Exception as e:
         logger.error(f"Error selecting seeds: {e}")
+        return []
+
+
+async def _select_seeds_semantic(
+    twin_id: str, 
+    query: str, 
+    cached_nodes: List[Dict[str, Any]] = None,
+    top_k: int = 5
+) -> List[Dict[str, Any]]:
+    """
+    Select seed nodes via semantic similarity using Pinecone.
+    
+    This finds related concepts even without exact keyword matches.
+    For example, "investment strategy" will find nodes about "portfolio allocation".
+    
+    Args:
+        twin_id: Twin UUID
+        query: User query for semantic matching
+        cached_nodes: Optional pre-fetched nodes to map against
+        top_k: Maximum number of semantic seeds
+        
+    Returns:
+        List of matched nodes
+    """
+    if not query:
+        return []
+    
+    try:
+        import asyncio
+        from modules.embeddings import get_embedding
+        from modules.clients import get_pinecone_index
+        
+        loop = asyncio.get_event_loop()
+        
+        # 1. Embed the query
+        def _embed():
+            return get_embedding(query)
+        
+        query_embedding = await loop.run_in_executor(None, _embed)
+        
+        # 2. Query Pinecone for similar vectors
+        index = get_pinecone_index()
+        
+        def _query_pinecone():
+            return index.query(
+                vector=query_embedding,
+                top_k=top_k * 2,  # Get more than needed for filtering
+                include_metadata=True,
+                namespace=twin_id
+            )
+        
+        results = await loop.run_in_executor(None, _query_pinecone)
+        
+        if not results or not results.get("matches"):
+            return []
+        
+        # 3. Extract source_ids from matched vectors
+        source_ids = set()
+        for match in results.get("matches", []):
+            if match.get("score", 0) > 0.3:  # Minimum similarity threshold
+                source_id = match.get("metadata", {}).get("source_id")
+                if source_id:
+                    source_ids.add(source_id)
+        
+        if not source_ids:
+            return []
+        
+        # 4. Find nodes that reference these sources (via properties or description)
+        if cached_nodes is None:
+            nodes_res = supabase.rpc("get_nodes_system", {
+                "t_id": twin_id,
+                "limit_val": 100
+            }).execute()
+            cached_nodes = nodes_res.data if nodes_res.data else []
+        
+        # 5. Score nodes by source_id proximity and text similarity
+        matched_nodes = []
+        for node in cached_nodes:
+            # Check if node references any matched source
+            props = node.get("properties") or {}
+            node_source = props.get("source_id") or props.get("source")
+            
+            # Also check if node description contains query terms
+            desc_lower = (node.get("description") or "").lower()
+            query_lower = query.lower()
+            
+            # Simple semantic relevance check
+            is_relevant = False
+            if node_source and node_source in source_ids:
+                is_relevant = True
+            elif any(term.lower() in desc_lower for term in query.split() if len(term) > 3):
+                is_relevant = True
+            
+            if is_relevant:
+                matched_nodes.append(node)
+        
+        return matched_nodes[:top_k]
+        
+    except Exception as e:
+        logger.warning(f"Semantic seed selection failed: {e}, falling back to empty")
         return []
 
 

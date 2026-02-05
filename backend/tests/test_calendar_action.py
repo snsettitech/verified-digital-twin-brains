@@ -8,15 +8,6 @@ from datetime import datetime, timedelta
 # Add backend to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-# Mock modules.observability to prevent real Supabase connection
-mock_observability = MagicMock()
-mock_supabase_client = MagicMock()
-mock_observability.supabase = mock_supabase_client
-sys.modules["modules.observability"] = mock_observability
-
-# Also mock AuditLogger in governance
-sys.modules["modules.governance"] = MagicMock()
-
 from modules.actions_engine import ActionExecutor
 
 @pytest.fixture
@@ -37,11 +28,12 @@ def mock_connector_data():
 # Patching the imports in modules.actions_engine directly
 @patch("modules.actions_engine.Credentials")
 @patch("modules.actions_engine.build")
-def test_execute_draft_calendar_event(mock_build, mock_creds, mock_connector_data):
+@patch("modules.actions_engine.supabase")
+def test_execute_draft_calendar_event(mock_supabase, mock_build, mock_creds, mock_connector_data):
     # Setup mocks
     # Note: we use the global mock_supabase_client we injected
     mock_query = MagicMock()
-    mock_supabase_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_query
+    mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = mock_query
     mock_query.data = mock_connector_data
 
     mock_service = MagicMock()

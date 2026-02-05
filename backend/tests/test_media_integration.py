@@ -8,15 +8,11 @@ Tests:
 import sys
 import os
 import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import patch, AsyncMock
 from fastapi.testclient import TestClient
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.getcwd(), "backend"))
-
-# Mock ingestion
-sys.modules["modules.ingestion"] = MagicMock()
-sys.modules["modules.ingestion"].process_and_index_text = AsyncMock(return_value=10)
 
 from main import app
 from modules.auth_guard import get_current_user
@@ -32,17 +28,13 @@ class TestMediaIntegration(unittest.TestCase):
     def tearDown(self):
         app.dependency_overrides = {}
 
-    @patch('routers.enhanced_ingestion.verify_twin_ownership')
-    @patch('modules.media_ingestion.MediaIngester.ingest_youtube_video', new_callable=AsyncMock)
+    @patch('routers.ingestion.verify_twin_ownership')
+    @patch('routers.ingestion.ingest_youtube_transcript_wrapper', new_callable=AsyncMock)
     def test_youtube_endpoint(self, mock_ingest, mock_auth):
         """Test POST /ingest/youtube/{twin_id}"""
         # Mock auth to always succeed
         mock_auth.return_value = True
-        mock_ingest.return_value = {
-            "success": True,
-            "source_id": "src-123",
-            "chunks": 10
-        }
+        mock_ingest.return_value = "src-123"
         
         response = client.post(
             "/ingest/youtube/twin-123",
@@ -52,11 +44,11 @@ class TestMediaIntegration(unittest.TestCase):
         if response.status_code != 200:
             print(f"FAIL BODY: {response.text}")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["success"], True)
-        self.assertEqual(response.json()["chunks"], 10)
+        self.assertEqual(response.json()["source_id"], "src-123")
+        self.assertEqual(response.json()["status"], "processing")
         
         # Verify call
-        mock_ingest.assert_called_with("http://youtube.com/watch?v=realvideo")
+        mock_ingest.assert_called_with("twin-123", "http://youtube.com/watch?v=realvideo")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

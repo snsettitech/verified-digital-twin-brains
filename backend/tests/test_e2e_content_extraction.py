@@ -9,16 +9,23 @@ Run with: python -m pytest tests/test_e2e_content_extraction.py -v -s
 import asyncio
 import os
 import sys
+import pytest
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+@pytest.mark.network
 async def test_e2e_extraction():
     """
     Real E2E test: Extract nodes from sample content text.
     Uses actual OpenAI API and Supabase connection.
     """
+    required_vars = ["OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY"]
+    missing = [v for v in required_vars if not os.getenv(v)]
+    if missing:
+        pytest.skip(f"Missing env vars for E2E extraction: {missing}")
+
     from modules._core.scribe_engine import extract_from_content
     from modules.observability import supabase
     

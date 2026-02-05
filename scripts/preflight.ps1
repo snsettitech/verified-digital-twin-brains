@@ -62,7 +62,7 @@ python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --e
 if ($LASTEXITCODE -ne 0) { throw "flake8 failed" }
 
 Write-Host "→ Running tests..."
-python -m pytest -v --tb=short
+python -m pytest -v -s --tb=short
 if ($LASTEXITCODE -ne 0) { throw "pytest failed" }
 
 Write-Host "✅ Backend preflight passed!" -ForegroundColor Green

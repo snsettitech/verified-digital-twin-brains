@@ -10,34 +10,26 @@ Uses FastAPI TestClient to verify:
 
 import sys
 import os
-import sys
-import os
 import unittest
+import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi.testclient import TestClient
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.getcwd(), "backend"))
 
-# Mock dependencies BEFORE importing app/routers
-sys.modules["modules.observability"] = MagicMock()
-sys.modules["modules.observability"].supabase = MagicMock()
-sys.modules["modules.auth_guard"] = MagicMock()
-sys.modules["modules.auth_guard"].get_current_user = lambda: {"user_id": "test-user", "tenant_id": "test-tenant"}
-sys.modules["modules.auth_guard"].verify_twin_ownership = lambda twin_id, user: True
-
-# Mock other heavy dependencies
-sys.modules["modules.ingestion"] = MagicMock()
-sys.modules["modules.ingestion"].process_and_index_text = AsyncMock(return_value=5)
-
 from main import app
-from routers.enhanced_ingestion import router
 
-# Override dependency for auth
 from modules.auth_guard import get_current_user
-app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user"}
-
 client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def _override_auth_and_supabase():
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user", "tenant_id": "test-tenant"}
+    with patch("modules.observability.supabase", MagicMock()), \
+         patch("modules.ingestion.process_and_index_text", new_callable=AsyncMock, return_value=5):
+        yield
+    app.dependency_overrides = {}
 
 class TestIngestionAPI(unittest.TestCase):
     

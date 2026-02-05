@@ -24,7 +24,7 @@ echo "✅ Backend lint OK"
 echo ""
 
 echo "3️⃣  Backend Tests..."
-python -m pytest -v --tb=short -m "not network" 2>&1 | tail -20
+python -m pytest -v -s --tb=short -m "not network" 2>&1 | tail -20
 if [ $? -ne 0 ]; then
     echo "❌ Backend tests failed!"
     exit 1

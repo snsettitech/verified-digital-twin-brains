@@ -9,31 +9,31 @@ Tests:
 import sys
 import os
 import unittest
+import json
+import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from fastapi.testclient import TestClient
-import json
 
 # Add backend to path
 sys.path.insert(0, os.path.join(os.getcwd(), "backend"))
 
-# Mock heavily - similar to previous integration tests
-sys.modules["modules.observability"] = MagicMock()
-sys.modules["modules.observability"].supabase = MagicMock()
-sys.modules["modules.auth_guard"] = MagicMock()
-sys.modules["modules.auth_guard"].get_current_user = lambda: {"user_id": "test-user", "tenant_id": "test-tenant"}
-sys.modules["modules.auth_guard"].verify_twin_ownership = lambda twin_id, user: True
-
-# Mock heavy deps
-sys.modules["modules.ingestion"] = MagicMock()
-sys.modules["modules.ingestion"].process_and_index_text = AsyncMock(return_value=5)
-
-# Ensure AsyncMock is available before imports that might use it
-from unittest.mock import AsyncMock
-
 from main import app
 from modules.reasoning_engine import DecisionTrace, StanceType, LogicStep
+from modules.auth_guard import get_current_user
 
 client = TestClient(app)
+
+@pytest.fixture(autouse=True)
+def _override_auth_and_supabase():
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user", "tenant_id": "test-tenant"}
+    with patch("modules.observability.supabase", MagicMock()) as mock_sb, \
+         patch("modules.ingestion.process_and_index_text", new_callable=AsyncMock, return_value=5):
+        mock_sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+            "settings": {},
+            "tenant_id": "test-tenant"
+        }
+        yield
+    app.dependency_overrides = {}
 
 class TestReasoningIntegration(unittest.TestCase):
     

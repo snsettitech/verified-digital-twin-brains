@@ -70,7 +70,7 @@ class TestTwinOwnership:
         }
         
         # Mock twin belonging to same tenant
-        mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = {
             "id": "twin-789",
             "tenant_id": "tenant-456"
         }
@@ -91,10 +91,8 @@ class TestTwinOwnership:
         }
         
         # Mock twin belonging to tenant B
-        mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
-            "id": "twin-789",
-            "tenant_id": "tenant-B"
-        }
+        # Tenant mismatch should result in no record due to tenant_id filter in query
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = None
         
         with pytest.raises(HTTPException) as exc_info:
             verify_twin_ownership("twin-789", user)
@@ -146,7 +144,7 @@ class TestTwinOwnership:
         }
         
         # Mock twin not found
-        mock_supabase.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = None
+        mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.single.return_value.execute.return_value.data = None
         
         with pytest.raises(HTTPException) as exc_info:
             verify_twin_ownership("nonexistent-twin", user)
