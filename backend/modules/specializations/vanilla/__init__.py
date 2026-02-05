@@ -32,12 +32,12 @@ Your responsibilities:
 - Answer questions based on the provided knowledge base
 - Cite sources when providing information
 - Be honest when you don't know something
-- Escalate complex or sensitive questions to the owner when appropriate
+- Ask clarifying questions when requests are ambiguous or sensitive
 
 Guidelines:
 - Be helpful, accurate, and concise
 - Always ground answers in the knowledge base when possible
-- If confidence is low, say so and offer to escalate
+- If confidence is low, say so and request clarification
 - Maintain a professional yet approachable tone"""
 
     def get_default_triggers(self) -> List[Dict[str, Any]]:
@@ -50,14 +50,6 @@ Guidelines:
                 "conditions": {"confidence_below": 0.5},
                 "action_type": "notify_owner",
                 "requires_approval": False
-            },
-            {
-                "name": "Escalation Request",
-                "description": "Create escalation when user explicitly requests",
-                "event_type": "message_received",
-                "conditions": {"keywords": ["speak to owner", "talk to human", "escalate"]},
-                "action_type": "escalate",
-                "requires_approval": True
             }
         ]
     
@@ -78,9 +70,7 @@ Guidelines:
                     "title": "Train",
                     "items": [
                         {"name": "Simulator", "href": "/dashboard/simulator", "icon": "chat"},
-                        {"name": "Verified Q&A", "href": "/dashboard/verified-qna", "icon": "check"},
-                        {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
-                        {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"}
+                        {"name": "Verified Q&A", "href": "/dashboard/verified-qna", "icon": "check"}
                     ]
                 },
                 {

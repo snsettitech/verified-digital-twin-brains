@@ -71,11 +71,11 @@ class Specialization(ABC):
             Dict of feature name to enabled boolean
         """
         return {
-            "actions_engine": True,
+            "actions_engine": False,
             "verified_qna": True,
             "access_groups": True,
             "governance": True,
-            "escalations": True,
+            "escalations": False,
             "share_links": True,
             "analytics": True
         }

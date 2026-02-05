@@ -12,7 +12,6 @@ interface OverviewTabProps {
         totalConversations: number;
         totalMessages: number;
         avgResponseTime: string;
-        escalations: number;
         satisfaction: number;
     };
 }
@@ -25,7 +24,6 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
         totalConversations: stats?.totalConversations ?? 0,
         totalMessages: stats?.totalMessages ?? 0,
         avgResponseTime: stats?.avgResponseTime ?? '--',
-        escalations: stats?.escalations ?? 0,
         satisfaction: stats?.satisfaction ?? 0,
     };
 
@@ -50,13 +48,6 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
             subtext: 'average',
             icon: '⚡',
             color: 'from-amber-500 to-orange-500'
-        },
-        {
-            label: 'Escalations',
-            value: defaultStats.escalations,
-            subtext: 'pending review',
-            icon: '🚨',
-            color: defaultStats.escalations > 0 ? 'from-red-500 to-rose-500' : 'from-slate-500 to-slate-600'
         }
     ];
 

@@ -11,11 +11,9 @@ from routers import (
     ingestion,
     youtube_preflight,
     twins,
-    actions,
     knowledge,
     sources,
     governance,
-    escalations,
     specializations,
     observability,
     cognitive,
@@ -76,11 +74,9 @@ app.include_router(ingestion.router)
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 
-app.include_router(actions.router)
 app.include_router(knowledge.router)
 app.include_router(sources.router)
 app.include_router(governance.router)
-app.include_router(escalations.router)
 app.include_router(specializations.router)
 app.include_router(observability.router)
 app.include_router(cognitive.router)

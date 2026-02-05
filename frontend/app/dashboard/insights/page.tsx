@@ -10,7 +10,6 @@ interface DashboardStats {
     userMessages: number;
     assistantMessages: number;
     avgConfidence: number;
-    escalationRate: number;
     responseRate: number;
 }
 
@@ -40,7 +39,6 @@ export default function InsightsPage() {
         userMessages: 0,
         assistantMessages: 0,
         avgConfidence: 0,
-        escalationRate: 0,
         responseRate: 0
     });
 
@@ -75,7 +73,6 @@ export default function InsightsPage() {
                     userMessages: data.user_messages,
                     assistantMessages: data.assistant_messages,
                     avgConfidence: data.avg_confidence,
-                    escalationRate: data.escalation_rate,
                     responseRate: data.response_rate
                 });
             }
@@ -238,12 +235,6 @@ export default function InsightsPage() {
                         value: `${stats.responseRate.toFixed(1)}%`,
                         icon: '⚡',
                         description: 'Questions answered by twin'
-                    },
-                    {
-                        label: 'Escalation Rate',
-                        value: `${stats.escalationRate.toFixed(1)}%`,
-                        icon: '⚠️',
-                        description: 'Flagged for owner review'
                     },
                     {
                         label: 'User Questions',

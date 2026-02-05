@@ -166,26 +166,6 @@ def _format_match_result(
     }
 
 
-def _get_twin_id_from_escalation(escalation_id: str) -> str:
-    """
-    Fetch twin_id from escalation record.
-    
-    Args:
-        escalation_id: ID of the escalation
-        
-    Returns:
-        Twin ID
-    """
-    response = supabase.table("escalations").select(
-        "*, messages(conversation_id, conversations(twin_id))"
-    ).eq("id", escalation_id).single().execute()
-    
-    if not response.data:
-        raise ValueError(f"Escalation {escalation_id} not found")
-    
-    return response.data["messages"]["conversations"]["twin_id"]
-
-
 def _generate_and_store_embedding(question: str) -> str:
     """
     Generate embedding for a question and return as JSON string.
@@ -272,30 +252,25 @@ def _create_citation_entries(verified_qna_id: str, citations: List[str]) -> None
 
 
 async def create_verified_qna(
-    escalation_id: str,
+    twin_id: str,
     question: str,
     answer: str,
     owner_id: str,
-    citations: Optional[List[str]] = None,
-    twin_id: Optional[str] = None
+    citations: Optional[List[str]] = None
 ) -> str:
     """
     Creates a verified QnA entry in Postgres.
     
     Args:
-        escalation_id: ID of the escalation being resolved
-        question: Original question that triggered escalation
-        answer: Owner's verified answer
+        twin_id: Twin ID for the QnA entry
+        question: Verified question text
+        answer: Verified answer text
         owner_id: ID of the user creating this QnA
         citations: Optional list of source/chunk IDs
-        twin_id: Optional twin_id (will be fetched from escalation if not provided)
     
     Returns:
         verified_qna_id: UUID of the created verified QnA entry
     """
-    # Fetch escalation to get twin_id if not provided
-    if not twin_id:
-        twin_id = _get_twin_id_from_escalation(escalation_id)
     
     # Generate embedding for question (for semantic matching)
     question_embedding_json = _generate_and_store_embedding(question)

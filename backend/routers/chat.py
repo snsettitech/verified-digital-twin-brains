@@ -617,7 +617,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
 async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequest, req_raw: Request = None):
     """Handle public chat via share link"""
     from modules.share_links import validate_share_token, get_public_group_for_twin
-    from modules.actions_engine import EventEmitter, TriggerMatcher, ActionDraftManager
     from modules.rate_limiting import check_rate_limit
     
     # Validate share token
@@ -636,30 +635,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
     # Get public group for context
     public_group = get_public_group_for_twin(twin_id)
     group_id = public_group["id"] if public_group else None
-    
-    # Emit message_received event for trigger matching
-    triggered_actions = []
-    try:
-        event_id = EventEmitter.emit(
-            twin_id=twin_id,
-            event_type='message_received',
-            payload={
-                'user_message': request.message,
-                'user_id': 'anonymous'
-            },
-            source_context={
-                'group_id': group_id,
-                'channel': 'public_share'
-            }
-        )
-        if event_id:
-            pending_drafts = ActionDraftManager.get_pending_drafts(twin_id)
-            for draft in pending_drafts:
-                if draft.get('event_id') == event_id:
-                    triggered_actions.append(draft.get('proposed_action', {}).get('action_type'))
-    except Exception as e:
-        print(f"Warning: Could not emit event or check triggers: {e}")
-    
+
     conversation_id = None
     # Build conversation history (tolerate extra fields)
     history = []
@@ -731,20 +707,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
                 msg = event["agent"]["messages"][-1]
                 if isinstance(msg, AIMessage) and msg.content:
                     final_response = msg.content
-        
-        # If actions were triggered, append acknowledgment
-        if triggered_actions:
-            acknowledgments = []
-            for action in triggered_actions:
-                if action == 'escalate' or action == 'notify_owner':
-                    acknowledgments.append("I've notified the owner about your request.")
-                elif action == 'draft_email':
-                    acknowledgments.append("I'm drafting an email for the owner to review.")
-                elif action == 'draft_calendar_event':
-                    acknowledgments.append("I'm preparing a calendar event for the owner to review.")
-            
-            if acknowledgments:
-                final_response += "\n\n" + " ".join(acknowledgments)
+
         
         citations = _normalize_json(citations)
         owner_memory_refs = _normalize_json(owner_memory_refs)

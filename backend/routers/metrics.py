@@ -57,7 +57,7 @@ class ConversationSummary(BaseModel):
 
 class ActivityItem(BaseModel):
     id: str
-    type: str  # 'conversation', 'message', 'escalation', 'source'
+    type: str  # 'conversation', 'message', 'source'
     title: str
     description: str
     time: str
@@ -124,15 +124,8 @@ async def get_dashboard_stats(twin_id: str, days: int = Query(30, ge=1, le=90), 
         confidences = [m["confidence_score"] for m in assistant_messages if m.get("confidence_score")]
         avg_confidence = sum(confidences) / len(confidences) if confidences else 0
         
-        # Get escalation count
-        escalations_result = supabase.table("escalations")\
-            .select("id, message_id")\
-            .execute()
-        
-        # Filter escalations for this twin's messages
-        message_ids = {m["id"] for m in all_messages}
-        twin_escalations = [e for e in (escalations_result.data or []) if e.get("message_id") in message_ids]
-        escalation_rate = (len(twin_escalations) / len(user_messages) * 100) if user_messages else 0
+        # Escalations removed - keep metric for compatibility
+        escalation_rate = 0
         
         return DashboardStats(
             conversations=total_conversations,
@@ -241,39 +234,7 @@ async def get_activity_feed(twin_id: str, limit: int = Query(10, ge=1, le=50), u
                 metadata={"conversation_id": conv["id"]}
             ))
         
-        # Get recent escalations - ONLY for this twin's conversations
-        # First get conversation IDs for this twin
-        conversation_ids = [c["id"] for c in (conversations_result.data or [])]
-        
-        if conversation_ids:
-            # Get messages for these conversations
-            messages_result = supabase.table("messages")\
-                .select("id, conversation_id, content")\
-                .in_("conversation_id", conversation_ids)\
-                .execute()
-            
-            message_ids = {m["id"]: m for m in (messages_result.data or [])}
-            
-            if message_ids:
-                # Get escalations for these messages only
-                escalations_result = supabase.table("escalations")\
-                    .select("id, created_at, status, message_id")\
-                    .in_("message_id", list(message_ids.keys()))\
-                    .order("created_at", desc=True)\
-                    .limit(limit)\
-                    .execute()
-                
-                for esc in escalations_result.data or []:
-                    msg = message_ids.get(esc.get("message_id"))
-                    question_preview = msg["content"][:50] + "..." if msg and len(msg.get("content", "")) > 50 else (msg["content"] if msg else "Question")
-                    activities.append(ActivityItem(
-                        id=esc["id"],
-                        type="escalation",
-                        title=f"Flagged: {question_preview}",
-                        description=f"Status: {esc['status']}",
-                        time=esc["created_at"],
-                        metadata={"message_id": esc.get("message_id")}
-                    ))
+        # Escalations removed - no escalation activity items
         
         # Get recent sources
         sources_result = supabase.table("sources")\

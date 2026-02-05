@@ -14,7 +14,6 @@ interface Stats {
   assistantMessages: number;
   responseRate: number;
   avgConfidence: number;
-  escalationRate: number;
 }
 
 interface Conversation {
@@ -43,7 +42,6 @@ export default function DashboardPage() {
     assistantMessages: 0,
     responseRate: 0,
     avgConfidence: 0,
-    escalationRate: 0
   });
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +112,6 @@ export default function DashboardPage() {
               assistantMessages: data.assistant_messages,
               responseRate: data.response_rate,
               avgConfidence: data.avg_confidence,
-              escalationRate: data.escalation_rate
             });
           }
         } catch (error) {
@@ -330,11 +327,9 @@ export default function DashboardPage() {
             ) : (
               recentActivity.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${activity.type === 'conversation' ? 'bg-blue-100 text-blue-600' :
-                    activity.type === 'escalation' ? 'bg-amber-100 text-amber-600' :
-                      'bg-emerald-100 text-emerald-600'
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${activity.type === 'conversation' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'
                     }`}>
-                    {activity.type === 'conversation' ? '💬' : activity.type === 'escalation' ? '⚠️' : '📄'}
+                    {activity.type === 'conversation' ? '💬' : '📄'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-900 font-medium truncate">{activity.title}</p>
@@ -352,9 +347,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-3">
             {[
               { name: 'Share Link', href: '/dashboard/share', icon: '🔗' },
-              { name: 'Embed Widget', href: '/dashboard/widget', icon: '📱' },
-              { name: 'Escalations', href: '/dashboard/escalations', icon: '📬', badge: stats.escalationRate > 0 ? Math.ceil(stats.escalationRate) : undefined },
-              { name: 'Verified Q&A', href: '/dashboard/verified-qna', icon: '✅' },
+              { name: 'Embed Widget', href: '/dashboard/widget', icon: '📱' },              { name: 'Verified Q&A', href: '/dashboard/verified-qna', icon: '✅' },
               { name: 'Access Groups', href: '/dashboard/access-groups', icon: '👥' },
               { name: 'Settings', href: '/dashboard/settings', icon: '⚙️' },
             ].map((link) => (
@@ -499,19 +492,8 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-xs text-orange-500 mt-2">
                   {stats.avgConfidence >= 85 ? '✅ High confidence in responses.' :
-                    stats.avgConfidence >= 70 ? '⚠️ Moderate confidence. Review escalations.' :
+                    stats.avgConfidence >= 70 ? '⚠️ Moderate confidence. Add more knowledge sources.' :
                       '❌ Low confidence. Add more verified Q&As.'}
-                </p>
-              </div>
-              <div className="p-4 bg-red-50 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-red-600 font-medium">Escalation Rate</p>
-                  <p className="text-2xl font-black text-red-600">{stats.escalationRate.toFixed(1)}%</p>
-                </div>
-                <p className="text-xs text-red-500 mt-2">
-                  {stats.escalationRate <= 5 ? '✅ Very few questions escalated.' :
-                    stats.escalationRate <= 15 ? '⚠️ Some questions need owner review.' :
-                      '❌ High escalation rate. Train your twin more.'}
                 </p>
               </div>
             </div>

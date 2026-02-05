@@ -744,26 +744,6 @@ async def extract_from_content(
         
         avg_confidence = total_confidence / len(chunks) if chunks else 0.0
         
-        # Phase 8: Emit event for Action Engine
-        from modules.actions_engine import EventEmitter
-        EventEmitter.emit(
-            twin_id=twin_id,
-            event_type="source_ingested",
-            payload={
-                "source_id": source_id,
-                "source_type": source_type,
-                "node_count": len(all_nodes),
-                "edge_count": len(all_edges),
-                "confidence": avg_confidence,
-                "content_preview": content_text[:1000] # For trigger matching (keywords)
-            },
-            source_context={
-                "source": "scribe_engine",
-                "method": "extract_from_content",
-                "tenant_id": tenant_id
-            }
-        )
-        
         return {
             "all_nodes": all_nodes,
             "all_edges": all_edges,

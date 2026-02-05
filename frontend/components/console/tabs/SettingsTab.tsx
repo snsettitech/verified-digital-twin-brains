@@ -7,7 +7,6 @@ interface TwinSettings {
     systemInstructions: string;
     responseStyle: 'concise' | 'detailed' | 'balanced';
     temperature: number;
-    escalationThreshold: number;
 }
 
 interface SettingsTabProps {
@@ -22,8 +21,7 @@ export function SettingsTab({ twinId, settings, onSave, onDelete }: SettingsTabP
         name: settings?.name || '',
         systemInstructions: settings?.systemInstructions || '',
         responseStyle: settings?.responseStyle || 'balanced',
-        temperature: settings?.temperature ?? 0.7,
-        escalationThreshold: settings?.escalationThreshold ?? 0.6,
+        temperature: settings?.temperature ?? 0.7
     });
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -114,25 +112,6 @@ export function SettingsTab({ twinId, settings, onSave, onDelete }: SettingsTabP
                         </div>
                     </div>
 
-                    <div>
-                        <div className="flex items-center justify-between mb-2">
-                            <label className="text-sm font-medium text-slate-300">Escalation Threshold</label>
-                            <span className="text-sm text-slate-400">{Math.round((form.escalationThreshold || 0.6) * 100)}%</span>
-                        </div>
-                        <input
-                            type="range"
-                            min="0"
-                            max="1"
-                            step="0.1"
-                            value={form.escalationThreshold}
-                            onChange={(e) => setForm({ ...form, escalationThreshold: parseFloat(e.target.value) })}
-                            className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-amber-500"
-                        />
-                        <div className="flex justify-between text-xs text-slate-500 mt-1">
-                            <span>Escalate more</span>
-                            <span>Answer more</span>
-                        </div>
-                    </div>
                 </div>
             </div>
 

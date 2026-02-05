@@ -80,7 +80,8 @@ services:
       - key: YOUTUBE_PROXY
         sync: false
       - key: GOOGLE_API_KEY
-        sync: false      - key: YOUTUBE_MAX_RETRIES
+        sync: false
+      - key: YOUTUBE_MAX_RETRIES
         value: "5"
       - key: YOUTUBE_ASR_MODEL
         value: "whisper-large-v3"

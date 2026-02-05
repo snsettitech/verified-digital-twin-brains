@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Sidebar from '@/components/Sidebar';
+import MobileNav from '@/components/MobileNav';
 import { ToastProvider, SkipNavigation, SkipNavLink } from '@/components/ui';
 import SyncStatusBanner from '@/components/ui/SyncStatusBanner';
 import { TwinProvider } from '@/lib/context/TwinContext';
@@ -34,8 +35,13 @@ export default function DashboardLayout({
             <SkipNavLink href="#chat-input">Skip to chat</SkipNavLink>
           </SkipNavigation>
           <div className="flex h-screen bg-[#F8FAFC] dark:bg-slate-900 transition-colors">
-            <Sidebar />
-            <main id="main-content" role="main" className="flex-1 overflow-y-auto relative">
+            {/* Mobile Navigation - visible on small screens */}
+            <MobileNav />
+            {/* Desktop Sidebar - hidden on mobile */}
+            <div className="hidden md:block">
+              <Sidebar />
+            </div>
+            <main id="main-content" role="main" className="flex-1 overflow-y-auto relative pt-16 md:pt-0">
               <div className="max-w-6xl mx-auto p-4 md:p-8">
                 <SyncStatusBanner />
                 {children}

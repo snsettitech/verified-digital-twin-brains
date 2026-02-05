@@ -152,7 +152,6 @@ export default function VerifiedQnAPage() {
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/dashboard" className="text-sm font-medium text-slate-500 hover:text-slate-800">Chat</Link>
             <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800">Knowledge Base</a>
-            <Link href="/dashboard/escalations" className="text-sm font-medium text-slate-500 hover:text-slate-800">Escalations</Link>
             <Link href="/dashboard/verified-qna" className="text-sm font-bold text-blue-600 border-b-2 border-blue-600 pb-1">Verified QnA</Link>
             <Link href="/dashboard/settings" className="text-sm font-medium text-slate-500 hover:text-slate-800">Settings</Link>
             <a href="#" className="text-sm font-medium text-slate-500 hover:text-slate-800">Analytics</a>
@@ -187,7 +186,7 @@ export default function VerifiedQnAPage() {
             </div>
             <h3 className="text-lg font-bold text-slate-800">No verified QnA entries</h3>
             <p className="text-slate-500 max-w-sm mt-2">
-              {searchQuery ? 'No entries match your search.' : 'Verified answers will appear here after you resolve escalations.'}
+              {searchQuery ? 'No entries match your search.' : 'Verified answers will appear here once you add them.'}
             </p>
           </div>
         ) : (

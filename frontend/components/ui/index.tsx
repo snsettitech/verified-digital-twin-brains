@@ -5,9 +5,9 @@ export { Toggle } from './Toggle';
 export { ToastProvider, useToast } from './Toast';
 export { default as VerificationBadge } from './VerificationBadge';
 export { Skeleton, SkeletonText, SkeletonAvatar, SkeletonCard, SkeletonTable, SkeletonStats, SkeletonChat } from './Skeleton';
-export { EmptyState, EmptyKnowledge, EmptyConversations, EmptyEscalations, EmptyActions, EmptyTwins, EmptySearch, ErrorState } from './EmptyState';
+export { EmptyState, EmptyKnowledge, EmptyConversations, EmptyTwins, EmptySearch, ErrorState } from './EmptyState';
 export { StatCard, StatCardCompact } from './StatCard';
-export { PremiumModal, ConfirmModal } from './PremiumModal';
+// PremiumModal archived to _deprecated/ - Stripe gating out of scope
 export { ErrorBoundary, withErrorBoundary } from './ErrorBoundary';
 export { PageTransition, PageLoadingOverlay, PageSkeleton } from './PageTransition';
 export { SkipNavigation, SkipNavLink, VisuallyHidden } from './SkipNavigation';

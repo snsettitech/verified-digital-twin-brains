@@ -66,18 +66,21 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
                     return profile
 
         # 2. Fetch data for analysis
-        # A. Fetch verified replies
-        replies_res = supabase.table("escalation_replies").select(
-            "content, escalations(messages(conversations(twin_id)))"
-        ).execute()
-        
+        # A. Fetch verified QnA answers as style signals
         analysis_texts = []
-        for r in replies_res.data:
-            try:
-                if r["escalations"]["messages"]["conversations"]["twin_id"] == twin_id:
-                    analysis_texts.append(f"VERIFIED REPLY: {r['content']}")
-            except (KeyError, TypeError):
-                continue
+        try:
+            qna_res = supabase.table("verified_qna")\
+                .select("answer")\
+                .eq("twin_id", twin_id)\
+                .eq("is_active", True)\
+                .limit(50)\
+                .execute()
+            for qna in (qna_res.data or []):
+                answer = qna.get("answer")
+                if answer:
+                    analysis_texts.append(f"VERIFIED ANSWER: {answer}")
+        except Exception as e:
+            print(f"Error fetching verified QnA for style: {e}")
         
         # B. Fetch some OPINION chunks from Pinecone for style variety
         from modules.clients import get_pinecone_index

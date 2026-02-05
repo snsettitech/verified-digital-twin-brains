@@ -8,7 +8,7 @@ import { OverviewTab } from '@/components/console/tabs/OverviewTab';
 import { KnowledgeTab } from '@/components/console/tabs/KnowledgeTab';
 import { ChatTab } from '@/components/console/tabs/ChatTab';
 import { TrainingTab } from '@/components/console/tabs/TrainingTab';
-// ActionsTab and EscalationsTab archived - out of scope for Clone-for-Experts
+// ActionsTab archived - out of scope for Clone-for-Experts
 import { PublishTab } from '@/components/console/tabs/PublishTab';
 import { PublicChatTab } from '@/components/console/tabs/PublicChatTab';
 import { SettingsTab } from '@/components/console/tabs/SettingsTab';
@@ -42,8 +42,7 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
         sources: 0,
         indexedSources: 0,
         processingSources: 0,
-        conversations: 0,
-        escalations: 0
+        conversations: 0
     });
 
     const activeTab = searchParams.get('tab') || 'overview';
@@ -112,18 +111,11 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
             const indexedCount = indexedCountRes.count || 0;
             const processingCount = processingCountRes.count || 0;
 
-            const { count: escalationCount } = await supabase
-                .from('escalations')
-                .select('*', { count: 'exact', head: true })
-                .eq('twin_id', twinId)
-                .eq('status', 'pending');
-
             setStats({
                 sources: sourceCount,
                 indexedSources: indexedCount,
                 processingSources: processingCount,
-                conversations: 0, // Would need sessions table
-                escalations: escalationCount || 0
+                conversations: 0 // Would need sessions table
             });
         } catch (error) {
             console.error('Error fetching twin:', error);
@@ -263,7 +255,6 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                             totalConversations: stats.conversations,
                             totalMessages: 0,
                             avgResponseTime: '< 1s',
-                            escalations: stats.escalations,
                             satisfaction: 0
                         }}
                     />
@@ -274,7 +265,6 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                 return <ChatTab twinId={twinId} twinName={twin.name} />;
             case 'training':
                 return <TrainingTab twinId={twinId} />;
-            // escalations archived - out of scope
             case 'publish':
                 return (
                     <PublishTab
@@ -294,7 +284,6 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                         isPublic={effectiveIsPublic}
                     />
                 );
-            // actions archived - out of scope
             case 'settings':
                 return (
                     <SettingsTab

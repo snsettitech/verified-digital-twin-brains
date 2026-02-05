@@ -53,13 +53,6 @@ class ConversationSchema(BaseModel):
     user_id: Optional[str]
     created_at: Optional[datetime]
 
-class EscalationSchema(BaseModel):
-    id: str
-    message_id: str
-    status: str
-    created_at: datetime
-    messages: Optional[MessageSchema] = None
-
 class TwinSettingsUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -383,124 +376,6 @@ class TwinVerificationRequest(BaseModel):
 class DeepScrubRequest(BaseModel):
     source_id: str
     reason: Optional[str] = None
-
-# Phase 8: Actions Engine Schemas
-
-class EventSchema(BaseModel):
-    id: str
-    twin_id: str
-    event_type: str
-    payload: Dict[str, Any]
-    source_context: Optional[Dict[str, Any]] = None
-    created_at: datetime
-
-class TriggerConditions(BaseModel):
-    intent_contains: Optional[List[str]] = None
-    keywords: Optional[List[str]] = None
-    confidence_below: Optional[float] = None
-    group_id: Optional[str] = None
-
-class ActionTriggerSchema(BaseModel):
-    id: str
-    twin_id: str
-    name: str
-    description: Optional[str] = None
-    event_type: str
-    conditions: Dict[str, Any]
-    connector_id: Optional[str] = None
-    action_type: str
-    action_config: Dict[str, Any]
-    requires_approval: bool
-    is_active: bool
-    priority: int
-    created_at: datetime
-    updated_at: datetime
-
-class TriggerCreateRequest(BaseModel):
-    name: str
-    description: Optional[str] = None
-    event_type: str
-    conditions: Optional[Dict[str, Any]] = None
-    connector_id: Optional[str] = None
-    action_type: str
-    action_config: Optional[Dict[str, Any]] = None
-    requires_approval: bool = True
-
-class TriggerUpdateRequest(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    conditions: Optional[Dict[str, Any]] = None
-    action_config: Optional[Dict[str, Any]] = None
-    requires_approval: Optional[bool] = None
-    is_active: Optional[bool] = None
-    priority: Optional[int] = None
-
-class ActionDraftSchema(BaseModel):
-    id: str
-    trigger_id: Optional[str] = None
-    event_id: Optional[str] = None
-    twin_id: str
-    status: str
-    proposed_action: Dict[str, Any]
-    context: Dict[str, Any]
-    approval_note: Optional[str] = None
-    approved_by: Optional[str] = None
-    expires_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
-
-class DraftApproveRequest(BaseModel):
-    approval_note: Optional[str] = None
-
-class DraftRejectRequest(BaseModel):
-    rejection_note: Optional[str] = None
-
-class DraftRespondRequest(BaseModel):
-    """Owner response to a triggered action - creates a saved response"""
-    response_message: str
-    save_as_verified: bool = False  # If true, save as verified QnA for future use
-
-class ActionExecutionSchema(BaseModel):
-    id: str
-    draft_id: Optional[str] = None
-    trigger_id: Optional[str] = None
-    twin_id: str
-    connector_id: Optional[str] = None
-    action_type: str
-    status: str
-    inputs: Dict[str, Any]
-    outputs: Dict[str, Any]
-    error_message: Optional[str] = None
-    execution_duration_ms: Optional[int] = None
-    executed_by: Optional[str] = None
-    executed_at: datetime
-
-class ToolConnectorSchema(BaseModel):
-    id: str
-    twin_id: str
-    connector_type: str
-    name: str
-    config: Dict[str, Any]
-    is_active: bool
-    last_used_at: Optional[datetime] = None
-    last_error: Optional[str] = None
-    created_at: datetime
-
-class ConnectorCreateRequest(BaseModel):
-    connector_type: str
-    name: str
-    config: Optional[Dict[str, Any]] = None
-
-class ConnectorTestResponse(BaseModel):
-    success: bool
-    message: Optional[str] = None
-    error: Optional[str] = None
-
-class EventEmitRequest(BaseModel):
-    event_type: str
-    payload: Dict[str, Any]
-    source_context: Optional[Dict[str, Any]] = None
-
 
 # ============================================================================
 # Governance & Audit Schemas

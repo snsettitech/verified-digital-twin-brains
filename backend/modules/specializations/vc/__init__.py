@@ -48,7 +48,7 @@ GUIDELINES:
 3. Use VC terminology appropriately (TAM/SAM/SOM, burn rate, runway, etc.)
 4. Flag items requiring partner attention or committee review
 5. Maintain confidentiality of deal and portfolio information
-6. When uncertain, recommend escalation to investment team
+6. When uncertain, recommend follow-up with the investment team
 
 TONE: Professional, analytical, direct. Time is valuable - be concise but thorough."""
 
@@ -66,10 +66,10 @@ TONE: Professional, analytical, direct. Time is valuable - be concise but thorou
             },
             {
                 "name": "Urgent LP Request",
-                "description": "Escalate urgent LP or investor inquiries immediately",
+                "description": "Notify owner about urgent LP or investor inquiries immediately",
                 "event_type": "message_received",
                 "conditions": {"keywords": ["LP", "investor", "urgent", "board"]},
-                "action_type": "escalate",
+                "action_type": "notify_owner",
                 "requires_approval": False
             },
             {
@@ -116,18 +116,8 @@ TONE: Professional, analytical, direct. Time is valuable - be concise but thorou
                 {
                     "title": "Management",
                     "items": [
-                        {"name": "Escalations", "href": "/dashboard/escalations", "icon": "alert"},
                         {"name": "Access Groups", "href": "/dashboard/access-groups", "icon": "users"},
                         {"name": "Governance", "href": "/dashboard/governance", "icon": "shield"}
-                    ]
-                },
-                {
-                    "title": "Automation",
-                    "items": [
-                        {"name": "Actions Hub", "href": "/dashboard/actions", "icon": "bolt"},
-                        {"name": "Triggers", "href": "/dashboard/actions/triggers", "icon": "bolt"},
-                        {"name": "Inbox", "href": "/dashboard/actions/inbox", "icon": "mail"},
-                        {"name": "History", "href": "/dashboard/actions/history", "icon": "history"}
                     ]
                 },
                 {
@@ -152,11 +142,11 @@ TONE: Professional, analytical, direct. Time is valuable - be concise but thorou
         """Return VC-specific feature flags."""
         return {
             # Core features (inherited)
-            "actions_engine": True,
+            "actions_engine": False,
             "verified_qna": True,
             "access_groups": True,
             "governance": True,
-            "escalations": True,
+            "escalations": False,
             "share_links": True,
             "analytics": True,
             # VC-specific features

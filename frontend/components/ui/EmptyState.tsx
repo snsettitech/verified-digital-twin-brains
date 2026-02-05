@@ -120,28 +120,7 @@ export function EmptyConversations({ twinId }: { twinId: string }) {
     );
 }
 
-export function EmptyEscalations() {
-    return (
-        <EmptyState
-            emoji="✅"
-            title="All caught up!"
-            description="No questions need review right now. Your twin is handling everything."
-            variant="subtle"
-        />
-    );
-}
 
-export function EmptyActions({ onCreate }: { onCreate?: () => void }) {
-    return (
-        <EmptyState
-            emoji="⚡"
-            title="No automated actions"
-            description="Create actions to automate workflows triggered by your twin's conversations."
-            action={{ label: "Create Action", onClick: onCreate }}
-            variant="card"
-        />
-    );
-}
 
 export function EmptyTwins() {
     return (

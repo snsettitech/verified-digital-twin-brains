@@ -13,7 +13,6 @@ interface ConsoleLayoutProps {
     stats?: {
         sources?: number;
         conversations?: number;
-        escalations?: number;
     };
 }
 
@@ -55,15 +54,6 @@ const CONSOLE_TABS: Tab[] = [
         )
     },
     {
-        id: 'escalations',
-        label: 'Escalations',
-        icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-        )
-    },
-    {
         id: 'publish',
         label: 'Publish',
         icon: (
@@ -78,15 +68,6 @@ const CONSOLE_TABS: Tab[] = [
         icon: (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2m-4 0H7a2 2 0 01-2-2V10a2 2 0 012-2h6m0-4h.01M12 20h.01M8 4h.01M16 4h.01" />
-            </svg>
-        )
-    },
-    {
-        id: 'actions',
-        label: 'Actions',
-        icon: (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
         )
     },
@@ -115,9 +96,7 @@ export function ConsoleLayout({
     // Add badges to tabs based on stats
     const tabsWithBadges = CONSOLE_TABS.map(tab => ({
         ...tab,
-        badge: tab.id === 'knowledge' ? stats?.sources :
-            tab.id === 'escalations' ? stats?.escalations :
-                undefined
+        badge: tab.id === 'knowledge' ? stats?.sources : undefined
     }));
 
     return (
