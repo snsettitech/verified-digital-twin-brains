@@ -179,7 +179,7 @@ async def crawl_website(
             "file_size": 0,
             "content_text": "",
             "status": "processing",
-            "staging_status": "processing"
+            "staging_status": "training"
         }).execute()
         
         log_ingestion_event(source_id, twin_id, "info", f"Starting crawl of {url}")
