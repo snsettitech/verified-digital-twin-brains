@@ -40,6 +40,44 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
+@router.get("/share/resolve/{handle}")
+async def resolve_share_handle(handle: str):
+    """
+    Resolve a twin handle to its twin_id and share_token.
+    This is used to support /share/handle style URLs.
+    """
+    try:
+        # Search twins by handle in settings
+        # In a high-traffic system, we'd use a indexed column or specific lookup
+        res = supabase.table("twins").select("id, settings").execute()
+        
+        target_twin = None
+        for twin in res.data:
+            settings = twin.get("settings", {})
+            if settings.get("handle") == handle:
+                target_twin = twin
+                break
+        
+        if not target_twin:
+            raise HTTPException(status_code=404, detail="Twin not found with this handle")
+        
+        settings = target_twin.get("settings", {})
+        widget_settings = settings.get("widget_settings", {})
+        share_token = widget_settings.get("share_token")
+        
+        if not widget_settings.get("public_share_enabled") or not share_token:
+             raise HTTPException(status_code=403, detail="Sharing is disabled for this twin")
+
+        return {
+            "twin_id": target_twin["id"],
+            "share_token": share_token
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error resolving share handle: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 def _normalize_json(value):
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value

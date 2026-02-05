@@ -22,6 +22,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         items: [
             { name: 'Dashboard', href: '/dashboard', icon: 'home' },
             { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book' },
+            { name: 'Share', href: '/dashboard/share', icon: 'share' },
         ]
     },
     {
