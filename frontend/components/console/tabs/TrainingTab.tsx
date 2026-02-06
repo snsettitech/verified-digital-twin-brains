@@ -381,6 +381,14 @@ export function TrainingTab({ twinId }: { twinId: string }) {
         }
     };
 
+    const scrollToSection = (sectionId: string) => {
+        if (typeof document === 'undefined') return;
+        const el = document.getElementById(sectionId);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
+
     const saveIntentProfile = async () => {
         setSavingIntent(true);
         try {
@@ -406,6 +414,7 @@ export function TrainingTab({ twinId }: { twinId: string }) {
             setTwinSettings(nextSettings);
             showToast('Intent & intro saved', 'success');
             setCurrentStep('interview');
+            scrollToSection('training-interview');
         } catch (err) {
             console.error(err);
             setError('Failed to save intent profile.');
@@ -428,130 +437,137 @@ export function TrainingTab({ twinId }: { twinId: string }) {
 
     const visibleMemories = filteredMemories.slice(0, visibleCount);
 
-    // Stepper Configuration
-    const steps: { id: TrainingStep; label: string; icon: string }[] = [
-        { id: 'intent', label: '1. Intent', icon: '1' },
-        { id: 'interview', label: '2. Interview', icon: '2' },
-        { id: 'knowledge', label: '3. Knowledge', icon: '3' },
-        { id: 'inbox', label: '4. Inbox', icon: '4' },
-        { id: 'validate', label: '5. Validate', icon: '5' }
-    ];
-
     return (
         <div className="flex flex-col h-[calc(100vh-theme(spacing.32))]">
-            {/* Stepper Header */}
+            {/* Header */}
             <div className="bg-[#111117] border-b border-white/10 px-6 py-4">
-                <div className="flex items-center justify-between max-w-4xl mx-auto">
-                    {steps.map((step, idx) => {
-                        const isActive = currentStep === step.id;
-                        const isPast = steps.findIndex(s => s.id === currentStep) > idx;
-
-                        return (
-                            <button
-                                key={step.id}
-                                onClick={() => setCurrentStep(step.id)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${isActive
-                                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50'
-                                        : isPast
-                                            ? 'text-emerald-400 opacity-80'
-                                            : 'text-slate-500 hover:text-slate-300'
-                                    }`}
-                            >
-                                <span className="text-base">{step.icon}</span>
-                                {step.label}
-                                {isPast && (
-                                    <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                                    </svg>
-                                )}
-                            </button>
-                        );
-                    })}
+                <div className="max-w-5xl mx-auto">
+                    <h2 className="text-xl font-bold text-white">Training Module</h2>
+                    <p className="text-sm text-slate-400">Complete each step in order to train your twin end-to-end.</p>
                 </div>
             </div>
 
             {/* Main Content Area */}
             <div className="flex-1 overflow-y-auto p-6 bg-[#0a0a0f]">
-                <div className="max-w-6xl mx-auto">
-                    {currentStep === 'intent' && (
-                        <div className="max-w-3xl mx-auto space-y-6">
-                            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                                <h2 className="text-xl font-bold text-white mb-2">Intent & Public Intro</h2>
-                                <p className="text-sm text-slate-400 mb-6">
-                                    Start by telling your twin what it is for and how you want users to know you.
-                                </p>
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-xs uppercase tracking-wider text-slate-400">Primary use case</label>
-                                        <textarea
-                                            rows={2}
-                                            value={intentProfile.use_case}
-                                            onChange={(e) => setIntentProfile(p => ({ ...p, use_case: e.target.value }))}
-                                            placeholder="e.g., A VC twin that helps founders understand my investment philosophy"
-                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs uppercase tracking-wider text-slate-400">Audience & outcomes</label>
-                                        <textarea
-                                            rows={2}
-                                            value={intentProfile.audience}
-                                            onChange={(e) => setIntentProfile(p => ({ ...p, audience: e.target.value }))}
-                                            placeholder="Who will use this twin and what should it help them accomplish?"
-                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs uppercase tracking-wider text-slate-400">Boundaries</label>
-                                        <textarea
-                                            rows={2}
-                                            value={intentProfile.boundaries}
-                                            onChange={(e) => setIntentProfile(p => ({ ...p, boundaries: e.target.value }))}
-                                            placeholder="Topics to avoid, when to escalate, or anything it should never do."
-                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs uppercase tracking-wider text-slate-400">Public intro (how users should know you)</label>
-                                        <textarea
-                                            rows={3}
-                                            value={publicIntro}
-                                            onChange={(e) => setPublicIntro(e.target.value)}
-                                            placeholder="A short intro you want the twin to use when asked about you."
-                                            className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
-                                        />
-                                    </div>
+                <div className="max-w-6xl mx-auto space-y-12">
+                    {/* STEP 1: INTENT */}
+                    <section id="training-intent" className="max-w-3xl mx-auto space-y-6">
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">Step 1. Intent & Public Intro</h2>
+                                    <p className="text-sm text-slate-400">
+                                        Start by telling your twin what it is for and how you want users to know you.
+                                    </p>
                                 </div>
-                                <div className="flex justify-end pt-4">
-                                    <button
-                                        onClick={saveIntentProfile}
-                                        disabled={savingIntent}
-                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
-                                    >
-                                        {savingIntent ? 'Saving...' : 'Save & Continue'}
-                                    </button>
+                                <span className="text-xs text-slate-500">Current: {currentStep === 'intent' ? 'Active' : 'Saved'}</span>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs uppercase tracking-wider text-slate-400">Primary use case</label>
+                                    <textarea
+                                        rows={2}
+                                        value={intentProfile.use_case}
+                                        onChange={(e) => setIntentProfile(p => ({ ...p, use_case: e.target.value }))}
+                                        placeholder="e.g., A VC twin that helps founders understand my investment philosophy"
+                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs uppercase tracking-wider text-slate-400">Audience & outcomes</label>
+                                    <textarea
+                                        rows={2}
+                                        value={intentProfile.audience}
+                                        onChange={(e) => setIntentProfile(p => ({ ...p, audience: e.target.value }))}
+                                        placeholder="Who will use this twin and what should it help them accomplish?"
+                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs uppercase tracking-wider text-slate-400">Boundaries</label>
+                                    <textarea
+                                        rows={2}
+                                        value={intentProfile.boundaries}
+                                        onChange={(e) => setIntentProfile(p => ({ ...p, boundaries: e.target.value }))}
+                                        placeholder="Topics to avoid, when to escalate, or anything it should never do."
+                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs uppercase tracking-wider text-slate-400">Public intro (how users should know you)</label>
+                                    <textarea
+                                        rows={3}
+                                        value={publicIntro}
+                                        onChange={(e) => setPublicIntro(e.target.value)}
+                                        placeholder="A short intro you want the twin to use when asked about you."
+                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    />
                                 </div>
                             </div>
+                            <div className="flex justify-end pt-4">
+                                <button
+                                    onClick={saveIntentProfile}
+                                    disabled={savingIntent}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
+                                >
+                                    {savingIntent ? 'Saving...' : 'Save & Continue'}
+                                </button>
+                            </div>
                         </div>
-                    )}
+                    </section>
 
-                    {currentStep === 'interview' && (
-                        <div className="max-w-3xl mx-auto">
-                            <InterviewView onComplete={() => setCurrentStep('knowledge')} />
+                    {/* STEP 2: INTERVIEW */}
+                    <section id="training-interview" className="max-w-3xl mx-auto space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Step 2. Interview</h2>
+                                <p className="text-sm text-slate-400">Answer questions so the twin can learn your intent, goals, and preferences.</p>
+                            </div>
+                            <button
+                                onClick={() => scrollToSection('training-knowledge')}
+                                className="text-xs text-indigo-300 hover:text-indigo-200"
+                            >
+                                Skip to Knowledge
+                            </button>
                         </div>
-                    )}
+                        <InterviewView onComplete={() => {
+                            setCurrentStep('knowledge');
+                            scrollToSection('training-knowledge');
+                        }} />
+                    </section>
 
-                    {currentStep === 'knowledge' && (
+                    {/* STEP 3: KNOWLEDGE */}
+                    <section id="training-knowledge" className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Step 3. Knowledge Ingestion</h2>
+                                <p className="text-sm text-slate-400">Upload documents or add links to grow the knowledge base.</p>
+                            </div>
+                            <button
+                                onClick={() => scrollToSection('training-inbox')}
+                                className="text-xs text-indigo-300 hover:text-indigo-200"
+                            >
+                                Next: Inbox
+                            </button>
+                        </div>
                         <KnowledgeTab twinId={twinId} onUrlSubmit={() => { }} />
-                    )}
+                    </section>
 
-                    {currentStep === 'validate' && (
-                        <div className="max-w-4xl mx-auto h-full">
-                            <SimulatorView twinId={twinId} onBack={() => setCurrentStep('inbox')} />
+                    {/* STEP 4: INBOX */}
+                    <section id="training-inbox" className="space-y-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Step 4. Inbox & Memory Review</h2>
+                                <p className="text-sm text-slate-400">Approve, edit, or reject proposed memories and respond to clarifications.</p>
+                            </div>
+                            <button
+                                onClick={() => scrollToSection('training-validate')}
+                                className="text-xs text-indigo-300 hover:text-indigo-200"
+                            >
+                                Next: Validate
+                            </button>
                         </div>
-                    )}
 
-                    {currentStep === 'inbox' && (
                         <div className="grid lg:grid-cols-[2fr_1fr] gap-6 items-start">
                             <div className="space-y-6">
                                 {/* Owner Memory Log - Main View */}
@@ -675,7 +691,109 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 </div>
                             </div>
                         </div>
-                    )}
+                    </section>
+
+                    {/* STEP 5: VALIDATE */}
+                    <section id="training-validate" className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-bold text-white">Step 5. Validate</h2>
+                                <p className="text-sm text-slate-400">Test your twin as a guest and verify responses match intent.</p>
+                            </div>
+                            <button
+                                onClick={() => scrollToSection('training-checklist')}
+                                className="text-xs text-indigo-300 hover:text-indigo-200"
+                            >
+                                Go to Checklist
+                            </button>
+                        </div>
+                        <div className="max-w-5xl mx-auto">
+                            <SimulatorView twinId={twinId} />
+                        </div>
+                    </section>
+
+                    {/* CHECKLIST */}
+                    <section id="training-checklist" className="space-y-4">
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                            <h2 className="text-xl font-bold text-white mb-2">Verification Checklist</h2>
+                            <p className="text-sm text-slate-400 mb-4">Use this to validate training, ingestion, and summaries.</p>
+
+                            <div className="space-y-4 text-sm text-slate-300">
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Owner Training Flow</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Go to Training → Step 1 (Intent).</li>
+                                        <li>Fill Use case, Audience, Boundaries, Public intro, click Save & Continue.</li>
+                                        <li>Refresh the page and confirm the fields persist.</li>
+                                        <li>Complete the Interview.</li>
+                                        <li>Open Inbox and approve 2–3 proposed memories.</li>
+                                        <li>Go to Validate and ask: “What’s your primary use case?”</li>
+                                        <li>Ask: “What should users never ask you?”</li>
+                                        <li>Confirm responses reflect Intent Summary.</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Ingestion Verification By Channel</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>After each source ingests, confirm: status moves from processing → live.</li>
+                                        <li>Confirm chunk count increases.</li>
+                                        <li>Ask a question about the ingested content and verify citations.</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Document Upload (PDF/DOCX)</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Upload a document.</li>
+                                        <li>Wait for status to show live.</li>
+                                        <li>Ask a question directly from the document.</li>
+                                        <li>Verify citations in response.</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">YouTube</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Paste a public YouTube URL.</li>
+                                        <li>Wait for live.</li>
+                                        <li>Ask a question about a specific section.</li>
+                                        <li>Verify citations in response.</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Podcast (RSS)</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Paste a valid RSS feed URL.</li>
+                                        <li>Wait for live.</li>
+                                        <li>Ask a question referencing a specific episode.</li>
+                                        <li>Verify citations in response.</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">X Thread</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Paste a public thread URL.</li>
+                                        <li>Wait for live.</li>
+                                        <li>Ask a question about the thread.</li>
+                                        <li>Verify citations in response.</li>
+                                    </ul>
+                                </div>
+
+                                <div>
+                                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Chunk Retention + Summarization</div>
+                                    <ul className="list-disc list-inside space-y-1">
+                                        <li>Open Knowledge Profile and confirm total chunks &gt; 0 and fact/opinion counts updated.</li>
+                                        <li>Refresh the page and confirm counts don’t reset.</li>
+                                        <li>Ask: “Summarize my views on &lt;topic&gt; in 3 bullets.”</li>
+                                        <li>Ensure responses are grounded and cite the correct sources.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
         </div>
