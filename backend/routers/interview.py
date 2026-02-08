@@ -69,6 +69,9 @@ class FinalizeSessionResponse(BaseModel):
     session_id: str
     extracted_memories: List[ExtractedMemory]
     write_count: int
+    proposed_count: int = 0
+    proposed_failed_count: int = 0
+    notes: List[str] = Field(default_factory=list)
     status: str
 
 
@@ -381,6 +384,10 @@ async def finalize_interview_session(
 
     # Store extracted memories as proposed owner memories (for approval)
     twin_id = None
+    proposed_count = 0
+    proposed_failed_count = 0
+    low_confidence_skipped = 0
+    notes: List[str] = []
     try:
         session_res = supabase.table("interview_sessions").select("twin_id").eq("id", session_id).single().execute()
         if session_res.data:
@@ -392,10 +399,11 @@ async def finalize_interview_session(
         for memory in extracted_memories:
             try:
                 if memory.confidence < 0.6:
+                    low_confidence_skipped += 1
                     continue
                 mapped_type = _map_interview_memory_type(memory.type)
                 topic_normalized = suggest_topic_from_value(memory.value)
-                create_owner_memory(
+                created = create_owner_memory(
                     twin_id=twin_id,
                     tenant_id=user.get("tenant_id"),
                     topic_normalized=topic_normalized,
@@ -410,8 +418,27 @@ async def finalize_interview_session(
                     },
                     status="proposed"
                 )
+                if created:
+                    proposed_count += 1
+                else:
+                    proposed_failed_count += 1
             except Exception as e:
                 print(f"[Interview] Failed to propose owner memory: {e}")
+                proposed_failed_count += 1
+
+        if low_confidence_skipped > 0:
+            notes.append(f"{low_confidence_skipped} low-confidence memories were skipped (<0.6).")
+        if proposed_failed_count > 0:
+            notes.append(
+                f"{proposed_failed_count} memories could not be saved as proposals. "
+                "Check owner_beliefs migration/status constraints."
+            )
+        if proposed_count == 0 and extracted_memories:
+            notes.append("No interview memories reached Inbox. Review extraction quality and owner memory schema.")
+    elif not twin_id:
+        notes.append("Interview session has no twin_id; proposals could not be created.")
+    elif not extracted_memories:
+        notes.append("No memories were extracted from transcript.")
     
     # Upsert memories to Zep/Graphiti
     write_count = 0
@@ -430,6 +457,14 @@ async def finalize_interview_session(
         print(f"Error upserting memories to Zep: {e}")
         # Continue anyway - transcript storage is more important
     
+    session_metadata = dict(request.metadata or {})
+    session_metadata.update({
+        "extracted_count": len(extracted_memories),
+        "proposed_count": proposed_count,
+        "proposed_failed_count": proposed_failed_count,
+        "low_confidence_skipped": low_confidence_skipped,
+    })
+
     # Update session record
     try:
         supabase.table("interview_sessions").update({
@@ -438,7 +473,7 @@ async def finalize_interview_session(
             "transcript": [t.model_dump() for t in request.transcript],
             "memories_extracted": len(extracted_memories),
             "status": "completed",
-            "metadata": request.metadata or {}
+            "metadata": session_metadata
         }).eq("id", session_id).execute()
     except Exception as e:
         print(f"Error updating interview session: {e}")
@@ -448,6 +483,9 @@ async def finalize_interview_session(
         session_id=session_id,
         extracted_memories=extracted_memories,
         write_count=write_count,
+        proposed_count=proposed_count,
+        proposed_failed_count=proposed_failed_count,
+        notes=notes,
         status="completed"
     )
 

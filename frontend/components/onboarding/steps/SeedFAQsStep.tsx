@@ -62,8 +62,10 @@ export function SeedFAQsStep({
 
     const updateFaq = (index: number, field: 'question' | 'answer', value: string) => {
         const newFaqs = [...faqs];
-        if (!newFaqs[index]) {
-            newFaqs[index] = { question: '', answer: '' };
+        for (let i = 0; i <= index; i += 1) {
+            if (!newFaqs[i]) {
+                newFaqs[i] = { question: '', answer: '' };
+            }
         }
         newFaqs[index][field] = value;
         onFaqsChange(newFaqs);

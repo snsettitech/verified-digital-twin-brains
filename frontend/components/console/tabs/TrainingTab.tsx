@@ -537,7 +537,21 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 scrollToSection('training-knowledge');
                             }}
                             onDataAvailable={(data) => {
-                                showToast(`Interview saved. ${data.write_count || 0} memories extracted.`, 'success');
+                                const extracted = Array.isArray(data?.extracted_memories) ? data.extracted_memories.length : 0;
+                                const proposed = Number(data?.proposed_count || 0);
+                                const notes = Array.isArray(data?.notes) ? data.notes : [];
+
+                                if (proposed > 0) {
+                                    showToast(`Interview saved. ${proposed} memory proposal(s) sent to Inbox.`, 'success');
+                                } else if (extracted > 0) {
+                                    showToast('Interview saved, but no memory proposals were generated. Check Step 4 diagnostics.', 'warning');
+                                } else {
+                                    showToast('Interview saved, but no memories were extracted. Try fuller answers and stop recording after a full response.', 'warning');
+                                }
+
+                                if (notes.length > 0) {
+                                    console.warn('[Interview] Finalize notes:', notes);
+                                }
                                 fetchData();
                                 scrollToSection('training-inbox');
                             }}

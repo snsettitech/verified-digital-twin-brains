@@ -97,7 +97,11 @@ def sanitize_raw(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     return redacted
 
 
-def classify_retryable(http_status: Optional[int] = None, code: Optional[str] = None) -> bool:
+def classify_retryable(
+    http_status: Optional[int] = None,
+    code: Optional[str] = None,
+    provider_error_code: Optional[str] = None,
+) -> bool:
     if http_status is not None:
         if http_status in (408, 425, 429, 500, 502, 503, 504):
             return True
@@ -113,6 +117,11 @@ def classify_retryable(http_status: Optional[int] = None, code: Optional[str] = 
         }
         if code in terminal_codes:
             return False
+        if code == "YOUTUBE_TRANSCRIPT_UNAVAILABLE":
+            if provider_error_code in {"auth", "gating", "unavailable"}:
+                return False
+            if provider_error_code in {"network", "rate_limit"}:
+                return True
     return True
 
 
@@ -165,7 +174,11 @@ def build_error(
         "step": step,
         "http_status": http_status,
         "provider_error_code": provider_error_code,
-        "retryable": classify_retryable(http_status=http_status, code=code),
+        "retryable": classify_retryable(
+            http_status=http_status,
+            code=code,
+            provider_error_code=provider_error_code,
+        ),
         "correlation_id": correlation_id,
         "raw": sanitize_raw(raw),
         "stacktrace": stacktrace,

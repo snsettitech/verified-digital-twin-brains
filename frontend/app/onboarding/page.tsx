@@ -225,6 +225,9 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
         const { data: { user } } = await supabase.auth.getUser();
 
         for (const faq of faqs) {
+            if (!faq || typeof faq.question !== 'string' || typeof faq.answer !== 'string') {
+                continue;
+            }
             if (faq.question && faq.answer) {
                 try {
                     await authFetchStandalone(`/twins/${twinId}/verified-qna`, {

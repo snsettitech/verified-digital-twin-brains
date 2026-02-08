@@ -26,7 +26,7 @@ if not SUPABASE_JWT_SECRET or len(SUPABASE_JWT_SECRET) < 32:
     print("=" * 60, file=sys.stderr)
 
 
-def resolve_tenant_id(user_id: str, email: str = None) -> str:
+def resolve_tenant_id(user_id: str, email: str = None, create_if_missing: bool = True) -> str:
     """
     Resolve tenant_id for a user, auto-creating tenant if needed.
     
@@ -45,18 +45,46 @@ def resolve_tenant_id(user_id: str, email: str = None) -> str:
     """
     from modules.observability import supabase as supabase_client
     
-    # 1. Try to lookup existing tenant from users table
+    # 1. Try to lookup existing tenant from users table.
+    # IMPORTANT: lookup failures should not mutate tenant mappings.
     try:
-        user_lookup = supabase_client.table("users").select("tenant_id").eq("id", user_id).execute()
-        if user_lookup.data and user_lookup.data[0].get("tenant_id"):
-            tenant_id = user_lookup.data[0]["tenant_id"]
-            print(f"[resolve_tenant_id] Found existing tenant {tenant_id} for user {user_id}")
+        user_lookup = supabase_client.table("users").select("id, tenant_id").eq("id", user_id).limit(1).execute()
+        if user_lookup.data and len(user_lookup.data) > 0:
+            tenant_id = user_lookup.data[0].get("tenant_id")
+            if tenant_id:
+                print(f"[resolve_tenant_id] Found existing tenant {tenant_id} for user {user_id}")
+                return tenant_id
+    except Exception as e:
+        print(f"[resolve_tenant_id] User lookup failed (non-mutating): {e}")
+        raise HTTPException(status_code=503, detail="Tenant lookup temporarily unavailable")
+
+    # 2. Recovery: if tenant has owner_id, re-link user to that tenant.
+    # Some environments won't have owner_id column; failures here are non-fatal.
+    try:
+        owner_tenant = (
+            supabase_client.table("tenants")
+            .select("id")
+            .eq("owner_id", user_id)
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        if owner_tenant.data and len(owner_tenant.data) > 0:
+            tenant_id = owner_tenant.data[0]["id"]
+            user_data = {"id": user_id, "tenant_id": tenant_id}
+            if email:
+                user_data["email"] = email
+            supabase_client.table("users").upsert(user_data).execute()
+            print(f"[resolve_tenant_id] Re-linked user {user_id} to existing owner tenant {tenant_id}")
             return tenant_id
     except Exception as e:
-        print(f"[resolve_tenant_id] User lookup failed: {e}")
-    
-    # 2. User exists but has no tenant, or user doesn't exist - auto-create tenant
-    print(f"[resolve_tenant_id] No tenant for user {user_id}, auto-creating...")
+        print(f"[resolve_tenant_id] Owner-tenant recovery skipped: {e}")
+
+    if not create_if_missing:
+        raise HTTPException(status_code=404, detail="Tenant not found for user")
+
+    # 3. Create tenant only when explicitly allowed.
+    print(f"[resolve_tenant_id] No tenant for user {user_id}, creating tenant...")
     
     try:
         # Create tenant
@@ -71,7 +99,7 @@ def resolve_tenant_id(user_id: str, email: str = None) -> str:
         tenant_id = tenant_insert.data[0]["id"]
         print(f"[resolve_tenant_id] Created tenant {tenant_id}")
         
-        # 3. Ensure user record exists with this tenant_id
+        # 4. Ensure user record exists with this tenant_id
         user_data = {
             "id": user_id,
             "tenant_id": tenant_id

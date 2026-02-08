@@ -181,9 +181,9 @@ async def whoami(user=Depends(get_current_user)):
     user_id = user.get("user_id")
     email = user.get("email", "")
     
-    # Always resolve tenant (auto-creates if missing)
+    # Resolve tenant without mutating tenant mappings.
     try:
-        tenant_id = resolve_tenant_id(user_id, email)
+        tenant_id = resolve_tenant_id(user_id, email, create_if_missing=False)
     except Exception as e:
         tenant_id = None
     
@@ -240,9 +240,9 @@ async def get_my_twins(user=Depends(get_current_user)):
     user_id = user.get("user_id")
     email = user.get("email", "")
     
-    # Use resolve_tenant_id for guaranteed tenant resolution
+    # Resolve tenant non-destructively. Avoid creating new tenants on read paths.
     try:
-        tenant_id = resolve_tenant_id(user_id, email)
+        tenant_id = resolve_tenant_id(user_id, email, create_if_missing=False)
     except Exception as e:
         print(f"[AUTH] ERROR resolving tenant for user {user_id}: {e}")
         return []  # Graceful fallback

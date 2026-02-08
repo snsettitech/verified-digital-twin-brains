@@ -154,10 +154,14 @@ class PIIScrubber:
 
 def extract_text_from_pdf(file_path: str) -> str:
     reader = PdfReader(file_path)
-    text = ""
+    text_parts: List[str] = []
     for page in reader.pages:
-        text += page.extract_text()
-    return text
+        # Some PDFs return None for image-only pages; keep extraction best-effort
+        # instead of crashing the whole ingest on a single page.
+        page_text = page.extract_text() or ""
+        if page_text:
+            text_parts.append(page_text)
+    return "\n".join(text_parts)
 
 
 def extract_text_from_docx(file_path: str) -> str:
@@ -582,9 +586,9 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
         temp_audio_path = None
         
         while strategy.attempts < strategy.max_retries and not text:
+            attempt_no = strategy.attempts + 1
             try:
-                strategy.attempts += 1
-                print(f"[YouTube] Download attempt {strategy.attempts}/{strategy.max_retries} for {video_id}")
+                print(f"[YouTube] Download attempt {attempt_no}/{strategy.max_retries} for {video_id}")
                 
                 # Download audio
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -607,6 +611,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
                 detected_pii = PIIScrubber.detect_pii(text) if pii_detected else []
                 
                 # Log success with metadata
+                strategy.attempts = attempt_no
                 strategy.log_success(
                     content_length=len(text),
                     metadata={
@@ -657,6 +662,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
             # Get final error message with classification
             final_error = strategy.get_final_error_message(strategy.last_error or "Unknown error")
             metrics = strategy.get_metrics()
+            final_error_category, _, _ = ErrorClassifier.classify(strategy.last_error or final_error)
             
             log_ingestion_event(
                 source_id, twin_id, "error",
@@ -667,6 +673,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
                 message=final_error,
                 provider=provider,
                 step="fetching",
+                provider_error_code=final_error_category,
                 correlation_id=correlation_id,
                 raw={
                     "video_id": video_id,
