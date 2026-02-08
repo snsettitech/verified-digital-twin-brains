@@ -243,9 +243,11 @@ async def get_my_twins(user=Depends(get_current_user)):
     # Resolve tenant non-destructively. Avoid creating new tenants on read paths.
     try:
         tenant_id = resolve_tenant_id(user_id, email, create_if_missing=False)
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[AUTH] ERROR resolving tenant for user {user_id}: {e}")
-        return []  # Graceful fallback
+        raise HTTPException(status_code=503, detail="Unable to resolve tenant for this user")
     
     print(f"[AUTH] get_my_twins: user={user_id}, tenant={tenant_id}")
     

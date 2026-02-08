@@ -129,3 +129,16 @@ If you need stacktraces persisted in diagnostics:
 - Re-run ingestion
 
 Production should generally keep `DEV_MODE=false`.
+
+## Proof Helpers
+
+To generate concrete Supabase/Pinecone evidence for required proof URLs:
+
+```powershell
+cd backend
+python scripts/seed_linkedin_youtube_ingestion.py
+python scripts/prove_linkedin_youtube.py
+```
+
+Artifacts are written under:
+- `docs/ingestion/proof_outputs/`

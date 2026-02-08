@@ -1,0 +1,137 @@
+{
+  "generated_at": "2026-02-08T09:54:05.436397+00:00",
+  "inputs": {
+    "youtube_url": "https://www.youtube.com/watch?v=HiC1J8a9V1I",
+    "linkedin_url": "https://www.linkedin.com/in/sainathsetti/"
+  },
+  "sources": {
+    "youtube": {
+      "id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+      "twin_id": "5698a809-87a5-4169-ab9b-c4a6222ae2dd",
+      "status": "live",
+      "filename": "YouTube: HiC1J8a9V1I",
+      "citation_url": "https://www.youtube.com/watch?v=HiC1J8a9V1I",
+      "created_at": "2026-02-08T09:51:28.279987+00:00",
+      "chunk_count": 68,
+      "last_provider": "youtube",
+      "last_step": "live",
+      "last_error": null,
+      "last_error_at": null,
+      "last_event_at": "2026-02-08T09:53:25.240247+00:00"
+    },
+    "linkedin": {
+      "id": "e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213",
+      "twin_id": "5698a809-87a5-4169-ab9b-c4a6222ae2dd",
+      "status": "error",
+      "filename": "LinkedIn: queued",
+      "citation_url": "https://www.linkedin.com/in/sainathsetti/",
+      "created_at": "2026-02-08T09:53:27.954623+00:00",
+      "chunk_count": null,
+      "last_provider": "linkedin",
+      "last_step": "fetching",
+      "last_error": {
+        "raw": {
+          "url": "https://www.linkedin.com/in/sainathsetti/",
+          "final_url": "https://www.linkedin.com/in/sainathsetti/"
+        },
+        "code": "LINKEDIN_BLOCKED_OR_REQUIRES_AUTH",
+        "step": "fetching",
+        "message": "LinkedIn profile content could not be fetched publicly (blocked/login wall). Upload your LinkedIn profile PDF export or paste profile text for full ingestion.",
+        "provider": "linkedin",
+        "retryable": false,
+        "stacktrace": "Traceback (most recent call last):\n  File \"D:\\verified-digital-twin-brains\\backend\\modules\\ingestion.py\", line 1316, in ingest_linkedin_open_graph\n    raise ValueError(\"LinkedIn blocked access or requires authentication.\")\nValueError: LinkedIn blocked access or requires authentication.\n",
+        "http_status": 999,
+        "correlation_id": "proof-linkedin-5767ea6c",
+        "provider_error_code": null
+      },
+      "last_error_at": "2026-02-08T09:53:28.554602+00:00",
+      "last_event_at": "2026-02-08T09:53:28.554602+00:00"
+    },
+    "youtube_chunk_rows": 68,
+    "linkedin_chunk_rows": 0
+  },
+  "pinecone": {
+    "youtube": {
+      "phrase": "YouTube: HiC1J8a9V1I",
+      "namespace_vector_count": 68,
+      "expected_source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+      "matches_for_source_count": 3,
+      "matches_for_source": [
+        {
+          "id": "0a8acf68-ff85-4015-8389-2ccede67a7fd",
+          "score": 0.242080703,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "my podcast application form in the description below. I'd love to have a chat with you and get some exposure for your business. Aside from that, guys, that's all for the video. Thank you so much for watching and I'll see you in the next"
+        },
+        {
+          "id": "7f2714c9-3084-4563-802e-868f17bffc20",
+          "score": 0.234066024,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "el with it. If you guys want to get this whole board, there's a lot more source that we didn't really get to dig into. That'll be linked in the first link in description with all of the other resources from my podcast. Uh but yeah, random m"
+        },
+        {
+          "id": "ce954e6b-59f4-497c-935d-76f9a99e08f4",
+          "score": 0.20520784,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "e going to be breaking down what this model actually is, how it works in motion, and the tips and tricks around pricing and scoping to ensure that if you're going to put it into action, it runs smoothly for you. And I can tell you this vide"
+        }
+      ],
+      "matches": [
+        {
+          "id": "0a8acf68-ff85-4015-8389-2ccede67a7fd",
+          "score": 0.242080703,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "my podcast application form in the description below. I'd love to have a chat with you and get some exposure for your business. Aside from that, guys, that's all for the video. Thank you so much for watching and I'll see you in the next"
+        },
+        {
+          "id": "7f2714c9-3084-4563-802e-868f17bffc20",
+          "score": 0.234066024,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "el with it. If you guys want to get this whole board, there's a lot more source that we didn't really get to dig into. That'll be linked in the first link in description with all of the other resources from my podcast. Uh but yeah, random m"
+        },
+        {
+          "id": "ce954e6b-59f4-497c-935d-76f9a99e08f4",
+          "score": 0.20520784,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "e going to be breaking down what this model actually is, how it works in motion, and the tips and tricks around pricing and scoping to ensure that if you're going to put it into action, it runs smoothly for you. And I can tell you this vide"
+        }
+      ]
+    },
+    "linkedin": {
+      "phrase": "LinkedIn: queued",
+      "namespace_vector_count": 68,
+      "expected_source_id": "e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213",
+      "matches_for_source_count": 0,
+      "matches_for_source": [],
+      "matches": [
+        {
+          "id": "9e1778ec-22c6-42fd-bac1-d497e8b92fa1",
+          "score": 0.289470702,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": " couple weeks ago. Um, investor dinners I get always invited to like once a week. Uh, found a trash day, bro. How how are you doing that? >> I'm a part of a lot of communities. So, there's one community, AI LA, if I can shout them out. Ther"
+        },
+        {
+          "id": "9b9f57e9-0a19-4abe-83ef-455864a68079",
+          "score": 0.27406314,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "ry quickly. If you're an aspiring entrepreneur and wants to start your own AI business and you haven't already joined my free school community, it's down there in one of the links in the description below. Has my full free course on how to "
+        },
+        {
+          "id": "6dc2f03c-a82f-406f-afd2-b8a51e73d6db",
+          "score": 0.266803741,
+          "source_id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+          "filename": "YouTube: HiC1J8a9V1I",
+          "text_preview": "am but essentially a discovery call via countly or you can even go in person and schedule a call to do the audit at their business. Uh which is some of the things that we've done before. Um and then in that moment you can build out their mi"
+        }
+      ]
+    }
+  }
+}

@@ -437,6 +437,14 @@ export function TrainingTab({ twinId }: { twinId: string }) {
     }, [memories, searchQuery]);
 
     const visibleMemories = filteredMemories.slice(0, visibleCount);
+    const interviewProposals = useMemo(
+        () =>
+            proposedMemories.filter(
+                (memory) =>
+                    (memory.provenance as Record<string, any> | undefined)?.source_type === 'interview'
+            ),
+        [proposedMemories]
+    );
 
     return (
         <div className="flex flex-col h-[calc(100vh-theme(spacing.32))]">
@@ -658,6 +666,47 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                             >
                                 Next: Validate
                             </button>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+                            <h3 className="text-sm font-semibold text-white mb-2">Step 1 + Step 2 Summary</h3>
+                            <div className="grid md:grid-cols-2 gap-4 text-xs">
+                                <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+                                    <div className="text-[10px] uppercase tracking-wider text-slate-400">Intent Profile</div>
+                                    <div className="text-slate-200">
+                                        <span className="text-slate-400">Use case:</span>{' '}
+                                        {intentProfile.use_case || 'Not set'}
+                                    </div>
+                                    <div className="text-slate-200">
+                                        <span className="text-slate-400">Audience:</span>{' '}
+                                        {intentProfile.audience || 'Not set'}
+                                    </div>
+                                    <div className="text-slate-200">
+                                        <span className="text-slate-400">Boundaries:</span>{' '}
+                                        {intentProfile.boundaries || 'Not set'}
+                                    </div>
+                                </div>
+                                <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
+                                    <div className="text-[10px] uppercase tracking-wider text-slate-400">Interview Signals</div>
+                                    <div className="text-slate-200">
+                                        <span className="text-slate-400">Proposals from interview:</span>{' '}
+                                        {interviewProposals.length}
+                                    </div>
+                                    {interviewProposals.length === 0 ? (
+                                        <div className="text-slate-400">
+                                            No interview proposals yet. Complete Step 2 and press Stop Interview.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1">
+                                            {interviewProposals.slice(0, 3).map((memory) => (
+                                                <div key={memory.id} className="text-slate-300">
+                                                    • {memory.value}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="grid lg:grid-cols-[2fr_1fr] gap-6 items-start">

@@ -1,127 +1,112 @@
 # LinkedIn + YouTube Ingestion Proof
 
 ## Scope
-- Repository: `d:\verified-digital-twin-brains`
+- Repo: `d:\verified-digital-twin-brains`
 - Required URLs:
-  - YouTube: `https://www.youtube.com/watch?v=HiC1J8a9V1I`
-  - LinkedIn: `https://www.linkedin.com/in/sainathsetti/`
+- YouTube: `https://www.youtube.com/watch?v=HiC1J8a9V1I`
+- LinkedIn: `https://www.linkedin.com/in/sainathsetti/`
 
-## What Was Implemented
-- Unified diagnostics schema + runbook already added:
-  - `docs/ingestion/INGESTION_DIAGNOSTICS_SPEC.md`
-  - `docs/ingestion/INGESTION_RUNBOOK.md`
-- YouTube transcript compatibility hardening:
-  - Added `fetch_youtube_transcript_compat(...)` in `backend/modules/ingestion.py` to support both old and new `youtube-transcript-api` method shapes (`fetch/list` and `get_transcript/list_transcripts`).
-- Regression tests for transcript API compatibility:
-  - `backend/tests/test_youtube_transcript_api_compat.py`
-- Proof automation script added:
-  - `backend/scripts/prove_linkedin_youtube.py`
-  - Writes JSON artifact to `docs/ingestion/proof_outputs/`.
-
-## Commands Run And Results
-
-1. Regression + diagnostics tests:
+## Validation Commands And Results
+1. Backend full suite:
 ```powershell
 cd backend
-python -m pytest tests/test_youtube_transcript_api_compat.py tests/test_ingestion_diagnostics_contract.py tests/test_media_integration.py -q
+pytest -q
 ```
-Result: `8 passed`.
+Result: `209 passed, 17 skipped`.
 
-2. Full backend test sweep:
+2. Frontend typecheck:
+```powershell
+cd frontend
+cmd /c npm run typecheck
+```
+Result: pass (`tsc --noEmit`).
+
+3. Frontend Playwright:
+```powershell
+cd frontend
+cmd /c npx playwright test
+```
+Result: `6 passed, 8 skipped` (suite green).
+
+## Proof Execution (Real DB/Pinecone)
+1. Seed required URLs into the real ingestion pipeline:
 ```powershell
 cd backend
-python -m pytest -q
+python scripts/seed_linkedin_youtube_ingestion.py
 ```
-Result: `194 passed, 18 skipped`.
+Observed output:
+- Twin created: `5698a809-87a5-4169-ab9b-c4a6222ae2dd`
+- YouTube source: `140f782b-94a5-4b6f-910f-7ff98aa04bb3`, `status=completed`, `chunk_count=68`
+- LinkedIn source: `e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213`, `status=error`
+- LinkedIn error: `LINKEDIN_BLOCKED_OR_REQUIRES_AUTH` (expected compliance behavior)
 
-3. Frontend typecheck:
-```powershell
-cd frontend
-npm run typecheck
-```
-Result: pass (`tsc --noEmit` completed with no errors).
-
-4. Frontend Playwright:
-```powershell
-cd frontend
-npx playwright test
-```
-Result: failed in this environment with `spawn EPERM` (process execution permission issue).  
-Note: `npx playwright test --list` succeeds and lists all tests.
-
-5. LinkedIn + YouTube proof script:
+2. Query proof from Supabase + Pinecone:
 ```powershell
 cd backend
 python scripts/prove_linkedin_youtube.py
 ```
-Result:
-- Script executed and wrote:
-  - `docs/ingestion/proof_outputs/proof_linkedin_youtube_20260208T042258Z.json`
-- Current environment could not connect to Supabase endpoint:
-  - `[WinError 10061] No connection could be made because the target machine actively refused it`
-- Therefore no live DB/Pinecone rows were retrievable from this run.
+Artifact written:
+- `docs/ingestion/proof_outputs/proof_linkedin_youtube_20260208T095408Z.json`
 
-## Proof Artifact Snapshot
-File: `docs/ingestion/proof_outputs/proof_linkedin_youtube_20260208T042258Z.json`
+## Supabase Evidence (from artifact)
+- YouTube source row:
+- `id=140f782b-94a5-4b6f-910f-7ff98aa04bb3`
+- `status=live`
+- `chunk_count=68`
+- `last_provider=youtube`
+- `last_step=live`
+- `last_error=null`
 
-Key fields:
-- `sources.youtube = null`
-- `sources.linkedin = null`
-- `errors` contains Supabase connection refusal for both lookups.
+- LinkedIn source row:
+- `id=e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213`
+- `status=error`
+- `last_provider=linkedin`
+- `last_step=fetching`
+- `last_error.code=LINKEDIN_BLOCKED_OR_REQUIRES_AUTH`
+- `last_error.http_status=999`
+- `last_error.retryable=false`
 
-## Compliance Behavior (LinkedIn)
-- LinkedIn ingestion path is compliance-first (no login automation/scraping bypass):
-  - Implemented in `backend/modules/ingestion.py` (`ingest_linkedin_open_graph`).
-- Behavior:
-  - Attempt public OG metadata fetch.
-  - If blocked/login wall, return terminal error:
-    - `LINKEDIN_BLOCKED_OR_REQUIRES_AUTH`
-  - UI/operator fallback: upload LinkedIn PDF export or paste profile text.
+## Pinecone Evidence (from artifact)
+- YouTube:
+- `namespace_vector_count=68`
+- `matches_for_source_count=3`
+- `matches_for_source[].source_id` all equal `140f782b-94a5-4b6f-910f-7ff98aa04bb3`
+
+- LinkedIn:
+- `matches_for_source_count=0`
+- This is correct for blocked LinkedIn URL ingestion (no profile text indexed).
+
+## Compliance Confirmation (LinkedIn)
+- No login automation/cookie theft/captcha bypass implemented.
+- Behavior for `linkedin.com/in/...`:
+- Attempt public OpenGraph fetch.
+- On login wall/block, return terminal error `LINKEDIN_BLOCKED_OR_REQUIRES_AUTH`.
+- UI guidance instructs owner to upload LinkedIn PDF export or paste profile text.
 
 ## UI Verification Steps (Production)
-1. Open Training -> Knowledge step.
-2. Submit YouTube URL and observe status transitions (`queued -> fetching -> parsed -> chunked -> embedded -> indexed/live`) or explicit terminal error.
-3. Open Diagnostics on the source row and verify:
-   - provider
-   - step timeline
-   - error object (`code`, `message`, `http_status`, `retryable`, `raw`).
-4. Submit LinkedIn URL and verify either:
-   - OG metadata ingested and indexed, or
-   - explicit blocked error with fallback instruction.
-5. Use `Retry` on failed rows and verify diagnostics timeline appends new events.
+1. Open `Training Module -> Step 3 (Knowledge)`.
+2. Add YouTube URL (`HiC1J8a9V1I`), wait for terminal state, open `Diagnostics`.
+3. Confirm source row shows provider/step/status and diagnostics JSON.
+4. Add LinkedIn URL (`/in/sainathsetti/`), confirm explicit blocked error.
+5. Click `Retry` and verify new diagnostics events append in timeline.
+6. For LinkedIn full content, upload a text-selectable PDF or paste profile text.
 
-## SQL Queries To Capture DB Proof
-Run in Supabase SQL editor:
-
+## SQL Queries (manual verification)
 ```sql
 select id, twin_id, status, citation_url, chunk_count, last_provider, last_step, last_error, created_at
 from sources
-where citation_url in (
-  'https://www.youtube.com/watch?v=HiC1J8a9V1I',
-  'https://www.linkedin.com/in/sainathsetti/'
-)
-order by created_at desc;
+where id in (
+  '140f782b-94a5-4b6f-910f-7ff98aa04bb3',
+  'e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213'
+);
 ```
 
 ```sql
 select source_id, count(*) as chunk_rows
 from chunks
 where source_id in (
-  select id from sources
-  where citation_url in (
-    'https://www.youtube.com/watch?v=HiC1J8a9V1I',
-    'https://www.linkedin.com/in/sainathsetti/'
-  )
+  '140f782b-94a5-4b6f-910f-7ff98aa04bb3',
+  'e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213'
 )
 group by source_id;
 ```
-
-## Pinecone Verification Command
-```powershell
-cd backend
-python scripts/prove_linkedin_youtube.py
-```
-Expected when connectivity is available:
-- `namespace_vector_count > 0` for relevant `twin_id`
-- non-empty `matches` with metadata including `source_id` / `filename`.
-

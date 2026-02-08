@@ -169,7 +169,12 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
      */
     const startInterview = useCallback(async () => {
         try {
-            setState(prev => ({ ...prev, connectionStatus: 'connecting', error: null }));
+            setState(prev => ({
+                ...prev,
+                connectionStatus: 'connecting',
+                error: null,
+                transcript: [],
+            }));
 
             // 1. Get auth token
             const accessToken = await getAccessToken();

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import {
@@ -42,6 +42,8 @@ interface FAQPair {
     answer: string;
 }
 
+const getOnboardingTwinStorageKey = (userId: string) => `onboardingTwinId:${userId}`;
+
 export default function OnboardingPage() {
     const router = useRouter();
     const supabase = getSupabaseClient();
@@ -49,6 +51,7 @@ export default function OnboardingPage() {
     // State
     const [currentStep, setCurrentStep] = useState(0);
     const [twinId, setTwinId] = useState<string | null>(null);
+    const creatingTwinRef = useRef(false);
 
     // Step 1: Specialization
     const [selectedSpecialization, setSelectedSpecialization] = useState('vanilla');
@@ -81,6 +84,9 @@ export default function OnboardingPage() {
     useEffect(() => {
         const checkExistingTwins = async () => {
             try {
+                // Sync user first so tenant resolution is deterministic.
+                await authFetchStandalone('/auth/sync-user', { method: 'POST' });
+
                 // Use API instead of direct Supabase query to ensure consistent tenant_id lookup
                 const response = await authFetchStandalone('/auth/my-twins');
                 if (response.ok) {
@@ -88,13 +94,16 @@ export default function OnboardingPage() {
                     if (twins && twins.length > 0) {
                         router.push('/dashboard');
                     }
+                } else {
+                    const err = await response.text();
+                    console.warn('[Onboarding] /auth/my-twins returned non-OK:', err);
                 }
             } catch (error) {
                 console.log('[Onboarding] Error checking twins, continuing with onboarding:', error);
             }
         };
         checkExistingTwins();
-    }, []);
+    }, [router]);
 
 
     const handleFileUpload = (files: File[]) => {
@@ -130,6 +139,10 @@ export default function OnboardingPage() {
     };
 
     const createTwin = async () => {
+        if (creatingTwinRef.current || twinId) {
+            return;
+        }
+        creatingTwinRef.current = true;
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
@@ -138,6 +151,24 @@ export default function OnboardingPage() {
             // This prevents race conditions where the twin is created before the tenant
             console.log('[Onboarding] Syncing user before twin creation...');
             await authFetchStandalone('/auth/sync-user', { method: 'POST' });
+
+            // Idempotency guard: if a twin already exists for this owner, reuse it.
+            const existingRes = await authFetchStandalone('/auth/my-twins');
+            if (existingRes.ok) {
+                const existingTwins = await existingRes.json();
+                if (Array.isArray(existingTwins) && existingTwins.length > 0) {
+                    const existingTwinId = existingTwins[0]?.id;
+                    if (existingTwinId) {
+                        setTwinId(existingTwinId);
+                        localStorage.setItem(getOnboardingTwinStorageKey(user.id), existingTwinId);
+                        console.log('[Onboarding] Reusing existing twin:', existingTwinId);
+                        return;
+                    }
+                }
+            } else {
+                const err = await existingRes.text();
+                throw new Error(`Unable to verify existing twins: ${err}`);
+            }
 
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
             const expertiseText = [...selectedDomains, ...customExpertise].join(', ');
@@ -175,12 +206,15 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
                 const data = await response.json();
                 console.log('Twin created:', data);
                 setTwinId(data.id);
+                localStorage.setItem(getOnboardingTwinStorageKey(user.id), data.id);
             } else {
                 const error = await response.json();
                 console.error('Error creating twin:', error);
             }
         } catch (error) {
             console.error('Error creating twin:', error);
+        } finally {
+            creatingTwinRef.current = false;
         }
     };
 
@@ -286,6 +320,13 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
     };
 
     const handleComplete = () => {
+        const clearKey = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id) {
+                localStorage.removeItem(getOnboardingTwinStorageKey(user.id));
+            }
+        };
+        void clearKey();
         if (twinId) {
             router.push(`/dashboard`);
         } else {

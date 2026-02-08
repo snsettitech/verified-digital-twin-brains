@@ -83,25 +83,6 @@ async def get_source_health(source_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/sources/{twin_id}/{source_id}")
-async def get_source(twin_id: str, source_id: str, user=Depends(get_current_user)):
-    """Get a specific source with its details."""
-    verify_twin_ownership(twin_id, user)
-
-    try:
-        response = supabase.table("sources").select("*").eq("id", source_id).eq("twin_id", twin_id).single().execute()
-
-        if not response.data:
-            raise HTTPException(status_code=404, detail="Source not found")
-
-        return _normalize_source(response.data)
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting source: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.delete("/sources/{twin_id}/{source_id}")
 async def delete_source_endpoint(twin_id: str, source_id: str, user=Depends(verify_owner)):
     """Delete a source and its associated vectors."""
@@ -238,4 +219,28 @@ async def retry_source(source_id: str, user=Depends(verify_owner)):
         raise
     except Exception as e:
         print(f"Error retrying source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sources/{twin_id}/{source_id}")
+async def get_source(twin_id: str, source_id: str, user=Depends(get_current_user)):
+    """
+    Get a specific source with its details.
+
+    NOTE: This route is intentionally declared after /sources/{source_id}/events|logs
+    so diagnostics endpoints are not shadowed by the dual-param path.
+    """
+    verify_twin_ownership(twin_id, user)
+
+    try:
+        response = supabase.table("sources").select("*").eq("id", source_id).eq("twin_id", twin_id).single().execute()
+
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        return _normalize_source(response.data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting source: {e}")
         raise HTTPException(status_code=500, detail=str(e))

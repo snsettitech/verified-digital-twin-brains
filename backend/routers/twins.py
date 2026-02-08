@@ -101,22 +101,58 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         # CRITICAL: Always use resolve_tenant_id - NEVER trust client tenant_id
         # This auto-creates tenant if missing
         tenant_id = resolve_tenant_id(user_id, email)
-        
+        requested_name = (request.name or "").strip()
+        if not requested_name:
+            raise HTTPException(status_code=400, detail="Twin name is required")
+
         # Log if client sent a different tenant_id (for debugging)
         if request.tenant_id and request.tenant_id != tenant_id:
             print(f"[TWINS] WARNING: Ignoring client tenant_id={request.tenant_id}, using resolved={tenant_id}")
+
+        def _find_existing_active_twin() -> Optional[Dict[str, Any]]:
+            existing_res = (
+                supabase.table("twins")
+                .select("*")
+                .eq("tenant_id", tenant_id)
+                .eq("name", requested_name)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            for row in existing_res.data or []:
+                if not (row.get("settings") or {}).get("deleted_at"):
+                    return row
+            return None
+
+        # Idempotency guard: retries from onboarding/network should not create duplicates.
+        existing = _find_existing_active_twin()
+        if existing:
+            print(f"[TWINS] Reusing existing twin {existing.get('id')} for tenant={tenant_id}, name='{requested_name}'")
+            return existing
         
         # Create the twin with the CORRECT tenant_id
         data = {
-            "name": request.name,
+            "name": requested_name,
             "tenant_id": tenant_id,  # Always from resolve_tenant_id
-            "description": request.description or f"{request.name}'s digital twin",
+            "description": request.description or f"{requested_name}'s digital twin",
             "specialization": request.specialization,
             "settings": request.settings or {}
         }
-        
-        print(f"[TWINS] Creating twin '{request.name}' for user={user_id}, tenant={tenant_id}")
-        response = supabase.table("twins").insert(data).execute()
+
+        print(f"[TWINS] Creating twin '{requested_name}' for user={user_id}, tenant={tenant_id}")
+        try:
+            response = supabase.table("twins").insert(data).execute()
+        except Exception as insert_error:
+            insert_msg = str(insert_error).lower()
+            if "duplicate key" in insert_msg or "already exists" in insert_msg:
+                existing_after_race = _find_existing_active_twin()
+                if existing_after_race:
+                    print(
+                        "[TWINS] Detected duplicate create race; returning existing twin "
+                        f"{existing_after_race.get('id')}"
+                    )
+                    return existing_after_race
+            raise
         
         if response.data:
             twin = response.data[0]

@@ -51,19 +51,41 @@ def _json_default(value: Any) -> str:
 
 
 def _latest_source_for_url(supabase_client, url: str) -> Optional[Dict[str, Any]]:
-    res = (
+    base_res = (
         supabase_client.table("sources")
-        .select(
-            "id,twin_id,status,filename,citation_url,chunk_count,created_at,updated_at,"
-            "last_provider,last_step,last_error,last_error_at,last_event_at"
-        )
+        .select("id,twin_id,status,filename,citation_url,created_at")
         .eq("citation_url", url)
         .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
-    rows = res.data or []
-    return rows[0] if rows else None
+    rows = base_res.data or []
+    if not rows:
+        return None
+
+    source = rows[0]
+
+    # Optional diagnostics/enrichment fields (schema can vary by deployment).
+    try:
+        detail_res = (
+            supabase_client.table("sources")
+            .select("chunk_count,last_provider,last_step,last_error,last_error_at,last_event_at")
+            .eq("id", source["id"])
+            .single()
+            .execute()
+        )
+        if detail_res.data:
+            source.update(detail_res.data)
+    except Exception:
+        pass
+
+    source.setdefault("chunk_count", None)
+    source.setdefault("last_provider", None)
+    source.setdefault("last_step", None)
+    source.setdefault("last_error", None)
+    source.setdefault("last_error_at", None)
+    source.setdefault("last_event_at", None)
+    return source
 
 
 def _chunk_count_for_source(supabase_client, source_id: str) -> int:
@@ -85,7 +107,7 @@ def _probe_phrase(source: Dict[str, Any], fallback: str) -> str:
     return fallback
 
 
-def _pinecone_proof(twin_id: str, phrase: str) -> Dict[str, Any]:
+def _pinecone_proof(twin_id: str, phrase: str, expected_source_id: Optional[str] = None) -> Dict[str, Any]:
     index = get_pinecone_index()
     stats = index.describe_index_stats()
 
@@ -110,6 +132,10 @@ def _pinecone_proof(twin_id: str, phrase: str) -> Dict[str, Any]:
             }
         )
 
+    source_matches: List[Dict[str, Any]] = []
+    if expected_source_id:
+        source_matches = [m for m in matches if m.get("source_id") == expected_source_id]
+
     namespaces = stats.get("namespaces", {}) or {}
     namespace_count = 0
     if twin_id in namespaces:
@@ -118,6 +144,9 @@ def _pinecone_proof(twin_id: str, phrase: str) -> Dict[str, Any]:
     return {
         "phrase": phrase,
         "namespace_vector_count": namespace_count,
+        "expected_source_id": expected_source_id,
+        "matches_for_source_count": len(source_matches),
+        "matches_for_source": source_matches,
         "matches": matches,
     }
 
@@ -181,7 +210,11 @@ def main() -> int:
                 youtube_source,
                 fallback="One of the biggest questions right now",
             )
-            result["pinecone"]["youtube"] = _pinecone_proof(youtube_source["twin_id"], phrase)
+            result["pinecone"]["youtube"] = _pinecone_proof(
+                youtube_source["twin_id"],
+                phrase,
+                expected_source_id=youtube_source.get("id"),
+            )
         except Exception as exc:
             errors.append(f"Failed Pinecone YouTube proof: {exc}")
 
@@ -191,7 +224,11 @@ def main() -> int:
                 linkedin_source,
                 fallback="LinkedIn Profile public metadata",
             )
-            result["pinecone"]["linkedin"] = _pinecone_proof(linkedin_source["twin_id"], phrase)
+            result["pinecone"]["linkedin"] = _pinecone_proof(
+                linkedin_source["twin_id"],
+                phrase,
+                expected_source_id=linkedin_source.get("id"),
+            )
         except Exception as exc:
             errors.append(f"Failed Pinecone LinkedIn proof: {exc}")
 

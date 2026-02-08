@@ -11,6 +11,7 @@ from datetime import datetime
 import json
 import os
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -62,18 +63,133 @@ Guidelines:
 TRANSCRIPT:
 {transcript}
 
-Return a JSON array of memory objects. If no memories can be extracted, return an empty array [].
-Example format:
-[
-  {
-    "type": "goal",
-    "value": "User wants to build a VC brain to track investment decisions",
-    "evidence": "I'm trying to create a VC brain that helps me remember my investment thesis",
-    "confidence": 0.9
-  }
-]
+Return a JSON object with this exact shape:
+{
+  "memories": [
+    {
+      "type": "goal",
+      "value": "User wants to build a VC brain to track investment decisions",
+      "evidence": "I'm trying to create a VC brain that helps me remember my investment thesis",
+      "confidence": 0.9
+    }
+  ]
+}
 
+If no memories can be extracted, return {"memories": []}.
 ONLY return valid JSON, no markdown formatting or explanation."""
+
+FILLER_ONLY_RE = re.compile(r"^(uh+|um+|hmm+|mm+|ah+|oh+|okay+|ok+|bye+|hi+|hello+)[\.\!\?]*$", re.IGNORECASE)
+ASSISTANT_ACK_ONLY_RE = re.compile(
+    r"^(got it|understood|sure|okay|ok|great|thanks|thank you|absolutely|of course|alright|noted|right)[\.\!\s]*$",
+    re.IGNORECASE,
+)
+BOUNDARY_RE = re.compile(r"\b(do not|don't|never|avoid|must not|cannot|can't|should not|no fluff)\b", re.IGNORECASE)
+PREFERENCE_RE = re.compile(r"\b(i prefer|i like|i value|my style|my communication style|direct|structured|practical)\b", re.IGNORECASE)
+GOAL_RE = re.compile(r"\b(i want|i am building|i'm building|purpose is|primary use case|help others|understand me)\b", re.IGNORECASE)
+CONSTRAINT_RE = re.compile(r"\b(if you don't know|if you do not know|ask for missing information|escalate to)\b", re.IGNORECASE)
+IDENTITY_RE = re.compile(r"\bmy name is\b", re.IGNORECASE)
+
+
+def _coalesce_transcript(transcript: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """Merge fragmented turns from realtime streams and drop low-signal fillers."""
+    merged: List[Dict[str, str]] = []
+    for turn in transcript:
+        role = (turn.get("role") or "").strip().lower()
+        content = (turn.get("content") or "").strip()
+        if role not in {"user", "assistant"} or not content:
+            continue
+        if len(content) <= 20 and FILLER_ONLY_RE.match(content):
+            continue
+        if (
+            role == "assistant"
+            and len(content) <= 80
+            and "?" not in content
+            and ASSISTANT_ACK_ONLY_RE.match(content)
+            and merged
+            and merged[-1]["role"] == "user"
+        ):
+            # Realtime voice sessions often interleave tiny assistant acknowledgements
+            # ("Got it.", "Understood.") between fragmented user phrases.
+            # Dropping those keeps the user thought intact for extraction.
+            continue
+        if merged and merged[-1]["role"] == role:
+            merged[-1]["content"] = f"{merged[-1]['content']} {content}".strip()
+        else:
+            merged.append({"role": role, "content": content})
+    return merged
+
+
+def _coerce_memories_data(parsed: Any) -> List[Dict[str, Any]]:
+    """Accept multiple JSON shapes and normalize to a list of memory dicts."""
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+
+    if isinstance(parsed, dict):
+        for key in ("memories", "items", "data", "results"):
+            value = parsed.get(key)
+            if isinstance(value, list):
+                return [item for item in value if isinstance(item, dict)]
+        if {"type", "value"}.issubset(set(parsed.keys())):
+            return [parsed]
+        if parsed and all(isinstance(v, dict) for v in parsed.values()):
+            return [item for item in parsed.values() if isinstance(item, dict)]
+
+    return []
+
+
+def _heuristic_extract_memories(transcript: List[Dict[str, str]], session_id: str) -> List[ExtractedMemory]:
+    """
+    Deterministic fallback extractor.
+    Used when model output is empty/malformed so owner training does not become a no-op.
+    """
+    memories: List[ExtractedMemory] = []
+    seen: set[tuple[str, str]] = set()
+
+    user_turns = [t.get("content", "").strip() for t in transcript if t.get("role") == "user"]
+    for content in user_turns:
+        if not content or len(content) < 12:
+            continue
+
+        mem_type = None
+        confidence = 0.66
+        if BOUNDARY_RE.search(content):
+            mem_type = "boundary"
+            confidence = 0.8
+        elif CONSTRAINT_RE.search(content):
+            mem_type = "constraint"
+            confidence = 0.75
+        elif IDENTITY_RE.search(content):
+            mem_type = "intent"
+            confidence = 0.82
+        elif PREFERENCE_RE.search(content):
+            mem_type = "preference"
+            confidence = 0.72
+        elif GOAL_RE.search(content):
+            mem_type = "goal"
+            confidence = 0.7
+
+        if not mem_type:
+            continue
+
+        normalized_value = content.strip()
+        dedupe_key = (mem_type, normalized_value.lower())
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        memories.append(
+            ExtractedMemory(
+                type=mem_type,
+                value=normalized_value,
+                evidence=content.strip(),
+                confidence=confidence,
+                timestamp=datetime.utcnow().isoformat(),
+                session_id=session_id,
+                source="interview_mode",
+            )
+        )
+
+    return memories
 
 
 async def extract_memories(
@@ -101,10 +217,12 @@ async def extract_memories(
             extraction_time_ms=0
         )
     
+    normalized_transcript = _coalesce_transcript(transcript)
+
     # Format transcript for prompt
     transcript_text = "\n".join([
         f"{turn.get('role', 'unknown').upper()}: {turn.get('content', '')}"
-        for turn in transcript
+        for turn in normalized_transcript
     ])
     
     # Call LLM for extraction
@@ -118,7 +236,10 @@ async def extract_memories(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a precise memory extraction system. Output only valid JSON arrays."
+                    "content": (
+                        "You are a precise memory extraction system. "
+                        "Output only valid JSON objects with a top-level `memories` array."
+                    ),
                 },
                 {
                     "role": "user",
@@ -134,16 +255,9 @@ async def extract_memories(
         
         # Parse JSON response
         try:
-            # Handle both array and object responses
+            # Handle multiple model response shapes.
             parsed = json.loads(content)
-            if isinstance(parsed, dict):
-                # If wrapped in an object, extract the array
-                memories_data = parsed.get("memories", parsed.get("items", []))
-            else:
-                memories_data = parsed
-                
-            if not isinstance(memories_data, list):
-                memories_data = []
+            memories_data = _coerce_memories_data(parsed)
                 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse extraction response: {e}")
@@ -174,22 +288,26 @@ async def extract_memories(
                 logger.warning(f"Failed to create memory from item: {e}")
                 continue
         
+        if not memories:
+            memories = _heuristic_extract_memories(normalized_transcript, session_id)
+
         elapsed_ms = int((time.time() - start_time) * 1000)
         
         return ExtractionResult(
             memories=memories,
             total_extracted=len(memories),
-            transcript_turns=len(transcript),
+            transcript_turns=len(normalized_transcript),
             extraction_time_ms=elapsed_ms
         )
         
     except Exception as e:
         logger.error(f"Memory extraction failed: {e}")
         elapsed_ms = int((time.time() - start_time) * 1000)
+        fallback_memories = _heuristic_extract_memories(normalized_transcript, session_id)
         return ExtractionResult(
-            memories=[],
-            total_extracted=0,
-            transcript_turns=len(transcript),
+            memories=fallback_memories,
+            total_extracted=len(fallback_memories),
+            transcript_turns=len(normalized_transcript),
             extraction_time_ms=elapsed_ms
         )
 
