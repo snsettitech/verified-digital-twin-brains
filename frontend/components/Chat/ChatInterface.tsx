@@ -322,6 +322,7 @@ export default function ChatInterface({
                   const lastMsg = { ...last[last.length - 1] };
                   lastMsg.confidence_score = data.confidence_score;
                   lastMsg.citations = data.citations;
+                  lastMsg.citation_details = data.citation_details;
                   lastMsg.graph_used = graphUsed;
                   lastMsg.owner_memory_refs = ownerMemoryRefs;
                   lastMsg.owner_memory_topics = ownerMemoryTopics;
@@ -405,6 +406,7 @@ export default function ChatInterface({
               const lastMsg = { ...last[last.length - 1] };
               lastMsg.confidence_score = data.confidence_score;
               lastMsg.citations = data.citations;
+              lastMsg.citation_details = data.citation_details;
               lastMsg.graph_used = graphUsed;
               lastMsg.owner_memory_refs = ownerMemoryRefs;
               lastMsg.owner_memory_topics = ownerMemoryTopics;

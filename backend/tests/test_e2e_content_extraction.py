@@ -31,10 +31,13 @@ async def test_e2e_extraction():
     from modules.observability import supabase
     
     # Use an existing twin
-    twins_result = supabase.table("twins").select("id").limit(1).execute()
+    try:
+        twins_result = supabase.table("twins").select("id").limit(1).execute()
+    except Exception as exc:
+        pytest.skip(f"Supabase not reachable for E2E extraction: {exc}")
+
     if not twins_result.data:
-        print("No twins found - skipping E2E test")
-        return
+        pytest.skip("No twins found - skipping E2E extraction")
     
     twin_id = twins_result.data[0]["id"]
     
@@ -76,14 +79,13 @@ async def test_e2e_extraction():
             print(f"    - {node.get('name')} ({node.get('type')})")
     
     if result.get('error'):
-        print(f"\n  Error: {result['error']}")
-        return False
+        pytest.fail(f"E2E extraction returned error: {result['error']}")
     
     # Verify nodes were created in DB
     nodes_check = supabase.table("nodes").select("id, name, type").eq("twin_id", twin_id).order("created_at", desc=True).limit(10).execute()
     print(f"\n  Latest nodes in DB: {len(nodes_check.data)}")
     
-    return len(result.get('all_nodes', [])) > 0
+    assert len(result.get('all_nodes', [])) > 0
 
 
 if __name__ == "__main__":

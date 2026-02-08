@@ -42,8 +42,9 @@ async def worker_loop():
     if redis_client:
         print("[Worker] Connected to Redis queue")
     else:
-        print("[Worker] WARNING: No Redis connection - using in-memory queue (ONLY WORKS LOCALLY OR SINGLE INSTANCE)")
-        print("[Worker] For Render, ensure REDIS_URL is set in environment variables")
+        # Job queue falls back to DB-backed dequeue when REDIS_URL is not configured.
+        print("[Worker] INFO: REDIS_URL not configured/available - using DB-backed queue polling")
+        print("[Worker] TIP: Configure REDIS_URL for lower latency and horizontal scaling")
 
     consecutive_empty_polls = 0
     jobs_processed = 0

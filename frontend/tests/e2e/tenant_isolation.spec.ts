@@ -7,17 +7,20 @@
  * - Each tenant can only access their own data
  */
 import { test, expect } from '@playwright/test';
+import path from 'path';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = process.env.E2E_BACKEND_URL || 'http://localhost:8000';
+const RUN_BACKEND_TESTS = process.env.RUN_BACKEND_E2E === '1';
 
-// Simulated tenant tokens for testing
-const TENANT_A_TOKEN = 'development_token';  // Tenant A (primary test user)
-const TENANT_B_TOKEN = 'tenant_b_dev_token'; // Tenant B (unauthorized user)
-const TENANT_A_TWIN = 'eeeed554-9180-4229-a9af-0f8dd2c69e9b';
+// Simulated tenant tokens for testing (override via env for real runs)
+const TENANT_A_TOKEN = process.env.E2E_TENANT_A_TOKEN || 'development_token';
+const TENANT_B_TOKEN = process.env.E2E_TENANT_B_TOKEN || 'tenant_b_dev_token';
+const TENANT_A_TWIN = process.env.E2E_TENANT_A_TWIN || 'eeeed554-9180-4229-a9af-0f8dd2c69e9b';
 
 test.describe('Gate 6: Tenant Isolation', () => {
 
     test.describe('API-Level Tenant Isolation', () => {
+        test.skip(!RUN_BACKEND_TESTS, 'Backend E2E env not configured');
 
         test('Tenant A can access their own graph data', async ({ request }) => {
             const response = await request.get(
@@ -98,18 +101,19 @@ test.describe('Gate 6: Tenant Isolation', () => {
             await expect(page.locator('h1')).toContainText('Dashboard');
         });
 
-        test('Simulator page loads and shows chat interface', async ({ page }) => {
+        test('Simulator page loads and shows training module', async ({ page }) => {
             await page.goto('/dashboard/simulator');
 
-            // Check for chat elements
-            await expect(page.locator('input[placeholder*="Ask"]')).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Training Module' })).toBeVisible();
+            await expect(page.getByText('Step 5. Validate')).toBeVisible();
+            await expect(page.locator('textarea[aria-label="Chat message input"]')).toBeVisible();
         });
 
-        test('Right Brain page loads with interview interface', async ({ page }) => {
+        test('Right Brain page loads with training interview step', async ({ page }) => {
             await page.goto('/dashboard/right-brain');
 
-            // Check for interview elements
-            await expect(page.locator('h1')).toContainText('Right Brain');
+            await expect(page.getByRole('heading', { name: 'Training Module' })).toBeVisible();
+            await expect(page.getByText('Step 2. Interview')).toBeVisible();
         });
 
         test('Brain Graph page loads with graph visualization', async ({ page }) => {
@@ -118,16 +122,34 @@ test.describe('Gate 6: Tenant Isolation', () => {
             // Check for graph elements
             await expect(page.locator('h1')).toContainText('Brain Graph');
         });
+
+        test('Training knowledge modal exposes file input', async ({ page }) => {
+            await page.goto('/dashboard/simulator');
+
+            await page.getByRole('button', { name: 'Skip to Knowledge' }).click();
+            await page.getByRole('button', { name: 'Add Knowledge' }).first().click();
+
+            const fileInput = page.locator('input[type="file"]');
+            await expect(fileInput).toHaveCount(1);
+
+            const uploadButton = page.getByRole('button', { name: 'Upload', exact: true });
+            await expect(uploadButton).toBeDisabled();
+
+            const fixturePath = path.join(__dirname, '..', 'fixtures', 'sample.txt');
+            await fileInput.setInputFiles(fixturePath);
+            await expect(uploadButton).toBeEnabled();
+        });
     });
 
     test.describe('Health Checks', () => {
+        test.skip(!RUN_BACKEND_TESTS, 'Backend E2E env not configured');
 
         test('Backend health endpoint returns online status', async ({ request }) => {
             const response = await request.get(`${API_URL}/health`);
 
             expect(response.status()).toBe(200);
             const data = await response.json();
-            expect(data.status).toBe('online');
+            expect(['online', 'healthy']).toContain(data.status);
         });
 
         test('Config endpoint returns specialization info', async ({ request }) => {

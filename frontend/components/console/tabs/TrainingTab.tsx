@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import ChatInterface from '@/components/Chat/ChatInterface';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { resolveApiBaseUrl } from '@/lib/api';
 import { useToast } from '@/components/ui/Toast';
@@ -62,6 +61,7 @@ export function TrainingTab({ twinId }: { twinId: string }) {
         intensity: 5
     });
     const [savingMemory, setSavingMemory] = useState(false);
+    const [showAddMemory, setShowAddMemory] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editingDraft, setEditingDraft] = useState<Partial<OwnerMemory>>({});
     const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
@@ -324,6 +324,7 @@ export function TrainingTab({ twinId }: { twinId: string }) {
             if (!res.ok) throw new Error('Create failed');
             showToast('Memory created', 'success');
             setNewMemory({ topic_normalized: '', memory_type: 'stance', value: '', stance: '', intensity: 5 });
+            setShowAddMemory(false);
             fetchData();
         } catch (err) {
             console.error(err);
@@ -530,10 +531,17 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 Skip to Knowledge
                             </button>
                         </div>
-                        <InterviewView onComplete={() => {
-                            setCurrentStep('knowledge');
-                            scrollToSection('training-knowledge');
-                        }} />
+                        <InterviewView
+                            onComplete={() => {
+                                setCurrentStep('knowledge');
+                                scrollToSection('training-knowledge');
+                            }}
+                            onDataAvailable={(data) => {
+                                showToast(`Interview saved. ${data.write_count || 0} memories extracted.`, 'success');
+                                fetchData();
+                                scrollToSection('training-inbox');
+                            }}
+                        />
                     </section>
 
                     {/* STEP 3: KNOWLEDGE */}
@@ -550,7 +558,77 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 Next: Inbox
                             </button>
                         </div>
-                        <KnowledgeTab twinId={twinId} onUrlSubmit={() => { }} />
+                        <KnowledgeTab
+                            twinId={twinId}
+                            onUrlSubmit={async (url) => {
+                                try {
+                                    const backendUrl = resolveApiBaseUrl();
+                                    const isE2EBypass =
+                                        process.env.NODE_ENV !== 'production' &&
+                                        process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
+                                    const headers: Record<string, string> = {
+                                        'Content-Type': 'application/json'
+                                    };
+                                    if (!isE2EBypass) {
+                                        const { data: { session } } = await supabase.auth.getSession();
+                                        const token = session?.access_token;
+                                        if (!token) return;
+                                        headers['Authorization'] = `Bearer ${token}`;
+                                    }
+                                    const res = await fetch(`${backendUrl}/ingest/url/${twinId}`, {
+                                        method: 'POST',
+                                        headers,
+                                        body: JSON.stringify({ url })
+                                    });
+                                    if (!res.ok) {
+                                        const errText = await res.text();
+                                        throw new Error(errText || 'Ingest failed');
+                                    }
+                                    showToast('URL added to knowledge base', 'success');
+                                } catch (e) {
+                                    console.error(e);
+                                    showToast('Failed to add URL', 'error');
+                                    throw e;
+                                }
+                            }}
+                            onUpload={async (files) => {
+                                try {
+                                    const backendUrl = resolveApiBaseUrl();
+                                    const isE2EBypass =
+                                        process.env.NODE_ENV !== 'production' &&
+                                        process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
+                                    const headers: Record<string, string> = {};
+                                    if (!isE2EBypass) {
+                                        const { data: { session } } = await supabase.auth.getSession();
+                                        const token = session?.access_token;
+                                        if (!token) return;
+                                        headers['Authorization'] = `Bearer ${token}`;
+                                    }
+
+                                    let successCount = 0;
+                                    for (const file of files) {
+                                        const formData = new FormData();
+                                        formData.append('file', file);
+                                        const res = await fetch(`${backendUrl}/ingest/file/${twinId}`, {
+                                            method: 'POST',
+                                            headers,
+                                            body: formData
+                                        });
+                                        if (res.ok) {
+                                            successCount++;
+                                        } else {
+                                            const errText = await res.text();
+                                            throw new Error(errText || `Upload failed (${res.status})`);
+                                        }
+                                    }
+                                    showToast(`Started processing ${successCount} files`, 'success');
+                                } catch (e) {
+                                    console.error(e);
+                                    showToast('Failed to upload files', 'error');
+                                    throw e;
+                                }
+                            }}
+                        />
                     </section>
 
                     {/* STEP 4: INBOX */}
@@ -588,16 +666,99 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                                 />
                                             </div>
                                             <button
-                                                onClick={() => { }} // Add manual logic
+                                                onClick={() => setShowAddMemory((prev) => !prev)}
                                                 className="text-xs bg-indigo-500/20 text-indigo-300 px-3 py-1 rounded-lg hover:bg-indigo-500/30"
                                             >
-                                                + Add
+                                                {showAddMemory ? 'Close' : '+ Add'}
                                             </button>
                                         </div>
                                     </div>
 
                                     {/* Memory Items */}
                                     <div className="space-y-3">
+                                        {showAddMemory && (
+                                            <div className="rounded-xl border border-white/10 bg-black/30 p-3 space-y-3">
+                                                <div className="grid gap-3 md:grid-cols-2">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] uppercase tracking-wider text-slate-400">Topic</label>
+                                                        <input
+                                                            type="text"
+                                                            value={newMemory.topic_normalized}
+                                                            onChange={(e) => setNewMemory(p => ({ ...p, topic_normalized: e.target.value }))}
+                                                            placeholder="e.g., Green flags"
+                                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] uppercase tracking-wider text-slate-400">Type</label>
+                                                        <select
+                                                            value={newMemory.memory_type}
+                                                            onChange={(e) => setNewMemory(p => ({ ...p, memory_type: e.target.value }))}
+                                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                                                        >
+                                                            {MEMORY_TYPES.map((type) => (
+                                                                <option key={type} value={type}>{type}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] uppercase tracking-wider text-slate-400">Value</label>
+                                                    <textarea
+                                                        rows={3}
+                                                        value={newMemory.value}
+                                                        onChange={(e) => setNewMemory(p => ({ ...p, value: e.target.value }))}
+                                                        placeholder="Write the memory in your own words."
+                                                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                                                    />
+                                                </div>
+                                                <div className="grid gap-3 md:grid-cols-2">
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] uppercase tracking-wider text-slate-400">Stance</label>
+                                                        <select
+                                                            value={newMemory.stance}
+                                                            onChange={(e) => setNewMemory(p => ({ ...p, stance: e.target.value }))}
+                                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                                                        >
+                                                            {STANCE_OPTIONS.map((option) => (
+                                                                <option key={option} value={option}>{option || 'none'}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="text-[10px] uppercase tracking-wider text-slate-400">Intensity</label>
+                                                        <input
+                                                            type="number"
+                                                            min={1}
+                                                            max={10}
+                                                            value={newMemory.intensity}
+                                                            onChange={(e) => setNewMemory(p => ({ ...p, intensity: Number(e.target.value) }))}
+                                                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-end gap-2">
+                                                    <button
+                                                        onClick={() => setShowAddMemory(false)}
+                                                        className="px-3 py-1.5 text-[10px] text-slate-400"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        onClick={createMemory}
+                                                        disabled={savingMemory}
+                                                        className="px-3 py-1.5 text-[10px] bg-emerald-500 text-white rounded-lg disabled:opacity-50"
+                                                    >
+                                                        {savingMemory ? 'Saving...' : 'Save'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {visibleMemories.length === 0 && !showAddMemory && (
+                                            <div className="rounded-xl border border-dashed border-white/10 bg-black/10 p-4 text-xs text-slate-400">
+                                                No approved memories yet. Complete an interview, approve proposals, or add one manually.
+                                            </div>
+                                        )}
                                         {visibleMemories.map((mem) => (
                                             <div key={mem.id} className="group rounded-xl border border-white/10 bg-black/20 p-3 relative">
                                                 {confirmDeleteId === mem.id && (

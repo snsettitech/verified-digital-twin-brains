@@ -109,6 +109,17 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
     /**
      * Handle incoming Realtime events
      */
+    const appendTranscriptTurn = useCallback((turn: TranscriptTurn) => {
+        setState(prev => {
+            const nextTranscript = [...prev.transcript, turn];
+            options.onTranscriptUpdate?.(nextTranscript);
+            return {
+                ...prev,
+                transcript: nextTranscript,
+            };
+        });
+    }, [options]);
+
     const handleRealtimeEvent = useCallback((event: MessageEvent) => {
         try {
             const data = JSON.parse(event.data);
@@ -122,18 +133,11 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
                     // Complete assistant turn
                     const assistantContent = data.transcript || '';
                     if (assistantContent.trim()) {
-                        setState(prev => ({
-                            ...prev,
-                            transcript: [
-                                ...prev.transcript,
-                                {
-                                    role: 'assistant',
-                                    content: assistantContent,
-                                    timestamp: new Date().toISOString(),
-                                }
-                            ]
-                        }));
-                        options.onTranscriptUpdate?.(state.transcript);
+                        appendTranscriptTurn({
+                            role: 'assistant',
+                            content: assistantContent,
+                            timestamp: new Date().toISOString(),
+                        });
                     }
                     break;
 
@@ -141,18 +145,11 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
                     // User speech transcribed
                     const userContent = data.transcript || '';
                     if (userContent.trim()) {
-                        setState(prev => ({
-                            ...prev,
-                            transcript: [
-                                ...prev.transcript,
-                                {
-                                    role: 'user',
-                                    content: userContent,
-                                    timestamp: new Date().toISOString(),
-                                }
-                            ]
-                        }));
-                        options.onTranscriptUpdate?.(state.transcript);
+                        appendTranscriptTurn({
+                            role: 'user',
+                            content: userContent,
+                            timestamp: new Date().toISOString(),
+                        });
                     }
                     break;
 
@@ -165,7 +162,7 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
         } catch (err) {
             console.error('Error parsing Realtime event:', err);
         }
-    }, [options, state.transcript]);
+    }, [appendTranscriptTurn, options]);
 
     /**
      * Start the interview session
@@ -323,12 +320,14 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
             audioElementRef.current = null;
         }
 
+        let result = null;
+
         // Finalize session with backend
         if (interviewSessionIdRef.current && state.transcript.length > 0) {
             try {
                 const accessToken = await getAccessToken();
 
-                await fetch(`${API_BASE_URL}/api/interview/sessions/${interviewSessionIdRef.current}/finalize`, {
+                const response = await fetch(`${API_BASE_URL}/api/interview/sessions/${interviewSessionIdRef.current}/finalize`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -339,6 +338,12 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
                         duration_seconds: duration,
                     }),
                 });
+
+                if (response.ok) {
+                    result = await response.json();
+                } else {
+                    console.error('Finalize failed:', await response.text());
+                }
             } catch (error) {
                 console.error('Failed to finalize interview:', error);
             }
@@ -352,6 +357,7 @@ export function useRealtimeInterview(options: UseRealtimeInterviewOptions = {}) 
         }));
 
         options.onConnectionChange?.(false);
+        return result;
 
     }, [state.transcript, getAccessToken, options]);
 

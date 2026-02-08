@@ -6,6 +6,7 @@ import { InterviewControls, TranscriptPanel } from '@/components/interview';
 
 interface InterviewViewProps {
     onComplete?: () => void;
+    onDataAvailable?: (data: any) => void;
 }
 
 /**
@@ -13,7 +14,7 @@ interface InterviewViewProps {
  * 
  * Reusable component for real-time voice interview.
  */
-export function InterviewView({ onComplete }: InterviewViewProps) {
+export function InterviewView({ onComplete, onDataAvailable }: InterviewViewProps) {
     const {
         isConnected,
         isRecording,
@@ -33,6 +34,7 @@ export function InterviewView({ onComplete }: InterviewViewProps) {
     });
 
     const [duration, setDuration] = useState(0);
+    const [saving, setSaving] = useState(false);
 
     // Sync duration with recording state
     useEffect(() => {
@@ -48,6 +50,23 @@ export function InterviewView({ onComplete }: InterviewViewProps) {
             if (interval) clearInterval(interval);
         };
     }, [isRecording]);
+
+    const handleStop = async () => {
+        setSaving(true);
+        const result = await stopInterview();
+        setSaving(false);
+        if (result && onDataAvailable) {
+            onDataAvailable(result);
+        }
+        return result;
+    };
+
+    const handleFinish = async () => {
+        if (isRecording) {
+            await handleStop();
+        }
+        onComplete?.();
+    };
 
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -103,9 +122,17 @@ export function InterviewView({ onComplete }: InterviewViewProps) {
                     isRecording={isRecording}
                     connectionStatus={connectionStatus}
                     onStart={startInterview}
-                    onStop={stopInterview}
+                    onStop={handleStop}
                     error={error}
                 />
+                <p className="mt-4 text-xs text-slate-400 text-center">
+                    Your interview is saved when you click Stop. Check Inbox after saving for proposed memories.
+                </p>
+                {!isRecording && transcript.length === 0 && (
+                    <p className="mt-2 text-[11px] text-amber-300 text-center">
+                        No transcript yet. Start the interview to capture memories.
+                    </p>
+                )}
             </div>
 
             {/* Transcript Panel */}
@@ -133,10 +160,11 @@ export function InterviewView({ onComplete }: InterviewViewProps) {
             {onComplete && (
                 <div className="flex justify-end pt-4">
                     <button
-                        onClick={onComplete}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors"
+                        onClick={handleFinish}
+                        disabled={saving}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
                     >
-                        Finish Interview
+                        {saving ? 'Saving...' : 'Finish Interview'}
                     </button>
                 </div>
             )}

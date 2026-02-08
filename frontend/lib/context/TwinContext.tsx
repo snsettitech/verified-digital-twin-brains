@@ -92,6 +92,9 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
 
     const supabase = getSupabaseClient();
     const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const isE2EBypass =
+        process.env.NODE_ENV !== 'production' &&
+        process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
     const SYNC_TIMEOUT_MS = 8000;
     const SYNC_RETRY_BASE_MS = 1000;
     const SYNC_RETRY_MAX_MS = 30000;
@@ -576,6 +579,34 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
         console.log(`[TwinContext][${mountId}] MOUNTED`);
         mountedRef.current = true;
 
+        if (isE2EBypass) {
+            const fakeTwin: Twin = {
+                id: 'e2e-twin',
+                name: 'E2E Twin',
+                owner_id: 'e2e-user',
+                tenant_id: 'e2e-tenant',
+                specialization: 'vanilla',
+                is_active: true,
+                settings: {},
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            const fakeUser: UserProfile = {
+                id: 'e2e-user',
+                email: 'e2e@local',
+                onboarding_completed: true,
+                tenant_id: 'e2e-tenant',
+                role: 'owner'
+            };
+            setUser(fakeUser);
+            setTwins([fakeTwin]);
+            setActiveTwinState(fakeTwin);
+            setIsLoading(false);
+            return () => {
+                mountedRef.current = false;
+            };
+        }
+
         const initialize = async () => {
             if (initRef.current) {
                 console.log(`[TwinContext][${mountId}] Already initialized, skipping`);
@@ -664,7 +695,7 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
                 syncTimerRef.current = null;
             }
         };
-    }, [supabase, syncUser, refreshTwins, API_URL, mountId, loadCachedUser, persistCachedUser]);
+    }, [supabase, syncUser, refreshTwins, API_URL, mountId, loadCachedUser, persistCachedUser, isE2EBypass]);
 
     const value: TwinContextType = {
         user,

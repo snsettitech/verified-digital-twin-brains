@@ -128,10 +128,21 @@ if VC_ROUTES_ENABLED:
 @app.get("/health", tags=["health"])
 async def health_check():
     """Health check endpoint for deployment readiness probes."""
+    # Include ingestion diagnostics schema availability for fast debug in production.
+    try:
+        from modules.ingestion_diagnostics import diagnostics_schema_status
+
+        diag_ok, _diag_err = diagnostics_schema_status()
+    except Exception:
+        diag_ok = False
+
     return {
         "status": "healthy",
         "service": "verified-digital-twin-brain-api",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "ingestion_diagnostics_schema": {
+            "available": bool(diag_ok),
+        },
     }
 
 @app.get("/", tags=["health"])

@@ -20,6 +20,7 @@ from datetime import datetime
 import re
 import json
 import asyncio
+import uuid
 
 # Langfuse v3 tracing
 try:
@@ -380,11 +381,41 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             # Determine if graph was likely used (no external citations and has graph)
             graph_used = graph_stats["has_graph"] and len(citations) == 0
             
+            # Resolve citations into real source records for UI (no fake "Source 1").
+            citation_details = []
+            try:
+                def _is_uuid(val: str) -> bool:
+                    try:
+                        uuid.UUID(str(val))
+                        return True
+                    except Exception:
+                        return False
+
+                source_ids = [c for c in (citations or []) if isinstance(c, str) and _is_uuid(c)]
+                by_id = {}
+                if source_ids:
+                    src_res = supabase.table("sources").select("id, filename, citation_url").in_("id", source_ids).eq("twin_id", twin_id).execute()
+                    for row in (src_res.data or []):
+                        by_id[str(row.get("id"))] = row
+
+                for c in (citations or []):
+                    row = by_id.get(str(c))
+                    if row:
+                        citation_details.append({
+                            "id": row.get("id"),
+                            "filename": row.get("filename"),
+                            "citation_url": row.get("citation_url"),
+                        })
+                    else:
+                        citation_details.append({"id": c})
+            except Exception as e:
+                logger.warning(f"Citation resolution failed (non-blocking): {e}")
             
             # 3. Send metadata first
             metadata = _normalize_json({
                 "type": "metadata",
                 "citations": citations,
+                "citation_details": citation_details,
                 "confidence_score": confidence_score,
                 "conversation_id": conversation_id,
                 "owner_memory_refs": owner_memory_refs,

@@ -11,6 +11,7 @@ import html
 import html as html_lib
 import asyncio
 from typing import List, Dict, Optional, Any, Tuple
+from bs4 import BeautifulSoup
 from modules.transcription import transcribe_audio_multi
 from modules.embeddings import get_embedding
 from PyPDF2 import PdfReader
@@ -19,6 +20,7 @@ import openpyxl
 from youtube_transcript_api import YouTubeTranscriptApi
 from modules.clients import get_openai_client, get_pinecone_index
 from modules.observability import supabase, log_ingestion_event
+from modules.ingestion_diagnostics import start_step, finish_step, build_error
 from modules.health_checks import run_all_health_checks, calculate_content_hash
 from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
@@ -198,6 +200,20 @@ def extract_video_id(url: str) -> str:
     return None
 
 
+def detect_url_provider(url: str) -> str:
+    u = (url or "").strip().lower()
+    if "youtube.com" in u or "youtu.be" in u:
+        return "youtube"
+    if "twitter.com" in u or "x.com" in u:
+        return "x"
+    if "linkedin.com" in u:
+        return "linkedin"
+    if u.endswith(".rss") or "feed" in u or "podcast" in u or "anchor.fm" in u or "podbean" in u:
+        return "podcast"
+    if u.startswith("http://") or u.startswith("https://"):
+        return "web"
+    return "unknown"
+
 
 
 
@@ -227,12 +243,12 @@ def _build_yt_dlp_opts(video_id: str, source_id: str, twin_id: str) -> dict:
         }],
         'quiet': True,
         'no_warnings': True,
-        # Multiple client strategies (try Android first, then web)
+        # Multiple client strategies (try Android first, then web/iOS)
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web', 'ios'],  # Try multiple clients
+                'player_client': ['android', 'web', 'ios'],
                 'player_skip': ['webpage', 'configs', 'js'],
-                'include_live_dash': [True]
+                'include_live_dash': [True],
             }
         },
         'nocheckcertificate': True,
@@ -240,11 +256,6 @@ def _build_yt_dlp_opts(video_id: str, source_id: str, twin_id: str) -> dict:
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
-        },
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-            }
         },
         'retries': 5,
         'fragment_retries': 5,
@@ -272,7 +283,129 @@ def _build_yt_dlp_opts(video_id: str, source_id: str, twin_id: str) -> dict:
     return ydl_opts, temp_dir, temp_filename
 
 
-async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
+def _transcript_items_to_text(items: Any) -> Optional[str]:
+    """Normalize transcript payloads from different youtube-transcript-api versions."""
+    if items is None:
+        return None
+
+    raw_items = items
+    if hasattr(items, "to_raw_data"):
+        raw_items = items.to_raw_data()
+
+    if raw_items is None:
+        return None
+
+    if not isinstance(raw_items, list):
+        try:
+            raw_items = list(raw_items)
+        except Exception:
+            return None
+
+    parts: List[str] = []
+    for item in raw_items:
+        if isinstance(item, dict):
+            parts.append(str(item.get("text", "")))
+        elif isinstance(item, str):
+            parts.append(item)
+
+    text = " ".join(parts).strip()
+    return text or None
+
+
+def fetch_youtube_transcript_compat(video_id: str, yta_cls: Optional[Any] = None) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Fetch transcript text while supporting both old and new youtube-transcript-api APIs.
+
+    Returns:
+      (text, error_message, method_used)
+      method_used is one of: fetch, list, get_transcript, list_transcripts.
+    """
+    transcript_error: Optional[str] = None
+
+    try:
+        if yta_cls is None:
+            from youtube_transcript_api import YouTubeTranscriptApi as yta_cls  # type: ignore[no-redef]
+
+        # New API: instance.fetch(video_id, languages=...)
+        try:
+            api = yta_cls()
+            if hasattr(api, "fetch"):
+                fetched = api.fetch(video_id, languages=("en", "en-US", "en-GB"))
+                text = _transcript_items_to_text(fetched)
+                if text:
+                    return text, None, "fetch"
+        except Exception as e:
+            transcript_error = str(e)
+
+        # New API fallback: instance.list(video_id).find_*_transcript(...).fetch()
+        try:
+            api = yta_cls()
+            if hasattr(api, "list"):
+                transcript_list = api.list(video_id)
+                transcript = None
+                try:
+                    if hasattr(transcript_list, "find_manually_created_transcript"):
+                        transcript = transcript_list.find_manually_created_transcript(["en", "en-US", "en-GB"])
+                except Exception:
+                    transcript = None
+                if transcript is None:
+                    try:
+                        if hasattr(transcript_list, "find_generated_transcript"):
+                            transcript = transcript_list.find_generated_transcript(["en", "en-US", "en-GB"])
+                    except Exception:
+                        transcript = None
+                if transcript is None:
+                    transcript = transcript_list.find_transcript(["en", "en-US", "en-GB"])
+
+                fetched = transcript.fetch(preserve_formatting=False)
+                text = _transcript_items_to_text(fetched)
+                if text:
+                    return text, None, "list"
+        except Exception as e:
+            if not transcript_error:
+                transcript_error = str(e)
+
+        # Old API fallback: static get_transcript(video_id)
+        if hasattr(yta_cls, "get_transcript"):
+            try:
+                items = yta_cls.get_transcript(video_id)
+                text = _transcript_items_to_text(items)
+                if text:
+                    return text, None, "get_transcript"
+            except Exception as e:
+                if not transcript_error:
+                    transcript_error = str(e)
+
+        # Old API fallback: static list_transcripts(video_id)
+        if hasattr(yta_cls, "list_transcripts"):
+            try:
+                transcript_list = yta_cls.list_transcripts(video_id)
+
+                for transcript in getattr(transcript_list, "manually_created_transcripts", []) or []:
+                    try:
+                        text = _transcript_items_to_text(transcript.fetch())
+                        if text:
+                            return text, None, "list_transcripts"
+                    except Exception:
+                        continue
+
+                for transcript in getattr(transcript_list, "generated_transcripts", []) or []:
+                    try:
+                        text = _transcript_items_to_text(transcript.fetch())
+                        if text:
+                            return text, None, "list_transcripts"
+                    except Exception:
+                        continue
+            except Exception as e:
+                if not transcript_error:
+                    transcript_error = str(e)
+    except Exception as e:
+        transcript_error = str(e)
+
+    return None, transcript_error, None
+
+
+async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, correlation_id: Optional[str] = None):
     """
     Ingest YouTube video transcript using robust multi-strategy approach.
     """
@@ -280,32 +413,37 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
     if not video_id:
         raise ValueError("Invalid YouTube URL")
 
+    provider = "youtube"
     # -------------------------------------------------------------
     # Step 0: Ensure Source Record exists
     # -------------------------------------------------------------
     try:
-        # Check if exists first to handle updates
-        existing = supabase.table("sources").select("id").eq("id", source_id).execute()
-        if not existing.data:
-            supabase.table("sources").insert({
-                "id": source_id,
-                "twin_id": twin_id,
-                "filename": f"YouTube: {video_id}",  # Placeholder title
-                "file_size": 0,
-                "content_text": "",
-                "status": "processing",
-                "staging_status": "staged"
-            }).execute()
-            print(f"[YouTube] Created processing record for {source_id}")
-            
-            # Brief wait to ensure DB propagation (especially with replica lag if any)
-            await asyncio.sleep(1)
+        supabase.table("sources").upsert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": f"YouTube: {video_id}",
+            "file_size": 0,
+            "content_text": "",
+            "status": "processing",
+            "staging_status": "staged",
+            "citation_url": url,
+        }).execute()
     except Exception as e:
-        print(f"[YouTube] Error or duplicate during source record creation: {e}")
+        # Don't crash ingestion for telemetry upsert issues; later updates may still succeed.
+        print(f"[YouTube] Warning: Failed to upsert source record: {e}")
 
     text = None
     video_title = None
     transcript_error = None
+    fetch_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        correlation_id=correlation_id,
+        message="Fetching YouTube transcript/captions",
+        metadata={"video_id": video_id, "url": url},
+    )
 
     # -------------------------------------------------------------
     # Step 1: Validate via YouTube Data API (if key available)
@@ -330,44 +468,18 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             print(f"[YouTube] Data API check failed (non-blocking): {e}")
 
     # -------------------------------------------------------------
-    # Strategy 1: YouTubeTranscriptApi (Official, Fast)
+    # Strategy 1: youtube-transcript-api (Fast, No Download)
     # -------------------------------------------------------------
-    try:
-        transcript_snippets = YouTubeTranscriptApi().fetch(video_id)
-        text = " ".join([item.text for item in transcript_snippets])
-        log_ingestion_event(source_id, twin_id, "info", f"Fetched official YouTube transcript")
-    except Exception as e:
-        transcript_error = str(e)
-        print(f"[YouTube] Transcript API failed: {e}")
-
-    # Strategy 1.5: List Transcripts (all languages)
-    if not text:
-        try:
-            from youtube_transcript_api import YouTubeTranscriptApi as YTA
-            transcript_list = YTA.list_transcripts(video_id)
-            
-            # Try manual transcripts first (usually more complete)
-            for transcript in transcript_list.manually_created_transcripts:
-                try:
-                    fetched = transcript.fetch()
-                    text = " ".join([item['text'] for item in fetched])
-                    log_ingestion_event(source_id, twin_id, "info", f"Fetched manual {transcript.language} transcript")
-                    break
-                except:
-                    continue
-            
-            # Then try auto-generated transcripts
-            if not text:
-                for transcript in transcript_list.generated_transcripts:
-                    try:
-                        fetched = transcript.fetch()
-                        text = " ".join([item['text'] for item in fetched])
-                        log_ingestion_event(source_id, twin_id, "info", f"Fetched auto-generated {transcript.language} transcript")
-                        break
-                    except:
-                        continue
-        except Exception as e:
-            print(f"[YouTube] List transcripts failed: {e}")
+    text, transcript_error, transcript_method = fetch_youtube_transcript_compat(video_id)
+    if text:
+        log_ingestion_event(
+            source_id,
+            twin_id,
+            "info",
+            f"Fetched YouTube transcript via youtube-transcript-api ({transcript_method})"
+        )
+    elif transcript_error and YouTubeConfig.VERBOSE_LOGGING:
+        print(f"[YouTube] Transcript API failed: {transcript_error}")
 
     # -------------------------------------------------------------
     # Strategy 1.6: Direct HTTP fetch with browser headers (bypasses library blocks)
@@ -455,7 +567,6 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         log_ingestion_event(source_id, twin_id, "warning", "Attempting robust audio download (yt-dlp with multiple clients)")
 
         from modules.youtube_retry_strategy import YouTubeRetryStrategy
-        from modules.ingestion import ErrorClassifier
         
         ydl_opts, temp_dir, temp_filename = _build_yt_dlp_opts(video_id, source_id, twin_id)
         
@@ -551,40 +662,120 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
                 source_id, twin_id, "error",
                 f"YouTube ingestion failed after {strategy.attempts} attempts. Metrics: {metrics}"
             )
-            
+            err = build_error(
+                code="YOUTUBE_TRANSCRIPT_UNAVAILABLE",
+                message=final_error,
+                provider=provider,
+                step="fetching",
+                correlation_id=correlation_id,
+                raw={
+                    "video_id": video_id,
+                    "url": url,
+                    "attempts": strategy.attempts,
+                    "metrics": metrics,
+                    "last_error": strategy.last_error,
+                },
+            )
+            finish_step(
+                event_id=fetch_event_id,
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="fetching",
+                status="error",
+                correlation_id=correlation_id,
+                error=err,
+            )
             raise ValueError(final_error)
 
     if not text:
+        err = build_error(
+            code="YOUTUBE_TRANSCRIPT_UNAVAILABLE",
+            message="No transcript could be extracted. This video may not have captions.",
+            provider=provider,
+            step="fetching",
+            correlation_id=correlation_id,
+            raw={"video_id": video_id, "url": url, "transcript_error": transcript_error},
+        )
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
         raise ValueError(
             "No transcript could be extracted. This video may not have captions. "
             "Try a different video with closed captions (CC) enabled."
         )
 
+    finish_step(
+        event_id=fetch_event_id,
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        status="completed",
+        correlation_id=correlation_id,
+        metadata={"text_len": len(text), "has_title": bool(video_title)},
+    )
+
+    parsed_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="parsed",
+        correlation_id=correlation_id,
+        message="Persisting transcript to sources.content_text",
+    )
+
     try:
         # Direct indexing - extract and index immediately
         content_hash = calculate_content_hash(text)
 
-        # Record source in Supabase with indexed status
-        supabase.table("sources").insert({
-            "id": source_id,
-            "twin_id": twin_id,
-            "filename": f"YouTube: {video_id}",
+        # Update existing source row (do NOT insert again; the row is created when job is queued)
+        filename = f"YouTube: {video_title or video_id}"
+        supabase.table("sources").update({
+            "filename": filename,
             "file_size": len(text),
             "content_text": text,
             "content_hash": content_hash,
-            "status": "processed",
+            "status": "processing",
             "staging_status": "staged",
-            "extracted_text_length": len(text)
-        }).execute()
+            "extracted_text_length": len(text),
+            "citation_url": url,
+        }).eq("id", source_id).eq("twin_id", twin_id).execute()
+
+        finish_step(
+            event_id=parsed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="parsed",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"filename": filename, "text_len": len(text)},
+        )
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube transcript extracted: {len(text)} characters")
 
         # Direct indexing
-        num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
-            "filename": f"YouTube: {video_id}",
-            "type": "youtube",
-            "video_id": video_id
-        })
+        num_chunks = await process_and_index_text(
+            source_id,
+            twin_id,
+            text,
+            metadata_override={
+                "filename": filename,
+                "type": "youtube",
+                "video_id": video_id,
+                "url": url,
+            },
+            provider=provider,
+            correlation_id=correlation_id,
+        )
 
         # Fetch tenant_id
         tenant_id = None
@@ -600,7 +791,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
             twin_id=twin_id, 
             event_type="KNOWLEDGE_UPDATE", 
             action="SOURCE_INDEXED", 
-            metadata={"source_id": source_id, "filename": f"YouTube: {video_id}", "type": "youtube", "chunks": num_chunks}
+            metadata={"source_id": source_id, "filename": filename, "type": "youtube", "chunks": num_chunks}
         )
 
         # Set status to live after successful Pinecone upsert
@@ -611,6 +802,25 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
         }).eq("id", source_id).execute()
 
         log_ingestion_event(source_id, twin_id, "info", f"YouTube content indexed: {num_chunks} chunks, status=live")
+
+        live_event_id = start_step(
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="live",
+            correlation_id=correlation_id,
+            message="Source is live",
+        )
+        finish_step(
+            event_id=live_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="live",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"chunks": num_chunks},
+        )
 
         # Enqueue async content extraction to build graph nodes/edges
         try:
@@ -630,6 +840,28 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str):
 
         return num_chunks
     except Exception as e:
+        try:
+            err = build_error(
+                code="YOUTUBE_INDEXING_FAILED",
+                message=str(e),
+                provider=provider,
+                step="indexed",
+                correlation_id=correlation_id,
+                raw={"video_id": video_id, "url": url},
+                exc=e,
+            )
+            finish_step(
+                event_id="",
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="indexed",
+                status="error",
+                correlation_id=correlation_id,
+                error=err,
+            )
+        except Exception:
+            pass
         print(f"Error processing YouTube content: {e}")
         log_ingestion_event(source_id, twin_id, "error", f"Error processing YouTube content: {e}")
         supabase.table("sources").update({"status": "error", "health_status": "failed"}).eq("id", source_id).execute()
@@ -675,7 +907,7 @@ async def ingest_podcast_rss(source_id: str, twin_id: str, url: str):
         raise e
 
 
-async def ingest_x_thread(source_id: str, twin_id: str, url: str):
+async def ingest_x_thread(source_id: str, twin_id: str, url: str, correlation_id: Optional[str] = None):
     """
     Ingests an X (Twitter) thread using multiple fallback strategies.
     """
@@ -683,9 +915,35 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
     if not tweet_id_match:
         raise ValueError("Invalid X (Twitter) URL")
 
+    provider = "x"
     tweet_id = tweet_id_match.group(1)
     text = ""
     user = "Unknown"
+
+    # Ensure source row exists
+    try:
+        supabase.table("sources").upsert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": f"X Thread: {tweet_id}",
+            "file_size": 0,
+            "content_text": "",
+            "status": "processing",
+            "staging_status": "staged",
+            "citation_url": url,
+        }).execute()
+    except Exception:
+        pass
+
+    fetch_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        correlation_id=correlation_id,
+        message="Fetching X thread content",
+        metadata={"tweet_id": tweet_id, "url": url},
+    )
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -786,11 +1044,49 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
     # -------------------------------------------------------------
     if not text:
         log_ingestion_event(source_id, twin_id, "error", "All X thread extraction methods failed")
-        raise ValueError(
-            "Could not extract X thread content. All methods failed. "
-            "X/Twitter may be blocking requests from this server. "
-            "Try copying the tweet text manually and pasting it as a text file."
+        err = build_error(
+            code="X_BLOCKED_OR_UNSUPPORTED",
+            message=(
+                "Could not extract X thread content. X/Twitter may be blocking requests from this server. "
+                "Try copying the tweet text manually and uploading it as a text file."
+            ),
+            provider=provider,
+            step="fetching",
+            correlation_id=correlation_id,
+            raw={"tweet_id": tweet_id, "url": url},
         )
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise ValueError(err["message"])
+
+    finish_step(
+        event_id=fetch_event_id,
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        status="completed",
+        correlation_id=correlation_id,
+        metadata={"text_len": len(text)},
+    )
+
+    parsed_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="parsed",
+        correlation_id=correlation_id,
+        message="Persisting extracted X thread text",
+        metadata={"tweet_id": tweet_id},
+    )
 
     try:
         content_hash = calculate_content_hash(text)
@@ -803,10 +1099,21 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
             "file_size": len(text),
             "content_text": text,
             "content_hash": content_hash,
-            "status": "processed",
+            "status": "processing",
             "staging_status": "staged",
             "extracted_text_length": len(text)
         }).execute()
+
+        finish_step(
+            event_id=parsed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="parsed",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"text_len": len(text), "user": user},
+        )
 
         # Small verification wait to settle FK
         await asyncio.sleep(1)
@@ -818,7 +1125,7 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
             "filename": f"X Thread: {tweet_id} by {user}",
             "type": "x_thread",
             "tweet_id": tweet_id
-        })
+        }, provider=provider, correlation_id=correlation_id)
 
         # Fetch tenant_id
         tenant_id = None
@@ -845,6 +1152,25 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
 
         log_ingestion_event(source_id, twin_id, "info", f"X Thread content indexed: {num_chunks} chunks, status=live")
 
+        live_event_id = start_step(
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="live",
+            correlation_id=correlation_id,
+            message="Source is live",
+        )
+        finish_step(
+            event_id=live_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="live",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"chunks": num_chunks},
+        )
+
         # Enqueue async content extraction to build graph nodes/edges
         try:
             from modules._core.scribe_engine import enqueue_content_extraction_job
@@ -863,10 +1189,475 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str):
 
         return num_chunks
     except Exception as e:
+        try:
+            err = build_error(
+                code="X_INDEXING_FAILED",
+                message=str(e),
+                provider=provider,
+                step="indexed",
+                correlation_id=correlation_id,
+                raw={"tweet_id": tweet_id, "url": url},
+                exc=e,
+            )
+            finish_step(
+                event_id="",
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="indexed",
+                status="error",
+                correlation_id=correlation_id,
+                error=err,
+            )
+        except Exception:
+            pass
         print(f"Error processing X thread: {e}")
         log_ingestion_event(source_id, twin_id, "error", f"Error processing X thread: {e}")
         supabase.table("sources").update({"status": "error", "health_status": "failed"}).eq("id", source_id).execute()
         raise e
+
+
+def _extract_og(soup: BeautifulSoup, prop: str) -> Optional[str]:
+    tag = soup.find("meta", attrs={"property": prop})
+    if tag and tag.get("content"):
+        return str(tag.get("content")).strip()
+    return None
+
+
+def _extract_meta_name(soup: BeautifulSoup, name: str) -> Optional[str]:
+    tag = soup.find("meta", attrs={"name": name})
+    if tag and tag.get("content"):
+        return str(tag.get("content")).strip()
+    return None
+
+
+def _extract_canonical(soup: BeautifulSoup) -> Optional[str]:
+    tag = soup.find("link", attrs={"rel": "canonical"})
+    if tag and tag.get("href"):
+        return str(tag.get("href")).strip()
+    return None
+
+
+def _linkedin_login_wall(html_text: str, final_url: str) -> bool:
+    t = (html_text or "").lower()
+    u = (final_url or "").lower()
+    if "/login" in u or "/checkpoint" in u or "authwall" in u:
+        return True
+    # Common LinkedIn wall cues
+    if "sign in" in t and "linkedin" in t and ("join linkedin" in t or "sign in to see" in t):
+        return True
+    if "linkedin login" in t or "linkedin: log in" in t:
+        return True
+    return False
+
+
+async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, correlation_id: Optional[str] = None) -> int:
+    """
+    Compliance-first LinkedIn ingestion:
+    - Fetches only public OpenGraph/canonical metadata when available.
+    - If blocked/login wall, fails with a clear terminal error instructing export/PDF fallback.
+    """
+    provider = "linkedin"
+
+    # Ensure source row exists
+    try:
+        supabase.table("sources").upsert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": "LinkedIn: queued",
+            "file_size": 0,
+            "content_text": "",
+            "status": "processing",
+            "staging_status": "staged",
+            "citation_url": url,
+        }).execute()
+    except Exception as e:
+        print(f"[LinkedIn] Warning: Failed to upsert source record: {e}")
+
+    fetch_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        correlation_id=correlation_id,
+        message="Fetching LinkedIn OpenGraph metadata",
+        metadata={"url": url},
+    )
+
+    http_status: Optional[int] = None
+    final_url: str = url
+    og_title = None
+    og_desc = None
+    og_image = None
+    canonical = None
+    page_title = None
+
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.8",
+        }
+        async with httpx.AsyncClient(timeout=20, headers=headers, follow_redirects=True) as client:
+            resp = await client.get(url)
+            http_status = resp.status_code
+            final_url = str(resp.url)
+            html_text = resp.text or ""
+
+        if http_status in (401, 403, 429, 999) or _linkedin_login_wall(html_text, final_url):
+            # LinkedIn commonly returns HTTP 999 for bot detection.
+            raise ValueError("LinkedIn blocked access or requires authentication.")
+
+        soup = BeautifulSoup(html_text, "html.parser")
+        og_title = _extract_og(soup, "og:title")
+        og_desc = _extract_og(soup, "og:description")
+        og_image = _extract_og(soup, "og:image")
+        canonical = _extract_canonical(soup) or _extract_og(soup, "og:url")
+        page_title = (soup.title.string.strip() if soup.title and soup.title.string else None)
+
+        # Fallback: standard meta tags
+        if not og_desc:
+            og_desc = _extract_meta_name(soup, "description")
+
+        # Block heuristics: LinkedIn login pages often expose generic titles
+        if (og_title and "linkedin login" in og_title.lower()) or (page_title and "linkedin login" in page_title.lower()):
+            raise ValueError("LinkedIn returned a login wall page.")
+
+        if not og_title and not og_desc:
+            raise ValueError("No public OpenGraph metadata available.")
+
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"http_status": http_status, "has_og_title": bool(og_title), "has_og_desc": bool(og_desc)},
+        )
+    except Exception as e:
+        err = build_error(
+            code="LINKEDIN_BLOCKED_OR_REQUIRES_AUTH",
+            message=(
+                "LinkedIn profile content could not be fetched publicly (blocked/login wall). "
+                "Upload your LinkedIn profile PDF export or paste profile text for full ingestion."
+            ),
+            provider=provider,
+            step="fetching",
+            http_status=http_status,
+            correlation_id=correlation_id,
+            raw={"url": url, "final_url": final_url},
+            exc=e,
+        )
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise ValueError(err["message"])
+
+    parsed_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="parsed",
+        correlation_id=correlation_id,
+        message="Building minimal profile document from OG fields",
+    )
+    try:
+        title = og_title or page_title or "LinkedIn Profile"
+        desc = og_desc or ""
+        canon = canonical or final_url or url
+
+        doc = "\n".join([
+            "LinkedIn Profile (public metadata)",
+            f"Title: {title}",
+            f"Description: {desc}",
+            f"URL: {canon}",
+            f"Image: {og_image or ''}",
+        ]).strip()
+
+        content_hash = calculate_content_hash(doc)
+
+        supabase.table("sources").update({
+            "filename": f"LinkedIn: {title}"[:240],
+            "file_size": len(doc),
+            "content_text": doc,
+            "content_hash": content_hash,
+            "status": "processing",
+            "staging_status": "staged",
+            "extracted_text_length": len(doc),
+            "citation_url": url,
+        }).eq("id", source_id).eq("twin_id", twin_id).execute()
+
+        finish_step(
+            event_id=parsed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="parsed",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"text_len": len(doc), "canonical": canon},
+        )
+    except Exception as e:
+        err = build_error(
+            code="LINKEDIN_PARSE_FAILED",
+            message=f"Failed to build LinkedIn metadata document: {str(e)}",
+            provider=provider,
+            step="parsed",
+            correlation_id=correlation_id,
+            raw={"url": url},
+            exc=e,
+        )
+        finish_step(
+            event_id=parsed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="parsed",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise
+
+    num_chunks = await process_and_index_text(
+        source_id,
+        twin_id,
+        doc,
+        metadata_override={
+            "filename": f"LinkedIn: {title}"[:240],
+            "type": "linkedin_profile_og",
+            "url": url,
+            "canonical_url": canonical or final_url,
+        },
+        provider=provider,
+        correlation_id=correlation_id,
+    )
+
+    supabase.table("sources").update({
+        "status": "live",
+        "staging_status": "live",
+        "chunk_count": num_chunks,
+    }).eq("id", source_id).execute()
+
+    live_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="live",
+        correlation_id=correlation_id,
+        message="Source is live",
+    )
+    finish_step(
+        event_id=live_event_id,
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="live",
+        status="completed",
+        correlation_id=correlation_id,
+        metadata={"chunks": num_chunks},
+    )
+
+    return num_chunks
+
+
+async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id: Optional[str] = None) -> int:
+    """Ingest a generic web URL by fetching HTML, extracting text, and indexing."""
+    provider = "web"
+
+    try:
+        supabase.table("sources").upsert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": f"Web: {url}"[:240],
+            "file_size": 0,
+            "content_text": "",
+            "status": "processing",
+            "staging_status": "staged",
+            "citation_url": url,
+        }).execute()
+    except Exception as e:
+        print(f"[Web] Warning: Failed to upsert source record: {e}")
+
+    fetch_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        correlation_id=correlation_id,
+        message="Fetching web page",
+        metadata={"url": url},
+    )
+
+    html_text = ""
+    http_status = None
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            resp = await client.get(url)
+            http_status = resp.status_code
+            resp.raise_for_status()
+            html_text = resp.text or ""
+
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"http_status": http_status, "bytes": len(html_text)},
+        )
+    except Exception as e:
+        err = build_error(
+            code="WEB_FETCH_FAILED",
+            message=f"Failed to fetch URL: {str(e)}",
+            provider=provider,
+            step="fetching",
+            http_status=http_status,
+            correlation_id=correlation_id,
+            raw={"url": url},
+            exc=e,
+        )
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise
+
+    parsed_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="parsed",
+        correlation_id=correlation_id,
+        message="Extracting text from HTML",
+    )
+    try:
+        soup = BeautifulSoup(html_text, "html.parser")
+        title = soup.title.string.strip() if soup.title and soup.title.string else url
+
+        text = soup.get_text(separator="\n", strip=True)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        if not text:
+            raise ValueError("No text extracted from HTML")
+
+        content_hash = calculate_content_hash(text)
+        supabase.table("sources").update({
+            "filename": f"Web: {title}"[:240],
+            "file_size": len(text),
+            "content_text": text,
+            "content_hash": content_hash,
+            "status": "processing",
+            "staging_status": "staged",
+            "extracted_text_length": len(text),
+            "citation_url": url,
+        }).eq("id", source_id).eq("twin_id", twin_id).execute()
+
+        finish_step(
+            event_id=parsed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="parsed",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"text_len": len(text), "title": title},
+        )
+    except Exception as e:
+        err = build_error(
+            code="WEB_PARSE_FAILED",
+            message=f"Failed to parse page: {str(e)}",
+            provider=provider,
+            step="parsed",
+            correlation_id=correlation_id,
+            raw={"url": url},
+            exc=e,
+        )
+        finish_step(
+            event_id=parsed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="parsed",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise
+
+    num_chunks = await process_and_index_text(
+        source_id,
+        twin_id,
+        text,
+        metadata_override={"filename": f"Web: {title}"[:240], "type": "web", "url": url},
+        provider=provider,
+        correlation_id=correlation_id,
+    )
+
+    supabase.table("sources").update({
+        "status": "live",
+        "staging_status": "live",
+        "chunk_count": num_chunks,
+    }).eq("id", source_id).execute()
+
+    live_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="live",
+        correlation_id=correlation_id,
+        message="Source is live",
+    )
+    finish_step(
+        event_id=live_event_id,
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="live",
+        status="completed",
+        correlation_id=correlation_id,
+        metadata={"chunks": num_chunks},
+    )
+
+    return num_chunks
+
+
+async def ingest_url_to_source(
+    source_id: str,
+    twin_id: str,
+    url: str,
+    provider: Optional[str] = None,
+    correlation_id: Optional[str] = None
+) -> int:
+    """Route a URL ingestion to the correct provider handler using an existing source_id."""
+    detected = provider or detect_url_provider(url)
+    if detected == "youtube":
+        return await ingest_youtube_transcript(source_id, twin_id, url, correlation_id=correlation_id)
+    if detected == "x":
+        return await ingest_x_thread(source_id, twin_id, url, correlation_id=correlation_id)
+    if detected == "podcast":
+        return await ingest_podcast_rss(source_id, twin_id, url)
+    if detected == "linkedin":
+        return await ingest_linkedin_open_graph(source_id, twin_id, url, correlation_id=correlation_id)
+    if detected == "web":
+        return await ingest_web_url(source_id, twin_id, url, correlation_id=correlation_id)
+    raise ValueError(f"Unsupported URL provider: {detected}")
 
 
 async def transcribe_audio(file_path: str) -> str:
@@ -920,9 +1711,56 @@ async def analyze_chunk_content(text: str) -> dict:
         return {"questions": [], "category": "FACT", "tone": "Neutral", "opinion_map": None}
 
 
-async def process_and_index_text(source_id: str, twin_id: str, text: str, metadata_override: dict = None):
-    # 2. Chunk text
-    chunks = chunk_text(text)
+async def process_and_index_text(
+    source_id: str,
+    twin_id: str,
+    text: str,
+    metadata_override: dict = None,
+    provider: str = "unknown",
+    correlation_id: Optional[str] = None
+):
+    # Step: chunked
+    chunk_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="chunked",
+        correlation_id=correlation_id,
+        message="Chunking text",
+    )
+    try:
+        chunks = chunk_text(text)
+        finish_step(
+            event_id=chunk_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="chunked",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"chunks": len(chunks)},
+        )
+    except Exception as e:
+        err = build_error(
+            code="CHUNKING_FAILED",
+            message=str(e),
+            provider=provider,
+            step="chunked",
+            correlation_id=correlation_id,
+            raw={"text_len": len(text) if text else 0},
+            exc=e,
+        )
+        finish_step(
+            event_id=chunk_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="chunked",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise
 
     # 0. Cleanup existing chunks for this source (idempotency)
     from modules.observability import supabase
@@ -931,85 +1769,164 @@ async def process_and_index_text(source_id: str, twin_id: str, text: str, metada
     except Exception as e:
         print(f"[Ingestion] Warning: Failed to clean old chunks for source {source_id}: {e}")
 
-    # 3. Generate embeddings and upsert to Pinecone
+    # Step: embedded
+    embed_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="embedded",
+        correlation_id=correlation_id,
+        message="Generating embeddings",
+        metadata={"chunks": len(chunks)},
+    )
+
+    # Generate embeddings and prepare vectors
     index = get_pinecone_index()
     vectors = []
     db_chunks = []
     
-    for i, chunk in enumerate(chunks):
-        vector_id = str(uuid.uuid4())
-        chunk_id = str(uuid.uuid4()) # Supabase primary key
+    try:
+        for _i, chunk in enumerate(chunks):
+            vector_id = str(uuid.uuid4())
+            chunk_id = str(uuid.uuid4())  # Supabase primary key
 
-        # Analyze chunk for enrichment
-        analysis = await analyze_chunk_content(chunk)
-        synth_questions = analysis.get("questions", [])
+            # Analyze chunk for enrichment
+            analysis = await analyze_chunk_content(chunk)
+            synth_questions = analysis.get("questions", [])
 
-        # Enriched embedding: include synthetic questions to improve retrieval
-        enriched_text = f"CONTENT: {chunk}\nQUESTIONS: {', '.join(synth_questions)}"
-        embedding = get_embedding(enriched_text)
+            # Enriched embedding: include synthetic questions to improve retrieval
+            enriched_text = f"CONTENT: {chunk}\nQUESTIONS: {', '.join(synth_questions)}"
+            embedding = get_embedding(enriched_text)
 
-        metadata = {
-            "source_id": source_id,
-            "twin_id": twin_id,
-            "chunk_id": chunk_id,  # Link back to DB chunk row
-            "text": chunk,  # Keep original text for grounding
-            "synthetic_questions": synth_questions,
-            "category": analysis.get("category", "FACT"),
-            "tone": analysis.get("tone", "Neutral"),
-            "is_verified": False  # Explicitly mark regular sources as not verified
-        }
+            metadata = {
+                "source_id": source_id,
+                "twin_id": twin_id,
+                "chunk_id": chunk_id,  # Link back to DB chunk row
+                "text": chunk,  # Keep original text for grounding
+                "synthetic_questions": synth_questions,
+                "category": analysis.get("category", "FACT"),
+                "tone": analysis.get("tone", "Neutral"),
+                "is_verified": False  # Explicitly mark regular sources as not verified
+            }
 
-        # Add opinion mapping if present
-        opinion_map = analysis.get("opinion_map")
-        if opinion_map and isinstance(opinion_map, dict):
-            metadata["opinion_topic"] = opinion_map.get("topic")
-            metadata["opinion_stance"] = opinion_map.get("stance")
-            metadata["opinion_intensity"] = opinion_map.get("intensity")
+            # Add opinion mapping if present
+            opinion_map = analysis.get("opinion_map")
+            if opinion_map and isinstance(opinion_map, dict):
+                metadata["opinion_topic"] = opinion_map.get("topic")
+                metadata["opinion_stance"] = opinion_map.get("stance")
+                metadata["opinion_intensity"] = opinion_map.get("intensity")
 
-        if metadata_override:
-            metadata.update(metadata_override)
+            if metadata_override:
+                metadata.update(metadata_override)
 
-        vectors.append({
-            "id": vector_id,
-            "values": embedding,
-            "metadata": metadata
-        })
-        
-        db_chunks.append({
-            "id": chunk_id,
-            "source_id": source_id,
-            "content": chunk,
-            "vector_id": vector_id,
-            "metadata": metadata
-        })
+            vectors.append({
+                "id": vector_id,
+                "values": embedding,
+                "metadata": metadata
+            })
+            
+            db_chunks.append({
+                "id": chunk_id,
+                "source_id": source_id,
+                "content": chunk,
+                "vector_id": vector_id,
+                "metadata": metadata
+            })
 
-    # Persist chunks to Supabase for citation grounding
-    if db_chunks:
-        try:
+        finish_step(
+            event_id=embed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="embedded",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"chunks": len(chunks), "vectors": len(vectors)},
+        )
+    except Exception as e:
+        err = build_error(
+            code="EMBEDDINGS_FAILED",
+            message=str(e),
+            provider=provider,
+            step="embedded",
+            correlation_id=correlation_id,
+            raw={"chunks": len(chunks)},
+            exc=e,
+        )
+        finish_step(
+            event_id=embed_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="embedded",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise
+
+    # Step: indexed (Supabase chunks + Pinecone upsert + permissions)
+    index_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="indexed",
+        correlation_id=correlation_id,
+        message="Persisting chunks and upserting vectors",
+        metadata={"vectors": len(vectors)},
+    )
+    try:
+        # Persist chunks to Supabase for citation grounding
+        if db_chunks:
             supabase.table("chunks").insert(db_chunks).execute()
             print(f"[Supabase] Persisted {len(db_chunks)} chunks for source_id={source_id}")
-        except Exception as e:
-            print(f"[Supabase] ERROR persisting chunks: {e}")
-            raise  # Fail loudly to prevent status=live
 
-    # CRITICAL: Actually upsert vectors to Pinecone (namespace = twin_id for isolation)
-    if vectors:
-        try:
+        # Upsert vectors to Pinecone (namespace = twin_id for isolation)
+        if vectors:
             index.upsert(vectors=vectors, namespace=twin_id)
             print(f"[Pinecone] Upserted {len(vectors)} vectors to namespace={twin_id}")
-        except Exception as e:
-            print(f"[Pinecone] ERROR during upsert: {e}")
-            raise
 
-    # Ensure default group has access to this source (required for retrieval filtering)
-    try:
-        default_group = await get_default_group(twin_id)
-        if default_group and default_group.get("id"):
-            await add_content_permission(default_group["id"], "source", source_id, twin_id)
-            log_ingestion_event(source_id, twin_id, "info", "Default group permission granted for source")
+        # Ensure default group has access to this source (required for retrieval filtering)
+        try:
+            default_group = await get_default_group(twin_id)
+            if default_group and default_group.get("id"):
+                await add_content_permission(default_group["id"], "source", source_id, twin_id)
+                log_ingestion_event(source_id, twin_id, "info", "Default group permission granted for source")
+        except Exception as e:
+            log_ingestion_event(source_id, twin_id, "warning", f"Failed to grant default group permission: {e}")
+            print(f"[Ingestion] Warning: Failed to grant default group permission for source {source_id}: {e}")
+
+        finish_step(
+            event_id=index_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="indexed",
+            status="completed",
+            correlation_id=correlation_id,
+            metadata={"vectors": len(vectors), "chunks": len(db_chunks)},
+        )
     except Exception as e:
-        log_ingestion_event(source_id, twin_id, "warning", f"Failed to grant default group permission: {e}")
-        print(f"[Ingestion] Warning: Failed to grant default group permission for source {source_id}: {e}")
+        err = build_error(
+            code="INDEXING_FAILED",
+            message=str(e),
+            provider=provider,
+            step="indexed",
+            correlation_id=correlation_id,
+            raw={"vectors": len(vectors), "chunks": len(db_chunks)},
+            exc=e,
+        )
+        finish_step(
+            event_id=index_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="indexed",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise
 
     return len(vectors)
 
@@ -1055,10 +1972,11 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
                 await delete_source(old_source_id, twin_id)
             # We keep the new source_id for the new record
 
-    # 0.1 Record source in Supabase FIRST (before logging - prevents FK error)
+    # 0.1 Record source in Supabase FIRST (before logging - prevents FK error).
+    # Use upsert to support queued sources (row may already exist).
     if filename:
         file_size = os.path.getsize(file_path)
-        supabase.table("sources").insert({
+        supabase.table("sources").upsert({
             "id": source_id,
             "twin_id": twin_id,
             "filename": filename,
@@ -1099,8 +2017,8 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
     if filename:
         supabase.table("sources").update(update_data).eq("id", source_id).execute()
     else:
-        # If no filename, we need to insert the source record
-        supabase.table("sources").insert({
+        # If no filename, we need to create the source record (upsert for safety).
+        supabase.table("sources").upsert({
             "id": source_id,
             "twin_id": twin_id,
             **update_data
@@ -1314,67 +2232,7 @@ async def ingest_file(twin_id: str, file) -> str:
 
 
 async def ingest_url(twin_id: str, url: str) -> str:
-    """Wrapper that detects URL type and routes to appropriate ingestion function.
-    
-    Args:
-        twin_id: Owner twin ID
-        url: URL to ingest
-    """
+    """Wrapper that creates a new source_id and ingests a URL."""
     source_id = str(uuid.uuid4())
-
-    # Detect URL type and route accordingly
-    if "youtube.com" in url or "youtu.be" in url:
-        await ingest_youtube_transcript(source_id, twin_id, url)
-    elif "twitter.com" in url or "x.com" in url:
-        await ingest_x_thread(source_id, twin_id, url)
-    elif url.endswith(".rss") or "feed" in url.lower() or "podcast" in url.lower():
-        await ingest_podcast_rss(source_id, twin_id, url)
-    else:
-        # Generic URL - try to fetch and extract text
-        import httpx
-        file_path = None
-        text_file_path = None
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url, follow_redirects=True)
-                response.raise_for_status()
-
-                # Save content to temp file
-                temp_dir = "temp_uploads"
-                os.makedirs(temp_dir, exist_ok=True)
-                temp_filename = f"{source_id}.html"
-                file_path = os.path.join(temp_dir, temp_filename)
-
-                with open(file_path, "wb") as f:
-                    f.write(response.content)
-
-                # Extract text from HTML (basic extraction)
-                try:
-                    from bs4 import BeautifulSoup
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    text = soup.get_text(separator='\n', strip=True)
-                except Exception:
-                    # Fallback: use regex to extract text if BeautifulSoup fails or not available
-                    import re
-                    text = re.sub(r'<[^>]+>', '', response.text)
-                    text = re.sub(r'\s+', ' ', text).strip()
-
-                # Save as text file and ingest
-                text_file_path = os.path.join(temp_dir, f"{source_id}.txt")
-                with open(text_file_path, "w", encoding="utf-8") as f:
-                    f.write(text)
-
-                await ingest_source(source_id, twin_id, text_file_path, url)
-        except Exception as e:
-            raise ValueError(f"Failed to ingest URL: {e}")
-        finally:
-            # Always clean up temporary files, even if exceptions occur
-            for temp_file in [file_path, text_file_path]:
-                if temp_file and os.path.exists(temp_file):
-                    try:
-                        os.remove(temp_file)
-                    except Exception as cleanup_error:
-                        # Log but don't fail on cleanup errors
-                        print(f"Warning: Failed to clean up temp file {temp_file}: {cleanup_error}")
-
+    await ingest_url_to_source(source_id=source_id, twin_id=twin_id, url=url)
     return source_id

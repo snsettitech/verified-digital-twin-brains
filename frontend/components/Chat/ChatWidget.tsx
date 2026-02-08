@@ -8,6 +8,11 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   citations?: string[];
+  citation_details?: Array<{
+    id: string;
+    filename?: string | null;
+    citation_url?: string | null;
+  }>;
   confidence_score?: number;
   owner_memory_refs?: string[];
 }
@@ -160,6 +165,7 @@ export default function ChatWidget({
                   const lastMsg = { ...last[last.length - 1] };
                   lastMsg.confidence_score = data.confidence_score;
                   lastMsg.citations = data.citations;
+                  lastMsg.citation_details = data.citation_details;
                   lastMsg.owner_memory_refs = data.owner_memory_refs || [];
                   last[last.length - 1] = lastMsg;
                   return last;
@@ -199,6 +205,7 @@ export default function ChatWidget({
               const lastMsg = { ...last[last.length - 1] };
               lastMsg.confidence_score = data.confidence_score;
               lastMsg.citations = data.citations;
+              lastMsg.citation_details = data.citation_details;
               lastMsg.owner_memory_refs = data.owner_memory_refs || [];
               last[last.length - 1] = lastMsg;
               return last;

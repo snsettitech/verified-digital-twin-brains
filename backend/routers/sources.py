@@ -3,6 +3,9 @@ from typing import Optional
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership
 from modules.observability import supabase
 from modules.ingestion import delete_source
+from modules.training_jobs import create_training_job
+from modules.ingestion import detect_url_provider
+from modules.ingestion_diagnostics import diagnostics_schema_status
 
 router = APIRouter(tags=["sources"])
 
@@ -130,21 +133,109 @@ async def get_source_logs(source_id: str, user=Depends(get_current_user)):
         print(f"Error getting source logs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/sources/{source_id}/events")
+async def get_source_events(source_id: str, user=Depends(get_current_user)):
+    """Get step timeline events for a source."""
+    try:
+        source = supabase.table("sources").select("twin_id").eq("id", source_id).single().execute()
+        if not source.data:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        verify_twin_ownership(source.data["twin_id"], user)
+
+        res = supabase.table("source_events").select("*").eq("source_id", source_id).order("created_at", desc=False).limit(200).execute()
+        return res.data or []
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting source events: {e}")
+        msg = str(e)
+        if "source_events" in msg and ("schema cache" in msg or "PGRST205" in msg):
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Ingestion diagnostics schema is not installed (missing source_events/last_error columns). "
+                    "Apply backend/database/migrations/20260207_ingestion_diagnostics.sql in Supabase SQL editor, "
+                    "then redeploy/restart the backend."
+                ),
+            )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/sources/{source_id}/re-extract")
 async def re_extract_source(source_id: str, user=Depends(verify_owner)):
-    """Re-extract content from a source (triggers re-processing)."""
+    """Compatibility shim: re-queue processing for a source (use /sources/{source_id}/retry)."""
     try:
-        # Reset status to trigger re-processing
-        supabase.table("sources").update({
-            "staging_status": "staged",
-            "status": "processing"
-        }).eq("id", source_id).execute()
-
-        return {"status": "success", "message": "Re-extraction queued"}
+        # Delegate to the canonical retry logic.
+        return await retry_source(source_id, user)
     except Exception as e:
         print(f"Error re-extracting source: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/sources/{source_id}/retry")
+async def retry_source(source_id: str, user=Depends(verify_owner)):
+    """
+    Retry ingestion/indexing for a source.
+
+    - If `citation_url` exists, re-runs URL ingestion.
+    - Otherwise, re-runs indexing over existing `content_text`.
+    """
+    try:
+        source_res = supabase.table("sources").select("id, twin_id, citation_url, content_text").eq("id", source_id).single().execute()
+        if not source_res.data:
+            raise HTTPException(status_code=404, detail="Source not found")
+
+        twin_id = source_res.data["twin_id"]
+        verify_twin_ownership(twin_id, user)
+
+        citation_url = source_res.data.get("citation_url")
+        provider = detect_url_provider(citation_url) if citation_url else "file"
+
+        # Clear last error and reset status to queued/pending. Diagnostics fields are best-effort
+        # and may not exist until the migration is applied.
+        update = {
+            "status": "pending",
+            "staging_status": "staged",
+            "health_status": "healthy",
+        }
+        available, _err = diagnostics_schema_status()
+        if available:
+            update.update(
+                {
+                    "last_error": None,
+                    "last_error_at": None,
+                    "last_provider": provider,
+                    "last_step": "queued",
+                    "last_event_at": None,
+                }
+            )
+        try:
+            supabase.table("sources").update(update).eq("id", source_id).execute()
+        except Exception as e:
+            # If some deployments have staging_status removed, retry without it.
+            msg = str(e)
+            if "staging_status" in msg:
+                update.pop("staging_status", None)
+                supabase.table("sources").update(update).eq("id", source_id).execute()
+            else:
+                raise
+
+        job_id = create_training_job(
+            source_id=source_id,
+            twin_id=twin_id,
+            job_type="ingestion",
+            priority=0,
+            metadata={
+                "provider": provider,
+                "url": citation_url,
+                "ingest_mode": "retry",
+            }
+        )
+
+        return {"status": "queued", "source_id": source_id, "job_id": job_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error retrying source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

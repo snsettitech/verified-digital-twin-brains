@@ -3,6 +3,8 @@
 Test script for Process Queue endpoint.
 This simulates what the frontend button does.
 """
+__test__ = False  # Prevent pytest from collecting this script as a test module.
+
 import os
 import sys
 import requests

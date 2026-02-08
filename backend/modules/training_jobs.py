@@ -132,6 +132,12 @@ async def process_training_job(job_id: str) -> bool:
     source_id = job["source_id"]
     twin_id = job["twin_id"]
     job_type = job["job_type"]
+    job_metadata = job.get("metadata") or {}
+    correlation_id = job_metadata.get("correlation_id")
+
+    source_data = {}
+    citation_url = None
+    provider = job_metadata.get("provider")
 
     try:
         # Update status to processing
@@ -142,9 +148,31 @@ async def process_training_job(job_id: str) -> bool:
         if not source_response.data:
             raise ValueError(f"Source {source_id} not found")
 
-        source_data = source_response.data
+        source_data = source_response.data or {}
         extracted_text = source_data.get("content_text")
         filename = source_data.get("filename", "Unknown")
+        citation_url = source_data.get("citation_url") or job_metadata.get("url")
+
+        # If this is a URL-based ingestion job, run the URL pipeline end-to-end.
+        if job_type == "ingestion" and citation_url:
+            from modules.ingestion import ingest_url_to_source, detect_url_provider
+            provider = provider or detect_url_provider(citation_url)
+
+            num_chunks = await ingest_url_to_source(
+                source_id=source_id,
+                twin_id=twin_id,
+                url=citation_url,
+                provider=provider,
+                correlation_id=correlation_id
+            )
+
+            # Mark job complete. Source status is updated by the ingestion pipeline.
+            update_job_status(job_id, "complete", metadata={
+                "provider": provider,
+                "url": citation_url,
+                "chunks_created": num_chunks,
+            })
+            return True
 
         # Validate content_text exists
         if not extracted_text or len(extracted_text.strip()) == 0:
@@ -201,9 +229,22 @@ async def process_training_job(job_id: str) -> bool:
 
         # Process based on job type
         if job_type == "ingestion":
-            # Process and index text (lazy import to avoid circular dependency)
+            # Index existing content_text (file uploads or pre-extracted sources)
             from modules.ingestion import process_and_index_text
-            num_chunks = await process_and_index_text(source_id, twin_id, extracted_text)
+            from modules.ingestion_diagnostics import start_step, finish_step
+
+            provider = provider or "file"
+            num_chunks = await process_and_index_text(
+                source_id,
+                twin_id,
+                extracted_text,
+                metadata_override={
+                    "filename": filename,
+                    "type": "file",
+                },
+                provider=provider,
+                correlation_id=correlation_id,
+            )
 
             # Update source with chunk count and extracted text length
             supabase.table("sources").update({
@@ -212,6 +253,26 @@ async def process_training_job(job_id: str) -> bool:
                 "staging_status": "live",
                 "status": "live"
             }).eq("id", source_id).execute()
+
+            # Emit terminal "live" step event for UI.
+            live_event_id = start_step(
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="live",
+                correlation_id=correlation_id,
+                message="Source is live",
+            )
+            finish_step(
+                event_id=live_event_id,
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="live",
+                status="completed",
+                correlation_id=correlation_id,
+                metadata={"chunks": num_chunks},
+            )
 
             # Update job metadata
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
@@ -264,10 +325,53 @@ async def process_training_job(job_id: str) -> bool:
         # Update source status (only if source_id is available)
         if source_id:
             try:
-                supabase.table("sources").update({
-                    "status": "error",
-                    "health_status": "failed"
-                }).eq("id", source_id).execute()
+                from modules.ingestion_diagnostics import finish_step, build_error, diagnostics_schema_status
+                from modules.ingestion import detect_url_provider
+
+                provider = provider or (detect_url_provider(citation_url) if citation_url else "file")
+
+                # Do not overwrite a provider-specific `last_error` if it was already captured.
+                emit_generic_error = True
+                diag_ok, _diag_err = diagnostics_schema_status()
+                if diag_ok:
+                    try:
+                        current = (
+                            supabase.table("sources")
+                            .select("status,last_error,last_step")
+                            .eq("id", source_id)
+                            .eq("twin_id", twin_id)
+                            .single()
+                            .execute()
+                        )
+                        cur = current.data or {}
+                        existing = cur.get("last_error")
+                        if cur.get("status") == "error" and isinstance(existing, dict) and existing.get("code"):
+                            emit_generic_error = False
+                    except Exception:
+                        # If schema drifts, fall back to emitting a generic error (it will be minimal anyway).
+                        emit_generic_error = True
+
+                if emit_generic_error:
+                    step = (source_data.get("last_step") or "processing") if isinstance(source_data, dict) else "processing"
+                    err = build_error(
+                        code="INGESTION_JOB_FAILED",
+                        message=error_msg,
+                        provider=provider,
+                        step=step,
+                        correlation_id=correlation_id,
+                        raw={"job_id": job_id, "url": citation_url},
+                        exc=e,
+                    )
+                    finish_step(
+                        event_id="",
+                        source_id=source_id,
+                        twin_id=twin_id,
+                        provider=provider,
+                        step=step,
+                        status="error",
+                        correlation_id=correlation_id,
+                        error=err,
+                    )
             except Exception as source_error:
                 print(f"Error updating source status: {source_error}")
 

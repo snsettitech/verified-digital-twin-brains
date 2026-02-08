@@ -61,3 +61,11 @@ Thumbs.db
 
 # YouTube
 youtube_cookies.txt
+
+# Generated artifacts and local diagnostics
+frontend/playwright-report/
+frontend/playwright-test-results/
+frontend/test-results-temp/
+artifacts/simulator/
+artifacts/supabase_jwt.txt
+backend/test_token.txt

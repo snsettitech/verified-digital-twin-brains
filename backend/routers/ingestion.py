@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership, verify_source_ownership
-from modules.ingestion import ingest_youtube_transcript_wrapper, ingest_podcast_transcript, ingest_x_thread_wrapper, ingest_file, ingest_url
+from modules.ingestion import detect_url_provider, extract_text_from_docx, extract_text_from_excel, extract_text_from_pdf
 from modules.observability import supabase
-from modules.training_jobs import get_training_job, process_training_queue, list_training_jobs
+from modules.training_jobs import create_training_job, get_training_job, process_training_queue, list_training_jobs
 from modules.job_queue import enqueue_job
 from pydantic import BaseModel
 from typing import Optional, List
 import os
+import uuid
+from modules.health_checks import calculate_content_hash, run_all_health_checks
+from modules.ingestion_diagnostics import start_step, finish_step, build_error
 
 router = APIRouter(tags=["ingestion"])
 
@@ -27,33 +30,100 @@ class URLIngestWithTwinRequest(BaseModel):
     url: str
     twin_id: str
 
+def _get_correlation_id(request: Request) -> Optional[str]:
+    return request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
+
+def _insert_source_row(*, source_id: str, twin_id: str, provider: str, filename: str, citation_url: Optional[str] = None):
+    # Keep insert minimal and safe; later steps will update content_text, hashes, etc.
+    supabase.table("sources").insert({
+        "id": source_id,
+        "twin_id": twin_id,
+        "filename": filename,
+        "file_size": 0,
+        "content_text": "",
+        "status": "pending",
+        "staging_status": "staged",
+        "health_status": "healthy",
+        "citation_url": citation_url,
+    }).execute()
+
+def _queue_ingestion_job(*, source_id: str, twin_id: str, provider: str, url: Optional[str], correlation_id: Optional[str]) -> str:
+    return create_training_job(
+        source_id=source_id,
+        twin_id=twin_id,
+        job_type="ingestion",
+        priority=0,
+        metadata={
+            "provider": provider,
+            "url": url,
+            "correlation_id": correlation_id,
+            "ingest_mode": "ingest",
+        }
+    )
+
 @router.post("/ingest/youtube/{twin_id}")
-async def ingest_youtube(twin_id: str, request: YouTubeIngestRequest, user=Depends(verify_owner)):
+async def ingest_youtube(twin_id: str, request: YouTubeIngestRequest, http_req: Request, user=Depends(verify_owner)):
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_youtube_transcript_wrapper(twin_id, request.url)
-        return {"source_id": source_id, "status": "processing"}
+        source_id = str(uuid.uuid4())
+        provider = "youtube"
+        _insert_source_row(
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            filename="YouTube: queued",
+            citation_url=request.url,
+        )
+        corr = _get_correlation_id(http_req)
+        ev = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
+        finish_step(event_id=ev, source_id=source_id, twin_id=twin_id, provider=provider, step="queued", status="completed", correlation_id=corr)
+        job_id = _queue_ingestion_job(source_id=source_id, twin_id=twin_id, provider=provider, url=request.url, correlation_id=corr)
+        return {"source_id": source_id, "job_id": job_id, "status": "pending"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/ingest/podcast/{twin_id}")
-async def ingest_podcast(twin_id: str, request: PodcastIngestRequest, user=Depends(verify_owner)):
+async def ingest_podcast(twin_id: str, request: PodcastIngestRequest, http_req: Request, user=Depends(verify_owner)):
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_podcast_transcript(twin_id, request.url)
-        return {"source_id": source_id, "status": "processing"}
+        source_id = str(uuid.uuid4())
+        provider = "podcast"
+        _insert_source_row(
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            filename="Podcast: queued",
+            citation_url=request.url,
+        )
+        corr = _get_correlation_id(http_req)
+        ev = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
+        finish_step(event_id=ev, source_id=source_id, twin_id=twin_id, provider=provider, step="queued", status="completed", correlation_id=corr)
+        job_id = _queue_ingestion_job(source_id=source_id, twin_id=twin_id, provider=provider, url=request.url, correlation_id=corr)
+        return {"source_id": source_id, "job_id": job_id, "status": "pending"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/ingest/x/{twin_id}")
-async def ingest_x(twin_id: str, request: XThreadIngestRequest, user=Depends(verify_owner)):
+async def ingest_x(twin_id: str, request: XThreadIngestRequest, http_req: Request, user=Depends(verify_owner)):
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_x_thread_wrapper(twin_id, request.url)
-        return {"source_id": source_id, "status": "processing"}
+        source_id = str(uuid.uuid4())
+        provider = "x"
+        _insert_source_row(
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            filename="X: queued",
+            citation_url=request.url,
+        )
+        corr = _get_correlation_id(http_req)
+        ev = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
+        finish_step(event_id=ev, source_id=source_id, twin_id=twin_id, provider=provider, step="queued", status="completed", correlation_id=corr)
+        job_id = _queue_ingestion_job(source_id=source_id, twin_id=twin_id, provider=provider, url=request.url, correlation_id=corr)
+        return {"source_id": source_id, "job_id": job_id, "status": "pending"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -61,6 +131,7 @@ async def ingest_x(twin_id: str, request: XThreadIngestRequest, user=Depends(ver
 async def ingest_file_endpoint(
     twin_id: str,
     file: UploadFile = File(...),
+    http_req: Request = None,
     user=Depends(verify_owner)
 ):
     """
@@ -74,20 +145,133 @@ async def ingest_file_endpoint(
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_file(twin_id, file)
-        return {"source_id": source_id, "status": "live"}
+        source_id = str(uuid.uuid4())
+        provider = "file"
+        corr = _get_correlation_id(http_req) if http_req else None
+
+        # Create source row first (required for FK references + UI visibility)
+        supabase.table("sources").insert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": file.filename or "upload",
+            "file_size": 0,
+            "content_text": "",
+            "status": "pending",
+            "staging_status": "staged",
+            "health_status": "healthy",
+        }).execute()
+
+        ev_q = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
+        finish_step(event_id=ev_q, source_id=source_id, twin_id=twin_id, provider=provider, step="queued", status="completed", correlation_id=corr)
+
+        # Save uploaded file temporarily for extraction (durable storage is out of scope)
+        temp_dir = "temp_uploads"
+        os.makedirs(temp_dir, exist_ok=True)
+        file_extension = os.path.splitext(file.filename)[1] if file.filename else ""
+        temp_filename = f"{source_id}{file_extension}"
+        file_path = os.path.join(temp_dir, temp_filename)
+
+        ev_p = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="parsed", correlation_id=corr)
+        try:
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            # Extract text (sync for PDFs/docx/xlsx; avoids long request times from embedding/indexing)
+            text = ""
+            if file_path.endswith(".pdf"):
+                text = extract_text_from_pdf(file_path)
+            elif file_path.endswith(".docx"):
+                text = extract_text_from_docx(file_path)
+            elif file_path.endswith(".xlsx"):
+                text = extract_text_from_excel(file_path)
+            else:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    text = f.read()
+
+            if not text or len(text.strip()) == 0:
+                err = build_error(
+                    code="FILE_EXTRACTION_EMPTY",
+                    message="File uploaded but no text could be extracted. Try a different file or export as PDF with selectable text.",
+                    provider=provider,
+                    step="parsed",
+                    correlation_id=corr,
+                    raw={"filename": file.filename, "ext": file_extension},
+                )
+                finish_step(event_id=ev_p, source_id=source_id, twin_id=twin_id, provider=provider, step="parsed", status="error", correlation_id=corr, error=err)
+                raise HTTPException(status_code=400, detail=err["message"])
+
+            content_hash = calculate_content_hash(text)
+
+            supabase.table("sources").update({
+                "file_size": len(content),
+                "content_text": text,
+                "content_hash": content_hash,
+                "extracted_text_length": len(text),
+                "status": "processing",
+            }).eq("id", source_id).eq("twin_id", twin_id).execute()
+
+            # Health checks are cheap and improve debuggability.
+            health = run_all_health_checks(
+                source_id,
+                twin_id,
+                text,
+                source_data={"filename": file.filename or "upload", "twin_id": twin_id}
+            )
+            supabase.table("sources").update({
+                "health_status": health.get("overall_status", "healthy")
+            }).eq("id", source_id).execute()
+
+            finish_step(event_id=ev_p, source_id=source_id, twin_id=twin_id, provider=provider, step="parsed", status="completed", correlation_id=corr, metadata={"text_len": len(text)})
+        except HTTPException:
+            raise
+        except Exception as e:
+            err = build_error(
+                code="FILE_EXTRACTION_FAILED",
+                message=f"Failed to extract text from file: {str(e)}",
+                provider=provider,
+                step="parsed",
+                correlation_id=corr,
+                raw={"filename": file.filename, "ext": file_extension},
+                exc=e,
+            )
+            finish_step(event_id=ev_p, source_id=source_id, twin_id=twin_id, provider=provider, step="parsed", status="error", correlation_id=corr, error=err)
+            raise HTTPException(status_code=400, detail=err["message"])
+        finally:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception:
+                    pass
+
+        job_id = _queue_ingestion_job(source_id=source_id, twin_id=twin_id, provider=provider, url=None, correlation_id=corr)
+        return {"source_id": source_id, "job_id": job_id, "status": "processing"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/ingest/url/{twin_id}")
-async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, user=Depends(verify_owner)):
+async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, http_req: Request, user=Depends(verify_owner)):
     """Ingest content from URL - auto-detects type (YouTube, X, Podcast, or generic page)."""
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_url(twin_id, request.url)
-        # All URL types now auto-index directly, so status will be live
-        return {"source_id": source_id, "status": "live"}
+        url = request.url.strip()
+        provider = detect_url_provider(url)
+        source_id = str(uuid.uuid4())
+        _insert_source_row(
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            filename=f"{provider.upper()}: queued",
+            citation_url=url,
+        )
+        corr = _get_correlation_id(http_req)
+        ev = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
+        finish_step(event_id=ev, source_id=source_id, twin_id=twin_id, provider=provider, step="queued", status="completed", correlation_id=corr)
+        job_id = _queue_ingestion_job(source_id=source_id, twin_id=twin_id, provider=provider, url=url, correlation_id=corr)
+        return {"source_id": source_id, "job_id": job_id, "status": "pending"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -99,6 +283,7 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, user=Depe
 async def ingest_document_compat(
     file: UploadFile = File(...),
     twin_id: str = Form(...),
+    http_req: Request = None,
     user=Depends(verify_owner)
 ):
     """
@@ -108,14 +293,13 @@ async def ingest_document_compat(
     print("[DEPRECATED] /ingest/document called. Use /ingest/file/{twin_id}.")
     verify_twin_ownership(twin_id, user)
     try:
-        source_id = await ingest_file(twin_id, file)
-        return {"source_id": source_id, "status": "live"}
+        return await ingest_file_endpoint(twin_id=twin_id, file=file, http_req=http_req, user=user)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/ingest/url")
-async def ingest_url_compat(request: URLIngestWithTwinRequest, user=Depends(verify_owner)):
+async def ingest_url_compat(request: URLIngestWithTwinRequest, http_req: Request, user=Depends(verify_owner)):
     """
     Compatibility shim for onboarding:
     Accepts JSON { url, twin_id } and forwards to canonical /ingest/url/{twin_id}.
@@ -123,8 +307,7 @@ async def ingest_url_compat(request: URLIngestWithTwinRequest, user=Depends(veri
     print("[DEPRECATED] /ingest/url called without twin_id in path. Use /ingest/url/{twin_id}.")
     verify_twin_ownership(request.twin_id, user)
     try:
-        source_id = await ingest_url(request.twin_id, request.url)
-        return {"source_id": source_id, "status": "live"}
+        return await ingest_url_endpoint(twin_id=request.twin_id, request=URLIngestRequest(url=request.url), http_req=http_req, user=user)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -253,7 +436,9 @@ async def retry_training_job_endpoint(job_id: str, user=Depends(verify_owner)):
         # Reset status and error before re-queue
         supabase.table("training_jobs").update({
             "status": "queued",
-            "error_message": None
+            "error_message": None,
+            "started_at": None,
+            "completed_at": None,
         }).eq("id", job_id).execute()
 
         enqueue_job(

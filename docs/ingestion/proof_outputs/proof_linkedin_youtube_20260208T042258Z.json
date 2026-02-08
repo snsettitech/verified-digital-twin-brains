@@ -1,0 +1,18 @@
+{
+  "generated_at": "2026-02-08T04:22:52.742120+00:00",
+  "inputs": {
+    "youtube_url": "https://www.youtube.com/watch?v=HiC1J8a9V1I",
+    "linkedin_url": "https://www.linkedin.com/in/sainathsetti/"
+  },
+  "sources": {
+    "youtube": null,
+    "linkedin": null,
+    "youtube_chunk_rows": 0,
+    "linkedin_chunk_rows": 0
+  },
+  "pinecone": {},
+  "errors": [
+    "Failed querying YouTube source: [WinError 10061] No connection could be made because the target machine actively refused it",
+    "Failed querying LinkedIn source: [WinError 10061] No connection could be made because the target machine actively refused it"
+  ]
+}

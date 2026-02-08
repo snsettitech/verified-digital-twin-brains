@@ -8,6 +8,10 @@ export async function middleware(request: NextRequest) {
         },
     });
 
+    if (process.env.NODE_ENV !== 'production' && process.env.E2E_BYPASS_AUTH === '1') {
+        return response;
+    }
+
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
