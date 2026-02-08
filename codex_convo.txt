@@ -1,0 +1,9 @@
+Paste your active Codex/Chat conversation here (copy entire chat pane).
+
+Include the exact last user message and the assistant response so the new chat can continue precisely.
+
+Example:
+[USER] I need to implement X in backend/modules/foo.py — I already changed A and B.
+[ASSISTANT] (generated code...)
+
+Save this file and keep the original browser session open until you've confirmed the other account resumed work.

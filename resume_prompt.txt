@@ -1,0 +1,14 @@
+Resume-Prompt for new ChatGPT session:
+
+I was working on the `verified-digital-twin-brains` repository (path: D:/verified-digital-twin-brains). Progress is saved in branch `wip/continue-task`.
+
+Summary of work so far:
+- I started implementing a task for ~2 hours; partial changes are committed as WIP.
+- Relevant files to inspect: backend/, modules/, and any recent unstaged changes in the repo.
+
+What I need you to do next:
+1. Review the workspace (list modified files and recent commits).
+2. Continue implementing the in-progress task, using the code in the branch `wip/continue-task`.
+3. Ask clarifying questions if any part of the partial implementation is ambiguous.
+
+Please confirm you can access the repository structure and then list the next concrete code change you'd make.
