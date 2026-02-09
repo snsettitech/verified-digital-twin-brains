@@ -20,6 +20,98 @@ type RequestError = {
     canRetry: boolean;
 };
 
+// Audio playback button component
+function AudioButton({ content, twinId, apiBaseUrl }: { content: string; twinId: string; apiBaseUrl: string }) {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    const stopAudio = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+            audioRef.current = null;
+        }
+        setIsPlaying(false);
+    };
+
+    const playText = async () => {
+        stopAudio();
+        setIsLoading(true);
+
+        try {
+            const response = await fetch(`${apiBaseUrl}/audio/tts/${twinId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: content }),
+            });
+
+            if (!response.ok) throw new Error('Failed to generate audio');
+
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            
+            const audio = new Audio(audioUrl);
+            audioRef.current = audio;
+            
+            audio.onended = () => {
+                setIsPlaying(false);
+                URL.revokeObjectURL(audioUrl);
+            };
+            
+            audio.onerror = () => {
+                setIsPlaying(false);
+                URL.revokeObjectURL(audioUrl);
+            };
+
+            await audio.play();
+            setIsPlaying(true);
+        } catch (err) {
+            console.error('Audio playback failed:', err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const togglePlayback = () => {
+        if (isPlaying) {
+            stopAudio();
+        } else {
+            playText();
+        }
+    };
+
+    return (
+        <button
+            onClick={togglePlayback}
+            disabled={isLoading}
+            className={`p-1.5 rounded-lg transition-all ${
+                isPlaying 
+                    ? 'text-indigo-400 bg-indigo-500/20' 
+                    : 'text-slate-400 hover:text-slate-300 hover:bg-white/10'
+            } ${isLoading ? 'animate-pulse' : ''}`}
+            aria-label={isPlaying ? 'Stop audio' : 'Read aloud'}
+            title={isPlaying ? 'Stop' : 'Read aloud'}
+        >
+            {isLoading ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            ) : isPlaying ? (
+                <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <rect x="10" y="8" width="2" height="8" fill="currentColor" />
+                    <rect x="14" y="6" width="2" height="12" fill="currentColor" />
+                </svg>
+            ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+            )}
+        </button>
+    );
+}
+
 function getErrorFromResponse(status: number, body?: string): RequestError {
     switch (status) {
         case 401:
@@ -52,8 +144,41 @@ export default function PublicSharePage() {
     const [error, setError] = useState<string | null>(null);
     const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
     const [requestError, setRequestError] = useState<RequestError | null>(null);
+    const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([
+        'What can you help me with?',
+        'Tell me about yourself',
+        'What do you know?',
+    ]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
+
+    // Default suggested questions by specialization
+    const DEFAULT_QUESTIONS: Record<string, string[]> = {
+        founder: [
+            'What startups have you built?',
+            'What\'s your best fundraising advice?',
+            'How do you find product-market fit?',
+            'What mistakes should founders avoid?',
+        ],
+        creator: [
+            'How do you grow an audience?',
+            'What\'s your content creation process?',
+            'How do you stay consistent?',
+            'What tools do you use?',
+        ],
+        technical: [
+            'What tech stack do you recommend?',
+            'How do you approach system design?',
+            'What\'s your debugging process?',
+            'How do you stay current with tech?',
+        ],
+        vanilla: [
+            'What can you help me with?',
+            'Tell me about yourself',
+            'What do you know?',
+            'What are your main interests?',
+        ],
+    };
 
     // Storage key for persistence (scoped to share session)
     const storageKey = useMemo(() => {
@@ -114,6 +239,9 @@ export default function PublicSharePage() {
                 const data = await response.json();
                 setIsValid(true);
                 setTwinName(data.twin_name || 'AI Assistant');
+                // Set suggested questions based on specialization or use defaults
+                const spec = data.specialization || 'vanilla';
+                setSuggestedQuestions(DEFAULT_QUESTIONS[spec] || DEFAULT_QUESTIONS.vanilla);
             } else {
                 setIsValid(false);
                 setError('This share link is invalid or has expired.');
@@ -274,7 +402,23 @@ export default function PublicSharePage() {
                             </svg>
                         </div>
                         <div>
-                            <h1 className="text-lg font-bold text-white">{twinName}</h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-lg font-bold text-white">{twinName}</h1>
+                                {/* Verification Badge */}
+                                <div className="group relative">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-500/20 text-emerald-400 text-xs font-medium rounded-full border border-emerald-500/30 cursor-help">
+                                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                        Verified
+                                    </span>
+                                    {/* Tooltip */}
+                                    <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 px-3 py-2 bg-slate-800 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 border border-white/10 shadow-xl">
+                                        This AI twin is officially associated with {twinName}
+                                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-800 border-l border-t border-white/10 rotate-45"></div>
+                                    </div>
+                                </div>
+                            </div>
                             <p className="text-xs text-slate-400">Powered by VT-BRAIN</p>
                         </div>
                     </div>
@@ -300,9 +444,27 @@ export default function PublicSharePage() {
                                 </svg>
                             </div>
                             <h2 className="text-2xl font-bold text-white mb-2">Start a Conversation</h2>
-                            <p className="text-slate-400 max-w-md mx-auto">
-                                Ask me anything! I'm here to help answer your questions.
+                            <p className="text-slate-400 max-w-md mx-auto mb-6">
+                                Ask me anything! I&apos;m here to help answer your questions.
                             </p>
+                            {/* Suggested Question Chips */}
+                            <div className="flex flex-wrap justify-center gap-2 max-w-lg mx-auto">
+                                {suggestedQuestions.map((question, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => {
+                                            setInput(question);
+                                            // Auto-submit after a brief delay
+                                            setTimeout(() => {
+                                                sendMessage(question);
+                                            }, 100);
+                                        }}
+                                        className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-indigo-500/30 text-slate-300 hover:text-white text-sm rounded-full transition-all hover:scale-105"
+                                    >
+                                        {question}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -321,39 +483,48 @@ export default function PublicSharePage() {
                             >
                                 <p className="whitespace-pre-wrap">{message.content}</p>
                                 {message.role === 'assistant' && !message.isError && (
-                                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] uppercase tracking-wider">
-                                        {message.used_owner_memory && (
-                                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                                </svg>
-                                                Owner Memory
-                                            </span>
-                                        )}
-                                        {message.used_owner_memory && message.owner_memory_topics && message.owner_memory_topics.length > 0 && (
-                                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                                                {message.owner_memory_topics.join(', ')}
-                                            </span>
-                                        )}
-                                        {message.confidence_score !== undefined && (
-                                            <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full border ${message.confidence_score > 0.8
-                                                ? 'bg-green-500/20 text-green-300 border-green-500/30'
-                                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                                }`}>
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                {(message.confidence_score * 100).toFixed(0)}%
-                                            </span>
-                                        )}
-                                        {message.citations?.map((_, i) => (
-                                            <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10">
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                                </svg>
-                                                Source {i + 1}
-                                            </span>
-                                        ))}
+                                    <div className="mt-3 pt-2 border-t border-white/10">
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div className="flex flex-wrap gap-2">
+                                                {message.used_owner_memory && (
+                                                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] uppercase tracking-wider">
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                                        </svg>
+                                                        Owner Memory
+                                                    </span>
+                                                )}
+                                                {message.used_owner_memory && message.owner_memory_topics && message.owner_memory_topics.length > 0 && (
+                                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 text-[10px] uppercase tracking-wider">
+                                                        {message.owner_memory_topics.join(', ')}
+                                                    </span>
+                                                )}
+                                                {message.confidence_score !== undefined && (
+                                                    <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wider ${message.confidence_score > 0.8
+                                                        ? 'bg-green-500/20 text-green-300 border-green-500/30'
+                                                        : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                                        }`}>
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        {(message.confidence_score * 100).toFixed(0)}%
+                                                    </span>
+                                                )}
+                                                {message.citations?.map((_, i) => (
+                                                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10 text-[10px] uppercase tracking-wider">
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                        </svg>
+                                                        Source {i + 1}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <AudioButton 
+                                                content={message.content} 
+                                                twinId={twinId} 
+                                                apiBaseUrl={apiBaseUrl} 
+                                            />
+                                        </div>
                                     </div>
                                 )}
                             </div>

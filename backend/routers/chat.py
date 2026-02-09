@@ -15,6 +15,17 @@ from modules.agent import run_agent_stream
 from modules.identity_gate import run_identity_gate
 from modules.owner_memory_store import create_clarification_thread
 from modules.memory_events import create_memory_event
+from modules.interaction_context import (
+    ResolvedInteractionContext,
+    resolve_owner_chat_context,
+    resolve_widget_context,
+    resolve_public_share_context,
+    identity_gate_mode_for_context,
+    clarification_mode_for_context,
+    trace_fields,
+)
+from modules.persona_auditor import audit_persona_response
+from modules.persona_spec_store import get_active_persona_spec
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
@@ -82,9 +93,15 @@ async def resolve_share_handle(handle: str):
 def _normalize_json(value):
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
-    if hasattr(value, "item"):
+    # Only coerce numpy-like scalar wrappers; mocks may expose `.item()`
+    # and return non-serializable objects.
+    if (
+        hasattr(value, "item")
+        and callable(getattr(value, "item", None))
+        and type(value).__module__.startswith("numpy")
+    ):
         try:
-            return value.item()
+            return _normalize_json(value.item())
         except Exception:
             pass
     if isinstance(value, list):
@@ -92,6 +109,103 @@ def _normalize_json(value):
     if isinstance(value, dict):
         return {k: _normalize_json(v) for k, v in value.items()}
     return str(value)
+
+
+def _fetch_conversation_record(conversation_id: str):
+    try:
+        res = (
+            supabase.table("conversations")
+            .select("id,twin_id,group_id,interaction_context,training_session_id")
+            .eq("id", conversation_id)
+            .single()
+            .execute()
+        )
+        return res.data if res.data else None
+    except Exception:
+        return None
+
+
+def _context_reset_reason_for_conversation(
+    conversation_row: dict | None,
+    twin_id: str,
+    resolved_context: ResolvedInteractionContext,
+):
+    if not conversation_row:
+        return "conversation_not_found"
+
+    if conversation_row.get("twin_id") != twin_id:
+        return "conversation_twin_mismatch"
+
+    existing_context = conversation_row.get("interaction_context")
+    expected_context = resolved_context.context.value
+    if existing_context != expected_context:
+        return f"context_mismatch:{existing_context or 'none'}->{expected_context}"
+
+    if expected_context == "owner_training":
+        existing_session_id = conversation_row.get("training_session_id")
+        if existing_session_id and existing_session_id != resolved_context.training_session_id:
+            return "training_session_mismatch"
+
+    return None
+
+
+def _init_persona_audit_trace(context_trace: dict) -> None:
+    context_trace.update(
+        {
+            "deterministic_gate_passed": None,
+            "structure_policy_score": None,
+            "voice_score": None,
+            "draft_persona_score": None,
+            "final_persona_score": None,
+            "rewrite_applied": False,
+            "rewrite_reason_categories": [],
+            "violated_clause_ids": [],
+        }
+    )
+
+
+async def _apply_persona_audit(
+    *,
+    twin_id: str,
+    user_query: str,
+    draft_response: str,
+    intent_label: Optional[str],
+    module_ids: List[str],
+    citations: List[str],
+    context_trace: dict,
+    tenant_id: Optional[str],
+    conversation_id: Optional[str],
+    interaction_context: str,
+) -> tuple[str, Optional[str], List[str]]:
+    try:
+        audit = await audit_persona_response(
+            twin_id=twin_id,
+            user_query=user_query,
+            draft_response=draft_response,
+            intent_label=intent_label,
+            module_ids=module_ids,
+            citations=citations,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            interaction_context=interaction_context,
+        )
+        context_trace.update(
+            {
+                "persona_spec_version": audit.persona_spec_version or context_trace.get("persona_spec_version"),
+                "deterministic_gate_passed": audit.deterministic_gate_passed,
+                "structure_policy_score": audit.structure_policy_score,
+                "voice_score": audit.voice_score,
+                "draft_persona_score": audit.draft_persona_score,
+                "final_persona_score": audit.final_persona_score,
+                "rewrite_applied": audit.rewrite_applied,
+                "rewrite_reason_categories": audit.rewrite_reason_categories,
+                "violated_clause_ids": audit.violated_clause_ids,
+            }
+        )
+        return audit.final_response, audit.intent_label, audit.module_ids
+    except Exception as e:
+        logger.warning(f"Persona audit failed, using draft response: {e}")
+        return draft_response, intent_label, module_ids
 
 @router.post("/chat/{twin_id}")
 @observe(name="chat_request")
@@ -106,7 +220,40 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
         raise HTTPException(status_code=422, detail="query is required")
     conversation_id = request.conversation_id
     group_id = request.group_id
-    
+    resolved_context = resolve_owner_chat_context(request, user or {}, twin_id)
+    mode = identity_gate_mode_for_context(resolved_context.context)
+    context_trace = trace_fields(resolved_context)
+    context_trace.update(
+        {
+            "forced_new_conversation": False,
+            "context_reset_reason": None,
+            "previous_conversation_id": None,
+            "persona_spec_version": None,
+            "persona_prompt_variant": None,
+        }
+    )
+    _init_persona_audit_trace(context_trace)
+    active_spec = get_active_persona_spec(twin_id=twin_id)
+    if active_spec:
+        context_trace["persona_spec_version"] = active_spec.get("version")
+
+    conversation_row = None
+    if conversation_id:
+        conversation_row = _fetch_conversation_record(conversation_id)
+        reset_reason = _context_reset_reason_for_conversation(
+            conversation_row=conversation_row,
+            twin_id=twin_id,
+            resolved_context=resolved_context,
+        )
+        if reset_reason:
+            context_trace["forced_new_conversation"] = True
+            context_trace["context_reset_reason"] = reset_reason
+            context_trace["previous_conversation_id"] = conversation_id
+            conversation_id = None
+            conversation_row = None
+        elif not group_id and conversation_row.get("group_id"):
+            group_id = conversation_row["group_id"]
+
     # Update Langfuse trace with session and user info (v3 pattern)
     if _langfuse_available and _langfuse_client:
         try:
@@ -126,19 +273,10 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                 )
         except Exception as e:
             logger.warning(f"Langfuse trace update failed: {e}")
-    
+
     # Determine user's group
     try:
         if not group_id:
-            # Check if conversation has a group_id set
-            if conversation_id:
-                try:
-                    conv_response = supabase.table("conversations").select("group_id").eq("id", conversation_id).single().execute()
-                    if conv_response.data and conv_response.data.get("group_id"):
-                        group_id = conv_response.data["group_id"]
-                except Exception as e:
-                    logger.warning(f"Warning: Could not fetch conversation group_id: {e}")
-            
             # If still no group_id, get user's default group
             if not group_id:
                 user_id = user.get("user_id") if user else None
@@ -157,11 +295,25 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
         # Don't raise, let stream generator handle it or default to None
         logger.error(f"Chat Setup Failed: {e}")
 
-    mode = request.mode or ("public" if user and user.get("role") == "visitor" else "owner")
-
     async def stream_generator():
         nonlocal conversation_id
         try:
+            if not conversation_id:
+                user_id = user.get("user_id") if user else None
+                conv = create_conversation(
+                    twin_id,
+                    user_id,
+                    group_id=group_id,
+                    interaction_context=resolved_context.context.value,
+                    origin_endpoint=resolved_context.origin_endpoint,
+                    share_link_id=resolved_context.share_link_id,
+                    training_session_id=resolved_context.training_session_id,
+                )
+                if conv and conv.get("id"):
+                    conversation_id = conv["id"]
+                else:
+                    raise RuntimeError("Failed to initialize conversation")
+
             # 1. Prepare History
             raw_history = []
             langchain_history = []
@@ -181,6 +333,8 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             teaching_questions = []
             planning_output = {}
             dialogue_mode = "ANSWER"
+            intent_label = None
+            module_ids = []
             
             # Fetch graph stats for this twin
             from modules.graph_context import get_graph_stats
@@ -209,7 +363,15 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                 # Ensure conversation exists for audit trail
                 if not conversation_id:
                     user_id = user.get("user_id") if user else None
-                    conv = create_conversation(twin_id, user_id, group_id=group_id)
+                    conv = create_conversation(
+                        twin_id,
+                        user_id,
+                        group_id=group_id,
+                        interaction_context=resolved_context.context.value,
+                        origin_endpoint=resolved_context.origin_endpoint,
+                        share_link_id=resolved_context.share_link_id,
+                        training_session_id=resolved_context.training_session_id,
+                    )
                     conversation_id = conv["id"]
 
                 # Create clarification thread
@@ -221,8 +383,8 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     memory_write_proposal=gate.get("memory_write_proposal", {}),
                     original_query=query,
                     conversation_id=conversation_id,
-                    mode=mode,
-                    requested_by="owner" if mode == "owner" else "public",
+                    mode=clarification_mode_for_context(resolved_context.context),
+                    requested_by="owner" if not resolved_context.is_public else "public",
                     created_by=user.get("user_id") if user else None
                 )
 
@@ -247,8 +409,18 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     logger.warning(f"Memory event pending log failed: {e}")
 
                 # Log interaction
-                log_interaction(conversation_id, "user", query)
-                log_interaction(conversation_id, "assistant", gate.get("question", ""))
+                log_interaction(
+                    conversation_id,
+                    "user",
+                    query,
+                    interaction_context=resolved_context.context.value,
+                )
+                log_interaction(
+                    conversation_id,
+                    "assistant",
+                    gate.get("question", ""),
+                    interaction_context=resolved_context.context.value,
+                )
 
                 clarify_event = {
                     "type": "clarify",
@@ -356,6 +528,14 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                                     planning_output = msg.additional_kwargs["planning_output"]
                                 if "dialogue_mode" in msg.additional_kwargs:
                                     dialogue_mode = msg.additional_kwargs["dialogue_mode"]
+                                if "intent_label" in msg.additional_kwargs:
+                                    intent_label = msg.additional_kwargs["intent_label"]
+                                if "module_ids" in msg.additional_kwargs:
+                                    module_ids = msg.additional_kwargs["module_ids"] or []
+                                if "persona_spec_version" in msg.additional_kwargs:
+                                    context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
+                                if "persona_prompt_variant" in msg.additional_kwargs:
+                                    context_trace["persona_prompt_variant"] = msg.additional_kwargs["persona_prompt_variant"]
 
                             # Only update if there's actual content (not just tool calls)
                             if msg.content and not getattr(msg, 'tool_calls', None):
@@ -410,6 +590,23 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                         citation_details.append({"id": c})
             except Exception as e:
                 logger.warning(f"Citation resolution failed (non-blocking): {e}")
+
+            draft_for_audit = full_response if full_response else fallback_message
+            audited_response, audited_intent_label, audited_module_ids = await _apply_persona_audit(
+                twin_id=twin_id,
+                user_query=query,
+                draft_response=draft_for_audit,
+                intent_label=intent_label,
+                module_ids=module_ids,
+                citations=citations,
+                context_trace=context_trace,
+                tenant_id=user.get("tenant_id") if user else None,
+                conversation_id=conversation_id,
+                interaction_context=resolved_context.context.value,
+            )
+            full_response = audited_response
+            intent_label = audited_intent_label or intent_label
+            module_ids = audited_module_ids or module_ids
             
             # 3. Send metadata first
             metadata = _normalize_json({
@@ -424,12 +621,16 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                 "teaching_questions": teaching_questions,
                 "planning_output": planning_output,
                 "dialogue_mode": dialogue_mode,
+                "intent_label": intent_label,
+                "module_ids": module_ids,
                 "graph_context": {
                     "has_graph": graph_stats["has_graph"],
                     "node_count": graph_stats["node_count"],
                     "graph_used": graph_used
                 },
-                "decision_trace": decision_trace
+                "decision_trace": decision_trace,
+                "effective_conversation_id": conversation_id,
+                **context_trace,
             })
             yield json.dumps(metadata) + "\n"
             
@@ -452,11 +653,31 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                 # Create conversation if needed
                 if not conversation_id:
                     user_id = user.get("user_id") if user else None
-                    conv = create_conversation(twin_id, user_id, group_id=group_id)
+                    conv = create_conversation(
+                        twin_id,
+                        user_id,
+                        group_id=group_id,
+                        interaction_context=resolved_context.context.value,
+                        origin_endpoint=resolved_context.origin_endpoint,
+                        share_link_id=resolved_context.share_link_id,
+                        training_session_id=resolved_context.training_session_id,
+                    )
                     conversation_id = conv["id"]
                 
-                log_interaction(conversation_id, "user", query)
-                log_interaction(conversation_id, "assistant", full_response or fallback, citations, confidence_score)
+                log_interaction(
+                    conversation_id,
+                    "user",
+                    query,
+                    interaction_context=resolved_context.context.value,
+                )
+                log_interaction(
+                    conversation_id,
+                    "assistant",
+                    full_response or fallback,
+                    citations,
+                    confidence_score,
+                    interaction_context=resolved_context.context.value,
+                )
             
             # 6. Trigger Scribe (Job Queue for reliability)
             try:
@@ -554,14 +775,56 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
     if not query:
         raise HTTPException(status_code=422, detail="query is required")
     group_id = key_info.get("group_id")
+    resolved_context = resolve_widget_context()
+    context_trace = trace_fields(resolved_context)
+    context_trace.update(
+        {
+            "forced_new_conversation": False,
+            "context_reset_reason": None,
+            "previous_conversation_id": None,
+            "persona_spec_version": None,
+            "persona_prompt_variant": None,
+        }
+    )
+    _init_persona_audit_trace(context_trace)
+    active_spec = get_active_persona_spec(twin_id=twin_id)
+    if active_spec:
+        context_trace["persona_spec_version"] = active_spec.get("version")
     
     # Get conversation for session
     # (Simplified for now: 1 conversation per session)
-    conv_response = supabase.table("conversations").select("id").eq("session_id", session_id).limit(1).execute()
+    conv_response = (
+        supabase.table("conversations")
+        .select("id")
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
     if conv_response.data and len(conv_response.data) > 0:
         conversation_id = conv_response.data[0]["id"]
+        conversation_row = _fetch_conversation_record(conversation_id)
+        reset_reason = _context_reset_reason_for_conversation(
+            conversation_row=conversation_row,
+            twin_id=twin_id,
+            resolved_context=resolved_context,
+        )
+        if reset_reason:
+            context_trace["forced_new_conversation"] = True
+            context_trace["context_reset_reason"] = reset_reason
+            context_trace["previous_conversation_id"] = conversation_id
+            conversation_id = None
     else:
-        conv_obj = create_conversation(twin_id, None, group_id=group_id)
+        conversation_id = None
+
+    if not conversation_id:
+        conv_obj = create_conversation(
+            twin_id,
+            None,
+            group_id=group_id,
+            interaction_context=resolved_context.context.value,
+            origin_endpoint=resolved_context.origin_endpoint,
+        )
         conversation_id = conv_obj["id"]
         # Link conversation to session
         supabase.table("conversations").update({"session_id": session_id}).eq("id", conversation_id).execute()
@@ -587,7 +850,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         twin_id=twin_id,
         tenant_id=None,
         group_id=group_id,
-        mode="public"
+        mode=identity_gate_mode_for_context(resolved_context.context)
     )
 
     if gate.get("decision") == "CLARIFY":
@@ -600,7 +863,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             memory_write_proposal=gate.get("memory_write_proposal", {}),
             original_query=query,
             conversation_id=conversation_id,
-            mode="public",
+            mode=clarification_mode_for_context(resolved_context.context),
             requested_by="public",
             created_by=None
         )
@@ -614,7 +877,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                 "memory_write_proposal": gate.get("memory_write_proposal", {}),
                 "status": "pending_owner",
                 "conversation_id": conversation_id,
-                "session_id": session_id
+                "session_id": session_id,
+                **context_trace,
             }) + "\n"
         return StreamingResponse(widget_clarify_stream(), media_type="text/event-stream")
 
@@ -655,7 +919,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         final_content = ""
         citations = []
         confidence_score = 0.0
-        sent_metadata = False
+        intent_label = None
+        module_ids = []
 
         async for event in run_agent_stream(
             twin_id,
@@ -669,31 +934,62 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             if "tools" in event:
                 citations = event["tools"].get("citations", citations)
                 confidence_score = event["tools"].get("confidence_score", confidence_score)
-                
-                if not sent_metadata:
-                    output = {
-                        "type": "metadata",
-                        "confidence_score": confidence_score,
-                        "citations": citations,
-                        "conversation_id": conversation_id,
-                        "owner_memory_refs": owner_memory_refs,
-                        "owner_memory_topics": owner_memory_topics,
-                        "session_id": session_id
-                    }
-                    yield json.dumps(output) + "\n"
-                    sent_metadata = True
 
             if "agent" in event:
                 msg = event["agent"]["messages"][-1]
                 if isinstance(msg, AIMessage):
-                    final_content += msg.content
-                    yield json.dumps({"type": "content", "token": msg.content, "content": msg.content}) + "\n"
+                    if hasattr(msg, "additional_kwargs") and isinstance(msg.additional_kwargs, dict):
+                        intent_label = msg.additional_kwargs.get("intent_label", intent_label)
+                        module_ids = msg.additional_kwargs.get("module_ids", module_ids) or []
+                        if msg.additional_kwargs.get("persona_spec_version"):
+                            context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
+                        if msg.additional_kwargs.get("persona_prompt_variant"):
+                            context_trace["persona_prompt_variant"] = msg.additional_kwargs["persona_prompt_variant"]
+                    if msg.content:
+                        final_content += msg.content
+
+        fallback_message = "I don't have this specific information in my knowledge base."
+        draft_for_audit = final_content if final_content else fallback_message
+        final_content, intent_label, module_ids = await _apply_persona_audit(
+            twin_id=twin_id,
+            user_query=query,
+            draft_response=draft_for_audit,
+            intent_label=intent_label,
+            module_ids=module_ids,
+            citations=citations,
+            context_trace=context_trace,
+            tenant_id=None,
+            conversation_id=conversation_id,
+            interaction_context=resolved_context.context.value,
+        )
+
+        output = {
+            "type": "metadata",
+            "confidence_score": confidence_score,
+            "citations": citations,
+            "conversation_id": conversation_id,
+            "owner_memory_refs": owner_memory_refs,
+            "owner_memory_topics": owner_memory_topics,
+            "intent_label": intent_label,
+            "module_ids": module_ids,
+            "session_id": session_id,
+            **context_trace,
+        }
+        yield json.dumps(output) + "\n"
+        yield json.dumps({"type": "content", "token": final_content, "content": final_content}) + "\n"
 
         # Record usage
         record_request(session_id, "session", "requests_per_hour")
         
         # Log interaction
-        log_interaction(conversation_id, "assistant", final_content, citations, confidence_score)
+        log_interaction(
+            conversation_id,
+            "assistant",
+            final_content,
+            citations,
+            confidence_score,
+            interaction_context=resolved_context.context.value,
+        )
         
         yield json.dumps({"type": "done", "escalated": confidence_score < 0.7}) + "\n"
 
@@ -709,6 +1005,21 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
     # Validate share token
     if not validate_share_token(token, twin_id):
         raise HTTPException(status_code=403, detail="Invalid or expired share link")
+    resolved_context = resolve_public_share_context(token)
+    context_trace = trace_fields(resolved_context)
+    context_trace.update(
+        {
+            "forced_new_conversation": False,
+            "context_reset_reason": None,
+            "previous_conversation_id": None,
+            "persona_spec_version": None,
+            "persona_prompt_variant": None,
+        }
+    )
+    _init_persona_audit_trace(context_trace)
+    active_spec = get_active_persona_spec(twin_id=twin_id)
+    if active_spec:
+        context_trace["persona_spec_version"] = active_spec.get("version")
     
     ensure_twin_active(twin_id)
     
@@ -786,7 +1097,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
         twin_id=twin_id,
         tenant_id=None,
         group_id=group_id,
-        mode="public"
+        mode=identity_gate_mode_for_context(resolved_context.context)
     )
 
     if gate.get("decision") == "CLARIFY":
@@ -798,7 +1109,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             memory_write_proposal=gate.get("memory_write_proposal", {}),
             original_query=request.message,
             conversation_id=None,
-            mode="public",
+            mode=clarification_mode_for_context(resolved_context.context),
             requested_by="public",
             created_by=None
         )
@@ -807,7 +1118,8 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             "message": "Queued for owner confirmation.",
             "clarification_id": clarif.get("id") if clarif else None,
             "question": gate.get("question"),
-            "options": gate.get("options", [])
+            "options": gate.get("options", []),
+            **context_trace,
         }
 
     owner_memory_context = gate.get("owner_memory_context", "")
@@ -822,6 +1134,8 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
     try:
         final_response = ""
         citations = []
+        intent_label = None
+        module_ids = []
         async for event in run_agent_stream(
             twin_id,
             request.message,
@@ -835,6 +1149,13 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             if "agent" in event:
                 msg = event["agent"]["messages"][-1]
                 if isinstance(msg, AIMessage) and msg.content:
+                    if hasattr(msg, "additional_kwargs") and isinstance(msg.additional_kwargs, dict):
+                        intent_label = msg.additional_kwargs.get("intent_label", intent_label)
+                        module_ids = msg.additional_kwargs.get("module_ids", module_ids) or []
+                        if msg.additional_kwargs.get("persona_spec_version"):
+                            context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
+                        if msg.additional_kwargs.get("persona_prompt_variant"):
+                            context_trace["persona_prompt_variant"] = msg.additional_kwargs["persona_prompt_variant"]
                     final_response = msg.content
         
         # If actions were triggered, append acknowledgment
@@ -850,6 +1171,21 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             
             if acknowledgments:
                 final_response += "\n\n" + " ".join(acknowledgments)
+
+        fallback_message = "I don't have this specific information in my knowledge base."
+        draft_for_audit = final_response if final_response else fallback_message
+        final_response, intent_label, module_ids = await _apply_persona_audit(
+            twin_id=twin_id,
+            user_query=request.message,
+            draft_response=draft_for_audit,
+            intent_label=intent_label,
+            module_ids=module_ids,
+            citations=citations,
+            context_trace=context_trace,
+            tenant_id=None,
+            conversation_id=conversation_id,
+            interaction_context=resolved_context.context.value,
+        )
         
         citations = _normalize_json(citations)
         owner_memory_refs = _normalize_json(owner_memory_refs)
@@ -861,7 +1197,10 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             "citations": citations,
             "owner_memory_refs": owner_memory_refs,
             "owner_memory_topics": owner_memory_topics,
-            "used_owner_memory": bool(owner_memory_refs)
+            "intent_label": intent_label,
+            "module_ids": module_ids,
+            "used_owner_memory": bool(owner_memory_refs),
+            **context_trace,
         }
     except Exception as e:
         print(f"Error in public chat: {e}")

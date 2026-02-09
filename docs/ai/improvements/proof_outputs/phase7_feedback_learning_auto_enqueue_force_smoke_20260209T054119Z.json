@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-02-09T05:41:19.050967+00:00",
+  "twin_id": "5dd06bcb-9afa-4174-a9bf-308dcf4108c3",
+  "feedback_event": {
+    "trace_id": "trace-auto-enqueue-force-509f7100-61f5-4e6f-b320-b9f038c807f5",
+    "stored": true,
+    "event_id": "58fc5ed9-c314-4356-a41c-452d80d50933"
+  },
+  "enqueue_outcome": {
+    "enqueued": true,
+    "job_id": "3f3ee9d9-895c-4322-ad27-c3ef5b9d0b7a",
+    "pending_events": 2,
+    "required_events": 1
+  },
+  "job_before_processing": {
+    "id": "3f3ee9d9-895c-4322-ad27-c3ef5b9d0b7a",
+    "status": "queued",
+    "job_type": "feedback_learning",
+    "metadata": {
+      "trigger": "manual_force_smoke",
+      "tenant_id": null,
+      "created_by": null,
+      "min_events": 1,
+      "auto_publish": false,
+      "run_regression_gate": false,
+      "pending_events_at_enqueue": 2
+    },
+    "created_at": "2026-02-09T05:41:15.832192+00:00"
+  },
+  "processed_ok": true,
+  "job_after_processing": {
+    "id": "3f3ee9d9-895c-4322-ad27-c3ef5b9d0b7a",
+    "status": "complete",
+    "job_type": "feedback_learning",
+    "metadata": {
+      "trigger": "manual_force_smoke",
+      "tenant_id": null,
+      "created_by": null,
+      "min_events": 1,
+      "gate_passed": true,
+      "auto_publish": false,
+      "events_scanned": 2,
+      "modules_updated": 0,
+      "events_processed": 2,
+      "publish_decision": "held",
+      "run_regression_gate": false,
+      "feedback_learning_run_id": "35f63668-3139-4406-8c3d-a12883f3e015",
+      "pending_events_at_enqueue": 2
+    },
+    "started_at": "2026-02-09T05:41:17.242005+00:00",
+    "completed_at": "2026-02-09T05:41:18.682512+00:00"
+  }
+}

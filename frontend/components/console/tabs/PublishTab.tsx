@@ -212,17 +212,26 @@ export function PublishTab({
                     ].map((integration) => (
                         <div
                             key={integration.name}
-                            className={`p-4 border rounded-xl ${integration.status === 'available'
-                                ? 'bg-white/5 border-white/10 hover:bg-white/10'
-                                : 'bg-white/[0.02] border-white/5'
-                                } transition-colors`}
+                            className={`p-4 border rounded-xl relative overflow-hidden ${integration.status === 'available'
+                                ? 'bg-white/5 border-white/10 hover:bg-white/10 cursor-pointer'
+                                : 'bg-white/[0.02] border-white/5 opacity-60 grayscale'
+                                } transition-all`}
                         >
+                            {integration.status === 'coming' && (
+                                <span className="absolute top-2 right-2 text-[10px] font-medium px-2 py-0.5 bg-slate-700 text-slate-400 rounded-full">
+                                    Soon
+                                </span>
+                            )}
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">{integration.icon}</span>
+                                <span className={`text-2xl ${integration.status === 'coming' ? 'opacity-50' : ''}`}>
+                                    {integration.icon}
+                                </span>
                                 <div>
-                                    <p className="font-medium text-white">{integration.name}</p>
-                                    <p className="text-xs text-slate-500">
-                                        {integration.status === 'available' ? 'Available' : 'Coming soon'}
+                                    <p className={`font-medium ${integration.status === 'available' ? 'text-white' : 'text-slate-400'}`}>
+                                        {integration.name}
+                                    </p>
+                                    <p className={`text-xs ${integration.status === 'available' ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                        {integration.status === 'available' ? '✓ Available' : 'Coming soon'}
                                     </p>
                                 </div>
                             </div>

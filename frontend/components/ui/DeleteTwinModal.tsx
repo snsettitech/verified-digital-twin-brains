@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface DeleteTwinModalProps {
     isOpen: boolean;
@@ -9,6 +9,13 @@ interface DeleteTwinModalProps {
     twinName: string;
     twinHandle?: string;
     twinId: string;
+}
+
+interface TwinDataVolume {
+    knowledgeCount: number;
+    conversationCount: number;
+    isLoading: boolean;
+    error: string | null;
 }
 
 export default function DeleteTwinModal({
@@ -24,6 +31,52 @@ export default function DeleteTwinModal({
     const [confirmText, setConfirmText] = useState('');
     const [isDeleting, setIsDeleting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [dataVolume, setDataVolume] = useState<TwinDataVolume>({
+        knowledgeCount: 0,
+        conversationCount: 0,
+        isLoading: false,
+        error: null
+    });
+
+    // Fetch data volume when modal opens
+    useEffect(() => {
+        if (isOpen && twinId) {
+            fetchDataVolume();
+        }
+    }, [isOpen, twinId]);
+
+    const fetchDataVolume = async () => {
+        setDataVolume(prev => ({ ...prev, isLoading: true, error: null }));
+        try {
+            // Fetch knowledge sources count
+            const knowledgeRes = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/twins/${twinId}/knowledge`,
+                { credentials: 'include' }
+            );
+            
+            // Fetch conversations count  
+            const conversationsRes = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/twins/${twinId}/conversations`,
+                { credentials: 'include' }
+            );
+
+            const knowledgeCount = knowledgeRes.ok ? (await knowledgeRes.json()).length || 0 : 0;
+            const conversationCount = conversationsRes.ok ? (await conversationsRes.json()).length || 0 : 0;
+
+            setDataVolume({
+                knowledgeCount,
+                conversationCount,
+                isLoading: false,
+                error: null
+            });
+        } catch {
+            setDataVolume(prev => ({
+                ...prev,
+                isLoading: false,
+                error: 'Could not load data volume'
+            }));
+        }
+    };
 
     // Reset state when modal opens/closes
     React.useEffect(() => {
@@ -72,6 +125,8 @@ export default function DeleteTwinModal({
 
     const isConfirmValid = confirmText.trim() === twinName || (twinHandle ? confirmText.trim() === twinHandle : false);
 
+    const totalItems = dataVolume.knowledgeCount + dataVolume.conversationCount;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
@@ -108,10 +163,42 @@ export default function DeleteTwinModal({
                                 <div className="flex gap-3">
                                     <span className="text-2xl">⚠️</span>
                                     <div>
-                                        <p className="font-semibold text-amber-800">You are about to delete "{twinName}"</p>
+                                        <p className="font-semibold text-amber-800">You are about to delete &quot;{twinName}&quot;</p>
                                         <p className="text-sm text-amber-700 mt-1">This will affect all knowledge, conversations, and API integrations.</p>
                                     </div>
                                 </div>
+                            </div>
+
+                            {/* Data Volume Summary */}
+                            <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                                <p className="font-semibold text-indigo-900 mb-3">📊 Data Volume</p>
+                                {dataVolume.isLoading ? (
+                                    <div className="flex items-center gap-2 text-sm text-indigo-600">
+                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                                        </svg>
+                                        Calculating...
+                                    </div>
+                                ) : dataVolume.error ? (
+                                    <p className="text-sm text-amber-600">{dataVolume.error}</p>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="text-center p-3 bg-white rounded-lg">
+                                            <p className="text-2xl font-bold text-indigo-600">{dataVolume.knowledgeCount}</p>
+                                            <p className="text-xs text-slate-500">Knowledge Sources</p>
+                                        </div>
+                                        <div className="text-center p-3 bg-white rounded-lg">
+                                            <p className="text-2xl font-bold text-indigo-600">{dataVolume.conversationCount}</p>
+                                            <p className="text-xs text-slate-500">Conversations</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {totalItems > 0 && !dataVolume.isLoading && (
+                                    <p className="mt-3 text-xs text-indigo-700 text-center">
+                                        Total: <strong>{totalItems}</strong> items will be {deleteType === 'permanent' ? 'permanently deleted' : 'archived'}
+                                    </p>
+                                )}
                             </div>
 
                             {/* Options */}
@@ -173,9 +260,19 @@ export default function DeleteTwinModal({
                                 <ul className="text-sm text-slate-600 space-y-1">
                                     <li className="flex items-center gap-2">
                                         <span>📚</span> All knowledge sources and embeddings
+                                        {dataVolume.knowledgeCount > 0 && (
+                                            <span className="ml-auto text-xs bg-slate-200 px-2 py-0.5 rounded-full">
+                                                {dataVolume.knowledgeCount}
+                                            </span>
+                                        )}
                                     </li>
                                     <li className="flex items-center gap-2">
                                         <span>💬</span> Conversation history
+                                        {dataVolume.conversationCount > 0 && (
+                                            <span className="ml-auto text-xs bg-slate-200 px-2 py-0.5 rounded-full">
+                                                {dataVolume.conversationCount}
+                                            </span>
+                                        )}
                                     </li>
                                     <li className="flex items-center gap-2">
                                         <span>🔑</span> API keys and integrations
@@ -203,7 +300,7 @@ export default function DeleteTwinModal({
                                 <p className={`text-sm mt-1 ${deleteType === 'permanent' ? 'text-red-700' : 'text-amber-700'
                                     }`}>
                                     {deleteType === 'permanent'
-                                        ? 'All data will be permanently deleted and cannot be recovered.'
+                                        ? `All ${totalItems} items will be permanently deleted and cannot be recovered.`
                                         : 'The twin will be hidden but data will be preserved.'
                                     }
                                 </p>
@@ -212,8 +309,8 @@ export default function DeleteTwinModal({
                             {/* Confirmation input */}
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Type <span className="font-bold text-slate-900">"{twinName}"</span>
-                                    {twinHandle ? <span> or <span className="font-bold text-slate-900">"{twinHandle}"</span></span> : null}
+                                    Type <span className="font-bold text-slate-900">&quot;{twinName}&quot;</span>
+                                    {twinHandle ? <span> or <span className="font-bold text-slate-900">&quot;{twinHandle}&quot;</span></span> : null}
                                     {" "}to confirm:
                                 </label>
                                 <input

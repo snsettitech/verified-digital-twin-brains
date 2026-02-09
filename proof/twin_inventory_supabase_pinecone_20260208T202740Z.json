@@ -1,0 +1,3599 @@
+{
+  "summary": {
+    "generated_at": "2026-02-08T20:27:40.395959+00:00",
+    "supabase_project_ref": "jvtffdbuwyhmcynauety",
+    "pinecone_index": "digital-twin-brain",
+    "total_twins": 100,
+    "twins_with_sources": 45,
+    "twins_with_memories": 12,
+    "twins_with_qna": 1,
+    "twins_with_interviews": 5,
+    "twins_with_pinecone_vectors": 22,
+    "pinecone_total_vectors": 791,
+    "pinecone_total_namespaces": 23,
+    "pinecone_default_namespace_vectors": 0,
+    "pinecone_orphan_namespaces_not_matching_any_twin": [
+      "__default__"
+    ],
+    "possible_memory_gap_twins": []
+  },
+  "twins": [
+    {
+      "twin_id": "5dd06bcb-9afa-4174-a9bf-308dcf4108c3",
+      "name": "Sham (archived 2026-02-08)",
+      "tenant_id": "398260f6-e7fd-4a8e-a8ea-32cce50474ce",
+      "created_at": "2026-02-08T15:05:03.055206+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "live": 1
+        },
+        "source_chunks_total": 24,
+        "source_extracted_text_length_total": 18840,
+        "memory_count": 3,
+        "memory_status_counts": {
+          "proposed": 3
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "cf4de5cf-e05a-4f35-9195-06d6118df18d",
+            "filename": "Sham's Knowledge Base.pdf",
+            "status": "live",
+            "chunk_count": 24,
+            "content_preview": "Questions\n \nA)\n \nThe\n \n\u201cVC\n \nTwin\u201d\n \nmission\n \nand\n \nscope\n \n1.\n \nIf\n \nsomeone\n \nuses\n \nyour\n \ndigital\n \ntwin\n \nin\n \noffice\n \nhours,\n \nwhat\n",
+            "created_at": "2026-02-08T15:05:31.92861+00:00"
+          }
+        ],
+        "latest_memories": [
+          {
+            "id": "3f0b8dea-839e-48d9-af54-0959e3d45e8c",
+            "status": "proposed",
+            "memory_type": "belief",
+            "topic_normalized": "background purpose help others understand me",
+            "value_preview": "my background The purpose is to help others understand me fast. how I work, what I am building and what I believe professionally.",
+            "created_at": "2026-02-08T15:57:06.91163+00:00"
+          },
+          {
+            "id": "08165a6e-4986-4b74-ada1-8ceee627c828",
+            "status": "proposed",
+            "memory_type": "belief",
+            "topic_normalized": "primary use case",
+            "value_preview": "You are The primary use case of your is that.",
+            "created_at": "2026-02-08T15:57:06.91163+00:00"
+          },
+          {
+            "id": "eb8200ac-cdfb-4cb2-913e-b14a7f815942",
+            "status": "proposed",
+            "memory_type": "belief",
+            "topic_normalized": "so main purpose",
+            "value_preview": "So your main purpose is to",
+            "created_at": "2026-02-08T15:57:06.91163+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "5dd06bcb-9afa-4174-a9bf-308dcf4108c3",
+        "vector_count": 24,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "5698a809-87a5-4169-ab9b-c4a6222ae2dd",
+      "name": "Proof Twin 095126-c652e",
+      "tenant_id": "4d0977d0-412a-49bb-a4f2-bc5a26f8ca6e",
+      "created_at": "2026-02-08T09:51:28.127843+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 1,
+          "error": 1
+        },
+        "source_chunks_total": 68,
+        "source_extracted_text_length_total": 53836,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "e5d2a34e-fa5a-46e3-8e2c-1667ea5f5213",
+            "filename": "LinkedIn: queued",
+            "status": "error",
+            "chunk_count": null,
+            "content_preview": "",
+            "created_at": "2026-02-08T09:53:27.954623+00:00"
+          },
+          {
+            "id": "140f782b-94a5-4b6f-910f-7ff98aa04bb3",
+            "filename": "YouTube: HiC1J8a9V1I",
+            "status": "live",
+            "chunk_count": 68,
+            "content_preview": "One of the biggest questions right now in the AI agency market is how to scale effectively without fully niching down to a productized servi",
+            "created_at": "2026-02-08T09:51:28.279987+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "5698a809-87a5-4169-ab9b-c4a6222ae2dd",
+        "vector_count": 68,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "9fc7616b-08a4-40e7-93ab-6c5fe7eb390e",
+      "name": "Sai",
+      "tenant_id": "398260f6-e7fd-4a8e-a8ea-32cce50474ce",
+      "created_at": "2026-02-08T08:23:17.960957+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 3,
+        "memory_status_counts": {
+          "proposed": 3
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 4,
+        "interview_status_counts": {
+          "completed": 4
+        },
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "94963496-9d3a-4b85-aeba-969b20de7c1f",
+            "status": "proposed",
+            "memory_type": "belief",
+            "topic_normalized": "background purpose help others understand me",
+            "value_preview": "my background The purpose is to help others understand me fast. how I work, what I am building and what I believe professionally.",
+            "created_at": "2026-02-08T15:01:11.368882+00:00"
+          },
+          {
+            "id": "a8ffe23a-8e90-4df3-833e-b267a1734e18",
+            "status": "proposed",
+            "memory_type": "belief",
+            "topic_normalized": "primary use case",
+            "value_preview": "You are The primary use case of your is that.",
+            "created_at": "2026-02-08T15:01:10.605663+00:00"
+          },
+          {
+            "id": "8ce9ffa0-df0f-4116-b021-f328f334cb31",
+            "status": "proposed",
+            "memory_type": "belief",
+            "topic_normalized": "so main purpose",
+            "value_preview": "So your main purpose is to",
+            "created_at": "2026-02-08T15:01:09.79571+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "9fc7616b-08a4-40e7-93ab-6c5fe7eb390e",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "14ae7b8d-6321-4ca6-8d72-abc106fb1b18",
+      "name": "Sham",
+      "tenant_id": "80ba0b74-656c-4440-8e9b-7d1c9185ccf2",
+      "created_at": "2026-02-07T03:09:02.923388+00:00",
+      "supabase": {
+        "source_count": 4,
+        "source_status_counts": {
+          "error": 3,
+          "live": 1
+        },
+        "source_chunks_total": 24,
+        "source_extracted_text_length_total": 18830,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 4,
+        "interview_status_counts": {
+          "completed": 4
+        },
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "cb453957-a774-41bf-94a1-35bb1485c652",
+            "filename": "YouTube: jOQkZ6dQrbk",
+            "status": "error",
+            "chunk_count": null,
+            "content_preview": "",
+            "created_at": "2026-02-08T08:17:30.039323+00:00"
+          },
+          {
+            "id": "04ad3d25-6102-4b35-9bb3-77d7fd9f5b37",
+            "filename": "Sham_Linkedin.pdf",
+            "status": "error",
+            "chunk_count": null,
+            "content_preview": "",
+            "created_at": "2026-02-08T08:13:57.056355+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "14ae7b8d-6321-4ca6-8d72-abc106fb1b18",
+        "vector_count": 24,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "1dcd2084-08ea-4612-a23c-df0cc619dd5a",
+      "name": "Sham",
+      "tenant_id": "72ebebeb-5591-4b64-8a0a-5e3a02836d85",
+      "created_at": "2026-02-06T20:13:34.501209+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "live": 1
+        },
+        "source_chunks_total": 24,
+        "source_extracted_text_length_total": 18830,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "4ff4fa41-ee13-43e9-9666-05d0277b1e4d",
+            "filename": "Sham's Knowledge Base.pdf",
+            "status": "live",
+            "chunk_count": 24,
+            "content_preview": "Questions\n A)\n \nThe\n \n\u201cVC\n \nTwin\u201d\n \nmission\n \nand\n \nscope\n \n1.\n \nIf\n \nsomeone\n \nuses\n \nyour\n \ndigital\n \ntwin\n \nin\n \noffice\n \nhours,\n \nwhat\n ",
+            "created_at": "2026-02-06T20:13:50.001108+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "1dcd2084-08ea-4612-a23c-df0cc619dd5a",
+        "vector_count": 24,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "11bc44bf-e1af-49f8-bed5-366b8234506b",
+      "name": "Sham",
+      "tenant_id": "72ebebeb-5591-4b64-8a0a-5e3a02836d85",
+      "created_at": "2026-02-06T20:13:33.490822+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "11bc44bf-e1af-49f8-bed5-366b8234506b",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "c3cd4ad0-d4cc-4e82-a020-82b48de72d42",
+      "name": "Sham",
+      "tenant_id": "398260f6-e7fd-4a8e-a8ea-32cce50474ce",
+      "created_at": "2026-02-05T03:11:20.767107+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "live": 1
+        },
+        "source_chunks_total": 24,
+        "source_extracted_text_length_total": 18830,
+        "memory_count": 12,
+        "memory_status_counts": {
+          "active": 11,
+          "verified": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 1,
+        "interview_status_counts": {
+          "completed": 1
+        },
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "50cc3107-5d7f-49a7-a266-ae105e36dc61",
+            "filename": "Sham's Knowledge Base.pdf",
+            "status": "live",
+            "chunk_count": 24,
+            "content_preview": "Questions\n A)\n \nThe\n \n\u201cVC\n \nTwin\u201d\n \nmission\n \nand\n \nscope\n \n1.\n \nIf\n \nsomeone\n \nuses\n \nyour\n \ndigital\n \ntwin\n \nin\n \noffice\n \nhours,\n \nwhat\n ",
+            "created_at": "2026-02-05T04:58:18.444857+00:00"
+          }
+        ],
+        "latest_memories": [
+          {
+            "id": "5a21f7c2-c34f-40c4-a554-8f26e350bafe",
+            "status": "verified",
+            "memory_type": "stance",
+            "topic_normalized": "advice give founder raising series",
+            "value_preview": "be strong problem solving",
+            "created_at": "2026-02-08T16:18:41.62488+00:00"
+          },
+          {
+            "id": "24a9b27a-a957-42a2-a87c-aabfebe06cb8",
+            "status": "active",
+            "memory_type": "belief",
+            "topic_normalized": "do we always require a board seat for our investme",
+            "value_preview": "We only require a board seat for investment rounds exceeding $3 million. For smaller checks, we take board observer rights.",
+            "created_at": "2026-02-06T15:55:05.079829+00:00"
+          },
+          {
+            "id": "15145cd8-688a-4715-bd05-3ac7fa2c8b3a",
+            "status": "active",
+            "memory_type": "belief",
+            "topic_normalized": "what is our standard due diligence timeline?",
+            "value_preview": "Our standard due diligence process is aggressive but thorough, taking exactly 4 weeks from term sheet to close.",
+            "created_at": "2026-02-06T15:54:36.444149+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "c3cd4ad0-d4cc-4e82-a020-82b48de72d42",
+        "vector_count": 24,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "003eb646-362e-4dad-a116-f478ea620b19",
+      "name": "Critical Path Proof Twin 1770201157",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T10:32:39.705369+00:00",
+      "supabase": {
+        "source_count": 4,
+        "source_status_counts": {
+          "live": 4
+        },
+        "source_chunks_total": 4,
+        "source_extracted_text_length_total": 498,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "887f5946-7a6f-49ed-bbea-785b746a2659",
+            "filename": "auto_extract_test.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Auto-extract graph test.\nClaim: The capital of France is Paris.\nMoat: retrieval accuracy and fast ingestion.\n",
+            "created_at": "2026-02-05T01:58:23.167597+00:00"
+          },
+          {
+            "id": "63dcd829-a2e2-433a-b0cb-fa2e0ef5a7fc",
+            "filename": "ingest_smoke_test.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Verified Digital Twin Brain ingestion smoke test.\nThis document states: The capital of France is Paris.\nThe product moats are retrieval accu",
+            "created_at": "2026-02-05T01:40:24.945634+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "003eb646-362e-4dad-a116-f478ea620b19",
+        "vector_count": 4,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "8837c300-826d-4504-a6f2-49e1e1ae0678",
+      "name": "Critical Path Proof Twin 1770200401",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T10:20:03.707916+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "ceead09d-defd-4472-a779-820756d7d6dc",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T10:20:11.825227+00:00"
+          },
+          {
+            "id": "e885847a-b98e-49d3-be8d-68f77de8d512",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770200402\n",
+            "created_at": "2026-02-04T10:20:04.347934+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "8837c300-826d-4504-a6f2-49e1e1ae0678",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "4e88fc8c-3a87-46a7-9f54-0c154a4aa2b3",
+      "name": "Critical Path Proof Twin 1770200283",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T10:18:05.695345+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "def54be2-4d51-4088-9b12-b83e3d9796d0",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T10:18:13.159371+00:00"
+          },
+          {
+            "id": "d9c881e2-c408-48fe-80b8-4491bd3a9a12",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770200284\n",
+            "created_at": "2026-02-04T10:18:06.377902+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "4e88fc8c-3a87-46a7-9f54-0c154a4aa2b3",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "28b274b7-1767-4e9b-ad53-d0b1e78a9ce3",
+      "name": "Critical Path Proof Twin 1770198157",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:42:39.574947+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "c1de4571-f915-47f8-9ea9-162a91fe03a4",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:43:01.544657+00:00"
+          },
+          {
+            "id": "d5ff9ca8-8545-47e5-8c57-c278685b70d3",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770198158\n",
+            "created_at": "2026-02-04T09:42:40.233986+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "28b274b7-1767-4e9b-ad53-d0b1e78a9ce3",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "29d09184-66c6-4c31-80ce-c6094b2f9ad7",
+      "name": "Critical Path Proof Twin 1770197836",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:37:18.137056+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "026c67e0-fa11-4873-8447-b971513aacd0",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:37:39.811537+00:00"
+          },
+          {
+            "id": "96183586-0904-45cd-9ef0-34642694c741",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770197837\n",
+            "created_at": "2026-02-04T09:37:18.803914+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "29d09184-66c6-4c31-80ce-c6094b2f9ad7",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "8b2b762e-9bb0-48a8-a627-b57e7b64da53",
+      "name": "Critical Path Proof Twin 1770197538",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:32:20.117317+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "5d463be1-c0bb-49ed-adb4-c9b282b13551",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:32:43.299718+00:00"
+          },
+          {
+            "id": "997c14dc-1df6-49eb-ad48-c25a1d7ba0a5",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770197538\n",
+            "created_at": "2026-02-04T09:32:20.832119+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "8b2b762e-9bb0-48a8-a627-b57e7b64da53",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "01ec5006-abd6-487a-b5aa-e032ea7c3a3b",
+      "name": "Critical Path Proof Twin 1770197322",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:28:44.315899+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "1bd4589d-8ee6-46d0-8d7b-8884e4e2ced0",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:29:02.422877+00:00"
+          },
+          {
+            "id": "b750662d-dd4e-4c8b-9e9b-0facacf23cfa",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770197323\n",
+            "created_at": "2026-02-04T09:28:45.014801+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "01ec5006-abd6-487a-b5aa-e032ea7c3a3b",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "36a9cda4-a5ad-40c5-8e45-2c62b18c8089",
+      "name": "Critical Path Proof Twin 1770196785",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:19:47.397721+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "5ba306c8-a424-46f3-8e79-c3c7907b8829",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:19:56.504023+00:00"
+          },
+          {
+            "id": "5aa1556d-c2e9-4b27-be23-b474530f3e9d",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770196786\n",
+            "created_at": "2026-02-04T09:19:48.130816+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "36a9cda4-a5ad-40c5-8e45-2c62b18c8089",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "bf022dc6-6800-4ed5-8195-10808b2a8b7e",
+      "name": "Critical Path Proof Twin 1770196527",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:15:29.017428+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "a87a6f02-4a40-416e-a910-48d63c2df5fe",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:15:39.876902+00:00"
+          },
+          {
+            "id": "a526a0bc-f031-4d8b-a3a9-2e84035da117",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770196527\n",
+            "created_at": "2026-02-04T09:15:29.790534+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "bf022dc6-6800-4ed5-8195-10808b2a8b7e",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "94bb567d-cdd3-4e8c-93c9-337c88bc5100",
+      "name": "Critical Path Proof Twin 1770196147",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T09:09:10.7508+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "live": 2
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 224,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "81e6f44a-2a21-4e1f-9ebe-b91e7658865c",
+            "filename": "https://example.com",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Example Domain\nExample Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn mo",
+            "created_at": "2026-02-04T09:09:25.171196+00:00"
+          },
+          {
+            "id": "636d6b73-d5dd-463d-893b-d66a9e387077",
+            "filename": "ingest_proof.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "Digital Brains critical path proof.\nUnique phrase: CRITICAL_PATH_PROOF_1770196149\n",
+            "created_at": "2026-02-04T09:09:14.409948+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "94bb567d-cdd3-4e8c-93c9-337c88bc5100",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "1d24803a-36fc-4e3f-9e51-9b55ccf54137",
+      "name": "UI Proof Twin 1770179511340",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:31:52.740529+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 2,
+        "memory_status_counts": {
+          "active": 2
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "65b24371-7c41-4db6-aa86-8995ca38a2f1",
+            "status": "active",
+            "memory_type": "stance",
+            "topic_normalized": "stance orion-policy-1770179545778 escalation policy incidents",
+            "value_preview": "Use Orion-Policy-1770179545778 only for critical emergencies.",
+            "created_at": "2026-02-04T04:32:36.455337+00:00"
+          },
+          {
+            "id": "9794df66-6764-4313-a2f0-fe44064b2c31",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770179517372 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770179517372 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:32:02.652286+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "1d24803a-36fc-4e3f-9e51-9b55ccf54137",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "0ba11e71-990d-4b79-83f3-ff3ff7c00df2",
+      "name": "UI Proof Twin 1770179337159",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:28:58.550559+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "3df802f3-06ba-4884-87f4-24accf77a316",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770179343668 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770179343668 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:29:08.353224+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "0ba11e71-990d-4b79-83f3-ff3ff7c00df2",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "69720946-0f5d-4558-8c29-2fefdaff33b5",
+      "name": "UI Proof Twin 1770179086399",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:24:47.755869+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "aee02843-10fc-4f43-bd3d-b18a92592cec",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770179091954 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770179091954 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:24:58.413722+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "69720946-0f5d-4558-8c29-2fefdaff33b5",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "22b039dc-0ef0-4b43-93d5-7e172ab6f72b",
+      "name": "UI Proof Twin 1770178789637",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:19:51.117892+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "2a8f1b9d-37e9-48d7-af38-64332c79b284",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770178796521 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770178796521 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:20:09.572793+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "22b039dc-0ef0-4b43-93d5-7e172ab6f72b",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "172750be-a5aa-4d71-aac2-ab8d311e1bef",
+      "name": "UI Proof Twin 1770178372812",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:12:54.233536+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "627a4a81-3b7d-40c6-890c-93da05891a30",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770178379985 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770178379985 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:13:05.509307+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "172750be-a5aa-4d71-aac2-ab8d311e1bef",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "ab915813-219b-425b-80fc-1d56276aaaa1",
+      "name": "UI Proof Twin 1770178030608",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:07:12.00828+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "0d103614-e925-4626-b76d-3ef43ac48411",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770178037814 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770178037814 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:07:26.060132+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "ab915813-219b-425b-80fc-1d56276aaaa1",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "ac2e05b7-5cff-4592-bc78-4f63f7718532",
+      "name": "UI Proof Twin 1770177722572",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T04:02:04.053921+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "586e6889-7674-4c67-912b-0cd27f4a5ee6",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770177730413 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770177730413 hiring framework for 2026.",
+            "created_at": "2026-02-04T04:02:26.158609+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "ac2e05b7-5cff-4592-bc78-4f63f7718532",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "54b433fa-1cb6-4b5d-9619-b0defe9282f0",
+      "name": "UI Proof Twin Manual 1770176951646",
+      "tenant_id": "c50afe83-643f-47e1-afcf-a643d86f943f",
+      "created_at": "2026-02-04T03:49:13.199752+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 1,
+        "memory_status_counts": {
+          "active": 1
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "7b0175da-c9f2-4679-81ab-341f78a0e0d7",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770177145546 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770177145546 hiring framework for 2026.",
+            "created_at": "2026-02-04T03:52:33.965758+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "54b433fa-1cb6-4b5d-9619-b0defe9282f0",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "7066dc02-0a96-4167-acde-9e367e86bea2",
+      "name": "UI Proof Twin 1770176785783",
+      "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+      "created_at": "2026-02-04T03:46:28.783982+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "7066dc02-0a96-4167-acde-9e367e86bea2",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+      "name": "Simulator E2E Twin B",
+      "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+      "created_at": "2026-02-03T22:13:36.647326+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 11,
+        "memory_status_counts": {
+          "active": 11
+        },
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [
+          {
+            "id": "bd782021-5fed-411c-b4d3-9e32b44e441d",
+            "status": "active",
+            "memory_type": "lens",
+            "topic_normalized": "stance zephyr-prism-1770175714751 hiring framework 2026",
+            "value_preview": "I strongly support the Zephyr-Prism-1770175714751 hiring framework for 2026.",
+            "created_at": "2026-02-04T03:28:42.557932+00:00"
+          },
+          {
+            "id": "ce19d886-4682-4e2f-8e64-1a41bbafcfc3",
+            "status": "active",
+            "memory_type": "stance",
+            "topic_normalized": "stance adopting async-1770175060598 default async communication",
+            "value_preview": "I strongly support Async-1770175060598 as the default async-first policy.",
+            "created_at": "2026-02-04T03:17:48.850697+00:00"
+          },
+          {
+            "id": "8dd2a37f-d484-481d-bd49-74e62d2c3067",
+            "status": "active",
+            "memory_type": "stance",
+            "topic_normalized": "use a 6-week release train called orion-1770169728 for product",
+            "value_preview": "I generally support use a 6-week release train called orion-1770169728 for product.",
+            "created_at": "2026-02-04T01:49:42.009676+00:00"
+          }
+        ],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "6e5855c8-da56-4d8a-b806-4004d2923a24",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+      "name": "Simulator E2E Twin",
+      "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+      "created_at": "2026-02-03T21:40:08.421999+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "d367d669-03cf-4ab8-b34a-90e1ed8fc88c",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "6b984afc-650f-4afc-b4c0-8238d0ad6b7b",
+      "name": "Simulator E2E Twin",
+      "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+      "created_at": "2026-02-03T21:04:21.825185+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "6b984afc-650f-4afc-b4c0-8238d0ad6b7b",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "6bb1cda3-8e02-4c0f-80d9-388d3eb359b8",
+      "name": "Sync QA Twin",
+      "tenant_id": "cbb9a5fe-2c07-4628-91dd-70137bda8b54",
+      "created_at": "2026-02-03T18:48:41.322338+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "6bb1cda3-8e02-4c0f-80d9-388d3eb359b8",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "ad1eeace-26d1-4eff-9560-39643832d0f2",
+      "name": "YOYO",
+      "tenant_id": "0d85c61a-c8c9-4646-8a7b-182b884eec83",
+      "created_at": "2026-02-03T18:11:51.612943+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "live": 1
+        },
+        "source_chunks_total": 47,
+        "source_extracted_text_length_total": 37457,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "1bf3ba8d-285a-441e-92b2-8b5edcb300d2",
+            "filename": "Canada Goose Project Outline Analysis.docx",
+            "status": "live",
+            "chunk_count": 47,
+            "content_preview": "\nStrategic Analysis of Canada Goose Holdings Inc.: Sustaining Differentiation in a Volatile Luxury Landscape\n\n\n1. Introduction & Overview\n\n\n",
+            "created_at": "2026-02-03T18:23:21.918591+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "ad1eeace-26d1-4eff-9560-39643832d0f2",
+        "vector_count": 47,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "f8c957a4-f58c-46eb-b1e1-9b3c94a3fe46",
+      "name": "sai",
+      "tenant_id": "fa7ddf26-9f52-403a-bac8-be2d206482f6",
+      "created_at": "2026-02-03T18:10:37.000981+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "f8c957a4-f58c-46eb-b1e1-9b3c94a3fe46",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "5fbd2d66-2026-4241-8f70-ec03882246a3",
+      "name": "sai",
+      "tenant_id": "fa7ddf26-9f52-403a-bac8-be2d206482f6",
+      "created_at": "2026-02-03T18:10:36.737382+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "5fbd2d66-2026-4241-8f70-ec03882246a3",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "dd7c3fc1-f741-4bc0-9020-19edbb014d7e",
+      "name": "sai",
+      "tenant_id": "fa7ddf26-9f52-403a-bac8-be2d206482f6",
+      "created_at": "2026-02-03T18:10:36.444104+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "dd7c3fc1-f741-4bc0-9020-19edbb014d7e",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "aa8d3e9d-1c8d-4f7a-b826-e0da65df1af1",
+      "name": "sai",
+      "tenant_id": "fa7ddf26-9f52-403a-bac8-be2d206482f6",
+      "created_at": "2026-02-03T18:10:35.168006+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "aa8d3e9d-1c8d-4f7a-b826-e0da65df1af1",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "1babb2b5-d766-470a-a462-34129b3d8596",
+      "name": "sai",
+      "tenant_id": "fa7ddf26-9f52-403a-bac8-be2d206482f6",
+      "created_at": "2026-02-03T18:10:33.511015+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "1babb2b5-d766-470a-a462-34129b3d8596",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "d2f67c14-a881-4199-80f2-41faa2f19266",
+      "name": "sai",
+      "tenant_id": "fa7ddf26-9f52-403a-bac8-be2d206482f6",
+      "created_at": "2026-02-03T18:10:33.225324+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "d2f67c14-a881-4199-80f2-41faa2f19266",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "e882a0f7-1d40-412b-9b7d-74fb10db7cfb",
+      "name": "QA Export Twin",
+      "tenant_id": "fd97d570-10f1-4376-b71f-febba2becdd8",
+      "created_at": "2026-02-03T18:04:28.89061+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 26,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "42f30278-1616-42d9-81b5-5e69c62f0ea9",
+            "filename": "qa-source.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "QA export source content",
+            "created_at": "2026-02-03T18:04:29.110439+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "e882a0f7-1d40-412b-9b7d-74fb10db7cfb",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "63a6aeb9-51d7-4a63-aeb6-c97bda11c038",
+      "name": "QA Export Twin",
+      "tenant_id": "05630fda-d076-4707-beda-087e24be9a4b",
+      "created_at": "2026-02-03T18:02:01.223618+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "processed": 1,
+          "live": 1
+        },
+        "source_chunks_total": 2,
+        "source_extracted_text_length_total": 106,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "26b00cb2-1a6a-4a36-976c-bd8d925320eb",
+            "filename": "ingest_e2e_codex_test.txt",
+            "status": "live",
+            "chunk_count": 1,
+            "content_preview": "INGEST-E2E-CODEX-TEST-2026-02-03-ALPHA\nThis is a small test file for ingestion.\n",
+            "created_at": "2026-02-03T18:04:39.377729+00:00"
+          },
+          {
+            "id": "3da90a37-e2b5-4795-bb60-a0cebe818e82",
+            "filename": "qa-source.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "QA export source content",
+            "created_at": "2026-02-03T18:02:01.465323+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "63a6aeb9-51d7-4a63-aeb6-c97bda11c038",
+        "vector_count": 1,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "faa947ca-653c-4b20-8665-0d16b1d6ab70",
+      "name": "QA Hard Delete Twin",
+      "tenant_id": "41a44dd5-7ffe-486d-8e0c-6e63948081bd",
+      "created_at": "2026-02-03T18:00:16.395435+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "faa947ca-653c-4b20-8665-0d16b1d6ab70",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "58581d82-7589-456d-a77a-d585e9e849e5",
+      "name": "QA Export Twin",
+      "tenant_id": "41a44dd5-7ffe-486d-8e0c-6e63948081bd",
+      "created_at": "2026-02-03T18:00:16.283906+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 26,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "706fdc79-fc4d-49e0-9de9-ad496f746a70",
+            "filename": "qa-source.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "QA export source content",
+            "created_at": "2026-02-03T18:00:16.55344+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "58581d82-7589-456d-a77a-d585e9e849e5",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "5c1de68a-e51b-4025-8833-05491782e36d",
+      "name": "QA Hard Delete Twin",
+      "tenant_id": "c5427426-f2f6-4d24-8074-0e450f0c0ce4",
+      "created_at": "2026-02-03T17:57:52.524194+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "5c1de68a-e51b-4025-8833-05491782e36d",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "8b05a4f7-8ad8-4197-b3da-154bb15dd749",
+      "name": "QA Export Twin",
+      "tenant_id": "c5427426-f2f6-4d24-8074-0e450f0c0ce4",
+      "created_at": "2026-02-03T17:57:52.390625+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 26,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "aa9acdd6-37f6-4c56-a89c-7d116dfc7e54",
+            "filename": "qa-source.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "QA export source content",
+            "created_at": "2026-02-03T17:57:52.649072+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "8b05a4f7-8ad8-4197-b3da-154bb15dd749",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "40451561-a38c-4c60-8e6a-b87cd0445b1d",
+      "name": "QA Export Twin",
+      "tenant_id": "d04f186f-d843-45a3-a017-07a5cbc593b0",
+      "created_at": "2026-02-03T15:53:01.326638+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 39,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "0590c3e1-72d6-4f72-afd8-c7de2c6c3f22",
+            "filename": "qa-sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "QA source text for export verification.",
+            "created_at": "2026-02-03T15:53:01.570515+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "40451561-a38c-4c60-8e6a-b87cd0445b1d",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "e874f362-88fb-461c-be45-0c142bfc84d9",
+      "name": "Export Twin",
+      "tenant_id": "31b5bccd-55e7-436d-a47b-b73bbe5bc922",
+      "created_at": "2026-02-03T10:06:56.561167+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 43,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "0e17247c-c85f-4976-be95-56941e140ecc",
+            "filename": "sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "Sample source text for export verification.",
+            "created_at": "2026-02-03T10:06:56.73927+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "e874f362-88fb-461c-be45-0c142bfc84d9",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "aa25fee9-fd4e-4505-b48f-5040a5e81b5f",
+      "name": "Export Twin",
+      "tenant_id": "e77938df-53ce-49ef-b3f5-defe717b900d",
+      "created_at": "2026-02-03T09:54:40.436306+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 43,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "37a95c27-89f9-4222-b835-2f28cfc57f6c",
+            "filename": "sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "Sample source text for export verification.",
+            "created_at": "2026-02-03T09:54:40.702445+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "aa25fee9-fd4e-4505-b48f-5040a5e81b5f",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "18247f87-2b22-4e59-b3c0-d56c7178235d",
+      "name": "Export Twin",
+      "tenant_id": "c93c7bf6-7163-4c5a-8ebb-e185cb4e2e13",
+      "created_at": "2026-02-03T09:50:08.084811+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 43,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "72d47dda-99bc-45c9-86ee-94f0cefc757e",
+            "filename": "sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "Sample source text for export verification.",
+            "created_at": "2026-02-03T09:50:08.257664+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "18247f87-2b22-4e59-b3c0-d56c7178235d",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "735e69ef-e5b9-46a4-9972-716cb11db277",
+      "name": "Export Twin",
+      "tenant_id": "159738e2-0426-439f-89da-674e3661e6d5",
+      "created_at": "2026-02-03T09:44:53.093852+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 43,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "7f97b4a4-c604-4816-abe7-20a62222c52c",
+            "filename": "sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "Sample source text for export verification.",
+            "created_at": "2026-02-03T09:44:53.299381+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "735e69ef-e5b9-46a4-9972-716cb11db277",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "69594ab1-8172-4d72-bf4b-939170ce93b6",
+      "name": "Hard Delete Twin",
+      "tenant_id": "352c4c89-49cf-46c7-bad1-debd74a3d7e5",
+      "created_at": "2026-02-03T09:43:59.29089+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "69594ab1-8172-4d72-bf4b-939170ce93b6",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "a9459df0-2f54-480a-a4fc-479e7b74bf6e",
+      "name": "Export Twin",
+      "tenant_id": "352c4c89-49cf-46c7-bad1-debd74a3d7e5",
+      "created_at": "2026-02-03T09:43:59.194735+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 43,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "c27a1fce-d9c2-481d-b936-146dcf9f79c1",
+            "filename": "sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "Sample source text for export verification.",
+            "created_at": "2026-02-03T09:43:59.400748+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "a9459df0-2f54-480a-a4fc-479e7b74bf6e",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "c85e1cb9-b380-47b5-9fde-a8df3ab23a5b",
+      "name": "Hard Delete Twin",
+      "tenant_id": "fc946517-5499-45db-acc8-f03891fff35d",
+      "created_at": "2026-02-03T09:43:05.16567+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "c85e1cb9-b380-47b5-9fde-a8df3ab23a5b",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "72b17f8d-e2fd-4144-888f-8bb3709150bf",
+      "name": "Export Twin",
+      "tenant_id": "fc946517-5499-45db-acc8-f03891fff35d",
+      "created_at": "2026-02-03T09:43:05.041569+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 1,
+        "source_extracted_text_length_total": 43,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "3c8d87cd-d016-4a5d-b22f-6b233300cbfd",
+            "filename": "sample.txt",
+            "status": "processed",
+            "chunk_count": 1,
+            "content_preview": "Sample source text for export verification.",
+            "created_at": "2026-02-03T09:43:05.279156+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "72b17f8d-e2fd-4144-888f-8bb3709150bf",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "79f6c8ba-4cf4-4cba-a859-e8df78ec71f1",
+      "name": "Hard Delete Twin",
+      "tenant_id": "726818da-d628-4b43-8e34-8a184f76968a",
+      "created_at": "2026-02-03T09:27:44.324069+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "79f6c8ba-4cf4-4cba-a859-e8df78ec71f1",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "09591abf-c451-4855-9322-15efdfe1ddfe",
+      "name": "Export Twin",
+      "tenant_id": "726818da-d628-4b43-8e34-8a184f76968a",
+      "created_at": "2026-02-03T09:27:44.224754+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "9eaf7c29-e1a3-48a2-9e67-98026cc2f5e7",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T09:27:44.419893+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "09591abf-c451-4855-9322-15efdfe1ddfe",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "34276d59-a14c-428b-b717-9c9e3d7f9798",
+      "name": "Export Twin",
+      "tenant_id": "f38ff338-3846-4a4d-a074-ca0b5fe9a42a",
+      "created_at": "2026-02-03T09:18:59.266866+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "ffc7ad3e-45aa-4bb3-963f-0abe3bc369d1",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T09:18:59.482857+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "34276d59-a14c-428b-b717-9c9e3d7f9798",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "c9fa1e61-8214-4bd9-9c67-9cf3f332a4c2",
+      "name": "Export Twin",
+      "tenant_id": "7de918ab-1396-4182-ab59-ba2ae98eb011",
+      "created_at": "2026-02-03T09:15:01.27664+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "c7cc60d5-b37f-45cf-9791-6b18fdc9a353",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T09:15:01.590379+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "c9fa1e61-8214-4bd9-9c67-9cf3f332a4c2",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "647acb76-5b5b-42fd-88b9-75f6ac798a86",
+      "name": "Export Twin",
+      "tenant_id": "e609b6d5-9b45-4fbe-ac22-863ea3cb1af8",
+      "created_at": "2026-02-03T09:05:24.548917+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "b74c685c-9651-47c8-bfe4-77e4cdabe359",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T09:05:24.736116+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "647acb76-5b5b-42fd-88b9-75f6ac798a86",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "526727ae-9a9d-4b13-b9dd-e4397919a0a3",
+      "name": "Export Twin",
+      "tenant_id": "3ecc1360-0300-4002-a65c-d7acf5ba31cb",
+      "created_at": "2026-02-03T09:01:30.77065+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "eaa8b0b5-3d31-40e4-9b47-796ea8ae5d96",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T09:01:30.954697+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "526727ae-9a9d-4b13-b9dd-e4397919a0a3",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "2b816b71-3a63-42d7-a1e7-570f261c951f",
+      "name": "Export Twin",
+      "tenant_id": "be180df3-27f5-42b6-be26-410aae9afbf6",
+      "created_at": "2026-02-03T08:55:34.992222+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "4015492e-e20e-41d7-a4d0-32020c8bdcca",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T08:55:35.190083+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "2b816b71-3a63-42d7-a1e7-570f261c951f",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "2a668af1-fc3d-44a2-8026-f8772e1a5aa4",
+      "name": "Hard Delete Twin",
+      "tenant_id": "e1e62c11-a687-4faa-95bb-fd0804a5714b",
+      "created_at": "2026-02-03T08:54:33.050172+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "2a668af1-fc3d-44a2-8026-f8772e1a5aa4",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "55a2a7e1-fb24-416f-ab21-5517651090e2",
+      "name": "Export Twin",
+      "tenant_id": "e1e62c11-a687-4faa-95bb-fd0804a5714b",
+      "created_at": "2026-02-03T08:54:32.919861+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "78df2d11-74f1-4dba-a01c-0be16f30c374",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T08:54:33.188716+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "55a2a7e1-fb24-416f-ab21-5517651090e2",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "ba983bbe-38b9-466c-b9ae-491ac5c706d0",
+      "name": "Export Twin",
+      "tenant_id": "35c03c27-129c-44b7-a480-2b876a911b4f",
+      "created_at": "2026-02-03T08:49:29.647127+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 34,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "4f6d8975-e4e3-48f4-9c47-fee7a08290c7",
+            "filename": "Test Source",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is extracted text for export.",
+            "created_at": "2026-02-03T08:49:29.840933+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "ba983bbe-38b9-466c-b9ae-491ac5c706d0",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "287f91a7-7f19-43ce-9863-b9a001b06d12",
+      "name": "Test Twin",
+      "tenant_id": "0a9eb74c-c352-4ff1-9222-17fb6a4cc98b",
+      "created_at": "2026-02-03T08:07:02.514614+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "processed": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "23f95d5a-788d-43bf-a61f-d0510f9538a8",
+            "filename": "test.txt",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "This is a test source document for export.",
+            "created_at": "2026-02-03T08:07:02.551096+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "287f91a7-7f19-43ce-9863-b9a001b06d12",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "e9c18ffa-ec7b-4f30-ab97-1beccd9fab4a",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:28.081108+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "e9c18ffa-ec7b-4f30-ab97-1beccd9fab4a",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "07be896a-5c30-4513-8dd4-c62c07ce806a",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:27.510759+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "07be896a-5c30-4513-8dd4-c62c07ce806a",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "5134ece5-373e-4f08-bfe3-d07a7dea3de7",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:27.224541+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "5134ece5-373e-4f08-bfe3-d07a7dea3de7",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "e1b5469b-4f7c-496b-9709-044ea26efae1",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:26.899565+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "e1b5469b-4f7c-496b-9709-044ea26efae1",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "b1134635-58ba-463c-ae05-ebb700de1960",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:26.568531+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "b1134635-58ba-463c-ae05-ebb700de1960",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "55eedd9a-a8da-435a-8d05-a34248b47d83",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:26.272133+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "55eedd9a-a8da-435a-8d05-a34248b47d83",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "947aad31-f023-4ab8-83d7-8faa65bb6b45",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:25.894532+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "947aad31-f023-4ab8-83d7-8faa65bb6b45",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "ec36dd66-e619-4ac9-9940-9797d635fba7",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:25.591542+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "ec36dd66-e619-4ac9-9940-9797d635fba7",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "6aafc563-bbb8-484e-83ad-8076c25600ca",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:25.286046+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "6aafc563-bbb8-484e-83ad-8076c25600ca",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "784686fa-ce23-42ce-b239-a7fc6b72fd73",
+      "name": "Sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-29T21:20:24.928417+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "784686fa-ce23-42ce-b239-a7fc6b72fd73",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "71ecbf9c-0b79-46d1-ad32-b439667017f5",
+      "name": "sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-28T21:53:31.516782+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "71ecbf9c-0b79-46d1-ad32-b439667017f5",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "00146890-ead4-4d3e-a5fc-a4c74dabc6ac",
+      "name": "sai",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-28T21:53:30.466767+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "00146890-ead4-4d3e-a5fc-a4c74dabc6ac",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "3efb75c7-b959-4a3e-9158-9bdd3cc25b7d",
+      "name": "YoYo",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-28T01:54:08.989863+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "3efb75c7-b959-4a3e-9158-9bdd3cc25b7d",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "53da5e33-efeb-441d-822e-a142f71b5dea",
+      "name": "Sainath",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-28T01:54:08.081153+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "53da5e33-efeb-441d-822e-a142f71b5dea",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "17a4d433-1d9a-4546-959d-8aee0c02da07",
+      "name": "Sainath",
+      "tenant_id": "a17b3b11-d298-426b-a4b8-b1b177a93f81",
+      "created_at": "2026-01-28T01:54:07.563817+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 3,
+        "interview_status_counts": {
+          "active": 2,
+          "completed": 1
+        },
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "17a4d433-1d9a-4546-959d-8aee0c02da07",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "9401b039-d6f0-461e-bade-c883e827bf39",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-27T05:30:40.532268+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "9401b039-d6f0-461e-bade-c883e827bf39",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "6622294e-86ba-40fd-ac8b-6811d0b79538",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-27T05:30:36.459344+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "6622294e-86ba-40fd-ac8b-6811d0b79538",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "0359b5d3-48e5-4166-bcb0-062903ecd187",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-27T01:38:34.060613+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "0359b5d3-48e5-4166-bcb0-062903ecd187",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "40b38c26-2a21-407c-8a60-1475d1dc1240",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-26T16:36:17.468192+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "40b38c26-2a21-407c-8a60-1475d1dc1240",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "01b20f6d-26e1-405a-8f59-ce980ab52906",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-26T16:36:14.26061+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "01b20f6d-26e1-405a-8f59-ce980ab52906",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "3c7156e8-4143-4406-9dfa-ec1cd20e1332",
+      "name": "Sai",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-26T03:09:12.374171+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "3c7156e8-4143-4406-9dfa-ec1cd20e1332",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "67cd44e6-8d93-45aa-96e6-2a8bedcad200",
+      "name": "Sainath",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2026-01-20T22:35:32.803016+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "staged": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 57830,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "6b46cca3-7b54-4f9e-b597-8f1ef1f587d8",
+            "filename": "Autonomous AI Agents_ Market Research & Competitor Analysis.pdf",
+            "status": "staged",
+            "chunk_count": null,
+            "content_preview": "Autonomous AI Agents: Market Research &\nCompetitor Analysis\nIntroduction\nAutonomous AI agents \u2013 think of them as digital \u201cbrains\u201d or persona",
+            "created_at": "2026-01-20T22:42:34.764158+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "67cd44e6-8d93-45aa-96e6-2a8bedcad200",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "19aea925-aba7-4cf8-9333-218ede6cafd7",
+      "name": "My Twin",
+      "tenant_id": "ecbc8fe6-ddd1-4aa5-9017-91856f24d3d1",
+      "created_at": "2026-01-11T18:07:51.87065+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "approved": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "b13b32e2-adc6-4367-9806-970f1616f263",
+            "filename": "ProfOS_Presentation.pdf",
+            "status": "approved",
+            "chunk_count": null,
+            "content_preview": "",
+            "created_at": "2026-01-29T03:20:14.622048+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "19aea925-aba7-4cf8-9333-218ede6cafd7",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "d080d547-5aac-4a92-91b2-6d3ff728af4c",
+      "name": "Founder Twin",
+      "tenant_id": "ecbc8fe6-ddd1-4aa5-9017-91856f24d3d1",
+      "created_at": "2026-01-11T15:19:13.6909+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "live": 1
+        },
+        "source_chunks_total": 73,
+        "source_extracted_text_length_total": 57830,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 7,
+        "interview_status_counts": {
+          "active": 2,
+          "completed": 5
+        },
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "cb8ad2b5-5c56-4eb3-9156-c6996dac7e65",
+            "filename": "Autonomous AI Agents_ Market Research & Competitor Analysis.pdf",
+            "status": "live",
+            "chunk_count": 73,
+            "content_preview": "Autonomous AI Agents: Market Research &\nCompetitor Analysis\nIntroduction\nAutonomous AI agents \u2013 think of them as digital \u201cbrains\u201d or persona",
+            "created_at": "2026-01-12T11:43:53.033748+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "d080d547-5aac-4a92-91b2-6d3ff728af4c",
+        "vector_count": 73,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "b4119968-4bec-46b2-86b3-c6f571f5c0ed",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-25T00:07:34.420416+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "b4119968-4bec-46b2-86b3-c6f571f5c0ed",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "61e5e6df-f51c-4985-9ef0-95b0bddd5258",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:31:53.136686+00:00",
+      "supabase": {
+        "source_count": 8,
+        "source_status_counts": {
+          "processed": 8
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 10525,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "7e00f454-0bab-4941-ae1d-1d064e4ee4c1",
+            "filename": "YouTube: dQw4w9WgXcQ",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "[\u266a\u266a\u266a] \u266a We're no strangers to love \u266a \u266a You know the rules\nand so do I \u266a \u266a A full commitment's\nwhat I'm thinking of \u266a \u266a You wouldn't get this",
+            "created_at": "2026-01-22T00:31:31.414781+00:00"
+          },
+          {
+            "id": "22001b0d-ba3d-424f-b38f-d44f10c7e624",
+            "filename": "YouTube: dQw4w9WgXcQ",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "[\u266a\u266a\u266a] \u266a We're no strangers to love \u266a \u266a You know the rules\nand so do I \u266a \u266a A full commitment's\nwhat I'm thinking of \u266a \u266a You wouldn't get this",
+            "created_at": "2026-01-22T00:26:48.026372+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "61e5e6df-f51c-4985-9ef0-95b0bddd5258",
+        "vector_count": 17,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "a4d4f43c-9bfd-4a11-83f4-36640a6a1d88",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:31:28.146684+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "a4d4f43c-9bfd-4a11-83f4-36640a6a1d88",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "436484f2-97ff-4070-bfc2-abe111d15fa9",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:31:26.02388+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "436484f2-97ff-4070-bfc2-abe111d15fa9",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "6118cb8a-016b-444d-ad84-2cab0a8310f8",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:29:08.488645+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "processed": 2
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 80,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "ec3f518b-c312-437a-aa27-7dc466fae654",
+            "filename": "X Thread: 1002103360646823936 by Naval",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "How to Get Rich (without getting lucky):",
+            "created_at": "2026-01-25T17:59:15.489395+00:00"
+          },
+          {
+            "id": "c2b6287d-e029-4965-813f-a6989a81ad2f",
+            "filename": "X Thread: 1002103360646823936 by Naval",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "How to Get Rich (without getting lucky):",
+            "created_at": "2026-01-22T01:17:04.344723+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "6118cb8a-016b-444d-ad84-2cab0a8310f8",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "1ad62bf2-0d1f-4d18-9452-9ebdd6caf655",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:29:06.674601+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "1ad62bf2-0d1f-4d18-9452-9ebdd6caf655",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "962370a3-b240-4767-974f-c0033c986966",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:29:03.95633+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "962370a3-b240-4767-974f-c0033c986966",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "7cf80192-0771-481c-b0f1-2dfe7b0eeb93",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:26:29.230118+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "7cf80192-0771-481c-b0f1-2dfe7b0eeb93",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "971c8f16-fbb4-4d04-8fb1-dd9dd4cb21cd",
+      "name": "My Digital Twin",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T23:26:27.116995+00:00",
+      "supabase": {
+        "source_count": 0,
+        "source_status_counts": {},
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 0,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "971c8f16-fbb4-4d04-8fb1-dd9dd4cb21cd",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "4d240cdb-3c96-45c8-8f1c-2b7166f51f52",
+      "name": "saivc",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T00:55:20.129665+00:00",
+      "supabase": {
+        "source_count": 1,
+        "source_status_counts": {
+          "staged": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 2089,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "01fa9b2d-7aa4-4678-96c0-59aa32bcf824",
+            "filename": "YouTube: dQw4w9WgXcQ",
+            "status": "staged",
+            "chunk_count": null,
+            "content_preview": "[\u266a\u266a\u266a] \u266a We're no strangers to love \u266a \u266a You know the rules\nand so do I \u266a \u266a A full commitment's\nwhat I'm thinking of \u266a \u266a You wouldn't get this",
+            "created_at": "2026-01-21T21:31:13.68777+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "4d240cdb-3c96-45c8-8f1c-2b7166f51f52",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "f3051d50-7cc1-4b7b-a2cd-ea93e20a1048",
+      "name": "saivc",
+      "tenant_id": "55b4c2be-c0d3-4c72-b9e7-f65c2c6bb6fb",
+      "created_at": "2025-12-24T00:55:19.866088+00:00",
+      "supabase": {
+        "source_count": 2,
+        "source_status_counts": {
+          "processed": 1,
+          "error": 1
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 40,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "457077a4-5923-4aaa-a349-de6448e89724",
+            "filename": "X Thread: 1002103360646823936 by Naval",
+            "status": "error",
+            "chunk_count": null,
+            "content_preview": "How to Get Rich (without getting lucky):",
+            "created_at": "2026-01-22T01:08:46.215474+00:00"
+          },
+          {
+            "id": "5f44aa59-2e4a-4c65-805c-5860141b1081",
+            "filename": "X Thread: 2014039116854300810 by Unknown",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "",
+            "created_at": "2026-01-21T23:52:54.430717+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "f3051d50-7cc1-4b7b-a2cd-ea93e20a1048",
+        "vector_count": 0,
+        "namespace_exists": false
+      }
+    },
+    {
+      "twin_id": "1e5866f7-7187-4020-bf93-3500564e02ba",
+      "name": "Test Twin",
+      "tenant_id": "33109209-6fd7-4eb1-bb90-dba7a7b02f56",
+      "created_at": "2025-12-18T09:00:41.185893+00:00",
+      "supabase": {
+        "source_count": 3,
+        "source_status_counts": {
+          "pending": 1,
+          "processed": 2
+        },
+        "source_chunks_total": 0,
+        "source_extracted_text_length_total": 80,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 0,
+        "qna_active_count": 0,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "1aad2852-dec8-45e2-81cd-a55c8ad9ae15",
+            "filename": "X Thread: 1002103360646823936 by Naval",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "How to Get Rich (without getting lucky):",
+            "created_at": "2026-01-22T01:13:56.961141+00:00"
+          },
+          {
+            "id": "d11c4776-ca7f-4ddf-8b52-b45bbd61536e",
+            "filename": "X Thread: 1002103360646823936 by Naval",
+            "status": "processed",
+            "chunk_count": null,
+            "content_preview": "How to Get Rich (without getting lucky):",
+            "created_at": "2026-01-22T00:12:15.369524+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": []
+      },
+      "pinecone": {
+        "namespace": "1e5866f7-7187-4020-bf93-3500564e02ba",
+        "vector_count": 2,
+        "namespace_exists": true
+      }
+    },
+    {
+      "twin_id": "eeeed554-9180-4229-a9af-0f8dd2c69e9b",
+      "name": "Sai",
+      "tenant_id": "986f270e-2d5c-4f88-ad88-7d2a15ea8ab1",
+      "created_at": "2025-12-18T05:32:46.250111+00:00",
+      "supabase": {
+        "source_count": 3,
+        "source_status_counts": {
+          "live": 2,
+          "staged": 1
+        },
+        "source_chunks_total": 79,
+        "source_extracted_text_length_total": 62625,
+        "memory_count": 0,
+        "memory_status_counts": {},
+        "qna_count": 8,
+        "qna_active_count": 8,
+        "interview_sessions_count": 0,
+        "interview_status_counts": {},
+        "interview_memories_extracted_total": 0,
+        "latest_sources": [
+          {
+            "id": "1284eecd-8913-406f-8048-fea90232f451",
+            "filename": "ProfOS_Presentation.pdf",
+            "status": "staged",
+            "chunk_count": null,
+            "content_preview": "",
+            "created_at": "2025-12-22T00:46:36.267139+00:00"
+          },
+          {
+            "id": "7ffe5fa5-7747-4fe7-8989-861eef853595",
+            "filename": "Autonomous AI Agents_ Market Research & Competitor Analysis.pdf",
+            "status": "live",
+            "chunk_count": 73,
+            "content_preview": "Autonomous AI Agents: Market Research &\nCompetitor Analysis\nIntroduction\nAutonomous AI agents \u2013 think of them as digital \u201cbrains\u201d or persona",
+            "created_at": "2025-12-21T23:56:22.601146+00:00"
+          }
+        ],
+        "latest_memories": [],
+        "latest_qna": [
+          {
+            "id": "7ff39392-1083-43a2-9225-8909be52dcb0",
+            "is_active": true,
+            "question_preview": "escalate",
+            "answer_preview": "i hear you. please tell me your question or problem. i will get back to you.\n",
+            "created_at": "2025-12-22T09:58:36.618077+00:00"
+          },
+          {
+            "id": "e2f38c55-d9aa-4dda-ab39-275d013c034d",
+            "is_active": true,
+            "question_preview": "escalate",
+            "answer_preview": "i hear you. please tell me your question or problem. i will get back to you. ",
+            "created_at": "2025-12-22T05:39:08.231576+00:00"
+          }
+        ]
+      },
+      "pinecone": {
+        "namespace": "eeeed554-9180-4229-a9af-0f8dd2c69e9b",
+        "vector_count": 87,
+        "namespace_exists": true
+      }
+    }
+  ]
+}

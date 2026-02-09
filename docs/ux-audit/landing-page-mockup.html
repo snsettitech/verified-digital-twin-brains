@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Brains - Create Your AI Twin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-indigo: #4F46E5;
+            --primary-purple: #7C3AED;
+            --primary-pink: #EC4899;
+            --bg-dark: #0F0F1A;
+            --surface-dark: #1A1A2E;
+            --text-primary: #FFFFFF;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-tertiary: rgba(255, 255, 255, 0.5);
+            --success: #10B981;
+            --accent-glow: rgba(79, 70, 229, 0.3);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero {
+            min-height: 100vh;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: 
+                linear-gradient(rgba(79, 70, 229, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(79, 70, 229, 0.03) 1px, transparent 1px),
+                var(--bg-dark);
+            background-size: 60px 60px, 60px 60px, 100% 100%;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { background-position: 0 0, 0 0, 0 0; }
+            100% { background-position: 60px 60px, 60px 60px, 0 0; }
+        }
+
+        /* Navigation */
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 48px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: rgba(15, 15, 26, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: -0.02em;
+        }
+
+        .logo-icon {
+            width: 44px;
+            height: 44px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-icon svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 4px 20px rgba(79, 70, 229, 0.5));
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+            position: relative;
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary-indigo), var(--primary-purple));
+            transition: width 0.2s ease-out;
+        }
+
+        .nav-link:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-link:hover::after {
+            width: 100%;
+        }
+
+        .nav-cta {
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            text-decoration: none;
+            transition: all 0.2s;
+            box-shadow: 0 4px 20px rgba(79, 70, 229, 0.3);
+        }
+
+        .nav-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(79, 70, 229, 0.5);
+        }
+
+        .mobile-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        /* Hero Content */
+        .hero-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 140px 48px 80px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            gap: 80px;
+        }
+
+        .hero-text {
+            flex: 1;
+            max-width: 600px;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(40px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(79, 70, 229, 0.1);
+            border: 1px solid rgba(79, 70, 229, 0.3);
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-size: 13px;
+            color: #A5B4FC;
+            margin-bottom: 24px;
+        }
+
+        .hero-badge .pulse {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .hero-title {
+            font-size: 64px;
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 24px;
+            background: linear-gradient(135deg, #FFFFFF 0%, #A5B4FC 50%, #C4B5FD 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 20px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 32px;
+        }
+
+        .hero-ctas {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            color: white;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 16px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4);
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(79, 70, 229, 0.6);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            padding: 16px 32px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 16px;
+            text-decoration: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .hero-trust {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .trust-text {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .trust-logos {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .trust-logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-tertiary);
+            transition: color 0.2s;
+        }
+
+        .trust-logo:hover {
+            color: var(--text-secondary);
+        }
+
+        /* Product Demo */
+        .hero-demo {
+            flex: 1;
+            max-width: 500px;
+            perspective: 1000px;
+            animation: fadeInUp 0.8s ease-out 0.2s both;
+        }
+
+        .demo-card {
+            background: rgba(26, 26, 46, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 
+                0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                0 0 0 1px rgba(79, 70, 229, 0.1);
+            transform: rotateY(-5deg) rotateX(2deg);
+            transition: transform 0.3s;
+        }
+
+        .demo-card:hover {
+            transform: rotateY(0deg) rotateX(0deg);
+        }
+
+        .demo-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .demo-avatar {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .demo-info h4 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .demo-info p {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .demo-live-badge {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            padding: 6px 12px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .demo-live-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .demo-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .stat-box:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(79, 70, 229, 0.3);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #FFFFFF, #A5B4FC);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .demo-chat {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .chat-message {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .chat-message.assistant {
+            align-items: flex-start;
+        }
+
+        .chat-bubble {
+            background: rgba(79, 70, 229, 0.2);
+            padding: 10px 14px;
+            border-radius: 14px;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 80%;
+        }
+
+        .chat-message.user {
+            justify-content: flex-end;
+        }
+
+        .chat-message.user .chat-bubble {
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+        }
+
+        .chat-avatar-small {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .demo-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 16px;
+        }
+
+        .demo-input-text {
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .demo-send {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: none;
+            cursor: pointer;
+            color: white;
+            transition: transform 0.2s;
+        }
+
+        .demo-send:hover {
+            transform: scale(1.1);
+        }
+
+        /* Floating Elements */
+        .floating-shape {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .shape-1 {
+            width: 400px;
+            height: 400px;
+            background: var(--primary-indigo);
+            top: -100px;
+            right: -100px;
+        }
+
+        .shape-2 {
+            width: 300px;
+            height: 300px;
+            background: var(--primary-purple);
+            bottom: 10%;
+            left: -100px;
+        }
+
+        /* ===== HOW IT WORKS ===== */
+        .how-it-works {
+            padding: 120px 48px;
+            position: relative;
+        }
+
+        .section-divider {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(79, 70, 229, 0.3), transparent);
+            margin: 0 48px;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-tag {
+            font-size: 12px;
+            color: #A5B4FC;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+        }
+
+        .section-subtitle {
+            font-size: 18px;
+            color: var(--text-secondary);
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .step-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 32px;
+            position: relative;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .step-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(79, 70, 229, 0.3);
+            box-shadow: 0 20px 40px -20px rgba(79, 70, 229, 0.2);
+        }
+
+        .step-number {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 72px;
+            font-weight: 800;
+            color: rgba(79, 70, 229, 0.1);
+            line-height: 1;
+        }
+
+        .step-icon {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(124, 58, 237, 0.2));
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(79, 70, 229, 0.3);
+        }
+
+        .step-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .step-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* ===== FEATURES SECTION ===== */
+        .features {
+            padding: 120px 48px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 32px;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            border-color: rgba(79, 70, 229, 0.3);
+            box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+        }
+
+        .feature-card.large {
+            grid-column: span 2;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(124, 58, 237, 0.2));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            margin-bottom: 16px;
+            border: 1px solid rgba(79, 70, 229, 0.3);
+        }
+
+        .feature-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .feature-preview {
+            margin-top: 24px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .citation-example {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .citation-sup {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            background: rgba(79, 70, 229, 0.3);
+            border-radius: 4px;
+            font-size: 10px;
+            color: #A5B4FC;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .citation-sup:hover {
+            background: rgba(79, 70, 229, 0.5);
+        }
+
+        .confidence-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            padding: 4px 10px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* ===== PRICING SECTION ===== */
+        .pricing {
+            padding: 120px 48px;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .pricing-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 32px;
+            position: relative;
+            transition: all 0.3s;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .pricing-card.popular {
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.1), rgba(124, 58, 237, 0.1));
+            border-color: rgba(79, 70, 229, 0.3);
+            box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2), 0 20px 40px -20px rgba(79, 70, 229, 0.3);
+        }
+
+        .popular-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            color: white;
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .pricing-name {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .pricing-price {
+            font-size: 48px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .pricing-price span {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-tertiary);
+        }
+
+        .pricing-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .pricing-features {
+            list-style: none;
+            margin-bottom: 32px;
+        }
+
+        .pricing-features li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+
+        .pricing-features li::before {
+            content: '✓';
+            width: 20px;
+            height: 20px;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .pricing-cta {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 15px;
+            text-align: center;
+            text-decoration: none;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .pricing-cta.primary {
+            background: linear-gradient(135deg, var(--primary-indigo), var(--primary-purple));
+            color: white;
+        }
+
+        .pricing-cta.secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .pricing-cta:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.3);
+        }
+
+        /* ===== FAQ SECTION ===== */
+        .faq {
+            padding: 120px 48px;
+        }
+
+        .faq-list {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .faq-question {
+            width: 100%;
+            padding: 24px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .faq-question:hover {
+            color: #A5B4FC;
+        }
+
+        .faq-icon {
+            width: 24px;
+            height: 24px;
+            transition: transform 0.3s;
+        }
+
+        .faq-item.active .faq-icon {
+            transform: rotate(180deg);
+        }
+
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .faq-item.active .faq-answer {
+            max-height: 200px;
+        }
+
+        .faq-answer p {
+            padding-bottom: 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.7;
+        }
+
+        /* ===== CTA SECTION ===== */
+        .cta-section {
+            padding: 120px 48px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(79, 70, 229, 0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .cta-title {
+            font-size: 48px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+            position: relative;
+        }
+
+        .cta-subtitle {
+            font-size: 18px;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .cta-note {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            margin-top: 16px;
+            position: relative;
+        }
+
+        /* ===== FOOTER ===== */
+        .footer {
+            padding: 60px 48px 40px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr repeat(3, 1fr);
+            gap: 48px;
+            max-width: 1200px;
+            margin: 0 auto 48px;
+        }
+
+        .footer-brand {
+            max-width: 300px;
+        }
+
+        .footer-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+
+        .footer-logo svg {
+            width: 32px;
+            height: 32px;
+        }
+
+        .footer-tagline {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .footer-column h4 {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+            color: var(--text-tertiary);
+        }
+
+        .footer-links {
+            list-style: none;
+        }
+
+        .footer-links li {
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: white;
+        }
+
+        .footer-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-copyright {
+            font-size: 13px;
+            color: var(--text-tertiary);
+        }
+
+        .footer-social {
+            display: flex;
+            gap: 16px;
+        }
+
+        .footer-social a {
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .footer-social a:hover {
+            background: rgba(79, 70, 229, 0.2);
+            color: white;
+        }
+
+        /* ===== MOBILE RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .hero-content {
+                flex-direction: column;
+                gap: 48px;
+                padding-top: 120px;
+            }
+            
+            .hero-title {
+                font-size: 48px;
+            }
+            
+            .steps-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .feature-card.large {
+                grid-column: span 1;
+            }
+            
+            .pricing-grid {
+                grid-template-columns: 1fr;
+                max-width: 400px;
+            }
+
+            .footer-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .nav {
+                padding: 16px 24px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .mobile-menu-btn {
+                display: block;
+            }
+
+            .hero-content,
+            .how-it-works,
+            .features,
+            .pricing,
+            .faq,
+            .cta-section {
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+
+            .hero-title {
+                font-size: 36px;
+            }
+
+            .hero-subtitle {
+                font-size: 16px;
+            }
+
+            .hero-ctas {
+                flex-direction: column;
+            }
+
+            .btn-primary,
+            .btn-secondary {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .section-title {
+                font-size: 32px;
+            }
+
+            .demo-card {
+                transform: none;
+            }
+
+            .demo-card:hover {
+                transform: none;
+            }
+
+            .cta-title {
+                font-size: 32px;
+            }
+
+            .footer-grid {
+                grid-template-columns: 1fr;
+                gap: 32px;
+            }
+
+            .footer-bottom {
+                flex-direction: column;
+                gap: 16px;
+                text-align: center;
+            }
+        }
+
+        /* Scroll animations */
+        .animate-on-scroll {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+        }
+
+        .animate-on-scroll.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L40 12V32L22 42L4 32V12L22 2Z" fill="url(#logoGradient)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                    <circle cx="22" cy="16" r="4" fill="white" fill-opacity="0.9"/>
+                    <circle cx="14" cy="26" r="3" fill="white" fill-opacity="0.7"/>
+                    <circle cx="30" cy="26" r="3" fill="white" fill-opacity="0.7"/>
+                    <circle cx="22" cy="32" r="2.5" fill="white" fill-opacity="0.8"/>
+                    <path d="M22 20L14 23M22 20L30 23M14 29L22 30M30 29L22 30" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.6"/>
+                    <defs>
+                        <linearGradient id="logoGradient" x1="4" y1="2" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#4F46E5"/>
+                            <stop offset="0.5" stop-color="#7C3AED"/>
+                            <stop offset="1" stop-color="#EC4899"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <span>Digital Brains</span>
+        </div>
+        <div class="nav-links">
+            <a href="#features" class="nav-link">Features</a>
+            <a href="#pricing" class="nav-link">Pricing</a>
+            <a href="#faq" class="nav-link">FAQ</a>
+            <a href="#" class="nav-link">Login</a>
+            <a href="#" class="nav-cta">Get Started</a>
+        </div>
+        <button class="mobile-menu-btn">☰</button>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="floating-shape shape-1"></div>
+        <div class="floating-shape shape-2"></div>
+
+        <div class="hero-content">
+            <div class="hero-text">
+                <div class="hero-badge">
+                    <span class="pulse"></span>
+                    Trusted by 1,000+ creators
+                </div>
+                <h1 class="hero-title">Create Your Digital Twin</h1>
+                <p class="hero-subtitle">
+                    An AI that answers exactly like you—with verified sources and zero hallucinations. Train once, scale infinitely.
+                </p>
+                <div class="hero-ctas">
+                    <a href="#" class="btn-primary">
+                        Build Your Twin Free
+                        <span>→</span>
+                    </a>
+                    <a href="#" class="btn-secondary">View Demo</a>
+                </div>
+                <div class="hero-trust">
+                    <span class="trust-text">Backed by teams at</span>
+                    <div class="trust-logos">
+                        <span class="trust-logo">Stripe</span>
+                        <span class="trust-logo">Notion</span>
+                        <span class="trust-logo">Figma</span>
+                        <span class="trust-logo">Linear</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hero-demo">
+                <div class="demo-card">
+                    <div class="demo-header">
+                        <div class="demo-avatar">LR</div>
+                        <div class="demo-info">
+                            <h4>Lenny Rachitsky</h4>
+                            <p>Product & Growth Advisor</p>
+                        </div>
+                        <div class="demo-live-badge">LIVE</div>
+                    </div>
+
+                    <div class="demo-stats">
+                        <div class="stat-box">
+                            <div class="stat-value">2,847</div>
+                            <div class="stat-label">Conversations</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">98.5%</div>
+                            <div class="stat-label">Accuracy</div>
+                        </div>
+                    </div>
+
+                    <div class="demo-chat">
+                        <div class="chat-message assistant">
+                            <div class="chat-avatar-small">LR</div>
+                            <div class="chat-bubble">
+                                Hi! I'm Lenny's digital twin. Ask me anything about product management, growth, or startup advice.
+                            </div>
+                        </div>
+                        <div class="chat-message user">
+                            <div class="chat-bubble">
+                                What's your framework for prioritizing features?
+                            </div>
+                        </div>
+                        <div class="chat-message assistant">
+                            <div class="chat-avatar-small">LR</div>
+                            <div class="chat-bubble">
+                                I use RICE (Reach, Impact, Confidence, Effort) combined with strategic bets...
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="demo-input">
+                        <div class="demo-input-text">Type your message...</div>
+                        <button class="demo-send">→</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <!-- How It Works -->
+    <section class="how-it-works">
+        <div class="section-header animate-on-scroll">
+            <div class="section-tag">How It Works</div>
+            <h2 class="section-title">Three steps to your AI twin</h2>
+            <p class="section-subtitle">From content to conversation in minutes, not months</p>
+        </div>
+
+        <div class="steps-grid">
+            <div class="step-card animate-on-scroll">
+                <div class="step-number">01</div>
+                <div class="step-icon">📤</div>
+                <h3 class="step-title">Connect Your Content</h3>
+                <p class="step-desc">Upload documents, connect URLs, or paste text. We support PDFs, Notion, YouTube transcripts, and more.</p>
+            </div>
+
+            <div class="step-card animate-on-scroll">
+                <div class="step-number">02</div>
+                <div class="step-icon">🧠</div>
+                <h3 class="step-title">Train Your Twin</h3>
+                <p class="step-desc">Answer a few questions to capture your voice, decision style, and expertise boundaries. Takes 5 minutes.</p>
+            </div>
+
+            <div class="step-card animate-on-scroll">
+                <div class="step-number">03</div>
+                <div class="step-icon">🚀</div>
+                <h3 class="step-title">Share Everywhere</h3>
+                <p class="step-desc">Get a shareable link, embed on your website, or integrate with Slack, Discord, or your API.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features" id="features">
+        <div class="section-header animate-on-scroll">
+            <div class="section-tag">Features</div>
+            <h2 class="section-title">Built for trust, designed for scale</h2>
+            <p class="section-subtitle">Everything you need to create a reliable AI twin</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card large animate-on-scroll">
+                <div class="feature-icon">📚</div>
+                <h3 class="feature-title">Source Citations</h3>
+                <p class="feature-desc">Every answer includes inline citations linking back to your original sources. Build trust with verified, traceable information.</p>
+                <div class="feature-preview">
+                    <div class="citation-example">
+                        <span>I recommend focusing on customer retention first</span>
+                        <span class="citation-sup">1</span>
+                        <span>then expansion revenue.</span>
+                        <span class="citation-sup">2</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="feature-card animate-on-scroll">
+                <div class="feature-icon">✓</div>
+                <h3 class="feature-title">Confidence Scoring</h3>
+                <p class="feature-desc">See exactly how confident your twin is in each response. Low confidence triggers automatic clarification.</p>
+                <div class="feature-preview">
+                    <span class="confidence-badge">
+                        <span>●</span> 94% Verified
+                    </span>
+                </div>
+            </div>
+
+            <div class="feature-card animate-on-scroll">
+                <div class="feature-icon">🎭</div>
+                <h3 class="feature-title">Voice Consistency</h3>
+                <p class="feature-desc">Your twin learns your unique writing style, tone, and decision-making patterns from training.</p>
+            </div>
+
+            <div class="feature-card animate-on-scroll">
+                <div class="feature-icon">🚨</div>
+                <h3 class="feature-title">Human Escalation</h3>
+                <p class="feature-desc">Questions outside your expertise are automatically escalated to you with suggested responses.</p>
+            </div>
+
+            <div class="feature-card animate-on-scroll">
+                <div class="feature-icon">🔒</div>
+                <h3 class="feature-title">Access Control</h3>
+                <p class="feature-desc">Control who can chat with your twin. Public links, password protection, or invite-only access.</p>
+            </div>
+        </div>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <!-- Pricing Section -->
+    <section class="pricing" id="pricing">
+        <div class="section-header animate-on-scroll">
+            <div class="section-tag">Pricing</div>
+            <h2 class="section-title">Simple, transparent pricing</h2>
+            <p class="section-subtitle">Start free, scale as you grow</p>
+        </div>
+
+        <div class="pricing-grid">
+            <div class="pricing-card animate-on-scroll">
+                <div class="pricing-name">Starter</div>
+                <div class="pricing-price">Free</div>
+                <div class="pricing-desc">Perfect for trying out your first twin</div>
+                <ul class="pricing-features">
+                    <li>1 digital twin</li>
+                    <li>100 messages/month</li>
+                    <li>3 knowledge sources</li>
+                    <li>Basic embed widget</li>
+                    <li>Community support</li>
+                </ul>
+                <button class="pricing-cta secondary">Get Started</button>
+            </div>
+
+            <div class="pricing-card popular animate-on-scroll">
+                <div class="popular-badge">Most Popular</div>
+                <div class="pricing-name">Pro</div>
+                <div class="pricing-price">$29<span>/month</span></div>
+                <div class="pricing-desc">For creators ready to scale</div>
+                <ul class="pricing-features">
+                    <li>3 digital twins</li>
+                    <li>Unlimited messages</li>
+                    <li>Unlimited sources</li>
+                    <li>Custom branding</li>
+                    <li>API access</li>
+                    <li>Priority support</li>
+                </ul>
+                <button class="pricing-cta primary">Start 14-Day Trial</button>
+            </div>
+
+            <div class="pricing-card animate-on-scroll">
+                <div class="pricing-name">Enterprise</div>
+                <div class="pricing-price">Custom</div>
+                <div class="pricing-desc">For teams with advanced needs</div>
+                <ul class="pricing-features">
+                    <li>Unlimited twins</li>
+                    <li>SSO / SAML</li>
+                    <li>Custom integrations</li>
+                    <li>SLA guarantee</li>
+                    <li>Dedicated support</li>
+                    <li>Audit logs</li>
+                </ul>
+                <button class="pricing-cta secondary">Contact Sales</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq" id="faq">
+        <div class="section-header animate-on-scroll">
+            <div class="section-tag">FAQ</div>
+            <h2 class="section-title">Frequently asked questions</h2>
+        </div>
+
+        <div class="faq-list">
+            <div class="faq-item animate-on-scroll">
+                <button class="faq-question">
+                    How is this different from ChatGPT?
+                    <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Your twin only answers from your verified knowledge sources—no hallucinations, no generic answers. It learns your specific voice, decision style, and expertise boundaries through structured training, not just prompt engineering.</p>
+                </div>
+            </div>
+
+            <div class="faq-item animate-on-scroll">
+                <button class="faq-question">
+                    Can I update my twin's knowledge?
+                    <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Yes! Add new documents, URLs, or text anytime. Your twin automatically incorporates new knowledge while maintaining version control—you can roll back to previous versions if needed.</p>
+                </div>
+            </div>
+
+            <div class="faq-item animate-on-scroll">
+                <button class="faq-question">
+                    Is my data private?
+                    <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Absolutely. Your training data and knowledge sources are isolated per tenant with Row Level Security in PostgreSQL. We never use your data to train models for other users. Full export and deletion supported.</p>
+                </div>
+            </div>
+
+            <div class="faq-item animate-on-scroll">
+                <button class="faq-question">
+                    What platforms can I share to?
+                    <svg class="faq-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div class="faq-answer">
+                    <p>Share via public link, embed as a widget on your website, or integrate via API into Slack, Discord, WhatsApp, or your own application. Full white-label options available on Pro and Enterprise plans.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <h2 class="cta-title animate-on-scroll">Ready to clone yourself?</h2>
+        <p class="cta-subtitle animate-on-scroll">Join 1,000+ creators who've already built their twins.</p>
+        <a href="#" class="btn-primary animate-on-scroll">Build Your Digital Twin Free →</a>
+        <p class="cta-note animate-on-scroll">No credit card • 2-minute setup • Cancel anytime</p>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-grid">
+            <div class="footer-brand">
+                <div class="footer-logo">
+                    <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22 2L40 12V32L22 42L4 32V12L22 2Z" fill="url(#footerLogoGradient)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                        <circle cx="22" cy="16" r="4" fill="white" fill-opacity="0.9"/>
+                        <circle cx="14" cy="26" r="3" fill="white" fill-opacity="0.7"/>
+                        <circle cx="30" cy="26" r="3" fill="white" fill-opacity="0.7"/>
+                        <circle cx="22" cy="32" r="2.5" fill="white" fill-opacity="0.8"/>
+                        <path d="M22 20L14 23M22 20L30 23M14 29L22 30M30 29L22 30" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.6"/>
+                        <defs>
+                            <linearGradient id="footerLogoGradient" x1="4" y1="2" x2="40" y2="42" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#4F46E5"/>
+                                <stop offset="0.5" stop-color="#7C3AED"/>
+                                <stop offset="1" stop-color="#EC4899"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    Digital Brains
+                </div>
+                <p class="footer-tagline">Creating AI twins that actually know things—trained on your expertise, speaking with your voice.</p>
+            </div>
+
+            <div class="footer-column">
+                <h4>Product</h4>
+                <ul class="footer-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#pricing">Pricing</a></li>
+                    <li><a href="#">API</a></li>
+                    <li><a href="#">Integrations</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-column">
+                <h4>Resources</h4>
+                <ul class="footer-links">
+                    <li><a href="#">Documentation</a></li>
+                    <li><a href="#">Blog</a></li>
+                    <li><a href="#">Community</a></li>
+                    <li><a href="#faq">Help Center</a></li>
+                </ul>
+            </div>
+
+            <div class="footer-column">
+                <h4>Company</h4>
+                <ul class="footer-links">
+                    <li><a href="#">About</a></li>
+                    <li><a href="#">Careers</a></li>
+                    <li><a href="#">Contact</a></li>
+                    <li><a href="#">Privacy</a></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer-bottom">
+            <p class="footer-copyright">© 2026 Digital Brains. All rights reserved.</p>
+            <div class="footer-social">
+                <a href="#" aria-label="Twitter">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                    </svg>
+                </a>
+                <a href="#" aria-label="GitHub">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                </a>
+                <a href="#" aria-label="Discord">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Scroll animations
+        const observerOptions = {
+            root: null,
+            rootMargin: '0px',
+            threshold: 0.1
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.animate-on-scroll').forEach(el => {
+            observer.observe(el);
+        });
+
+        // FAQ accordion
+        document.querySelectorAll('.faq-question').forEach(button => {
+            button.addEventListener('click', () => {
+                const item = button.parentElement;
+                const isActive = item.classList.contains('active');
+                
+                // Close all
+                document.querySelectorAll('.faq-item').forEach(faq => {
+                    faq.classList.remove('active');
+                });
+                
+                // Open clicked if wasn't active
+                if (!isActive) {
+                    item.classList.add('active');
+                }
+            });
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

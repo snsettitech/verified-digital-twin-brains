@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import ChatInterface from '@/components/Chat/ChatInterface';
 import GraphContext from '@/components/Chat/GraphContext';
 import { useTwin } from '@/lib/context/TwinContext';
@@ -8,6 +8,8 @@ import { useTwin } from '@/lib/context/TwinContext';
 interface SimulatorViewProps {
     twinId?: string;
     onBack?: () => void;
+    mode?: 'owner' | 'public' | 'training';
+    trainingSessionId?: string | null;
 }
 
 /**
@@ -15,11 +17,13 @@ interface SimulatorViewProps {
  * 
  * Reusable component for the Twin Simulator.
  */
-export function SimulatorView({ twinId, onBack }: SimulatorViewProps) {
+export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionId }: SimulatorViewProps) {
     const { activeTwin, isLoading } = useTwin();
     const effectiveTwinId = twinId || activeTwin?.id;
-    const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+    const contextKey = `${mode}:${trainingSessionId || 'none'}`;
+    const [conversationIdsByContext, setConversationIdsByContext] = useState<Record<string, string | null>>({});
     const [resetCounter, setResetCounter] = useState(0);
+    const currentConversationId = conversationIdsByContext[contextKey] || null;
 
     const settings = (activeTwin?.id === effectiveTwinId && activeTwin?.settings && typeof activeTwin.settings === 'object')
         ? (activeTwin.settings as Record<string, any>)
@@ -29,7 +33,7 @@ export function SimulatorView({ twinId, onBack }: SimulatorViewProps) {
     const hasIntentSummary = !!(intentProfile?.use_case || intentProfile?.audience || intentProfile?.boundaries || publicIntro);
 
     const startNewSession = () => {
-        setCurrentConversationId(null);
+        setConversationIdsByContext((prev) => ({ ...prev, [contextKey]: null }));
         setResetCounter((prev) => prev + 1);
     };
 
@@ -64,7 +68,11 @@ export function SimulatorView({ twinId, onBack }: SimulatorViewProps) {
             <div className="flex items-center justify-between mb-4">
                 <div>
                     <h2 className="text-xl font-extrabold tracking-tight text-slate-800">Simulator</h2>
-                    <p className="text-sm text-slate-500 font-medium">Test your Digital Twin&apos;s responses as a guest.</p>
+                    <p className="text-sm text-slate-500 font-medium">
+                        {mode === 'training'
+                            ? 'Test responses in owner training context.'
+                            : "Test your Digital Twin's responses as a guest."}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     {onBack && (
@@ -131,8 +139,12 @@ export function SimulatorView({ twinId, onBack }: SimulatorViewProps) {
                     twinId={effectiveTwinId}
                     tenantId={activeTwin?.tenant_id} // Fallback to context if needed, though strictly ChatInterface might need it
                     conversationId={currentConversationId}
-                    onConversationStarted={setCurrentConversationId}
+                    onConversationStarted={(id) =>
+                        setConversationIdsByContext((prev) => ({ ...prev, [contextKey]: id }))
+                    }
                     resetKey={resetCounter}
+                    mode={mode}
+                    trainingSessionId={trainingSessionId}
                 />
             </div>
         </div>

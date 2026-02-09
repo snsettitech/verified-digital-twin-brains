@@ -60,6 +60,24 @@ export default function ChatWidget({
     }
   }, [messages, loading, isOpen]);
 
+  // Keyboard shortcuts: Cmd+K to open, Escape to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K or Ctrl+K to toggle open
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsOpen(prev => !prev);
+      }
+      // Escape to close
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   // Get auth token for internal dashboard use (when no API key is provided)
   const getAuthToken = useCallback(async (): Promise<string | null> => {
     try {
@@ -252,9 +270,15 @@ export default function ChatWidget({
               </div>
               <div className="font-bold">Digital Twin</div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-1 rounded-md transition-colors">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Escape hint */}
+              <kbd className="hidden sm:inline-flex px-1.5 py-0.5 bg-white/20 rounded text-[10px] font-mono opacity-70">
+                ESC
+              </kbd>
+              <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-1 rounded-md transition-colors" aria-label="Close chat">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -330,24 +354,37 @@ export default function ChatWidget({
         </div>
       )}
 
-      {/* Toggle Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95 group"
-        style={{ backgroundColor: primaryColor }}
-      >
-        {isOpen ? (
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
-        ) : (
-          <div className="relative">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
-            <span
-              className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 rounded-full"
-              style={{ borderColor: primaryColor }}
-            ></span>
+      {/* Toggle Button with Keyboard Shortcut Hint */}
+      <div className="relative group">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white hover:scale-110 transition-transform active:scale-95"
+          style={{ backgroundColor: primaryColor }}
+          aria-label={isOpen ? 'Close chat' : 'Open chat (Cmd+K)'}
+        >
+          {isOpen ? (
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          ) : (
+            <div className="relative">
+              <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+              <span
+                className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 border-2 rounded-full"
+                style={{ borderColor: primaryColor }}
+              ></span>
+            </div>
+          )}
+        </button>
+        {/* Keyboard shortcut tooltip */}
+        {!isOpen && (
+          <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap border border-white/10 shadow-xl">
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[10px] font-mono">⌘K</kbd>
+              to open
+            </span>
+            <div className="absolute left-full top-1/2 -translate-y-1/2 -ml-1 w-2 h-2 bg-slate-800 border-t border-r border-white/10 rotate-45"></div>
           </div>
         )}
-      </button>
+      </div>
     </div>
   );
 }

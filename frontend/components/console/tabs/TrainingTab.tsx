@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/Toast';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { InterviewView, SimulatorView } from '@/components/training';
 import { KnowledgeTab } from '@/components/console/tabs/KnowledgeTab';
+import JobProgress from '@/components/jobs/JobProgress';
 
 // ... (Keep existing interfaces)
 interface ClarificationThread {
@@ -39,9 +40,20 @@ const STANCE_OPTIONS = ['', 'positive', 'negative', 'neutral', 'mixed', 'unknown
 
 type TrainingStep = 'intent' | 'interview' | 'knowledge' | 'inbox' | 'validate';
 
+interface ActiveTrainingSession {
+    id: string;
+    status: 'active' | 'stopped' | 'expired';
+    started_at?: string;
+    ended_at?: string;
+    metadata?: Record<string, any>;
+}
+
 export function TrainingTab({ twinId }: { twinId: string }) {
     const supabase = getSupabaseClient();
     const { showToast } = useToast();
+    const isE2EBypass =
+        process.env.NODE_ENV !== 'production' &&
+        process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
 
     // Core Data State
     const [pending, setPending] = useState<ClarificationThread[]>([]);
@@ -75,6 +87,8 @@ export function TrainingTab({ twinId }: { twinId: string }) {
     });
     const [publicIntro, setPublicIntro] = useState('');
     const [savingIntent, setSavingIntent] = useState(false);
+    const [activeTrainingSession, setActiveTrainingSession] = useState<ActiveTrainingSession | null>(null);
+    const [sessionLoading, setSessionLoading] = useState(false);
 
     // Search and pagination state
     const [searchQuery, setSearchQuery] = useState('');
@@ -88,25 +102,32 @@ export function TrainingTab({ twinId }: { twinId: string }) {
         try {
             const { data: { session } } = await supabase.auth.getSession();
             const token = session?.access_token;
-            if (!token) {
+            if (!token && !isE2EBypass) {
                 setError('Not authenticated.');
                 setLoading(false);
                 return;
             }
+            const authHeaders: Record<string, string> = {};
+            if (token) {
+                authHeaders['Authorization'] = `Bearer ${token}`;
+            }
 
             const backendUrl = resolveApiBaseUrl();
-            const [pendingRes, memoryRes, proposedRes, twinRes] = await Promise.all([
+            const [pendingRes, memoryRes, proposedRes, twinRes, trainingRes] = await Promise.all([
                 fetch(`${backendUrl}/twins/${twinId}/clarifications?status=pending_owner`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: authHeaders
                 }),
                 fetch(`${backendUrl}/twins/${twinId}/owner-memory?status=active`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: authHeaders
                 }),
                 fetch(`${backendUrl}/twins/${twinId}/owner-memory?status=proposed`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: authHeaders
                 }),
                 fetch(`${backendUrl}/twins/${twinId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: authHeaders
+                }),
+                fetch(`${backendUrl}/twins/${twinId}/training-sessions/active`, {
+                    headers: authHeaders
                 })
             ]);
 
@@ -133,6 +154,12 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                     boundaries: profile.boundaries || ''
                 });
                 setPublicIntro(settings.public_intro || '');
+            }
+            if (trainingRes.ok) {
+                const data = await trainingRes.json();
+                setActiveTrainingSession(data?.active ? (data?.session || null) : null);
+            } else {
+                setActiveTrainingSession(null);
             }
         } catch (err) {
             console.error(err);
@@ -424,6 +451,73 @@ export function TrainingTab({ twinId }: { twinId: string }) {
         }
     };
 
+    const startTrainingSession = async () => {
+        setSessionLoading(true);
+        setError(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (!token && !isE2EBypass) {
+                setError('Not authenticated.');
+                return;
+            }
+            const backendUrl = resolveApiBaseUrl();
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json'
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            const res = await fetch(`${backendUrl}/twins/${twinId}/training-sessions/start`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    metadata: { source: 'training_validate_step' }
+                })
+            });
+            if (!res.ok) throw new Error(`Start training session failed (${res.status})`);
+            const payload = await res.json();
+            setActiveTrainingSession(payload?.session || null);
+            showToast('Training session started', 'success');
+        } catch (err) {
+            console.error(err);
+            setError('Failed to start training session.');
+        } finally {
+            setSessionLoading(false);
+        }
+    };
+
+    const stopTrainingSession = async () => {
+        if (!activeTrainingSession?.id) return;
+        setSessionLoading(true);
+        setError(null);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (!token && !isE2EBypass) {
+                setError('Not authenticated.');
+                return;
+            }
+            const backendUrl = resolveApiBaseUrl();
+            const headers: Record<string, string> = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            const res = await fetch(`${backendUrl}/twins/${twinId}/training-sessions/${activeTrainingSession.id}/stop`, {
+                method: 'POST',
+                headers
+            });
+            if (!res.ok) throw new Error(`Stop training session failed (${res.status})`);
+            setActiveTrainingSession(null);
+            showToast('Training session stopped', 'success');
+        } catch (err) {
+            console.error(err);
+            setError('Failed to stop training session.');
+        } finally {
+            setSessionLoading(false);
+        }
+    };
+
     // Filtered memories based on search
     const filteredMemories = useMemo(() => {
         if (!searchQuery.trim()) return memories;
@@ -523,6 +617,11 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 </button>
                             </div>
                         </div>
+                    </section>
+
+                    {/* JOB PROGRESS */}
+                    <section id="training-jobs" className="max-w-3xl mx-auto">
+                        <JobProgress twinId={twinId} />
                     </section>
 
                     {/* STEP 2: INTERVIEW */}
@@ -872,7 +971,7 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
                                     <h3 className="text-sm font-semibold text-white mb-4">Pending Clarifications</h3>
                                     {pending.length === 0 ? (
-                                        <EmptyState emoji="✅" title="All caught up!" description="No questions need review." variant="subtle" />
+                                        <EmptyState illustration="checkmark" title="All caught up!" description="No questions need review." />
                                     ) : (
                                         <div className="space-y-4">
                                             {pending.map((thread) => (
@@ -898,7 +997,7 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
                                     <h3 className="text-sm font-semibold text-white mb-4">Proposed Memories</h3>
                                     {proposedMemories.length === 0 ? (
-                                        <EmptyState emoji="🧠" title="No proposals" description="Complete an interview to generate." variant="subtle" />
+                                        <EmptyState illustration="knowledge-empty" title="No proposals" description="Complete an interview to generate." />
                                     ) : (
                                         <div className="space-y-3">
                                             {proposedMemories.map((mem) => (
@@ -932,8 +1031,49 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                 Go to Checklist
                             </button>
                         </div>
+                        <div className="max-w-5xl mx-auto bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+                            <div>
+                                <div className="text-sm font-semibold text-white">Owner Training Session</div>
+                                <div className="text-xs text-slate-400">
+                                    {activeTrainingSession
+                                        ? `Active (${activeTrainingSession.id})`
+                                        : 'Inactive. Start to capture training-context turns.'}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {activeTrainingSession ? (
+                                    <button
+                                        onClick={stopTrainingSession}
+                                        disabled={sessionLoading}
+                                        className="px-3 py-2 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50"
+                                    >
+                                        {sessionLoading ? 'Stopping...' : 'Stop Training'}
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={startTrainingSession}
+                                        disabled={sessionLoading}
+                                        className="px-3 py-2 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-50"
+                                    >
+                                        {sessionLoading ? 'Starting...' : 'Start Training'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                         <div className="max-w-5xl mx-auto">
-                            <SimulatorView twinId={twinId} />
+                            <SimulatorView
+                                twinId={twinId}
+                                mode={activeTrainingSession ? 'training' : 'owner'}
+                                trainingSessionId={activeTrainingSession?.id || null}
+                            />
+                        </div>
+                    </section>
+
+                    {/* JOB PROGRESS */}
+                    <section id="training-jobs" className="space-y-4">
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+                            <h2 className="text-xl font-bold text-white mb-4">Background Jobs</h2>
+                            <JobProgress twinId={twinId} />
                         </div>
                     </section>
 

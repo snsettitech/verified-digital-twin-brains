@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useTwin } from '@/lib/context/TwinContext';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
+import { EmptyState, EmptyTwinNoActivity } from '@/components/ui/EmptyState';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -323,10 +324,19 @@ export default function DashboardPage() {
             {loading ? (
               <div className="text-center py-8 text-slate-400">Loading activity...</div>
             ) : recentActivity.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <p>No activity yet</p>
-                <p className="text-sm mt-1">Start a conversation to see activity here</p>
-              </div>
+              activeTwin?.name ? (
+                <EmptyTwinNoActivity twinName={activeTwin.name} />
+              ) : (
+                <EmptyState
+                  illustration="chat-bubble"
+                  title="No activity yet"
+                  description="Start a conversation to see activity here."
+                  primaryAction={{
+                    label: 'Start Chatting',
+                    href: '/dashboard/simulator',
+                  }}
+                />
+              )
             ) : (
               recentActivity.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0 last:pb-0">

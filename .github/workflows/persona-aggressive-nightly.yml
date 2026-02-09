@@ -1,0 +1,64 @@
+name: Persona Aggressive Nightly
+
+on:
+  schedule:
+    - cron: "20 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  persona-aggressive:
+    name: Persona Aggressive Evaluation
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "backend/.python-version"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest
+
+      - name: Run aggressive persona unit lane
+        run: |
+          pytest -q \
+            backend/tests/test_persona_channel_isolation.py \
+            backend/tests/test_persona_blind_recognition.py \
+            backend/tests/test_persona_convergence_gate.py \
+            backend/tests/test_persona_aggressive_runner.py \
+            backend/tests/test_persona_regression_runner.py
+
+      - name: Run aggressive roleplay convergence gate
+        run: |
+          python backend/eval/persona_aggressive_runner.py \
+            --dataset backend/eval/persona_roleplay_scenarios.json \
+            --output artifacts/persona_aggressive_nightly_summary.json \
+            --max-cycles 6 \
+            --required-consecutive 3 \
+            --scenario-multiplier 8 \
+            --persona-recognizability-min 0.80 \
+            --post-rewrite-compliance-min 0.88 \
+            --citation-validity-min 0.95 \
+            --clarification-correctness-min 0.85 \
+            --invalid-policy-transitions-max 0 \
+            --rewrite-rate-max 0.30 \
+            --latency-delta-max 0.25 \
+            --public-context-training-writes-max 0 \
+            --unpublished-leakage-max 0
+
+      - name: Upload aggressive evaluation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: persona-aggressive-nightly
+          path: |
+            artifacts/persona_aggressive_nightly_summary.json
+            artifacts/transcripts.json

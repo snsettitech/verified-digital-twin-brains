@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import MessageList, { Message } from './MessageList';
+import SuggestedQuestions from './SuggestedQuestions';
 import { useTwin } from '@/lib/context/TwinContext';
 import { resolveApiBaseUrl } from '@/lib/api';
 
@@ -15,6 +16,7 @@ export default function ChatInterface({
   resetKey,
   tenantId,
   mode = 'owner',
+  trainingSessionId,
   onMemoryUpdated
 }: {
   twinId: string;
@@ -23,9 +25,13 @@ export default function ChatInterface({
   resetKey?: number;
   tenantId?: string | null;
   mode?: 'owner' | 'public' | 'training';
+  trainingSessionId?: string | null;
   onMemoryUpdated?: () => void;
 }) {
   const { user } = useTwin();
+  const isE2EBypass =
+    process.env.NODE_ENV !== 'production' &&
+    process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -55,10 +61,14 @@ export default function ChatInterface({
   const abortRef = useRef<AbortController | null>(null);
 
   const supabase = getSupabaseClient();
+  const contextStorageKey = mode === 'training'
+    ? `training_${trainingSessionId || 'none'}`
+    : mode;
+
   const storageKey = useMemo(() => {
     const resolvedTenantId = tenantId || user?.tenant_id || 'unknown';
-    return `simulator_chat_${resolvedTenantId}_${twinId}`;
-  }, [tenantId, user?.tenant_id, twinId]);
+    return `simulator_chat_${resolvedTenantId}_${twinId}_${contextStorageKey}`;
+  }, [tenantId, user?.tenant_id, twinId, contextStorageKey]);
   const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
 
   const getAuthToken = useCallback(async (): Promise<string | null> => {
@@ -100,14 +110,17 @@ export default function ChatInterface({
     intensity?: number;
   }) => {
     const token = await getAuthToken();
-    if (!token) throw new Error('Not authenticated');
+    if (!token && !isE2EBypass) throw new Error('Not authenticated');
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
     const res = await fetch(`${apiBaseUrl}/twins/${twinId}/owner-memory`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         topic_normalized: payload.topic,
         memory_type: payload.memory_type,
@@ -123,7 +136,7 @@ export default function ChatInterface({
 
     onMemoryUpdated?.();
     setMessages((prev) => [...prev, { role: 'assistant', content: 'Saved to memory.', timestamp: Date.now() }]);
-  }, [apiBaseUrl, getAuthToken, onMemoryUpdated, twinId]);
+  }, [apiBaseUrl, getAuthToken, onMemoryUpdated, twinId, isE2EBypass]);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -226,20 +239,24 @@ export default function ChatInterface({
 
     try {
       const token = await getAuthToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token && !isE2EBypass) throw new Error('Not authenticated');
 
       abortRef.current = new AbortController();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
 
       const response = await fetch(`${apiBaseUrl}/chat/${twinId}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           query: text,
           conversation_id: conversationId || null,
-          mode: mode === 'training' ? 'owner' : mode,
+          mode,
+          training_session_id: mode === 'training' ? (trainingSessionId || undefined) : undefined,
         }),
         signal: abortRef.current.signal
       });
@@ -293,7 +310,11 @@ export default function ChatInterface({
                 });
               } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
                 setIsSearching(false); // Found context, now generating
-                if (data.conversation_id && !conversationId && onConversationStarted) {
+                if (
+                  data.conversation_id &&
+                  onConversationStarted &&
+                  data.conversation_id !== conversationId
+                ) {
                   onConversationStarted(data.conversation_id);
                 }
                 const summaries = Array.isArray(data.owner_memory_summaries)
@@ -378,7 +399,11 @@ export default function ChatInterface({
             });
           } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
             setIsSearching(false);
-            if (data.conversation_id && !conversationId && onConversationStarted) {
+            if (
+              data.conversation_id &&
+              onConversationStarted &&
+              data.conversation_id !== conversationId
+            ) {
               onConversationStarted(data.conversation_id);
             }
             const summaries = Array.isArray(data.owner_memory_summaries)
@@ -512,6 +537,7 @@ export default function ChatInterface({
         loading={loading}
         isSearching={isSearching}
         enableRemember={mode !== 'public'}
+        twinId={twinId}
         onRemember={rememberMemory}
       />
 
@@ -548,13 +574,16 @@ export default function ChatInterface({
               onClick={async () => {
                 try {
                   const token = await getAuthToken();
-                  if (!token) throw new Error('Not authenticated');
+                  if (!token && !isE2EBypass) throw new Error('Not authenticated');
+                  const headers: Record<string, string> = {
+                    'Content-Type': 'application/json'
+                  };
+                  if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                  }
                   const res = await fetch(`${apiBaseUrl}/twins/${twinId}/clarifications/${clarification.clarification_id}/resolve`, {
                     method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${token}`,
-                      'Content-Type': 'application/json'
-                    },
+                    headers,
                     body: JSON.stringify({
                       answer: clarifyAnswer || clarifyOption || '',
                       selected_option: clarifyOption || undefined
@@ -644,6 +673,22 @@ export default function ChatInterface({
             )}
           </div>
         )}
+        {/* Suggested Questions */}
+        {messages.length <= 1 && !loading && mode !== 'public' && (
+          <div className="max-w-4xl mx-auto w-full px-6 mb-4">
+            <SuggestedQuestions
+              twinId={twinId}
+              onSelect={(question) => {
+                setInput(question);
+                // Focus the textarea
+                const textarea = document.querySelector('#chat-input textarea') as HTMLTextAreaElement;
+                textarea?.focus();
+              }}
+              disabled={loading}
+            />
+          </div>
+        )}
+
         <div id="chat-input" className="relative flex items-start max-w-4xl mx-auto w-full pb-[env(safe-area-inset-bottom)]">
           <textarea
             value={input}

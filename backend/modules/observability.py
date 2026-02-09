@@ -22,16 +22,49 @@ try:
 except Exception as e:
     raise ValueError(f"Failed to initialize Supabase client: {e}. Please check your SUPABASE_URL and SUPABASE_KEY environment variables.")
 
-def create_conversation(twin_id: str, user_id: str = None, group_id: str = None):
+def create_conversation(
+    twin_id: str,
+    user_id: str = None,
+    group_id: str = None,
+    interaction_context: str = None,
+    origin_endpoint: str = None,
+    share_link_id: str = None,
+    training_session_id: str = None,
+):
     data = {"twin_id": twin_id}
     if user_id:
         data["user_id"] = user_id
     if group_id:
         data["group_id"] = group_id
-    response = supabase.table("conversations").insert(data).execute()
+    if interaction_context:
+        data["interaction_context"] = interaction_context
+    if origin_endpoint:
+        data["origin_endpoint"] = origin_endpoint
+    if share_link_id:
+        data["share_link_id"] = share_link_id
+    if training_session_id:
+        data["training_session_id"] = training_session_id
+
+    try:
+        response = supabase.table("conversations").insert(data).execute()
+    except Exception:
+        # Compatibility fallback for environments where context columns are not migrated yet.
+        fallback = {"twin_id": twin_id}
+        if user_id:
+            fallback["user_id"] = user_id
+        if group_id:
+            fallback["group_id"] = group_id
+        response = supabase.table("conversations").insert(fallback).execute()
     return response.data[0] if response.data else None
 
-def log_interaction(conversation_id: str, role: str, content: str, citations: list = None, confidence_score: float = None):
+def log_interaction(
+    conversation_id: str,
+    role: str,
+    content: str,
+    citations: list = None,
+    confidence_score: float = None,
+    interaction_context: str = None,
+):
     data = {
         "conversation_id": conversation_id,
         "role": role,
@@ -41,8 +74,23 @@ def log_interaction(conversation_id: str, role: str, content: str, citations: li
         data["citations"] = citations
     if confidence_score is not None:
         data["confidence_score"] = confidence_score
-        
-    response = supabase.table("messages").insert(data).execute()
+    if interaction_context:
+        data["interaction_context"] = interaction_context
+
+    try:
+        response = supabase.table("messages").insert(data).execute()
+    except Exception:
+        # Compatibility fallback for environments where message context column is not migrated yet.
+        fallback = {
+            "conversation_id": conversation_id,
+            "role": role,
+            "content": content,
+        }
+        if citations:
+            fallback["citations"] = citations
+        if confidence_score is not None:
+            fallback["confidence_score"] = confidence_score
+        response = supabase.table("messages").insert(fallback).execute()
     return response.data[0] if response.data else None
 
 def get_conversations(twin_id: str):

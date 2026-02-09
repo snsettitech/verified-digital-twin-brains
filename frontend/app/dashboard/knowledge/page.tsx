@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTwin } from '@/lib/context/TwinContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import UnifiedIngestion from '@/components/ingestion/UnifiedIngestion';
+import KnowledgeGraph from '@/components/Knowledge/KnowledgeGraph';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
@@ -92,6 +93,7 @@ export default function KnowledgePage() {
   const [profile, setProfile] = useState<KnowledgeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'graph'>('list');
 
   const twinId = activeTwin?.id;
 
@@ -232,14 +234,48 @@ export default function KnowledgePage() {
         </div>
       )}
 
-      {/* Sources List */}
+      {/* Sources List / Graph Toggle */}
       <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
         <div className="p-8 border-b border-slate-100 flex items-center justify-between">
           <h3 className="text-lg font-black text-slate-800">Your Sources</h3>
-          <span className="text-xs font-black text-slate-400 bg-slate-50 px-4 py-1.5 rounded-full">{sources.length} Total</span>
+          <div className="flex items-center gap-4">
+            <span className="text-xs font-black text-slate-400 bg-slate-50 px-4 py-1.5 rounded-full">{sources.length} Total</span>
+            
+            {/* View Toggle */}
+            <div className="flex items-center bg-slate-100 rounded-full p-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  viewMode === 'list' 
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('graph')}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${
+                  viewMode === 'graph' 
+                    ? 'bg-white text-slate-900 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Graph
+              </button>
+            </div>
+          </div>
         </div>
 
-        {loading ? (
+        {/* Graph View */}
+        {viewMode === 'graph' && twinId && (
+          <div className="p-6">
+            <KnowledgeGraph twinId={twinId} />
+          </div>
+        )}
+
+        {/* List View */}
+        {viewMode === 'list' && (loading ? (
           <div className="p-20 flex justify-center">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
           </div>
@@ -321,7 +357,7 @@ export default function KnowledgePage() {
               </tbody>
             </table>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

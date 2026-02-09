@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-09T05:40:44.684959+00:00",
+  "twin_id": "5dd06bcb-9afa-4174-a9bf-308dcf4108c3",
+  "feedback_event": {
+    "trace_id": "trace-auto-enqueue-345bc680-f653-40f1-a14e-24e0101e9ea0",
+    "stored": true,
+    "event_id": "ee1e76ea-edad-431b-8410-7c4ded97c4ff"
+  },
+  "enqueue_outcome": {
+    "enqueued": false,
+    "reason": "cooldown_active",
+    "cooldown_minutes": 30
+  },
+  "job_before_processing": null,
+  "processed_ok": null,
+  "job_after_processing": null
+}

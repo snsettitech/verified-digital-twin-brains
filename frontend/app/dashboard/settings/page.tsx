@@ -6,6 +6,7 @@ import { getSupabaseClient } from '@/lib/supabase/client';
 import { useTwin } from '@/lib/context/TwinContext';
 import DeleteTwinModal from '@/components/ui/DeleteTwinModal';
 import { useToast } from '@/components/ui';
+import VoiceSettings from '@/components/settings/VoiceSettings';
 
 interface UserProfile {
   name: string;
@@ -23,6 +24,20 @@ interface TwinSettings {
   systemPrompt: string;
 }
 
+interface QuotaData {
+  quota_type: string;
+  limit: number;
+  current_usage: number;
+  remaining: number;
+  percent_used: number;
+  reset_at?: string;
+}
+
+interface QuotaResponse {
+  tenant_id: string;
+  quotas: QuotaData[];
+}
+
 const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 export default function SettingsPage() {
@@ -30,7 +45,7 @@ export default function SettingsPage() {
   const supabase = getSupabaseClient();
   const { showToast } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'twin' | 'billing' | 'danger'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'twin' | 'voice' | 'billing' | 'danger'>('profile');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
@@ -66,11 +81,64 @@ export default function SettingsPage() {
     systemPrompt: ''
   });
 
+  // Quota/billing state
+  const [quotaData, setQuotaData] = useState<QuotaResponse | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(false);
+  const [quotaError, setQuotaError] = useState<string | null>(null);
+
   // Get auth token
   const getAuthToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token;
   }, [supabase]);
+
+  // Fetch quota data for billing
+  const fetchQuotaData = useCallback(async () => {
+    if (!user?.tenant_id) {
+      setQuotaLoading(false);
+      return;
+    }
+    
+    setQuotaLoading(true);
+    setQuotaError(null);
+    
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setQuotaError('Not authenticated');
+        setQuotaLoading(false);
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/metrics/quota/${user.tenant_id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setQuotaData(data);
+      } else if (response.status === 404) {
+        // No quota set yet, show default
+        setQuotaData({
+          tenant_id: user.tenant_id,
+          quotas: [{
+            quota_type: 'daily_tokens',
+            limit: 100000,
+            current_usage: 0,
+            remaining: 100000,
+            percent_used: 0
+          }]
+        });
+      } else {
+        setQuotaError(`Failed to load usage data (${response.status})`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch quota:', error);
+      setQuotaError('Network error. Please try again.');
+    } finally {
+      setQuotaLoading(false);
+    }
+  }, [user?.tenant_id, getAuthToken]);
 
   // Handle photo upload
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,6 +261,13 @@ export default function SettingsPage() {
       });
     }
   }, [user]);
+
+  // Fetch quota data when billing tab is active
+  useEffect(() => {
+    if (activeTab === 'billing') {
+      fetchQuotaData();
+    }
+  }, [activeTab, fetchQuotaData]);
 
   // Real PATCH save with TwinContext refresh
   const handleSave = async () => {
@@ -386,6 +461,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'profile', label: 'Profile', icon: '👤' },
     { id: 'twin', label: 'Twin Settings', icon: '🤖' },
+    { id: 'voice', label: 'Voice', icon: '🔊' },
     { id: 'billing', label: 'Billing', icon: '💳' },
     { id: 'danger', label: 'Danger Zone', icon: '⚠️' },
   ];
@@ -622,6 +698,11 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Voice Tab */}
+      {activeTab === 'voice' && activeTwin && (
+        <VoiceSettings twinId={activeTwin.id} />
+      )}
+
       {/* Billing Tab */}
       {activeTab === 'billing' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
@@ -632,21 +713,72 @@ export default function SettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-indigo-200 text-sm font-medium">Current Plan</p>
-                <p className="text-2xl font-black mt-1">Free Plan</p>
+                <p className="text-2xl font-black mt-1">
+                  {(quotaData?.quotas?.[0]?.limit ?? 0) > 1000 ? 'Pro Plan' : 'Free Plan'}
+                </p>
               </div>
               <button className="px-4 py-2 bg-white text-indigo-600 font-semibold text-sm rounded-xl hover:bg-indigo-50 transition-colors">
                 Upgrade to Pro
               </button>
             </div>
-            <div className="mt-4 pt-4 border-t border-white/20">
-              <div className="flex justify-between text-sm">
-                <span className="text-indigo-200">Messages used</span>
-                <span className="font-medium">67 / 100</span>
+            
+            {quotaLoading ? (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <div className="animate-pulse flex justify-between text-sm">
+                  <span className="text-indigo-200">Loading usage...</span>
+                </div>
+                <div className="mt-2 w-full h-2 bg-white/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-white/50 rounded-full animate-pulse" style={{ width: '50%' }} />
+                </div>
               </div>
-              <div className="mt-2 w-full h-2 bg-white/20 rounded-full overflow-hidden">
-                <div className="h-full bg-white rounded-full" style={{ width: '67%' }} />
+            ) : quotaError ? (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <div className="flex items-center gap-2 text-sm text-amber-200">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <span>{quotaError}</span>
+                </div>
+                <button
+                  onClick={fetchQuotaData}
+                  className="mt-2 text-xs text-white underline hover:no-underline"
+                >
+                  Retry
+                </button>
               </div>
-            </div>
+            ) : quotaData?.quotas?.[0] ? (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <div className="flex justify-between text-sm">
+                  <span className="text-indigo-200">
+                    {quotaData.quotas[0].quota_type === 'daily_tokens' ? 'Tokens used' : 'Messages used'}
+                  </span>
+                  <span className="font-medium">
+                    {quotaData.quotas[0].current_usage.toLocaleString()} / {quotaData.quotas[0].limit.toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-2 w-full h-2 bg-white/20 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-white rounded-full transition-all duration-500" 
+                    style={{ width: `${Math.min(quotaData.quotas[0].percent_used, 100)}%` }} 
+                  />
+                </div>
+                <p className="mt-2 text-xs text-indigo-200">
+                  {quotaData.quotas[0].percent_used > 80 ? '⚠️ Approaching limit' : 
+                   quotaData.quotas[0].percent_used < 20 ? '✓ Plenty of room' : 
+                   `${(100 - quotaData.quotas[0].percent_used).toFixed(0)}% remaining`}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <div className="flex justify-between text-sm">
+                  <span className="text-indigo-200">Messages used</span>
+                  <span className="font-medium">0 / 100</span>
+                </div>
+                <div className="mt-2 w-full h-2 bg-white/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-white rounded-full" style={{ width: '0%' }} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Plan Comparison */}

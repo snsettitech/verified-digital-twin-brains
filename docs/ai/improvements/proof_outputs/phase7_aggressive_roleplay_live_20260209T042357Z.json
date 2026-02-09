@@ -1,0 +1,2689 @@
+{
+  "timestamp": "2026-02-09T04:26:21.538798+00:00",
+  "dataset_version": "phase6_aggressive_v1",
+  "generator_mode": "openai",
+  "model": "gpt-4o-mini",
+  "max_cycles": 6,
+  "required_consecutive": 3,
+  "scenario_multiplier": 1,
+  "total_cycles_executed": 5,
+  "converged": true,
+  "convergence": {
+    "timestamp": "2026-02-09T04:26:21.536495+00:00",
+    "required_consecutive": 3,
+    "total_cycles": 5,
+    "tail_streak": 3,
+    "longest_streak": 3,
+    "converged": true,
+    "thresholds": {
+      "persona_recognizability_min": 0.8,
+      "post_rewrite_compliance_min": 0.88,
+      "citation_validity_min": 0.95,
+      "clarification_correctness_min": 0.85,
+      "invalid_policy_transitions_max": 0,
+      "rewrite_rate_max": 0.3,
+      "latency_delta_max": 0.25,
+      "public_context_training_writes_max": 0,
+      "unpublished_leakage_max": 0
+    },
+    "cycles": [
+      {
+        "cycle": 1,
+        "passed": false,
+        "checks": {
+          "persona_recognizability": true,
+          "post_rewrite_compliance": true,
+          "citation_validity": true,
+          "clarification_correctness": false,
+          "invalid_policy_transitions": true,
+          "rewrite_rate": true,
+          "latency_delta": true,
+          "public_context_training_writes": true,
+          "unpublished_leakage": true
+        },
+        "failed_checks": [
+          "clarification_correctness"
+        ],
+        "metrics": {
+          "cycle": 1,
+          "persona_recognizability": 1.0,
+          "post_rewrite_compliance": 0.9917,
+          "citation_validity": 1.0,
+          "clarification_correctness": 0.75,
+          "invalid_policy_transitions": 0,
+          "rewrite_rate": 0.1667,
+          "latency_delta": 0.1377,
+          "public_context_training_writes": 0,
+          "unpublished_leakage": 0,
+          "metadata": {
+            "total_cases": 24,
+            "rewrite_count": 4,
+            "state_version": 1,
+            "state_adherence": 0.58,
+            "top_violations": [
+              "EXPECT_CLARIFICATION_BEHAVIOR"
+            ],
+            "channel_isolation_pass_rate": 1.0
+          }
+        }
+      },
+      {
+        "cycle": 2,
+        "passed": false,
+        "checks": {
+          "persona_recognizability": true,
+          "post_rewrite_compliance": true,
+          "citation_validity": true,
+          "clarification_correctness": false,
+          "invalid_policy_transitions": true,
+          "rewrite_rate": true,
+          "latency_delta": true,
+          "public_context_training_writes": true,
+          "unpublished_leakage": true
+        },
+        "failed_checks": [
+          "clarification_correctness"
+        ],
+        "metrics": {
+          "cycle": 2,
+          "persona_recognizability": 1.0,
+          "post_rewrite_compliance": 0.9917,
+          "citation_validity": 1.0,
+          "clarification_correctness": 0.75,
+          "invalid_policy_transitions": 0,
+          "rewrite_rate": 0.25,
+          "latency_delta": 0.169,
+          "public_context_training_writes": 0,
+          "unpublished_leakage": 0,
+          "metadata": {
+            "total_cases": 24,
+            "rewrite_count": 6,
+            "state_version": 2,
+            "state_adherence": 0.62,
+            "top_violations": [
+              "EXPECT_CLARIFICATION_BEHAVIOR"
+            ],
+            "channel_isolation_pass_rate": 1.0
+          }
+        }
+      },
+      {
+        "cycle": 3,
+        "passed": true,
+        "checks": {
+          "persona_recognizability": true,
+          "post_rewrite_compliance": true,
+          "citation_validity": true,
+          "clarification_correctness": true,
+          "invalid_policy_transitions": true,
+          "rewrite_rate": true,
+          "latency_delta": true,
+          "public_context_training_writes": true,
+          "unpublished_leakage": true
+        },
+        "failed_checks": [],
+        "metrics": {
+          "cycle": 3,
+          "persona_recognizability": 1.0,
+          "post_rewrite_compliance": 0.9958,
+          "citation_validity": 1.0,
+          "clarification_correctness": 1.0,
+          "invalid_policy_transitions": 0,
+          "rewrite_rate": 0.2083,
+          "latency_delta": 0.1495,
+          "public_context_training_writes": 0,
+          "unpublished_leakage": 0,
+          "metadata": {
+            "total_cases": 24,
+            "rewrite_count": 5,
+            "state_version": 3,
+            "state_adherence": 0.6775,
+            "top_violations": [
+              "EXPECT_CLARIFICATION_BEHAVIOR"
+            ],
+            "channel_isolation_pass_rate": 1.0
+          }
+        }
+      },
+      {
+        "cycle": 4,
+        "passed": true,
+        "checks": {
+          "persona_recognizability": true,
+          "post_rewrite_compliance": true,
+          "citation_validity": true,
+          "clarification_correctness": true,
+          "invalid_policy_transitions": true,
+          "rewrite_rate": true,
+          "latency_delta": true,
+          "public_context_training_writes": true,
+          "unpublished_leakage": true
+        },
+        "failed_checks": [],
+        "metrics": {
+          "cycle": 4,
+          "persona_recognizability": 1.0,
+          "post_rewrite_compliance": 0.9958,
+          "citation_validity": 1.0,
+          "clarification_correctness": 1.0,
+          "invalid_policy_transitions": 0,
+          "rewrite_rate": 0.25,
+          "latency_delta": 0.164,
+          "public_context_training_writes": 0,
+          "unpublished_leakage": 0,
+          "metadata": {
+            "total_cases": 24,
+            "rewrite_count": 6,
+            "state_version": 4,
+            "state_adherence": 0.7204,
+            "top_violations": [
+              "EXPECT_CLARIFICATION_BEHAVIOR"
+            ],
+            "channel_isolation_pass_rate": 1.0
+          }
+        }
+      },
+      {
+        "cycle": 5,
+        "passed": true,
+        "checks": {
+          "persona_recognizability": true,
+          "post_rewrite_compliance": true,
+          "citation_validity": true,
+          "clarification_correctness": true,
+          "invalid_policy_transitions": true,
+          "rewrite_rate": true,
+          "latency_delta": true,
+          "public_context_training_writes": true,
+          "unpublished_leakage": true
+        },
+        "failed_checks": [],
+        "metrics": {
+          "cycle": 5,
+          "persona_recognizability": 1.0,
+          "post_rewrite_compliance": 0.9958,
+          "citation_validity": 1.0,
+          "clarification_correctness": 1.0,
+          "invalid_policy_transitions": 0,
+          "rewrite_rate": 0.2917,
+          "latency_delta": 0.1778,
+          "public_context_training_writes": 0,
+          "unpublished_leakage": 0,
+          "metadata": {
+            "total_cases": 24,
+            "rewrite_count": 7,
+            "state_version": 5,
+            "state_adherence": 0.7779,
+            "top_violations": [
+              "EXPECT_CLARIFICATION_BEHAVIOR"
+            ],
+            "channel_isolation_pass_rate": 1.0
+          }
+        }
+      }
+    ]
+  },
+  "cycles": [
+    {
+      "cycle": 1,
+      "metrics": {
+        "cycle": 1,
+        "persona_recognizability": 1.0,
+        "post_rewrite_compliance": 0.9917,
+        "citation_validity": 1.0,
+        "clarification_correctness": 0.75,
+        "invalid_policy_transitions": 0,
+        "rewrite_rate": 0.1667,
+        "latency_delta": 0.1377,
+        "public_context_training_writes": 0,
+        "unpublished_leakage": 0,
+        "metadata": {
+          "total_cases": 24,
+          "rewrite_count": 4,
+          "state_version": 1,
+          "state_adherence": 0.58,
+          "top_violations": [
+            "EXPECT_CLARIFICATION_BEHAVIOR"
+          ],
+          "channel_isolation_pass_rate": 1.0
+        }
+      },
+      "recognition": {
+        "timestamp": "2026-02-09T04:24:26.921750+00:00",
+        "total": 24,
+        "correct": 24,
+        "accuracy": 1.0,
+        "min_accuracy": 0.8,
+        "passed": true,
+        "confusion_matrix": {
+          "owner_exec_direct": {
+            "owner_exec_direct": 12
+          },
+          "owner_coach_reflective": {
+            "owner_coach_reflective": 12
+          }
+        },
+        "results": [
+          {
+            "transcript_id": "rp_0001-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0002-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.92
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.425
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0003-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.75
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0004-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.92
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.3
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0005-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0006-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0007-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0008-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0009-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0010-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.697222
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0011-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.716667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.273333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0012-c1-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0013-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.426111
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0014-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0015-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0016-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.29
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0017-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0018-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0019-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.75
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0020-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0021-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.703333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.456667
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0022-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.71
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.26
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0023-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0024-c1-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          }
+        ]
+      },
+      "channel_isolation": {
+        "total": 6,
+        "passed": 6,
+        "pass_rate": 1.0,
+        "checks": [
+          {
+            "id": "owner_mode_spoof",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "owner_active_training",
+            "passed": true,
+            "detail": "owner_training"
+          },
+          {
+            "id": "owner_inactive_training",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "visitor_training_spoof",
+            "passed": true,
+            "detail": "public_widget"
+          },
+          {
+            "id": "public_share_resolution",
+            "passed": true,
+            "detail": "public_share:token-ab"
+          },
+          {
+            "id": "training_write_block_public",
+            "passed": true,
+            "detail": "403 expected"
+          }
+        ],
+        "declared_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "executed_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "undeclared_executed_checks": [],
+        "missing_declared_checks": []
+      },
+      "turn_summary": {
+        "total": 24,
+        "passed": 24,
+        "rewrites": 4
+      }
+    },
+    {
+      "cycle": 2,
+      "metrics": {
+        "cycle": 2,
+        "persona_recognizability": 1.0,
+        "post_rewrite_compliance": 0.9917,
+        "citation_validity": 1.0,
+        "clarification_correctness": 0.75,
+        "invalid_policy_transitions": 0,
+        "rewrite_rate": 0.25,
+        "latency_delta": 0.169,
+        "public_context_training_writes": 0,
+        "unpublished_leakage": 0,
+        "metadata": {
+          "total_cases": 24,
+          "rewrite_count": 6,
+          "state_version": 2,
+          "state_adherence": 0.62,
+          "top_violations": [
+            "EXPECT_CLARIFICATION_BEHAVIOR"
+          ],
+          "channel_isolation_pass_rate": 1.0
+        }
+      },
+      "recognition": {
+        "timestamp": "2026-02-09T04:24:52.769132+00:00",
+        "total": 24,
+        "correct": 24,
+        "accuracy": 1.0,
+        "min_accuracy": 0.8,
+        "passed": true,
+        "confusion_matrix": {
+          "owner_exec_direct": {
+            "owner_exec_direct": 12
+          },
+          "owner_coach_reflective": {
+            "owner_coach_reflective": 12
+          }
+        },
+        "results": [
+          {
+            "transcript_id": "rp_0001-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0002-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.92
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.425
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0003-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.625
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0004-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.825
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0005-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0006-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0007-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0008-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0009-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0010-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.572222
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0011-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0012-c2-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0013-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.848333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0014-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0015-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0016-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.75
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.415
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0017-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0018-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0019-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.703333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.456667
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0020-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0021-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.703333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.456667
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0022-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.585
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.26
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0023-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0024-c2-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          }
+        ]
+      },
+      "channel_isolation": {
+        "total": 6,
+        "passed": 6,
+        "pass_rate": 1.0,
+        "checks": [
+          {
+            "id": "owner_mode_spoof",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "owner_active_training",
+            "passed": true,
+            "detail": "owner_training"
+          },
+          {
+            "id": "owner_inactive_training",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "visitor_training_spoof",
+            "passed": true,
+            "detail": "public_widget"
+          },
+          {
+            "id": "public_share_resolution",
+            "passed": true,
+            "detail": "public_share:token-ab"
+          },
+          {
+            "id": "training_write_block_public",
+            "passed": true,
+            "detail": "403 expected"
+          }
+        ],
+        "declared_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "executed_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "undeclared_executed_checks": [],
+        "missing_declared_checks": []
+      },
+      "turn_summary": {
+        "total": 24,
+        "passed": 24,
+        "rewrites": 6
+      }
+    },
+    {
+      "cycle": 3,
+      "metrics": {
+        "cycle": 3,
+        "persona_recognizability": 1.0,
+        "post_rewrite_compliance": 0.9958,
+        "citation_validity": 1.0,
+        "clarification_correctness": 1.0,
+        "invalid_policy_transitions": 0,
+        "rewrite_rate": 0.2083,
+        "latency_delta": 0.1495,
+        "public_context_training_writes": 0,
+        "unpublished_leakage": 0,
+        "metadata": {
+          "total_cases": 24,
+          "rewrite_count": 5,
+          "state_version": 3,
+          "state_adherence": 0.6775,
+          "top_violations": [
+            "EXPECT_CLARIFICATION_BEHAVIOR"
+          ],
+          "channel_isolation_pass_rate": 1.0
+        }
+      },
+      "recognition": {
+        "timestamp": "2026-02-09T04:25:31.541654+00:00",
+        "total": 24,
+        "correct": 24,
+        "accuracy": 1.0,
+        "min_accuracy": 0.8,
+        "passed": true,
+        "confusion_matrix": {
+          "owner_exec_direct": {
+            "owner_exec_direct": 12
+          },
+          "owner_coach_reflective": {
+            "owner_coach_reflective": 12
+          }
+        },
+        "results": [
+          {
+            "transcript_id": "rp_0001-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.491667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0002-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.92
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.425
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0003-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0004-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.95
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0005-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0006-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0007-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0008-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0009-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0010-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.805556
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0011-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.625
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0012-c3-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0013-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.462222
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0014-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.415
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0015-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0016-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.26
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0017-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0018-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0019-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0020-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0021-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.703333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.456667
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0022-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.665
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0023-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0024-c3-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          }
+        ]
+      },
+      "channel_isolation": {
+        "total": 6,
+        "passed": 6,
+        "pass_rate": 1.0,
+        "checks": [
+          {
+            "id": "owner_mode_spoof",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "owner_active_training",
+            "passed": true,
+            "detail": "owner_training"
+          },
+          {
+            "id": "owner_inactive_training",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "visitor_training_spoof",
+            "passed": true,
+            "detail": "public_widget"
+          },
+          {
+            "id": "public_share_resolution",
+            "passed": true,
+            "detail": "public_share:token-ab"
+          },
+          {
+            "id": "training_write_block_public",
+            "passed": true,
+            "detail": "403 expected"
+          }
+        ],
+        "declared_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "executed_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "undeclared_executed_checks": [],
+        "missing_declared_checks": []
+      },
+      "turn_summary": {
+        "total": 24,
+        "passed": 24,
+        "rewrites": 5
+      }
+    },
+    {
+      "cycle": 4,
+      "metrics": {
+        "cycle": 4,
+        "persona_recognizability": 1.0,
+        "post_rewrite_compliance": 0.9958,
+        "citation_validity": 1.0,
+        "clarification_correctness": 1.0,
+        "invalid_policy_transitions": 0,
+        "rewrite_rate": 0.25,
+        "latency_delta": 0.164,
+        "public_context_training_writes": 0,
+        "unpublished_leakage": 0,
+        "metadata": {
+          "total_cases": 24,
+          "rewrite_count": 6,
+          "state_version": 4,
+          "state_adherence": 0.7204,
+          "top_violations": [
+            "EXPECT_CLARIFICATION_BEHAVIOR"
+          ],
+          "channel_isolation_pass_rate": 1.0
+        }
+      },
+      "recognition": {
+        "timestamp": "2026-02-09T04:25:57.100407+00:00",
+        "total": 24,
+        "correct": 24,
+        "accuracy": 1.0,
+        "min_accuracy": 0.8,
+        "passed": true,
+        "confusion_matrix": {
+          "owner_exec_direct": {
+            "owner_exec_direct": 12
+          },
+          "owner_coach_reflective": {
+            "owner_coach_reflective": 12
+          }
+        },
+        "results": [
+          {
+            "transcript_id": "rp_0001-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.494444
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0002-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.92
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.425
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0003-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.816667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0004-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.825
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0005-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0006-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0007-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0008-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0009-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0010-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.7
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0011-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0012-c4-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0013-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.415
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0014-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0015-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0016-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.26
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0017-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0018-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0019-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0020-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0021-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.703333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.456667
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0022-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.665
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0023-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0024-c4-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          }
+        ]
+      },
+      "channel_isolation": {
+        "total": 6,
+        "passed": 6,
+        "pass_rate": 1.0,
+        "checks": [
+          {
+            "id": "owner_mode_spoof",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "owner_active_training",
+            "passed": true,
+            "detail": "owner_training"
+          },
+          {
+            "id": "owner_inactive_training",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "visitor_training_spoof",
+            "passed": true,
+            "detail": "public_widget"
+          },
+          {
+            "id": "public_share_resolution",
+            "passed": true,
+            "detail": "public_share:token-ab"
+          },
+          {
+            "id": "training_write_block_public",
+            "passed": true,
+            "detail": "403 expected"
+          }
+        ],
+        "declared_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "executed_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "undeclared_executed_checks": [],
+        "missing_declared_checks": []
+      },
+      "turn_summary": {
+        "total": 24,
+        "passed": 24,
+        "rewrites": 6
+      }
+    },
+    {
+      "cycle": 5,
+      "metrics": {
+        "cycle": 5,
+        "persona_recognizability": 1.0,
+        "post_rewrite_compliance": 0.9958,
+        "citation_validity": 1.0,
+        "clarification_correctness": 1.0,
+        "invalid_policy_transitions": 0,
+        "rewrite_rate": 0.2917,
+        "latency_delta": 0.1778,
+        "public_context_training_writes": 0,
+        "unpublished_leakage": 0,
+        "metadata": {
+          "total_cases": 24,
+          "rewrite_count": 7,
+          "state_version": 5,
+          "state_adherence": 0.7779,
+          "top_violations": [
+            "EXPECT_CLARIFICATION_BEHAVIOR"
+          ],
+          "channel_isolation_pass_rate": 1.0
+        }
+      },
+      "recognition": {
+        "timestamp": "2026-02-09T04:26:21.536495+00:00",
+        "total": 24,
+        "correct": 24,
+        "accuracy": 1.0,
+        "min_accuracy": 0.8,
+        "passed": true,
+        "confusion_matrix": {
+          "owner_exec_direct": {
+            "owner_exec_direct": 12
+          },
+          "owner_coach_reflective": {
+            "owner_coach_reflective": 12
+          }
+        },
+        "results": [
+          {
+            "transcript_id": "rp_0001-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.825
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.26
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0002-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.92
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.425
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0003-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.75
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0004-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.825
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0005-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0006-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0007-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0008-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.691667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.253333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0009-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0010-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.544444
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0011-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.716667
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.273333
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0012-c5-r0",
+            "actual_persona_id": "owner_exec_direct",
+            "predicted_persona_id": "owner_exec_direct",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.59
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0013-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.625
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.462222
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0014-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0015-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.835
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0016-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.75
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.415
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0017-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0018-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 1.0
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0019-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0020-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.34
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0021-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.703333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.456667
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0022-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.5
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.415
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0023-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.723333
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          },
+          {
+            "transcript_id": "rp_0024-c5-r0",
+            "actual_persona_id": "owner_coach_reflective",
+            "predicted_persona_id": "owner_coach_reflective",
+            "correct": true,
+            "scores": [
+              {
+                "persona_id": "owner_coach_reflective",
+                "score": 0.875
+              },
+              {
+                "persona_id": "owner_exec_direct",
+                "score": 0.465
+              }
+            ]
+          }
+        ]
+      },
+      "channel_isolation": {
+        "total": 6,
+        "passed": 6,
+        "pass_rate": 1.0,
+        "checks": [
+          {
+            "id": "owner_mode_spoof",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "owner_active_training",
+            "passed": true,
+            "detail": "owner_training"
+          },
+          {
+            "id": "owner_inactive_training",
+            "passed": true,
+            "detail": "owner_chat"
+          },
+          {
+            "id": "visitor_training_spoof",
+            "passed": true,
+            "detail": "public_widget"
+          },
+          {
+            "id": "public_share_resolution",
+            "passed": true,
+            "detail": "public_share:token-ab"
+          },
+          {
+            "id": "training_write_block_public",
+            "passed": true,
+            "detail": "403 expected"
+          }
+        ],
+        "declared_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "executed_checks": [
+          "owner_active_training",
+          "owner_inactive_training",
+          "owner_mode_spoof",
+          "public_share_resolution",
+          "training_write_block_public",
+          "visitor_training_spoof"
+        ],
+        "undeclared_executed_checks": [],
+        "missing_declared_checks": []
+      },
+      "turn_summary": {
+        "total": 24,
+        "passed": 24,
+        "rewrites": 7
+      }
+    }
+  ],
+  "final_cycle_metrics": {
+    "cycle": 5,
+    "persona_recognizability": 1.0,
+    "post_rewrite_compliance": 0.9958,
+    "citation_validity": 1.0,
+    "clarification_correctness": 1.0,
+    "invalid_policy_transitions": 0,
+    "rewrite_rate": 0.2917,
+    "latency_delta": 0.1778,
+    "public_context_training_writes": 0,
+    "unpublished_leakage": 0,
+    "metadata": {
+      "total_cases": 24,
+      "rewrite_count": 7,
+      "state_version": 5,
+      "state_adherence": 0.7779,
+      "top_violations": [
+        "EXPECT_CLARIFICATION_BEHAVIOR"
+      ],
+      "channel_isolation_pass_rate": 1.0
+    }
+  },
+  "artifacts": {
+    "summary_path": "docs\\ai\\improvements\\proof_outputs\\phase7_aggressive_roleplay_live_20260209T042357Z.json",
+    "transcripts_path": "docs\\ai\\improvements\\proof_outputs\\phase7_aggressive_roleplay_live_20260209T042357Z_transcripts.json"
+  }
+}

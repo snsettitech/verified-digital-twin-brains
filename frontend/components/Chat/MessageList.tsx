@@ -3,6 +3,8 @@
 import React, { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useAudioPlayback } from '@/lib/hooks/useAudioPlayback';
+import { CitationsDrawer, InlineCitation, Citation } from '@/components/ui/CitationsDrawer';
 
 export interface Message {
   role: 'user' | 'assistant';
@@ -29,6 +31,7 @@ interface MessageListProps {
   loading: boolean;
   isSearching: boolean;
   enableRemember?: boolean;
+  twinId?: string;
   onRemember?: (payload: {
     value: string;
     topic: string;
@@ -86,6 +89,41 @@ function CopyButton({ content }: { content: string }) {
       ) : (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+// Audio playback button for text-to-speech
+function AudioButton({ content, twinId }: { content: string; twinId?: string }) {
+  const { isPlaying, isLoading, error, togglePlayback } = useAudioPlayback(twinId);
+
+  return (
+    <button
+      onClick={() => togglePlayback(content)}
+      disabled={isLoading || !twinId}
+      className={`opacity-0 group-hover:opacity-100 p-1.5 rounded-lg transition-all ${
+        isPlaying 
+          ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' 
+          : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300'
+      } ${isLoading ? 'animate-pulse' : ''}`}
+      aria-label={isPlaying ? 'Stop audio' : 'Read aloud'}
+      title={error || (isPlaying ? 'Stop' : 'Read aloud')}
+    >
+      {isLoading ? (
+        <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      ) : isPlaying ? (
+        <svg className="w-4 h-4" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+          <rect x="10" y="8" width="2" height="8" fill="currentColor" />
+          <rect x="14" y="6" width="2" height="12" fill="currentColor" />
+        </svg>
+      ) : (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
         </svg>
       )}
     </button>
@@ -158,7 +196,7 @@ export function MessageSkeleton() {
 
 // Memoized component to prevent re-rendering of the message list when input changes.
 // This improves performance significantly as the message list grows.
-const MessageList = React.memo(({ messages, loading, isSearching, enableRemember = false, onRemember }: MessageListProps) => {
+const MessageList = React.memo(({ messages, loading, isSearching, enableRemember = false, twinId, onRemember }: MessageListProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [rememberingId, setRememberingId] = useState<number | null>(null);
   const [rememberDraft, setRememberDraft] = useState({
@@ -170,8 +208,17 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
   const [rememberSaving, setRememberSaving] = useState(false);
   const [rememberError, setRememberError] = useState<string | null>(null);
 
+  // Citations drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
+
   const MEMORY_TYPES = ['belief', 'preference', 'stance', 'lens', 'tone_rule'];
   const STANCE_OPTIONS = ['', 'positive', 'negative', 'neutral', 'mixed', 'unknown'];
+
+  const openCitationsDrawer = (citations: Citation[]) => {
+    setActiveCitations(citations);
+    setDrawerOpen(true);
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -199,14 +246,27 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
                 {msg.role === 'assistant' ? (
                   <div className="prose prose-sm prose-slate max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-code:text-indigo-600 prose-code:bg-indigo-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    {/* Inline Citations */}
+                    {msg.citation_details && msg.citation_details.length > 0 && (
+                      <span className="inline-flex gap-1 ml-1 align-super">
+                        {msg.citation_details.map((citation, citeIdx) => (
+                          <InlineCitation
+                            key={citation.id}
+                            number={citeIdx + 1}
+                            onClick={() => openCitationsDrawer(msg.citation_details || [])}
+                          />
+                        ))}
+                      </span>
+                    )}
                   </div>
                 ) : (
                   <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
                 )}
 
-                {/* Copy button - absolute positioned */}
+                {/* Action buttons - absolute positioned */}
                 {msg.content && msg.role === 'assistant' && (
-                  <div className="absolute -right-2 -top-2">
+                  <div className="absolute -right-2 -top-2 flex gap-1">
+                    <AudioButton content={msg.content} twinId={twinId} />
                     <CopyButton content={msg.content} />
                   </div>
                 )}
@@ -429,6 +489,13 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
         </div>
       )}
       <div ref={messagesEndRef} />
+      
+      {/* Citations Drawer */}
+      <CitationsDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        citations={activeCitations}
+      />
     </div>
   );
 });

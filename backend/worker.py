@@ -9,6 +9,7 @@ load_dotenv()
 
 from modules.job_queue import dequeue_job, get_redis_client, get_queue_length
 from modules._core.scribe_engine import process_graph_extraction_job, process_content_extraction_job
+from modules.persona_feedback_learning_jobs import process_feedback_learning_job
 from modules.training_jobs import process_training_job
 
 # Graceful shutdown
@@ -73,6 +74,8 @@ async def worker_loop():
                         success = await process_content_extraction_job(job_id)
                     elif job_type == "graph_extraction":
                         success = await process_graph_extraction_job(job_id)
+                    elif job_type == "feedback_learning":
+                        success = await process_feedback_learning_job(job_id)
                     elif job_type in ["ingestion", "reindex", "health_check"]:
                         # Training jobs (legacy/ingestion module)
                         success = await process_training_job(job_id)

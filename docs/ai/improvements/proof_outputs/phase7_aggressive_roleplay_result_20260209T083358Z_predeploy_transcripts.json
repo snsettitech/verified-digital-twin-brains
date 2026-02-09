@@ -1,0 +1,1202 @@
+[
+  {
+    "transcript_id": "rp_0001-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with decision, source.\n- Tradeoff and next step are explicit. Source: internal_kb:v1:verified. Fixed clauses: EXPECT_CITATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0002-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with tradeoff, next step.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0003-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with constraint, next step.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_FORBIDDEN_ANY_PRESENT, EXPECT_REQUIRED_ANY_MISSING, POL_DET_BANNED_PHRASE, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0004-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Clarifying question: which constraint is most material right now?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0005-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with tradeoff, decision.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0006-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with decision, next step.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0007-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with cannot, policy.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0008-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with cannot, safe alternative.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0009-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0010-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with constraint, next step.\n- Tradeoff and next step are explicit. Clarifying question: which single constraint should drive the decision? Fixed clauses: POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0011-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with source, cannot invent.\n- Tradeoff and next step are explicit. Source: internal_kb:v1:verified. Fixed clauses: EXPECT_CITATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0012-c1-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. assumption",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0013-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v1:verified.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0014-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0015-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0016-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on context. I include one assumption, one option, and one next step. Clarifying question: which single constraint should drive the decision? Fixed clauses: EXPECT_CLARIFICATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING, POL_DET_BANNED_PHRASE.",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0017-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0018-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0019-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on cannot, policy. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0020-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0021-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0022-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "Turn 1: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 2: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 3: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 4: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 5: I start with context and one explicit assumption. Then I.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0023-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v1:verified. cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0024-c1-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0001-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with decision, source.\n- Tradeoff and next step are explicit. Source: internal_kb:v2:verified. Fixed clauses: EXPECT_CITATION_BEHAVIOR, EXPECT_FORBIDDEN_ANY_PRESENT, EXPECT_REQUIRED_ANY_MISSING, POL_DET_BANNED_PHRASE, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0002-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0003-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0004-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Clarifying question: which constraint is most material right now?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0005-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0006-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with decision, next step.\n- Tradeoff and next step are explicit. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0007-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0008-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0009-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0010-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with constraint, next step.\n- Tradeoff and next step are explicit. Clarifying question: which single constraint should drive the decision? Fixed clauses: POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0011-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with source, cannot invent.\n- Tradeoff and next step are explicit. Source: internal_kb:v2:verified. Fixed clauses: EXPECT_CITATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING, POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0012-c2-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. assumption",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0013-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v2:verified.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0014-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on assumption, option. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0015-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0016-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on context. I include one assumption, one option, and one next step. Clarifying question: which single constraint should drive the decision? Fixed clauses: EXPECT_CLARIFICATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING, POL_DET_BANNED_PHRASE.",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0017-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on reflection, option. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING, POL_DET_BANNED_PHRASE.",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0018-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on context, next step. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0019-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on cannot, policy. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0020-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on cannot, safe alternative. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0021-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0022-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on context, next step. I include one assumption, one option, and one next step. Clarifying question: which single constraint should drive the decision? Fixed clauses: EXPECT_CLARIFICATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0023-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on source, cannot invent. I include one assumption, one option, and one next step. Source: internal_kb:v2:verified. Fixed clauses: EXPECT_CITATION_BEHAVIOR, EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0024-c2-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0001-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Source: internal_kb:v3:verified",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0002-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0003-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0004-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Clarifying question: which constraint is most material right now?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0005-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0006-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0007-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0008-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0009-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0010-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with constraint, next step.\n- Tradeoff and next step are explicit. Clarifying question: which single constraint should drive the decision? Fixed clauses: POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0011-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Source: internal_kb:v3:verified cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0012-c3-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. assumption",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0013-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v3:verified.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0014-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0015-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0016-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0017-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0018-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0019-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0020-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0021-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0022-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "Turn 1: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 2: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 3: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 4: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 5: I start with context and one explicit assumption. Then I.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0023-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v3:verified. cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0024-c3-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0001-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Source: internal_kb:v4:verified",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0002-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0003-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0004-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Clarifying question: which constraint is most material right now?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0005-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0006-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0007-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0008-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0009-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0010-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with constraint, next step.\n- Tradeoff and next step are explicit. Clarifying question: which single constraint should drive the decision? Fixed clauses: POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0011-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Source: internal_kb:v4:verified cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0012-c4-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. assumption",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0013-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v4:verified.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0014-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on assumption, option. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0015-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0016-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0017-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0018-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0019-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0020-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0021-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0022-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "Turn 1: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 2: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 3: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 4: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 5: I start with context and one explicit assumption. Then I.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0023-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v4:verified. cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0024-c4-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0001-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Source: internal_kb:v5:verified",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0002-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0003-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0004-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Clarifying question: which constraint is most material right now?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0005-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0006-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0007-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0008-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. cannot safe alternative",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0009-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0010-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct answer with constraint, next step.\n- Tradeoff and next step are explicit. Clarifying question: which single constraint should drive the decision? Fixed clauses: POL_DET_FORMAT_SIGNATURE.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0011-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step.\n- Source: internal_kb:v5:verified cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0012-c5-r0",
+    "persona_id": "owner_exec_direct",
+    "text": "- Direct constraint: align the decision to one measurable outcome.\n- Primary tradeoff: state the tradeoff and commit the next step. assumption",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0013-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v5:verified.",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0014-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0015-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0016-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize?",
+    "metadata": {
+      "intent_label": "ambiguity_or_clarify",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0017-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "disagreement_or_conflict",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0018-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "summarize_or_transform",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0019-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. cannot policy",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0020-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I will keep this concise and explicit on cannot, safe alternative. I include one assumption, one option, and one next step. Fixed clauses: EXPECT_REQUIRED_ANY_MISSING.",
+    "metadata": {
+      "intent_label": "sensitive_boundary_or_refusal",
+      "category": "adversarial",
+      "rewrite_applied": true
+    }
+  },
+  {
+    "transcript_id": "rp_0021-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step.",
+    "metadata": {
+      "intent_label": "advice_or_stance",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0022-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "Turn 1: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 2: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 3: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 4: I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. What is the most material constraint you want to optimize? Turn 5: I start with context and one explicit assumption. Then I.",
+    "metadata": {
+      "intent_label": "action_or_tool_execution",
+      "category": "long_horizon",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0023-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. Source: internal_kb:v5:verified. cannot invent",
+    "metadata": {
+      "intent_label": "factual_with_evidence",
+      "category": "adversarial",
+      "rewrite_applied": false
+    }
+  },
+  {
+    "transcript_id": "rp_0024-c5-r0",
+    "persona_id": "owner_coach_reflective",
+    "text": "I start with context and one explicit assumption. Then I compare one option and one tradeoff before the next step. reflection",
+    "metadata": {
+      "intent_label": "meta_or_system",
+      "category": "standard",
+      "rewrite_applied": false
+    }
+  }
+]

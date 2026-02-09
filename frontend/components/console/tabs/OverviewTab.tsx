@@ -1,7 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+
+interface Conversation {
+    id: string;
+    preview: string;
+    message_count: number;
+    created_at: string;
+    updated_at: string;
+}
 
 interface OverviewTabProps {
     twinId: string;
@@ -17,7 +25,13 @@ interface OverviewTabProps {
     };
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 export function OverviewTab({ twinId, stats }: OverviewTabProps) {
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [conversationsLoading, setConversationsLoading] = useState(false);
+    const [conversationsError, setConversationsError] = useState<string | null>(null);
+
     const defaultStats = {
         totalSources: stats?.totalSources ?? 0,
         indexedSources: stats?.indexedSources ?? 0,
@@ -27,6 +41,46 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
         avgResponseTime: stats?.avgResponseTime ?? '--',
         escalations: stats?.escalations ?? 0,
         satisfaction: stats?.satisfaction ?? 0,
+    };
+
+    // Fetch recent conversations on mount
+    useEffect(() => {
+        const fetchConversations = async () => {
+            if (!twinId) return;
+            setConversationsLoading(true);
+            setConversationsError(null);
+            try {
+                const response = await fetch(`${API_URL}/twins/${twinId}/conversations?limit=5`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setConversations(data.conversations || data || []);
+                } else {
+                    setConversationsError('Failed to load conversations');
+                }
+            } catch {
+                setConversationsError('Failed to load conversations');
+            } finally {
+                setConversationsLoading(false);
+            }
+        };
+        fetchConversations();
+    }, [twinId]);
+
+    const formatTimeAgo = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
     };
 
     const statCards = [
@@ -118,13 +172,47 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                     </div>
 
                     <div className="space-y-3">
-                        {defaultStats.totalConversations === 0 ? (
+                        {conversationsLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                <span className="ml-3 text-slate-400 text-sm">Loading conversations...</span>
+                            </div>
+                        ) : conversationsError ? (
                             <div className="text-center py-8">
+                                <p className="text-red-400 text-sm">{conversationsError}</p>
+                                <button 
+                                    onClick={() => window.location.reload()}
+                                    className="text-indigo-400 text-sm mt-2 hover:underline"
+                                >
+                                    Retry
+                                </button>
+                            </div>
+                        ) : conversations.length === 0 ? (
+                            <div className="text-center py-8">
+                                <div className="w-16 h-16 mx-auto mb-4 bg-white/5 rounded-2xl flex items-center justify-center">
+                                    <span className="text-3xl">💬</span>
+                                </div>
                                 <p className="text-slate-500 text-sm">No conversations yet</p>
-                                <Link href="?tab=chat" className="text-indigo-400 text-sm mt-2 inline-block">Start your first chat →</Link>
+                                <Link href="?tab=chat" className="text-indigo-400 text-sm mt-2 inline-block hover:underline">Start your first chat →</Link>
                             </div>
                         ) : (
-                            <p className="text-slate-400 text-sm">Loading recent conversations...</p>
+                            conversations.slice(0, 5).map((conv) => (
+                                <Link
+                                    key={conv.id}
+                                    href={`?tab=chat&conversation=${conv.id}`}
+                                    className="block p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+                                >
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-white text-sm truncate">{conv.preview || 'New conversation'}</p>
+                                            <p className="text-slate-500 text-xs mt-1">{conv.message_count} messages</p>
+                                        </div>
+                                        <span className="text-slate-600 text-xs shrink-0 ml-2">
+                                            {formatTimeAgo(conv.updated_at || conv.created_at)}
+                                        </span>
+                                    </div>
+                                </Link>
+                            ))
                         )}
                     </div>
                 </div>

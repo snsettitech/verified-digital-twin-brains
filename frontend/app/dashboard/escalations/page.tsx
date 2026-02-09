@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 import { useTwin } from '@/lib/context/TwinContext';
+import { EmptyEscalations } from '@/components/ui/EmptyState';
 
 export default function EscalationsPage() {
   const { getTwin, getTenant, post } = useAuthFetch();
@@ -116,12 +117,8 @@ export default function EscalationsPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         ) : escalations.length === 0 ? (
-          <div className="bg-white p-20 rounded-3xl border border-dashed flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mb-4">
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-            </div>
-            <h3 className="text-lg font-bold text-slate-800">No open escalations</h3>
-            <p className="text-slate-500 max-w-sm mt-2">All low-confidence answers have been reviewed or the system is performing with high confidence.</p>
+          <div className="bg-white rounded-3xl border border-slate-200">
+            <EmptyEscalations />
           </div>
         ) : (
           <div className="space-y-4">

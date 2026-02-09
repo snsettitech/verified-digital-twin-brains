@@ -8,6 +8,9 @@ import time
 from routers import (
     auth,
     chat,
+    training_sessions,
+    persona_specs,
+    decision_capture,
     ingestion,
     youtube_preflight,
     twins,
@@ -72,6 +75,9 @@ async def log_requests(request, call_next):
 # Include Routers
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(training_sessions.router)
+app.include_router(persona_specs.router)
+app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)

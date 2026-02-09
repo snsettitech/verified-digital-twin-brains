@@ -9,6 +9,19 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from modules.tools import get_retrieval_tool, get_cloud_tools
 from modules.observability import supabase
+from modules.persona_compiler import (
+    compile_prompt_plan,
+    get_prompt_render_options,
+    render_prompt_plan_with_options,
+)
+from modules.persona_intents import classify_query_intent
+from modules.persona_module_store import list_runtime_modules_for_intent
+from modules.persona_prompt_variant_store import (
+    DEFAULT_PERSONA_PROMPT_VARIANT,
+    get_active_persona_prompt_variant,
+)
+from modules.persona_spec import PersonaSpec
+from modules.persona_spec_store import get_active_persona_spec
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -170,6 +183,10 @@ class TwinState(TypedDict):
     requires_teaching: bool
     target_owner_scope: bool            # True if person-specific
     planning_output: Optional[Dict[str, Any]] # Structured JSON from Planner Pass
+    intent_label: Optional[str]         # Phase 3 stable intent taxonomy label
+    persona_module_ids: Optional[List[str]]
+    persona_spec_version: Optional[str]
+    persona_prompt_variant: Optional[str]
     
     # Path B / Phase 4 Context
     full_settings: Optional[Dict[str, Any]]
@@ -219,17 +236,24 @@ def create_twin_agent(
     cloud_tools = get_cloud_tools(allowed_tools=allowed_tools)
     
     # Helper: Build the system prompt with persona and context
-def build_system_prompt(state: TwinState) -> str:
+def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any]]:
     """
-    Analyzes owner's verified responses and opinion documents to create a persistent style profile.
-    Now supports Phase 4: Dialogue Orchestration via TwinState.
+    Build prompt text plus persona runtime trace metadata (Phase 3).
     """
     twin_id = state.get("twin_id", "Unknown")
     full_settings = state.get("full_settings") or {}
     graph_context = state.get("graph_context") or ""
     owner_memory_context = state.get("owner_memory_context") or ""
     system_prompt_override = (state.get("system_prompt_override") or "").strip()
-    
+    dialogue_mode = state.get("dialogue_mode")
+
+    messages = state.get("messages") or []
+    last_human_msg = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
+    intent_label = state.get("intent_label") or classify_query_intent(
+        last_human_msg,
+        dialogue_mode=dialogue_mode,
+    )
+
     style_desc = full_settings.get("persona_profile", "Professional and helpful.")
     phrases = full_settings.get("signature_phrases", [])
     opinion_map = full_settings.get("opinion_map", {})
@@ -237,7 +261,7 @@ def build_system_prompt(state: TwinState) -> str:
     custom_instructions = system_prompt_override or default_system_prompt
     public_intro = (full_settings.get("public_intro") or "").strip()
     intent_profile = full_settings.get("intent_profile") or {}
-    
+
     # Load identity context (High-level concepts)
     node_context = ""
     try:
@@ -245,19 +269,67 @@ def build_system_prompt(state: TwinState) -> str:
         if nodes_res.data:
             profile_items = [f"- {n.get('name')}: {n.get('description')}" for n in nodes_res.data]
             node_context = "\n            **GENERAL IDENTITY NODES:**\n            " + "\n            ".join(profile_items)
-    except Exception: pass
+    except Exception:
+        pass
 
     final_graph_context = ""
     if graph_context:
         final_graph_context += f"SPECIFIC KNOWLEDGE:\n{graph_context}\n\n"
     if node_context:
         final_graph_context += node_context
-    
-    persona_section = f"YOUR PERSONA STYLE:\n- DESCRIPTION: {style_desc}"
-    if phrases: persona_section += f"\n- SIGNATURE PHRASES: {', '.join(phrases)}"
-    if opinion_map:
-        opinions_text = "\n".join([f"- {t}: {d['stance']}" for t, d in opinion_map.items()])
-        persona_section += f"\n- CORE WORLDVIEW:\n{opinions_text}"
+
+    persona_section = ""
+    persona_trace = {
+        "intent_label": intent_label,
+        "module_ids": [],
+        "persona_spec_version": None,
+        "persona_prompt_variant": DEFAULT_PERSONA_PROMPT_VARIANT,
+    }
+    active_variant_row = get_active_persona_prompt_variant(twin_id=twin_id)
+    active_variant_id = (
+        str(active_variant_row.get("variant_id"))
+        if active_variant_row and active_variant_row.get("variant_id")
+        else DEFAULT_PERSONA_PROMPT_VARIANT
+    )
+    variant_overrides = (active_variant_row or {}).get("render_options") or {}
+    render_options = get_prompt_render_options(active_variant_id, overrides=variant_overrides)
+
+    active_persona_row = get_active_persona_spec(twin_id=twin_id)
+    if active_persona_row and active_persona_row.get("spec"):
+        try:
+            parsed = PersonaSpec.model_validate(active_persona_row["spec"])
+            runtime_modules = list_runtime_modules_for_intent(
+                twin_id=twin_id,
+                intent_label=intent_label,
+                limit=8,
+                include_draft=True,
+            )
+            prompt_plan = compile_prompt_plan(
+                spec=parsed,
+                intent_label=intent_label,
+                user_query=last_human_msg,
+                runtime_modules=runtime_modules,
+                max_few_shots=max(0, int(render_options.max_few_shots)),
+                module_detail_level=render_options.module_detail_level,
+            )
+            persona_section = render_prompt_plan_with_options(plan=prompt_plan, options=render_options)
+            persona_trace["module_ids"] = prompt_plan.selected_module_ids
+            persona_trace["intent_label"] = prompt_plan.intent_label or intent_label
+            persona_trace["persona_spec_version"] = active_persona_row.get("version") or parsed.version
+            persona_trace["persona_prompt_variant"] = render_options.variant_id
+        except Exception as e:
+            print(f"[PersonaCompiler] Active spec compile failed, using legacy settings fallback: {e}")
+            persona_section = ""
+            persona_trace["persona_spec_version"] = active_persona_row.get("version")
+            persona_trace["persona_prompt_variant"] = active_variant_id
+
+    if not persona_section:
+        persona_section = f"YOUR PERSONA STYLE:\n- DESCRIPTION: {style_desc}"
+        if phrases:
+            persona_section += f"\n- SIGNATURE PHRASES: {', '.join(phrases)}"
+        if opinion_map:
+            opinions_text = "\n".join([f"- {t}: {d['stance']}" for t, d in opinion_map.items()])
+            persona_section += f"\n- CORE WORLDVIEW:\n{opinions_text}"
 
     owner_memory_block = f"OWNER MEMORY:\n{owner_memory_context if owner_memory_context else '- None available.'}"
     custom_instructions_block = f"CUSTOM INSTRUCTIONS:\n{custom_instructions}\n" if custom_instructions else ""
@@ -276,8 +348,8 @@ def build_system_prompt(state: TwinState) -> str:
             intent_lines.append(f"- Boundaries: {boundaries}")
         if intent_lines:
             intent_block = "INTENT PROFILE:\n" + "\n".join(intent_lines) + "\n"
-    
-    return f"""You are the AI Digital Twin of the owner (ID: {twin_id}).
+
+    prompt = f"""You are the AI Digital Twin of the owner (ID: {twin_id}).
 YOUR PRINCIPLES (Immutable):
 - Use first-person ("I", "my").
 - Every claim MUST be supported by retrieved context.
@@ -299,6 +371,12 @@ AGENTIC RAG OPERATING PROCEDURES:
 2. If multiple searches are needed for global reasoning (e.g. "What are my principles?"), perform them.
 3. If you find contradictions, acknowledge them.
 """
+    return prompt, persona_trace
+
+
+def build_system_prompt(state: TwinState) -> str:
+    prompt, _ = build_system_prompt_with_trace(state)
+    return prompt
 
     # Define the nodes
 async def router_node(state: TwinState):
@@ -340,6 +418,7 @@ async def router_node(state: TwinState):
         mode = plan.get("mode", "QA_FACT")
         is_specific = plan.get("is_person_specific", False)
         req_evidence = plan.get("requires_evidence", True)
+        intent_label = classify_query_intent(last_human_msg, dialogue_mode=mode)
         
         # Phase 4 Enforcement: Person-specific queries MUST have evidence verification
         if is_specific:
@@ -350,14 +429,22 @@ async def router_node(state: TwinState):
         
         return {
             "dialogue_mode": mode,
+            "intent_label": intent_label,
             "target_owner_scope": is_specific,
             "requires_evidence": req_evidence,
             "sub_queries": sub_queries,
-            "reasoning_history": (state.get("reasoning_history") or []) + [f"Router: Mode={mode}, Specific={is_specific}"]
+            "reasoning_history": (state.get("reasoning_history") or [])
+            + [f"Router: Mode={mode}, Intent={intent_label}, Specific={is_specific}"]
         }
     except Exception as e:
         print(f"Router error: {e}")
-        return {"dialogue_mode": "QA_FACT", "requires_evidence": True, "sub_queries": [last_human_msg]}
+        fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="QA_FACT")
+        return {
+            "dialogue_mode": "QA_FACT",
+            "intent_label": fallback_intent,
+            "requires_evidence": True,
+            "sub_queries": [last_human_msg],
+        }
 
 async def evidence_gate_node(state: TwinState):
     """Phase 4: Evidence Gate (Hard Constraint with LLM Verifier)"""
@@ -434,7 +521,7 @@ async def planner_node(state: TwinState):
     context_data = state.get("retrieved_context", {}).get("results", [])
     
     # Use the dynamic system prompt (Phase 4)
-    system_msg = build_system_prompt(state)
+    system_msg, persona_trace = build_system_prompt_with_trace(state)
     
     # Prepare context
     context_str = ""
@@ -474,11 +561,24 @@ OUTPUT FORMAT (STRICT JSON):
         
         return {
             "planning_output": plan,
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
             "reasoning_history": (state.get("reasoning_history") or []) + [f"Planner: Generated {len(plan.get('answer_points', []))} points."]
         }
     except Exception as e:
         print(f"Planner error: {e}")
-        return {"planning_output": {"answer_points": ["I encountered an error planning my response."], "follow_up_question": "Can you try rephrasing?"}}
+        return {
+            "planning_output": {
+                "answer_points": ["I encountered an error planning my response."],
+                "follow_up_question": "Can you try rephrasing?",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+        }
 
 async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
@@ -511,6 +611,12 @@ async def realizer_node(state: TwinState):
         res.additional_kwargs["teaching_questions"] = teaching_questions
         res.additional_kwargs["planning_output"] = plan
         res.additional_kwargs["dialogue_mode"] = mode
+        res.additional_kwargs["intent_label"] = state.get("intent_label")
+        res.additional_kwargs["module_ids"] = state.get("persona_module_ids") or []
+        if state.get("persona_spec_version"):
+            res.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
+        if state.get("persona_prompt_variant"):
+            res.additional_kwargs["persona_prompt_variant"] = state.get("persona_prompt_variant")
         
         return {
             "messages": [res],
@@ -698,10 +804,14 @@ async def run_agent_stream(
         "retrieved_context": {},
         # Phase 4 initialization
         "dialogue_mode": "QA_FACT",
+        "intent_label": "factual_with_evidence",
         "requires_evidence": True,
         "requires_teaching": False,
         "target_owner_scope": False,
         "planning_output": None,
+        "persona_module_ids": [],
+        "persona_spec_version": None,
+        "persona_prompt_variant": None,
         # Path B / Phase 4 Context
         "full_settings": settings,
         "graph_context": graph_context,

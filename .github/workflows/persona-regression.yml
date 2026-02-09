@@ -1,0 +1,57 @@
+name: Persona Regression Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  persona-regression:
+    name: Persona Regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "backend/.python-version"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest
+
+      - name: Run persona regression test lane
+        run: |
+          pytest -q \
+            backend/tests/test_persona_regression_runner.py \
+            backend/tests/test_persona_compiler.py \
+            backend/tests/test_persona_fingerprint_gate.py \
+            backend/tests/test_persona_auditor.py \
+            backend/tests/test_chat_interaction_context.py \
+            backend/tests/test_interaction_context.py \
+            backend/tests/test_training_sessions_router.py \
+            backend/tests/test_decision_capture_router.py
+
+      - name: Run blocking persona regression gate
+        run: |
+          python backend/eval/persona_regression_runner.py \
+            --dataset backend/eval/persona_regression_dataset.json \
+            --output artifacts/persona_regression_ci_result.json \
+            --min-pass-rate 0.95 \
+            --min-adversarial-pass-rate 0.95 \
+            --min-channel-isolation-pass-rate 1.0
+
+      - name: Upload persona regression artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: persona-regression-results
+          path: artifacts/persona_regression_ci_result.json

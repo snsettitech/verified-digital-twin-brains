@@ -7,7 +7,8 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     group_id: Optional[str] = None  # NEW: Allow group override
     metadata: Optional[Dict[str, Any]] = None
-    mode: Optional[str] = None  # "owner" | "public"
+    mode: Optional[str] = None  # Deprecated: ignored for auth/routing decisions
+    training_session_id: Optional[str] = None
     # Compatibility: accept legacy {message} payloads for one release window
     message: Optional[str] = None
 

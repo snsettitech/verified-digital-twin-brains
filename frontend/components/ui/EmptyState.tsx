@@ -3,195 +3,256 @@
 import React from 'react';
 import Link from 'next/link';
 
+export type EmptyStateIllustration = 
+  | 'robot-building' 
+  | 'robot-sleeping' 
+  | 'checkmark' 
+  | 'inbox-empty'
+  | 'knowledge-empty'
+  | 'chat-bubble';
+
 interface EmptyStateProps {
-    icon?: React.ReactNode;
-    emoji?: string;
-    title: string;
-    description?: string;
-    action?: {
-        label: string;
-        href?: string;
-        onClick?: () => void;
-    };
-    secondaryAction?: {
-        label: string;
-        href?: string;
-        onClick?: () => void;
-    };
-    variant?: 'default' | 'subtle' | 'card';
-    className?: string;
+  illustration: EmptyStateIllustration;
+  title: string;
+  description: string;
+  primaryAction?: {
+    label: string;
+    href?: string;
+    onClick?: () => void;
+  };
+  secondaryAction?: {
+    label: string;
+    href?: string;
+    onClick?: () => void;
+  };
+  className?: string;
 }
+
+// SVG Illustrations
+const Illustrations: Record<EmptyStateIllustration, React.ReactNode> = {
+  'robot-building': (
+    <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Robot head */}
+      <rect x="35" y="20" width="50" height="45" rx="8" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+      {/* Eyes */}
+      <circle cx="50" cy="42" r="6" fill="#6366f1" className="animate-pulse"/>
+      <circle cx="70" cy="42" r="6" fill="#6366f1" className="animate-pulse" style={{ animationDelay: '0.2s' }}/>
+      {/* Antenna */}
+      <line x1="60" y1="20" x2="60" y2="8" stroke="#6366f1" strokeWidth="2"/>
+      <circle cx="60" cy="6" r="3" fill="#f59e0b" className="animate-pulse"/>
+      {/* Body being built */}
+      <rect x="40" y="70" width="40" height="30" rx="4" fill="#f3f4f6" stroke="#9ca3af" strokeWidth="2" strokeDasharray="4 4"/>
+      {/* Construction lines */}
+      <line x1="30" y1="85" x2="10" y2="85" stroke="#10b981" strokeWidth="2" className="animate-pulse"/>
+      <line x1="90" y1="85" x2="110" y2="85" stroke="#10b981" strokeWidth="2" className="animate-pulse" style={{ animationDelay: '0.3s' }}/>
+      {/* Tools */}
+      <circle cx="20" cy="95" r="5" fill="#f59e0b" opacity="0.6"/>
+      <circle cx="100" cy="95" r="5" fill="#f59e0b" opacity="0.6"/>
+    </svg>
+  ),
+  'robot-sleeping': (
+    <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Robot head */}
+      <rect x="35" y="30" width="50" height="40" rx="8" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+      {/* Sleeping eyes (lines) */}
+      <line x1="44" y1="48" x2="56" y2="48" stroke="#6366f1" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="64" y1="48" x2="76" y2="48" stroke="#6366f1" strokeWidth="2" strokeLinecap="round"/>
+      {/* Sleep zzz */}
+      <text x="90" y="30" fontSize="12" fill="#9ca3af" className="animate-pulse">Z</text>
+      <text x="98" y="22" fontSize="10" fill="#9ca3af" className="animate-pulse" style={{ animationDelay: '0.5s' }}>z</text>
+      <text x="104" y="16" fontSize="8" fill="#9ca3af" className="animate-pulse" style={{ animationDelay: '1s' }}>z</text>
+      {/* Body */}
+      <rect x="40" y="75" width="40" height="25" rx="4" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+    </svg>
+  ),
+  'checkmark': (
+    <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Circle background */}
+      <circle cx="60" cy="60" r="45" fill="#d1fae5" stroke="#10b981" strokeWidth="2"/>
+      {/* Checkmark */}
+      <path 
+        d="M38 60 L52 74 L82 44" 
+        stroke="#10b981" 
+        strokeWidth="4" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+        fill="none"
+        className="animate-in fade-in duration-500"
+      />
+      {/* Sparkles */}
+      <circle cx="25" cy="45" r="3" fill="#f59e0b" className="animate-pulse"/>
+      <circle cx="95" cy="35" r="2" fill="#f59e0b" className="animate-pulse" style={{ animationDelay: '0.3s' }}/>
+      <circle cx="100" cy="75" r="4" fill="#f59e0b" className="animate-pulse" style={{ animationDelay: '0.6s' }}/>
+    </svg>
+  ),
+  'inbox-empty': (
+    <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Inbox tray */}
+      <path 
+        d="M20 40 L20 85 Q20 95 30 95 L90 95 Q100 95 100 85 L100 40 L75 65 L45 65 Z" 
+        fill="#f3f4f6" 
+        stroke="#9ca3af" 
+        strokeWidth="2"
+      />
+      {/* Paper inside */}
+      <rect x="35" y="25" width="50" height="40" rx="2" fill="white" stroke="#d1d5db" strokeWidth="1"/>
+      {/* Lines on paper */}
+      <line x1="42" y1="38" x2="78" y2="38" stroke="#e5e7eb" strokeWidth="2"/>
+      <line x1="42" y1="48" x2="78" y2="48" stroke="#e5e7eb" strokeWidth="2"/>
+      <line x1="42" y1="58" x2="65" y2="58" stroke="#e5e7eb" strokeWidth="2"/>
+    </svg>
+  ),
+  'knowledge-empty': (
+    <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Book/document stack */}
+      <rect x="30" y="65" width="60" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" strokeWidth="1.5"/>
+      <rect x="32" y="55" width="56" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" strokeWidth="1.5"/>
+      <rect x="34" y="45" width="52" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" strokeWidth="1.5"/>
+      {/* Plus icon */}
+      <circle cx="85" cy="35" r="15" fill="#10b981" className="animate-pulse"/>
+      <line x1="85" y1="28" x2="85" y2="42" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+      <line x1="78" y1="35" x2="92" y2="35" stroke="white" strokeWidth="3" strokeLinecap="round"/>
+    </svg>
+  ),
+  'chat-bubble': (
+    <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+      {/* Chat bubble 1 */}
+      <path 
+        d="M20 30 Q20 20 30 20 L70 20 Q80 20 80 30 L80 55 Q80 65 70 65 L50 65 L35 75 L38 65 L30 65 Q20 65 20 55 Z" 
+        fill="#e0e7ff" 
+        stroke="#6366f1" 
+        strokeWidth="2"
+      />
+      {/* Lines in bubble */}
+      <line x1="32" y1="35" x2="68" y2="35" stroke="#6366f1" strokeWidth="2" opacity="0.5"/>
+      <line x1="32" y1="45" x2="55" y2="45" stroke="#6366f1" strokeWidth="2" opacity="0.5"/>
+      {/* Chat bubble 2 */}
+      <path 
+        d="M40 75 Q40 65 50 65 L90 65 Q100 65 100 75 L100 100 Q100 110 90 110 L70 110 L55 120 L58 110 L50 110 Q40 110 40 100 Z" 
+        fill="#f3f4f6" 
+        stroke="#9ca3af" 
+        strokeWidth="2"
+      />
+    </svg>
+  ),
+};
 
 export function EmptyState({
-    icon,
-    emoji,
-    title,
-    description,
-    action,
-    secondaryAction,
-    variant = 'default',
-    className = ''
+  illustration,
+  title,
+  description,
+  primaryAction,
+  secondaryAction,
+  className = '',
 }: EmptyStateProps) {
-    const variantClasses = {
-        default: '',
-        subtle: 'py-8',
-        card: 'bg-white/5 border border-white/10 rounded-2xl p-12'
-    };
+  const ActionButton = ({ action, variant }: { action: typeof primaryAction; variant: 'primary' | 'secondary' }) => {
+    if (!action) return null;
 
-    const renderIcon = () => {
-        if (emoji) {
-            return (
-                <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-2xl flex items-center justify-center">
-                    <span className="text-4xl">{emoji}</span>
-                </div>
-            );
-        }
-        if (icon) {
-            return (
-                <div className="w-20 h-20 mx-auto mb-4 bg-white/5 rounded-2xl flex items-center justify-center">
-                    {icon}
-                </div>
-            );
-        }
-        return null;
-    };
+    const baseClasses = variant === 'primary'
+      ? 'px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2'
+      : 'px-6 py-2.5 bg-white text-slate-700 font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2';
 
-    const ActionButton = ({ action: a, primary = false }: { action: NonNullable<EmptyStateProps['action']>; primary?: boolean }) => {
-        const buttonClasses = primary
-            ? 'px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-lg shadow-indigo-500/20 transition-all'
-            : 'px-4 py-2 text-sm font-medium text-slate-400 hover:text-white transition-colors';
-
-        if (a.href) {
-            return (
-                <Link href={a.href} className={buttonClasses}>
-                    {a.label}
-                </Link>
-            );
-        }
-        return (
-            <button onClick={a.onClick} className={buttonClasses}>
-                {a.label}
-            </button>
-        );
-    };
+    if (action.href) {
+      return (
+        <Link href={action.href} className={baseClasses}>
+          {action.label}
+        </Link>
+      );
+    }
 
     return (
-        <div className={`text-center ${variantClasses[variant]} ${className}`}>
-            {renderIcon()}
-
-            <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
-
-            {description && (
-                <p className="text-slate-400 text-sm mb-6 max-w-sm mx-auto">{description}</p>
-            )}
-
-            {(action || secondaryAction) && (
-                <div className="flex items-center justify-center gap-3">
-                    {action && <ActionButton action={action} primary />}
-                    {secondaryAction && <ActionButton action={secondaryAction} />}
-                </div>
-            )}
-        </div>
+      <button onClick={action.onClick} className={baseClasses}>
+        {action.label}
+      </button>
     );
+  };
+
+  return (
+    <div className={`flex flex-col items-center justify-center text-center p-8 ${className}`}>
+      {/* Illustration */}
+      <div className="w-32 h-32 mb-6">
+        {Illustrations[illustration]}
+      </div>
+
+      {/* Title */}
+      <h3 className="text-xl font-bold text-slate-900 mb-2">
+        {title}
+      </h3>
+
+      {/* Description */}
+      <p className="text-slate-500 max-w-sm mb-6">
+        {description}
+      </p>
+
+      {/* Actions */}
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        {primaryAction && <ActionButton action={primaryAction} variant="primary" />}
+        {secondaryAction && <ActionButton action={secondaryAction} variant="secondary" />}
+      </div>
+    </div>
+  );
 }
 
-// Pre-configured empty states for common scenarios
-export function EmptyKnowledge({ onAdd }: { onAdd?: () => void }) {
-    return (
-        <EmptyState
-            emoji="📚"
-            title="No knowledge sources yet"
-            description="Add documents, URLs, or complete an interview to train your twin."
-            action={{ label: "Add Your First Source", onClick: onAdd }}
-            variant="card"
-        />
-    );
+// Specialized empty states for common scenarios
+export function EmptyDashboard({ onCreateTwin }: { onCreateTwin?: () => void }) {
+  return (
+    <EmptyState
+      illustration="robot-building"
+      title="Create your first digital twin"
+      description="Train an AI that answers questions in your voice with verified sources."
+      primaryAction={{
+        label: 'Get Started',
+        href: '/dashboard/right-brain',
+      }}
+      secondaryAction={onCreateTwin ? {
+        label: 'Learn More',
+        onClick: onCreateTwin,
+      } : undefined}
+    />
+  );
 }
 
-export function EmptyConversations({ twinId }: { twinId: string }) {
-    return (
-        <EmptyState
-            emoji="💬"
-            title="No conversations yet"
-            description="Your twin is ready to chat. Start a conversation to see it in action."
-            action={{ label: "Start Chatting", href: `/dashboard/twins/${twinId}?tab=chat` }}
-            variant="subtle"
-        />
-    );
+export function EmptyTwinNoActivity({ twinName }: { twinName?: string }) {
+  return (
+    <EmptyState
+      illustration="robot-sleeping"
+      title={twinName ? `${twinName} is ready` : 'Your twin is ready'}
+      description="Your twin is ready but hasn't had any conversations yet. Test it out!"
+      primaryAction={{
+        label: 'Test Your Twin',
+        href: '/dashboard/simulator',
+      }}
+    />
+  );
 }
 
 export function EmptyEscalations() {
-    return (
-        <EmptyState
-            emoji="✅"
-            title="All caught up!"
-            description="No questions need review right now. Your twin is handling everything."
-            variant="subtle"
-        />
-    );
+  return (
+    <EmptyState
+      illustration="checkmark"
+      title="You're all caught up!"
+      description="No questions need your review. Your twin is handling things beautifully."
+      primaryAction={{
+        label: 'Test Your Twin',
+        href: '/dashboard/simulator',
+      }}
+    />
+  );
 }
 
-export function EmptyActions({ onCreate }: { onCreate?: () => void }) {
-    return (
-        <EmptyState
-            emoji="⚡"
-            title="No automated actions"
-            description="Create actions to automate workflows triggered by your twin's conversations."
-            action={{ label: "Create Action", onClick: onCreate }}
-            variant="card"
-        />
-    );
-}
-
-export function EmptyTwins() {
-    return (
-        <EmptyState
-            emoji="🧠"
-            title="No twins yet"
-            description="Create your first digital twin to get started."
-            action={{ label: "Create Your First Twin", href: "/onboarding" }}
-            variant="card"
-        />
-    );
-}
-
-export function EmptySearch({ query }: { query: string }) {
-    return (
-        <EmptyState
-            icon={
-                <svg className="w-10 h-10 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-            }
-            title={`No results for "${query}"`}
-            description="Try adjusting your search or filter to find what you're looking for."
-            variant="subtle"
-        />
-    );
-}
-
-export function ErrorState({
-    title = "Something went wrong",
-    description = "We encountered an error. Please try again.",
-    onRetry
-}: {
-    title?: string;
-    description?: string;
-    onRetry?: () => void;
-}) {
-    return (
-        <EmptyState
-            icon={
-                <svg className="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-            }
-            title={title}
-            description={description}
-            action={onRetry ? { label: "Try Again", onClick: onRetry } : undefined}
-            variant="subtle"
-        />
-    );
+export function EmptyKnowledge({ onAddSource }: { onAddSource?: () => void }) {
+  return (
+    <EmptyState
+      illustration="knowledge-empty"
+      title="Build your knowledge base"
+      description="Upload documents, connect URLs, or paste text to train your twin."
+      primaryAction={{
+        label: 'Add Source',
+        onClick: onAddSource,
+        href: '/dashboard/knowledge',
+      }}
+    />
+  );
 }
 
 export default EmptyState;

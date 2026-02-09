@@ -1,0 +1,107 @@
+{
+  "mode": "persona",
+  "status": "completed",
+  "timestamp": "2026-02-09T02:42:57.617826+00:00",
+  "run_mode": "heuristic",
+  "dataset_version": "phase5_v1",
+  "persona_spec_version": "1.0.0",
+  "candidate_count": 7,
+  "best_variant": {
+    "variant_id": "compact_v1",
+    "render_overrides": {}
+  },
+  "best_objective_score": 0.518901,
+  "best_metrics": {
+    "avg_case_score": 0.7975,
+    "pass_rate": 0.375,
+    "avg_response_words": 12.0,
+    "avg_prompt_tokens_est": 228.56
+  },
+  "ranking": [
+    {
+      "rank": 1,
+      "variant": {
+        "variant_id": "compact_v1",
+        "render_overrides": {}
+      },
+      "objective_score": 0.518901,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 228.56
+    },
+    {
+      "rank": 2,
+      "variant": {
+        "variant_id": "compact_no_examples_v1",
+        "render_overrides": {}
+      },
+      "objective_score": 0.518901,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 228.56
+    },
+    {
+      "rank": 3,
+      "variant": {
+        "variant_id": "compact_v1",
+        "render_overrides": {
+          "max_few_shots": 1
+        }
+      },
+      "objective_score": 0.518901,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 228.56
+    },
+    {
+      "rank": 4,
+      "variant": {
+        "variant_id": "baseline_v1",
+        "render_overrides": {}
+      },
+      "objective_score": 0.517651,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 273.56
+    },
+    {
+      "rank": 5,
+      "variant": {
+        "variant_id": "voice_focus_v1",
+        "render_overrides": {}
+      },
+      "objective_score": 0.517651,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 273.56
+    },
+    {
+      "rank": 6,
+      "variant": {
+        "variant_id": "baseline_v1",
+        "render_overrides": {
+          "max_few_shots": 2
+        }
+      },
+      "objective_score": 0.517651,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 273.56
+    },
+    {
+      "rank": 7,
+      "variant": {
+        "variant_id": "voice_focus_v1",
+        "render_overrides": {
+          "max_few_shots": 3
+        }
+      },
+      "objective_score": 0.517651,
+      "pass_rate": 0.375,
+      "avg_case_score": 0.7975,
+      "avg_prompt_tokens_est": 273.56
+    }
+  ],
+  "activated_variant": null,
+  "errors": []
+}

@@ -28,6 +28,16 @@ A feature/fix is "done" when:
 - New routers should have at least one smoke test
 - Imports must not fail (`python -c "from routers.my_router import router"`)
 
+### Persona/Policy Gate (Phase 6, Blocking)
+- Run regression gate:
+  - `python backend/eval/persona_regression_runner.py --dataset backend/eval/persona_regression_dataset.json`
+- Required thresholds:
+  - `pass_rate >= 0.95`
+  - `adversarial_pass_rate >= 0.95`
+  - `channel_isolation_pass_rate == 1.0`
+- CI workflow:
+  - `.github/workflows/persona-regression.yml` must pass for merge/release.
+
 ---
 
 ## Performance Budgets

@@ -5,10 +5,14 @@ Allows users to provide feedback on chat responses with thumbs up/down.
 Stores feedback as Langfuse scores for quality tracking.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from enum import Enum
+
+from modules.observability import supabase
+from modules.persona_feedback_learning import record_feedback_training_event
+from modules.persona_feedback_learning_jobs import enqueue_feedback_learning_job
 
 router = APIRouter(tags=["feedback"])
 
@@ -28,6 +32,11 @@ class FeedbackRequest(BaseModel):
     reason: FeedbackReason = Field(..., description="Reason for feedback")
     comment: Optional[str] = Field(None, max_length=500, description="Optional additional comment")
     message_id: Optional[str] = Field(None, description="Optional message ID for context")
+    twin_id: Optional[str] = Field(None, description="Twin ID for feedback-learning ingestion")
+    conversation_id: Optional[str] = Field(None, description="Conversation ID for context resolution")
+    intent_label: Optional[str] = Field(None, description="Runtime intent label from chat metadata")
+    module_ids: List[str] = Field(default_factory=list, description="Persona module IDs used for the answer")
+    interaction_context: Optional[str] = Field(None, description="owner_training|owner_chat|public_share|public_widget")
 
 
 class FeedbackResponse(BaseModel):
@@ -51,43 +60,99 @@ async def submit_feedback(
     Returns:
         Confirmation of feedback submission
     """
+    langfuse_error: Optional[str] = None
     try:
         from langfuse import get_client
-        
+
         client = get_client()
-        if not client:
-            raise HTTPException(status_code=503, detail="Langfuse client not available")
-        
-        # Log score to Langfuse
-        client.score(
-            trace_id=trace_id,
-            name="user_feedback",
-            value=request.score,
-            comment=f"{request.reason.value}: {request.comment}" if request.comment else request.reason.value,
-            data_type="NUMERIC",
-        )
-        
-        # Also log reason as separate score for filtering
-        client.score(
-            trace_id=trace_id,
-            name="feedback_reason",
-            value=1 if request.score > 0 else 0,
-            comment=request.reason.value,
-            data_type="CATEGORICAL",
-        )
-        
-        client.flush()
-        
-        return FeedbackResponse(
-            success=True,
-            message="Feedback submitted successfully",
-            trace_id=trace_id
-        )
-        
+        if client:
+            # Log score to Langfuse
+            client.score(
+                trace_id=trace_id,
+                name="user_feedback",
+                value=request.score,
+                comment=f"{request.reason.value}: {request.comment}" if request.comment else request.reason.value,
+                data_type="NUMERIC",
+            )
+
+            # Also log reason as separate score for filtering
+            client.score(
+                trace_id=trace_id,
+                name="feedback_reason",
+                value=1 if request.score > 0 else 0,
+                comment=request.reason.value,
+                data_type="CATEGORICAL",
+            )
+            client.flush()
+        else:
+            langfuse_error = "Langfuse client not available"
     except ImportError:
-        raise HTTPException(status_code=503, detail="Langfuse SDK not installed")
+        langfuse_error = "Langfuse SDK not installed"
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to submit feedback: {str(e)}")
+        langfuse_error = str(e)
+
+    resolved_twin_id = request.twin_id
+    if not resolved_twin_id and request.conversation_id:
+        try:
+            conv_res = (
+                supabase.table("conversations")
+                .select("twin_id")
+                .eq("id", request.conversation_id)
+                .single()
+                .execute()
+            )
+            if conv_res.data:
+                resolved_twin_id = conv_res.data.get("twin_id")
+        except Exception:
+            resolved_twin_id = None
+
+    try:
+        record_feedback_training_event(
+            trace_id=trace_id,
+            score=float(request.score),
+            reason=request.reason.value,
+            comment=request.comment,
+            twin_id=resolved_twin_id,
+            tenant_id=None,
+            conversation_id=request.conversation_id,
+            message_id=request.message_id,
+            intent_label=request.intent_label,
+            module_ids=request.module_ids,
+            interaction_context=request.interaction_context,
+            created_by=None,
+        )
+    except Exception:
+        # Non-blocking; response remains successful if core feedback logging succeeded.
+        pass
+
+    try:
+        if resolved_twin_id:
+            enqueue_feedback_learning_job(
+                twin_id=resolved_twin_id,
+                tenant_id=None,
+                created_by=None,
+                trigger="feedback_event",
+                force=False,
+            )
+    except Exception:
+        # Non-blocking; feedback response should not fail if job enqueueing fails.
+        pass
+
+    if langfuse_error and not resolved_twin_id:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Feedback capture unavailable: {langfuse_error}. Provide twin_id/conversation_id to store locally.",
+        )
+
+    message = "Feedback submitted successfully"
+    if langfuse_error:
+        message = f"Feedback stored locally; Langfuse logging unavailable ({langfuse_error})"
+
+    return FeedbackResponse(
+        success=True,
+        message=message,
+        trace_id=trace_id
+    )
 
 
 @router.get("/feedback/reasons")
