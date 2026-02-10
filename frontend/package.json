@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:vercel": "node -e \"require('fs').copyFileSync('.env.production', '.env.local')\" && next build",
+    "build:vercel": "next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
