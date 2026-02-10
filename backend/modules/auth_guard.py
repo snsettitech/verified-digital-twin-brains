@@ -14,6 +14,7 @@ BACKWARD COMPATIBILITY:
 - Maintains existing function signatures for router compatibility
 - verify_owner: Validates token and returns user dict
 - get_current_user: Extracts and validates user from request
+- resolve_tenant_id: Resolves/corrects tenant mapping for a user
 - verify_twin_ownership: Checks twin ownership
 - verify_source_ownership: Checks source ownership
 - verify_conversation_ownership: Checks conversation ownership
@@ -32,7 +33,7 @@ from datetime import datetime, timedelta
 import json
 
 # FastAPI imports for dependencies
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Depends, Request
 
 # Security configuration from environment
 JWT_SECRET = os.getenv("JWT_SECRET", os.getenv("SUPABASE_JWT_SECRET", ""))
@@ -248,6 +249,124 @@ def get_token_from_header(authorization: str) -> Optional[str]:
     return None
 
 
+def _is_deleted_email(email: str) -> bool:
+    normalized = (email or "").lower().strip()
+    return normalized.startswith("deleted_") or normalized.endswith("@deleted.local")
+
+
+def resolve_tenant_id(user_id: str, email: str = None, create_if_missing: bool = True) -> str:
+    """
+    Resolve tenant_id for a user, recovering stale mappings when possible.
+
+    Behavior:
+    - Returns existing users.tenant_id when present.
+    - Attempts non-destructive recovery via tenants.owner_id and then by email.
+    - Creates a tenant only when create_if_missing=True.
+    """
+    from modules.observability import supabase as supabase_client
+
+    # 1) Primary lookup from users table. Lookup failures are non-mutating.
+    try:
+        user_lookup = (
+            supabase_client.table("users")
+            .select("id, tenant_id")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if user_lookup.data and len(user_lookup.data) > 0:
+            tenant_id = user_lookup.data[0].get("tenant_id")
+            if tenant_id:
+                print(f"[resolve_tenant_id] Found existing tenant {tenant_id} for user {user_id}")
+                return tenant_id
+    except Exception as e:
+        print(f"[resolve_tenant_id] User lookup failed (non-mutating): {e}")
+        raise HTTPException(status_code=503, detail="Tenant lookup temporarily unavailable")
+
+    # 2) Recovery by owner_id where schema supports it.
+    try:
+        owner_tenant = (
+            supabase_client.table("tenants")
+            .select("id")
+            .eq("owner_id", user_id)
+            .order("created_at", desc=False)
+            .limit(1)
+            .execute()
+        )
+        if owner_tenant.data and len(owner_tenant.data) > 0:
+            tenant_id = owner_tenant.data[0]["id"]
+            user_data = {"id": user_id, "tenant_id": tenant_id}
+            if email:
+                user_data["email"] = email
+            supabase_client.table("users").upsert(user_data).execute()
+            print(f"[resolve_tenant_id] Re-linked user {user_id} to owner tenant {tenant_id}")
+            return tenant_id
+    except Exception as e:
+        print(f"[resolve_tenant_id] Owner-tenant recovery skipped: {e}")
+
+    # 3) Recovery by historical email mapping (prevents tenant drift after auth-id changes).
+    normalized_email = (email or "").strip().lower()
+    if normalized_email and not _is_deleted_email(normalized_email):
+        try:
+            email_matches = (
+                supabase_client.table("users")
+                .select("id, email, tenant_id, last_active_at, created_at")
+                .eq("email", normalized_email)
+                .execute()
+            )
+            candidates = []
+            for row in email_matches.data or []:
+                candidate_tenant_id = row.get("tenant_id")
+                candidate_email = row.get("email")
+                if not candidate_tenant_id:
+                    continue
+                if _is_deleted_email(candidate_email):
+                    continue
+                candidates.append(row)
+
+            if candidates:
+                candidates.sort(
+                    key=lambda r: ((r.get("last_active_at") or ""), (r.get("created_at") or "")),
+                    reverse=True,
+                )
+                tenant_id = candidates[0]["tenant_id"]
+                supabase_client.table("users").upsert(
+                    {"id": user_id, "tenant_id": tenant_id, "email": normalized_email}
+                ).execute()
+                print(
+                    "[resolve_tenant_id] Re-linked user "
+                    f"{user_id} to tenant {tenant_id} via email {normalized_email}"
+                )
+                return tenant_id
+        except Exception as e:
+            print(f"[resolve_tenant_id] Email-tenant recovery skipped: {e}")
+
+    if not create_if_missing:
+        raise HTTPException(status_code=404, detail="Tenant not found for user")
+
+    # 4) Auto-create tenant only for write-enabled flows.
+    try:
+        name = email.split("@")[0] if email else f"User-{user_id[:8]}"
+        tenant_insert = supabase_client.table("tenants").insert(
+            {"name": f"{name}'s Workspace"}
+        ).execute()
+        if not tenant_insert.data:
+            raise HTTPException(status_code=500, detail="Failed to auto-create tenant")
+
+        tenant_id = tenant_insert.data[0]["id"]
+        user_data = {"id": user_id, "tenant_id": tenant_id}
+        if email:
+            user_data["email"] = email
+        supabase_client.table("users").upsert(user_data).execute()
+        print(f"[resolve_tenant_id] Created tenant {tenant_id} and linked user {user_id}")
+        return tenant_id
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[resolve_tenant_id] ERROR creating tenant: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to resolve tenant: {str(e)}")
+
+
 def verify_owner(authorization: str = Header(None)) -> Dict[str, Any]:
     """
     Dependency for FastAPI to verify the request owner.
@@ -287,12 +406,22 @@ def verify_owner(authorization: str = Header(None)) -> Dict[str, Any]:
         )
 
 
-def get_current_user(authorization: str = Header(None)) -> Optional[Dict[str, Any]]:
+def get_current_user(
+    request: Request = None,
+    authorization: str = Header(None),
+    x_twin_api_key: str = Header(None),
+    origin: str = Header(None),
+    referer: str = Header(None),
+) -> Optional[Dict[str, Any]]:
     """
     Dependency to get current user without requiring authentication.
     
     Args:
+        request: Optional request object (kept for backward compatibility)
         authorization: Authorization header
+        x_twin_api_key: Optional API key header (legacy compatibility)
+        origin: Optional request origin header (legacy compatibility)
+        referer: Optional request referer header (legacy compatibility)
         
     Returns:
         User dict or None if not authenticated
@@ -308,6 +437,107 @@ def get_current_user(authorization: str = Header(None)) -> Optional[Dict[str, An
         return authenticate_request(token)
     except AuthenticationError:
         return None
+
+
+def require_tenant(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """
+    Require an authenticated user with a resolvable tenant_id.
+    """
+    if not user or not user.get("user_id"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    tenant_id = user.get("tenant_id")
+    if not tenant_id:
+        try:
+            tenant_id = resolve_tenant_id(
+                user_id=user.get("user_id"),
+                email=user.get("email"),
+                create_if_missing=False,
+            )
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User has no tenant association",
+                )
+            raise
+
+    user = dict(user)
+    user["tenant_id"] = tenant_id
+    return user
+
+
+def require_admin(user: Dict[str, Any] = Depends(require_tenant)) -> Dict[str, Any]:
+    """
+    Require owner/admin/support role for tenant admin endpoints.
+    """
+    from modules.observability import supabase
+
+    user_id = user.get("user_id")
+    actual_role = "viewer"
+    try:
+        role_lookup = (
+            supabase.table("users")
+            .select("role")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if role_lookup.data:
+            actual_role = role_lookup.data[0].get("role", "viewer")
+    except Exception as e:
+        print(f"[require_admin] Role lookup failed: {e}")
+
+    if actual_role not in {"owner", "admin", "support"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required",
+        )
+
+    user = dict(user)
+    user["actual_role"] = actual_role
+    return user
+
+
+def require_twin_access(twin_id: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure the twin belongs to the user's tenant and return minimal twin metadata.
+    """
+    from modules.observability import supabase
+
+    tenant_id = user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User has no tenant association",
+        )
+
+    try:
+        twin_res = (
+            supabase.table("twins")
+            .select("id, name, tenant_id, specialization")
+            .eq("id", twin_id)
+            .eq("tenant_id", tenant_id)
+            .limit(1)
+            .execute()
+        )
+        if not twin_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Twin not found or access denied",
+            )
+        return twin_res.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[require_twin_access] Access validation failed for twin {twin_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Twin not found or access denied",
+        )
 
 
 def verify_twin_ownership(twin_id: str, user: Dict[str, Any]) -> bool:

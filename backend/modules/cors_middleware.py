@@ -108,13 +108,26 @@ def get_allowed_origins() -> List[str]:
     return origins
 
 
-def create_cors_middleware(app: ASGIApp) -> DynamicCORSMiddleware:
-    """Factory function to create CORS middleware with proper configuration."""
+def create_cors_middleware(app: ASGIApp) -> ASGIApp:
+    """Register dynamic CORS middleware on the app and return the app."""
     origins = get_allowed_origins()
     
     # Log what origins we're allowing
     logger.info(f"CORS allowed origins: {origins}")
-    
+
+    if hasattr(app, "add_middleware"):
+        app.add_middleware(
+            DynamicCORSMiddleware,
+            allow_origins=origins,
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["x-correlation-id"],
+            log_rejections=os.getenv("CORS_LOG_REJECTIONS", "true").lower() == "true",
+        )
+        return app
+
+    # Fallback for plain ASGI app instances without add_middleware.
     return DynamicCORSMiddleware(
         app=app,
         allow_origins=origins,
@@ -122,5 +135,5 @@ def create_cors_middleware(app: ASGIApp) -> DynamicCORSMiddleware:
         allow_methods=["*"],
         allow_headers=["*"],
         expose_headers=["x-correlation-id"],
-        log_rejections=os.getenv("CORS_LOG_REJECTIONS", "true").lower() == "true"
+        log_rejections=os.getenv("CORS_LOG_REJECTIONS", "true").lower() == "true",
     )
