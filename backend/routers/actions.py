@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List, Optional
+from typing import Any, List, Optional
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership
 from modules.schemas import (
     EventSchema, ActionTriggerSchema, TriggerCreateRequest, TriggerUpdateRequest,
@@ -7,12 +7,38 @@ from modules.schemas import (
     ActionExecutionSchema, ToolConnectorSchema, ConnectorCreateRequest, ConnectorTestResponse,
     EventEmitRequest
 )
-from modules.actions_engine import (
-    EventEmitter, TriggerManager, ActionDraftManager, ActionExecutor, ConnectorManager
-)
 from modules.observability import supabase
 
-router = APIRouter(tags=["actions"])
+# Lazily import the actions engine to keep API cold-start fast.
+# The actions engine pulls in heavy Google client dependencies that we don't want
+# on the critical path for chat/retrieval/realtime ingestion.
+EventEmitter: Any = None
+TriggerManager: Any = None
+ActionDraftManager: Any = None
+ActionExecutor: Any = None
+ConnectorManager: Any = None
+
+
+def _ensure_actions_engine():
+    global EventEmitter, TriggerManager, ActionDraftManager, ActionExecutor, ConnectorManager
+    if EventEmitter is not None:
+        return
+    from modules.actions_engine import (
+        EventEmitter as _EventEmitter,
+        TriggerManager as _TriggerManager,
+        ActionDraftManager as _ActionDraftManager,
+        ActionExecutor as _ActionExecutor,
+        ConnectorManager as _ConnectorManager,
+    )
+
+    EventEmitter = _EventEmitter
+    TriggerManager = _TriggerManager
+    ActionDraftManager = _ActionDraftManager
+    ActionExecutor = _ActionExecutor
+    ConnectorManager = _ConnectorManager
+
+
+router = APIRouter(tags=["actions"], dependencies=[Depends(_ensure_actions_engine)])
 
 # Events
 @router.get("/twins/{twin_id}/events", response_model=List[EventSchema])
