@@ -69,25 +69,22 @@ def parse_namespace(namespace: str) -> tuple[Optional[str], str]:
             return parts[0], parts[1]
     return None, namespace
 
-# FlashRank for local reranking
-try:
-    from flashrank import Ranker, RerankRequest
-    _flashrank_available = True
-    # Cache the ranker instance
-    _ranker_instance = None
-except ImportError:
-    _flashrank_available = False
-    _ranker_instance = None
+# FlashRank for local reranking (lazy import to avoid startup overhead).
+_ranker_instance = None
 
 def get_ranker():
     """Lazy load FlashRank to avoid startup overhead."""
     global _ranker_instance
-    if _flashrank_available and _ranker_instance is None:
-        try:
-            # Use a lightweight model
-            _ranker_instance = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.model_cache")
-        except Exception as e:
-            print(f"Failed to initialize FlashRank: {e}")
+    if _ranker_instance is not None:
+        return _ranker_instance
+    try:
+        from flashrank import Ranker
+
+        # Use a lightweight model.
+        _ranker_instance = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.model_cache")
+    except Exception as e:
+        print(f"Failed to initialize FlashRank: {e}")
+        _ranker_instance = None
     return _ranker_instance
 
 
@@ -647,6 +644,8 @@ async def retrieve_context_vectors(
     
     if ranker and unique_contexts:
         try:
+            from flashrank import RerankRequest
+
             # Prepare for reranking
             passages = [
                 {"id": str(i), "text": c["text"], "meta": c} 
