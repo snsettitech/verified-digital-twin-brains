@@ -10,27 +10,30 @@ const DEFAULT_SUPABASE_URL = 'https://jvtffdbuwyhmcynauety.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2dGZmZGJ1d3lobWN5bmF1ZXR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMTY1MzksImV4cCI6MjA4MTU5MjUzOX0.tRpBHBhL2GM9s6sSncrVrNnmtwxrzED01SzwjKRb37E';
 const DEFAULT_BACKEND_URL = 'https://verified-digital-twin-brains.onrender.com';
 
-function getEnvVar(name: string, defaultValue?: string): string {
-  const value = process.env[name] || defaultValue;
-  if (!value) {
-    console.warn(`[WARN] Missing environment variable: ${name}, using fallback`);
-    return '';
-  }
-  return value.replace(/\/$/, ''); // Remove trailing slash
+function sanitizeUrl(url: string): string {
+  return (url || '').replace(/\/$/, '');
 }
 
 /**
  * The base URL for all API requests.
  * Uses default backend URL if environment variable not set.
  */
-export const API_BASE_URL = getEnvVar('NEXT_PUBLIC_BACKEND_URL', DEFAULT_BACKEND_URL) || DEFAULT_BACKEND_URL;
+// NOTE: Use explicit `process.env.NEXT_PUBLIC_*` accesses so Next can inline these at build time.
+// Dynamic access like `process.env[name]` will not work reliably in the browser bundle.
+const RAW_BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_API_URL ||
+  DEFAULT_BACKEND_URL;
+export const API_BASE_URL = sanitizeUrl(RAW_BACKEND_URL) || DEFAULT_BACKEND_URL;
 
 /**
  * Supabase configuration
  * Uses defaults for Vercel deployments when env vars not set in dashboard
  */
-export const SUPABASE_URL = getEnvVar('NEXT_PUBLIC_SUPABASE_URL', DEFAULT_SUPABASE_URL) || DEFAULT_SUPABASE_URL;
-export const SUPABASE_ANON_KEY = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY', DEFAULT_SUPABASE_ANON_KEY) || DEFAULT_SUPABASE_ANON_KEY;
+export const SUPABASE_URL =
+  sanitizeUrl(process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL) || DEFAULT_SUPABASE_URL;
+export const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
 /**
  * Frontend URL (for redirects, sharing, etc.)

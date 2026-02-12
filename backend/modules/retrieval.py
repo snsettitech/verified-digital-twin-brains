@@ -69,21 +69,44 @@ def parse_namespace(namespace: str) -> tuple[Optional[str], str]:
             return parts[0], parts[1]
     return None, namespace
 
+# =============================================================================
+# Reranking configuration
+# =============================================================================
+# NOTE: FlashRank loads an on-device model via onnxruntime and can be memory-heavy.
+# On small instances (ex: Render starter), enabling FlashRank can OOM the web
+# process and cause 502s. Keep FlashRank behind an explicit flag and allow a
+# managed reranker (Cohere) or "none".
+
+RERANK_PROVIDER = os.getenv("RERANK_PROVIDER", "flashrank").lower().strip()
+if RERANK_PROVIDER not in ("flashrank", "cohere", "none"):
+    print(f"[Retrieval] Unknown RERANK_PROVIDER='{RERANK_PROVIDER}', defaulting to 'flashrank'")
+    RERANK_PROVIDER = "flashrank"
+
+COHERE_RERANK_MODEL = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5")
+
+FLASHRANK_ENABLED = os.getenv("FLASHRANK_ENABLED", "true").lower() == "true"
+FLASHRANK_MODEL = os.getenv("FLASHRANK_MODEL", "ms-marco-MiniLM-L-12-v2")
+FLASHRANK_CACHE_DIR = os.getenv("FLASHRANK_CACHE_DIR", "./.model_cache")
+
 # FlashRank for local reranking (lazy import to avoid startup overhead).
 _ranker_instance = None
 
 def get_ranker():
-    """Lazy load FlashRank to avoid startup overhead."""
+    """Lazy load FlashRank (if enabled) to avoid startup overhead."""
+    if RERANK_PROVIDER != "flashrank" or not FLASHRANK_ENABLED:
+        return None
+
     global _ranker_instance
     if _ranker_instance is not None:
         return _ranker_instance
+
     try:
         from flashrank import Ranker
 
-        # Use a lightweight model.
-        _ranker_instance = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.model_cache")
+        # Use a lightweight model by default; allow override via env.
+        _ranker_instance = Ranker(model_name=FLASHRANK_MODEL, cache_dir=FLASHRANK_CACHE_DIR)
     except Exception as e:
-        print(f"Failed to initialize FlashRank: {e}")
+        print(f"[Retrieval] Failed to initialize FlashRank: {e}")
         _ranker_instance = None
     return _ranker_instance
 
@@ -636,45 +659,66 @@ async def retrieve_context_vectors(
     unique_contexts = _deduplicate_and_limit(contexts, top_k=top_k * 3)
     print(f"DEBUG: Unique contexts before rerank: {len(unique_contexts)}")
     
-    # 8. Rerank
+    # 8. Rerank (optional)
+    reranked = False
+    final_contexts: List[Dict[str, Any]] = []
 
-    final_contexts = []
-    ranker = get_ranker()
-    # ranker = None # FORCE DISABLE
-    
-    if ranker and unique_contexts:
-        try:
-            from flashrank import RerankRequest
-
-            # Prepare for reranking
-            passages = [
-                {"id": str(i), "text": c["text"], "meta": c} 
-                for i, c in enumerate(unique_contexts)
-            ]
-            
-            rerank_request = RerankRequest(query=query, passages=passages)
-            results = ranker.rerank(rerank_request)
-
-            max_rerank_score = max((float(res.get("score", 0) or 0) for res in results), default=0)
-            if max_rerank_score < 0.001:
-                print("[Retrieval] Rerank scores too low. Using vector scores.")
-                final_contexts = unique_contexts[:top_k]
-            else:
-                # Reconstruct sorted contexts
-                for res in results:
-                    original_idx = int(res["id"])
-                    ctx = unique_contexts[original_idx]
-                    ctx["score"] = float(res.get("score", 0.0) or 0.0) # Update score with rerank score
-                    final_contexts.append(ctx)
-                
-                # Limit to requested top_k
-                final_contexts = final_contexts[:top_k]
-                print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
-        except Exception as e:
-            print(f"[Retrieval] Reranking failed: {e}. Falling back to vector scores.")
+    if RERANK_PROVIDER == "cohere" and unique_contexts:
+        cohere_client = get_cohere_client()
+        if not cohere_client:
+            print("[Retrieval] RERANK_PROVIDER=cohere but COHERE_API_KEY is missing. Skipping rerank.")
             final_contexts = unique_contexts[:top_k]
+        else:
+            try:
+                docs = [c.get("text", "") for c in unique_contexts]
+                top_n = min(top_k, len(docs))
+                rr = cohere_client.rerank(model=COHERE_RERANK_MODEL, query=query, documents=docs, top_n=top_n)
+                for res in rr.results:
+                    ctx = unique_contexts[int(res.index)]
+                    ctx["score"] = float(res.relevance_score)
+                    final_contexts.append(ctx)
+                reranked = True
+                print(f"[Retrieval] Cohere reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
+            except Exception as e:
+                print(f"[Retrieval] Cohere reranking failed: {e}. Falling back to vector scores.")
+                final_contexts = unique_contexts[:top_k]
+
+    elif RERANK_PROVIDER == "flashrank" and unique_contexts:
+        ranker = get_ranker()
+        if ranker:
+            try:
+                from flashrank import RerankRequest
+
+                # Prepare for reranking
+                passages = [{"id": str(i), "text": c["text"], "meta": c} for i, c in enumerate(unique_contexts)]
+                rerank_request = RerankRequest(query=query, passages=passages)
+                results = ranker.rerank(rerank_request)
+
+                max_rerank_score = max((float(res.get("score", 0) or 0) for res in results), default=0)
+                if max_rerank_score < 0.001:
+                    print("[Retrieval] FlashRank scores too low. Using vector scores.")
+                    final_contexts = unique_contexts[:top_k]
+                else:
+                    # Reconstruct sorted contexts
+                    for res in results:
+                        original_idx = int(res["id"])
+                        ctx = unique_contexts[original_idx]
+                        # Replace score with rerank score
+                        ctx["score"] = float(res.get("score", 0.0) or 0.0)
+                        final_contexts.append(ctx)
+
+                    # Limit to requested top_k
+                    final_contexts = final_contexts[:top_k]
+                    reranked = True
+                    print(f"[Retrieval] FlashRank reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
+            except Exception as e:
+                print(f"[Retrieval] FlashRank reranking failed: {e}. Falling back to vector scores.")
+                final_contexts = unique_contexts[:top_k]
+        else:
+            final_contexts = unique_contexts[:top_k]
+
     else:
-        # Fallback if no ranker
+        # RERANK_PROVIDER=none or no contexts
         final_contexts = unique_contexts[:top_k]
 
     
@@ -699,7 +743,6 @@ async def retrieve_context_vectors(
         c["verified_qna_match"] = False
     
     # Log RAG metrics to Langfuse
-    cohere_client = get_cohere_client()
     if _langfuse_available and final_contexts:
         try:
             langfuse.update_current_observation(
@@ -707,7 +750,7 @@ async def retrieve_context_vectors(
                     "doc_ids": [c.get("source_id", "unknown")[:50] for c in final_contexts],
                     "similarity_scores": [round(c.get("score", 0.0), 3) for c in final_contexts],
                     "chunk_lengths": [len(c.get("text", "")) for c in final_contexts],
-                    "reranked": cohere_client is not None,
+                    "reranked": reranked,
                     "top_k": top_k,
                     "total_retrieved": len(final_contexts),
                 }
