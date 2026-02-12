@@ -177,6 +177,20 @@ async def run_identity_gate(
     has_conflict = detect_conflicts(candidates[:3]) if candidates else False
 
     if not candidates or best_score < 0.70 or has_conflict:
+        # Phase 4/5 integration: preference queries are safe to defer to the main agent
+        # (which already enforces evidence for person-specific queries) rather than forcing
+        # a clarification loop here. This improves UX for realtime-ingested persona facts.
+        if memory_type == "preference":
+            return {
+                "decision": "ANSWER",
+                "requires_owner": True,
+                "memory_type": memory_type,
+                "topic": topic,
+                "reason": "missing_owner_memory_preference_defer_to_agent",
+                "owner_memory": [],
+                "owner_memory_refs": [],
+                "owner_memory_context": ""
+            }
         if not candidates or best_score < 0.70:
             if wants_intent or wants_constraints or wants_boundaries:
                 profile = _load_intent_profile(twin_id)

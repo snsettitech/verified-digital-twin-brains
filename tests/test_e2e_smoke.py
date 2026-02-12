@@ -9,6 +9,12 @@ import pytest
 import requests
 from typing import Dict, Optional
 
+# These tests require a live backend + real credentials.
+# Opt-in with RUN_E2E_SMOKE=1 (and set API_URL/TEST_TOKEN).
+pytestmark = pytest.mark.integration
+if os.getenv("RUN_E2E_SMOKE", "0").lower() not in {"1", "true", "yes"}:
+    pytest.skip("E2E smoke tests disabled (set RUN_E2E_SMOKE=1 to enable)", allow_module_level=True)
+
 # Configuration
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 TEST_TOKEN = os.getenv("TEST_TOKEN", "")

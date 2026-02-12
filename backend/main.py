@@ -99,6 +99,7 @@ if ENHANCED_INGESTION_ENABLED:
     print("[INFO] Enhanced ingestion routes enabled (ENABLE_ENHANCED_INGESTION=true)")
 else:
     print("[INFO] Enhanced ingestion routes disabled (ENABLE_ENHANCED_INGESTION=false)")
+
 app.include_router(reasoning.router)
 app.include_router(interview.router)
 app.include_router(api_keys.router)

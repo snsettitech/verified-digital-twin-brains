@@ -68,4 +68,5 @@ frontend/playwright-test-results/
 frontend/test-results-temp/
 artifacts/simulator/
 artifacts/supabase_jwt.txt
+artifacts/importtime_*.txt
 backend/test_token.txt

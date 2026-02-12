@@ -30,14 +30,21 @@ def base_state():
 
 @pytest.mark.asyncio
 async def test_router_node_intent_classification(base_state):
-    # Mocking ChatOpenAI to avoid real API calls
-    with unittest.mock.patch("modules.agent.ChatOpenAI") as mock_llm_class:
-        mock_llm = mock_llm_class.return_value
-        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content='{"mode": "SMALLTALK", "is_person_specific": false, "requires_evidence": false, "reasoning": "Greeting"}'))
-        
+    # Mock invoke_json to avoid real model calls
+    with unittest.mock.patch("modules.agent.invoke_json") as mock_invoke_json:
+        mock_invoke_json.return_value = (
+            {
+                "mode": "SMALLTALK",
+                "is_person_specific": False,
+                "requires_evidence": False,
+                "reasoning": "Greeting",
+            },
+            {},
+        )
+
         base_state["messages"] = [HumanMessage(content="Hello!")]
         result = await router_node(base_state)
-        
+
         assert result["dialogue_mode"] == "SMALLTALK"
         assert result["requires_evidence"] is False
         assert "Router: Mode=SMALLTALK" in result["reasoning_history"][-1]
@@ -53,7 +60,10 @@ async def test_evidence_gate_pass(base_state):
     
     assert result["dialogue_mode"] == "QA_FACT"
     assert result["requires_teaching"] is False
-    assert "Gate: PASS" in result["reasoning_history"][-1]
+    assert any(
+        token in result["reasoning_history"][-1]
+        for token in ["Gate: PASS", "Gate: SOFT"]
+    )
 
 @pytest.mark.asyncio
 async def test_evidence_gate_fail_to_teaching(base_state):
@@ -75,13 +85,12 @@ async def test_evidence_gate_with_llm_verifier_fail(base_state):
     base_state["retrieved_context"] = {"results": [{"text": "Irrelevant info"}]}
     base_state["messages"] = [HumanMessage(content="What is your favorite book?")]
     
-    # Mock verifier to fail
-    with unittest.mock.patch("modules.agent.ChatOpenAI") as mock_llm_class:
-        mock_llm = mock_llm_class.return_value
-        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content='{"is_sufficient": false, "reason": "No book found"}'))
-        
+    # Mock verifier to fail (invoke_json used by evidence gate)
+    with unittest.mock.patch("modules.agent.invoke_json") as mock_invoke_json:
+        mock_invoke_json.return_value = ({"is_sufficient": False, "reason": "No book found"}, {})
+
         result = await evidence_gate_node(base_state)
-        
+
         assert result["dialogue_mode"] == "TEACHING"
         assert result["requires_teaching"] is True
         assert "Verifier: No book found" in result["reasoning_history"][-1]

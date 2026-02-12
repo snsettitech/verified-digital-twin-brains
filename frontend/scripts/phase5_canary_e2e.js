@@ -410,6 +410,8 @@ async function main() {
       'Ask anything about your knowledge base... (Enter to send, Shift+Enter for new line)'
     );
     await chatInput.waitFor({ timeout: 30_000 });
+    // Let initial simulator API calls settle (conversation fetch, twin metadata, etc).
+    await page.waitForTimeout(2000);
 
     // Ensure owner mode first (stop training if already active)
     const stopBtn = page.getByRole('button', { name: 'Stop Training' });
@@ -418,55 +420,117 @@ async function main() {
       await page.getByRole('button', { name: 'Start Training' }).waitFor({ timeout: 30_000 });
     }
 
-    async function sendChat(question) {
-      const prose = page.locator('div.prose');
-      const beforeCount = await prose.count();
+    function parseChatStreamBody(bodyText) {
+      const lines = String(bodyText || '')
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((l) => (l.startsWith('data:') ? l.slice('data:'.length).trim() : l));
+
+      let content = '';
+      let metadata = null;
+      let clarify = null;
+
+      for (const line of lines) {
+        let obj = null;
+        try {
+          obj = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (!obj || typeof obj !== 'object') continue;
+        if (obj.type === 'metadata' && !obj.ping) {
+          metadata = obj;
+          continue;
+        }
+        if (obj.type === 'clarify') {
+          clarify = obj;
+          // In the UI, clarifications are rendered as the assistant message content.
+          if (typeof obj.question === 'string' && obj.question.trim()) {
+            content = obj.question.trim();
+          }
+          continue;
+        }
+        if (obj.type === 'content' || obj.type === 'answer_token') {
+          const tok = typeof obj.content === 'string' ? obj.content : (typeof obj.token === 'string' ? obj.token : '');
+          if (tok) content += tok;
+          continue;
+        }
+      }
+
+      return { content: String(content || '').trim(), metadata, clarify };
+    }
+
+    async function waitForChatResponseForQuery(question) {
+      const chatResponse = await page.waitForResponse(
+        (res) => {
+          try {
+            if (!res.url().includes('/chat/')) return false;
+            const req = res.request();
+            if (req.method() !== 'POST') return false;
+            const postData = req.postData() || '';
+            if (!postData) return false;
+            const parsed = JSON.parse(postData);
+            return parsed && parsed.query === question;
+          } catch {
+            return false;
+          }
+        },
+        { timeout: 90_000 }
+      );
+
+      // Ensure the stream fully completes before reading the body.
+      await chatResponse.finished().catch(() => {});
+      const bodyText = await chatResponse.text().catch(() => '');
+      return parseChatStreamBody(bodyText);
+    }
+
+    async function sendChat(question, key) {
+      const respPromise = waitForChatResponseForQuery(question);
 
       await chatInput.click();
       await chatInput.fill(question);
       await chatInput.press('Enter');
 
-      // Wait for a new assistant bubble to be appended (ChatInterface pushes an empty assistant message immediately).
-      await page.waitForFunction(
-        (n) => document.querySelectorAll('div.prose').length > n,
-        beforeCount,
-        { timeout: 10_000 }
-      );
-
-      const target = prose.nth(beforeCount);
-      const start = Date.now();
-      let last = '';
-      let stableMs = 0;
-      while (Date.now() - start < 60_000) {
-        const txt = await target.innerText().catch(() => '');
-        if (txt && txt === last) {
-          stableMs += 500;
-          if (stableMs >= 1500) return txt.trim();
-        } else {
-          stableMs = 0;
-          last = txt;
-        }
-        await page.waitForTimeout(500);
+      const parsed = await respPromise;
+      if (key && parsed?.metadata) {
+        result.response_quality_meta = result.response_quality_meta || {};
+        result.response_quality_meta[key] = {
+          dialogue_mode: parsed.metadata.dialogue_mode || null,
+          intent_label: parsed.metadata.intent_label || null,
+          citations_count: Array.isArray(parsed.metadata.citations) ? parsed.metadata.citations.length : null,
+          citations: Array.isArray(parsed.metadata.citations) ? parsed.metadata.citations.slice(0, 5) : null,
+          conversation_id: parsed.metadata.conversation_id || null,
+          persona_spec_version: parsed.metadata.persona_spec_version || null,
+          persona_prompt_variant: parsed.metadata.persona_prompt_variant || null,
+          forced_new_conversation: parsed.metadata.forced_new_conversation ?? null,
+        };
       }
-      return (await target.innerText().catch(() => last)).trim();
+      return parsed?.content || '';
     }
 
-    result.response_quality.owner_small_talk = await sendChat('Hey! How are you today?');
-    result.response_quality.owner_general_qa = await sendChat('What is the capital of France?');
+    result.response_quality.owner_small_talk = await sendChat('Hey! How are you today?', 'owner_small_talk');
+    result.response_quality.owner_general_qa = await sendChat('What is the capital of France?', 'owner_general_qa');
     result.response_quality.owner_persona_coffee = await sendChat(
       'Based on the latest realtime ingestion, what is my coffee preference? Answer in one sentence.'
-    );
+    , 'owner_persona_coffee');
     result.response_quality.owner_marker_echo = await sendChat(
       `Repeat this marker exactly (no extra words): ${marker}`
-    );
+    , 'owner_marker_echo');
 
     // Switch to training (roleplay) mode
-    await page.getByRole('button', { name: 'Start Training' }).click();
-    await page.getByRole('button', { name: 'Stop Training' }).waitFor({ timeout: 30_000 });
+    const startTraining = page.getByRole('button', { name: 'Start Training' });
+    const stopTraining = page.getByRole('button', { name: 'Stop Training' });
+    if (await stopTraining.isVisible().catch(() => false)) {
+      // Already in training mode.
+    } else {
+      await startTraining.click();
+      await stopTraining.waitFor({ timeout: 30_000 });
+    }
 
     result.response_quality.roleplay_identity = await sendChat(
       'Roleplay mode: In one sentence, who are you and what are you building right now?'
-    );
+    , 'roleplay_identity');
 
     result.observed_request_hosts = Array.from(requestHosts).filter((h) => {
       return h.includes('onrender.com') || h.includes('supabase.co') || h.includes('vercel.app') || h.includes('localhost');
