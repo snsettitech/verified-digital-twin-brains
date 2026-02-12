@@ -24,6 +24,7 @@ class JobType(str, Enum):
     INGESTION = "ingestion"
     REINDEX = "reindex"
     HEALTH_CHECK = "health_check"
+    REALTIME_INGESTION = "realtime_ingestion"
     GRAPH_EXTRACTION = "graph_extraction"
     CONTENT_EXTRACTION = "content_extraction"
     FEEDBACK_LEARNING = "feedback_learning"

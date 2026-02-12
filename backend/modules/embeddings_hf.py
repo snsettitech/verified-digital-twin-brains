@@ -26,8 +26,9 @@ from functools import lru_cache
 logger = logging.getLogger(__name__)
 
 # Constants
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
-DEFAULT_DIMENSION = 384  # Note: MiniLM uses 384 dims vs OpenAI's 3072
+# 3072-dim model for OpenAI compatibility (text-embedding-3-large = 3072 dims)
+DEFAULT_MODEL = "SeanLee97/mxbai-embed-large-v1-nli-matryoshka"
+DEFAULT_DIMENSION = 3072  # Matches OpenAI text-embedding-3-large
 
 
 class HFEmbeddingClient:
@@ -200,7 +201,7 @@ class HFEmbeddingClient:
     
     @property
     def dimension(self) -> int:
-        """Return embedding dimension (384 for MiniLM)."""
+        """Return embedding dimension (3072 for mxbai-embed-large)."""
         return self._dimension
     
     @property

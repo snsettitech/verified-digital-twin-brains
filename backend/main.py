@@ -14,6 +14,7 @@ from routers import (
     persona_specs,
     decision_capture,
     ingestion,
+    ingestion_realtime,
     youtube_preflight,
     twins,
     actions,
@@ -69,6 +70,12 @@ app.include_router(training_sessions.router)
 app.include_router(persona_specs.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
+REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "false").lower() == "true"
+if REALTIME_INGESTION_ENABLED:
+    app.include_router(ingestion_realtime.router)
+    print("[INFO] Realtime ingestion routes enabled (ENABLE_REALTIME_INGESTION=true)")
+else:
+    print("[INFO] Realtime ingestion routes disabled (ENABLE_REALTIME_INGESTION=false)")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 
@@ -199,6 +206,8 @@ async def cors_test(request: Request):
     
     Returns information about the request origin and whether it's allowed.
     """
+    # Never echo sensitive request headers in production.
+    dev_mode = os.getenv("DEV_MODE", "true").lower() == "true"
     origin = request.headers.get("origin", "no-origin")
     allowed_origins = get_allowed_origins()
     
@@ -218,14 +227,32 @@ async def cors_test(request: Request):
             matched_pattern = pattern
             break
     
-    return {
+    payload = {
         "origin": origin,
         "is_allowed": is_allowed,
         "matched_pattern": matched_pattern,
         "allowed_origins": allowed_origins,
-        "headers": dict(request.headers),
         "timestamp": time.time()
     }
+
+    if dev_mode:
+        safe_allowlist = {
+            "origin",
+            "referer",
+            "user-agent",
+            "x-forwarded-for",
+            "x-forwarded-proto",
+            "x-real-ip",
+            "sec-fetch-site",
+            "sec-fetch-mode",
+            "sec-fetch-dest",
+            "sec-fetch-user",
+        }
+        payload["headers"] = {
+            k: v for k, v in dict(request.headers).items() if k.lower() in safe_allowlist
+        }
+
+    return payload
 
 
 # ============================================================================
@@ -258,7 +285,7 @@ def validate_required_env_vars():
     if not dev_mode and (not jwt_secret or jwt_secret == "your_jwt_secret" or "secret" in jwt_secret.lower()):
         print("WARNING: JWT_SECRET is not properly configured for production!")
         print("  Set JWT_SECRET to your Supabase project's JWT secret from:")
-        print("  Supabase Dashboard → Settings → API → JWT Secret")
+        print("  Supabase Dashboard -> Settings -> API -> JWT Secret")
     
     if missing:
         print("=" * 60)

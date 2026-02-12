@@ -6,11 +6,11 @@ across ingestion, verified_qna, and retrieval modules.
 
 PROVIDER SUPPORT (NEW):
 - OpenAI: text-embedding-3-large (default, 3072 dims)
-- Hugging Face Local: all-MiniLM-L6-v2 (384 dims, 20x faster)
+- Hugging Face Local: mxbai-embed-large-v1 (3072 dims, 20x faster)
 
 Environment Variables:
 - EMBEDDING_PROVIDER: "openai" (default) or "huggingface"
-- HF_EMBEDDING_MODEL: Model name (default: all-MiniLM-L6-v2)
+- HF_EMBEDDING_MODEL: Model name (default: SeanLee97/mxbai-embed-large-v1-nli-matryoshka)
 - HF_EMBEDDING_DEVICE: "cpu" or "cuda" (auto-detected if not set)
 
 SECURITY FIXES:
@@ -112,6 +112,17 @@ class CircuitBreaker:
 
 # Global circuit breaker for embeddings
 _embedding_circuit_breaker = CircuitBreaker()
+
+def reset_embedding_circuit_breaker() -> None:
+    """
+    Reset the global embedding circuit breaker state.
+
+    Intended for tests to prevent cross-test coupling when earlier tests
+    intentionally trigger failures.
+    """
+    _embedding_circuit_breaker.failure_count = 0
+    _embedding_circuit_breaker.last_failure_time = None
+    _embedding_circuit_breaker.state = _embedding_circuit_breaker.STATE_CLOSED
 
 
 def with_retry_and_timeout(max_attempts: int = None, timeout_seconds: int = None):

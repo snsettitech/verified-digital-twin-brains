@@ -1,6 +1,7 @@
 import os
 import asyncio
 import json
+import re
 from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
@@ -198,6 +199,160 @@ class TwinState(TypedDict):
     owner_memory_context: Optional[str]
     system_prompt_override: Optional[str]
 
+
+def _is_uuid_like(value: Any) -> bool:
+    try:
+        import uuid as _uuid
+        _uuid.UUID(str(value))
+        return True
+    except Exception:
+        return False
+
+
+def _is_recency_query(query: str) -> bool:
+    q = (query or "").lower()
+    return bool(
+        re.search(
+            r"\b(latest|recent|newest|just now|most recent|just ingested|just uploaded|just added)\b",
+            q,
+        )
+    )
+
+
+def _is_exact_token_query(query: str) -> bool:
+    q = (query or "").lower()
+    exact_terms = ["exact", "verbatim", "token", "marker", "phrase", "quote"]
+    return any(term in q for term in exact_terms)
+
+
+def _extract_candidate_markers(text: str) -> List[str]:
+    if not text:
+        return []
+    patterns = [
+        r"\bPHASE\d+_MARKER_[0-9]+\b",
+        r"\bE2E_[A-Z0-9_]+\b",
+        r"\b[A-Z]{3,}[A-Z0-9_]*_[A-Z0-9_]+\b",
+    ]
+    hits: List[str] = []
+    for pattern in patterns:
+        for match in re.findall(pattern, text):
+            token = str(match).strip()
+            if token:
+                hits.append(token)
+    return list(dict.fromkeys(hits))
+
+
+def _deterministic_token_plan(
+    *,
+    user_query: str,
+    context_data: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """
+    Deterministic plan for exact token/marker questions.
+    """
+    if not context_data:
+        return None
+    if not _is_exact_token_query(user_query):
+        return None
+
+    # Prefer explicit token mention in user query first.
+    explicit_from_query = _extract_candidate_markers(user_query)
+    if explicit_from_query:
+        marker = explicit_from_query[0]
+        top_source = str(context_data[0].get("source_id") or "").strip()
+        return {
+            "answer_points": [marker],
+            "citations": [top_source] if top_source else [],
+            "follow_up_question": "Do you want me to verify any other exact token?",
+            "confidence": 1.0,
+            "teaching_questions": [],
+            "reasoning_trace": "Deterministic marker extraction from user query.",
+        }
+
+    # Otherwise extract the first marker from top-ranked evidence chunks.
+    for item in context_data[:3]:
+        text = str(item.get("text") or "")
+        markers = _extract_candidate_markers(text)
+        if markers:
+            source_id = str(item.get("source_id") or "").strip()
+            return {
+                "answer_points": [markers[0]],
+                "citations": [source_id] if source_id else [],
+                "follow_up_question": "Do you want me to verify any other exact token?",
+                "confidence": 0.95,
+                "teaching_questions": [],
+                "reasoning_trace": "Deterministic marker extraction from evidence.",
+            }
+    return None
+
+
+def _normalize_plan_citations(plan: Dict[str, Any], context_data: List[Dict[str, Any]]) -> None:
+    """
+    Convert planner citation outputs into canonical source IDs.
+    Handles both index-style references ("0", "1") and direct source IDs.
+    """
+    if not isinstance(plan, dict):
+        return
+
+    raw_citations = plan.get("citations")
+    if not isinstance(raw_citations, list):
+        plan["citations"] = []
+        return
+
+    index_to_source: Dict[str, str] = {}
+    valid_source_ids: set[str] = set()
+    for i, item in enumerate(context_data):
+        sid = str(item.get("source_id") or "").strip()
+        if not sid:
+            continue
+        index_to_source[str(i)] = sid
+        valid_source_ids.add(sid)
+
+    normalized: List[str] = []
+    for citation in raw_citations:
+        token = str(citation).strip()
+        if not token:
+            continue
+        if token in index_to_source:
+            token = index_to_source[token]
+        if token in valid_source_ids:
+            normalized.append(token)
+
+    # Default to top evidence source when planner returns unusable citations.
+    if not normalized and context_data:
+        top_sid = str(context_data[0].get("source_id") or "").strip()
+        if top_sid:
+            normalized.append(top_sid)
+
+    plan["citations"] = list(dict.fromkeys(normalized))
+
+
+def _build_realizer_fallback(plan: Dict[str, Any], user_query: str) -> str:
+    """
+    Deterministic fallback if the realizer LLM call fails.
+    """
+    answer_points = plan.get("answer_points") if isinstance(plan, dict) else []
+    follow_up = plan.get("follow_up_question") if isinstance(plan, dict) else None
+
+    if isinstance(answer_points, list):
+        safe_points = [str(p).strip() for p in answer_points if str(p).strip()]
+    else:
+        safe_points = []
+
+    if safe_points:
+        core = safe_points[0]
+        if follow_up and isinstance(follow_up, str) and follow_up.strip():
+            return f"{core} {follow_up.strip()}"
+        return core
+
+    fallback_query = (user_query or "").strip()
+    if fallback_query:
+        return (
+            f"I want to answer this precisely: \"{fallback_query}\". "
+            "I need one concrete detail from you to avoid guessing."
+        )
+    return "I want to answer precisely, but I need one more detail to avoid guessing."
+
 def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any]]:
     """
     Build prompt text plus persona runtime trace metadata (Phase 3).
@@ -311,12 +466,25 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
         if intent_lines:
             intent_block = "INTENT PROFILE:\n" + "\n".join(intent_lines) + "\n"
 
+    # Grounding rules must be mode-aware.
+    # For owner-specific / stance questions we enforce strict RAG grounding.
+    # For general QA and smalltalk, allow general knowledge without forcing TEACHING mode.
+    strict_grounding = bool(state.get("target_owner_scope")) or (dialogue_mode in {"STANCE_GLOBAL", "QA_RELATIONSHIP"})
+    if strict_grounding:
+        grounding_rules = (
+            "- Every claim MUST be supported by retrieved context.\n"
+            "- If context is missing, say you don't know and ask one specific follow-up question.\n"
+        )
+    else:
+        grounding_rules = (
+            "- For general questions, you may answer using general knowledge.\n"
+            "- Never invent personal experiences/preferences; if asked about me specifically and you lack evidence, ask a clarifying question.\n"
+        )
+
     prompt = f"""You are the AI Digital Twin of the owner (ID: {twin_id}).
 YOUR PRINCIPLES (Immutable):
 - Use first-person ("I", "my").
-- Every claim MUST be supported by retrieved context.
-- If context is missing, say you don't know.
-- Be concise by default.
+{grounding_rules}- Be concise by default.
 - PUBLIC INTRO and INTENT PROFILE are owner-provided facts and may be used for self-description.
 
 {custom_instructions_block}
@@ -388,6 +556,8 @@ async def router_node(state: TwinState):
         # Phase 4 Enforcement: Person-specific queries MUST have evidence verification
         if is_specific:
             req_evidence = True
+        if mode == "SMALLTALK":
+            req_evidence = False
             
         # Sub-query generation for the next step (retrieval)
         sub_queries = [last_human_msg] if mode != "SMALLTALK" else []
@@ -428,6 +598,14 @@ async def evidence_gate_node(state: TwinState):
             "dialogue_mode": mode,
             "requires_teaching": False,
             "reasoning_history": (state.get("reasoning_history") or []) + ["Gate: SKIP (smalltalk)"]
+        }
+
+    # Soft gate: for general, non-owner-specific fact questions we allow answering even if RAG returns nothing.
+    if mode == "QA_FACT" and not is_specific:
+        return {
+            "dialogue_mode": mode,
+            "requires_teaching": False,
+            "reasoning_history": (state.get("reasoning_history") or []) + ["Gate: SOFT (qa_fact_general)"],
         }
 
     if requires_evidence and not context:
@@ -486,7 +664,47 @@ async def evidence_gate_node(state: TwinState):
 async def planner_node(state: TwinState):
     """Pass A: Strategic Planning & Logic (Structured JSON)"""
     mode = state.get("dialogue_mode", "QA_FACT")
-    context_data = state.get("retrieved_context", {}).get("results", [])
+    context_data = list(state.get("retrieved_context", {}).get("results", []) or [])
+    user_query = next((m.content for m in reversed(state.get("messages") or []) if isinstance(m, HumanMessage)), "")
+    recency_query = _is_recency_query(user_query)
+
+    source_time_map: Dict[str, str] = {}
+    if recency_query and context_data:
+        source_ids = list({
+            str(item.get("source_id"))
+            for item in context_data
+            if _is_uuid_like(item.get("source_id"))
+        })
+        if source_ids:
+            try:
+                # Use created_at as stable cross-env recency field.
+                src_res = (
+                    supabase.table("sources")
+                    .select("id,created_at")
+                    .in_("id", source_ids)
+                    .execute()
+                )
+                for row in src_res.data or []:
+                    ts = row.get("created_at") or ""
+                    source_time_map[str(row.get("id"))] = str(ts)
+            except Exception as e:
+                print(f"Planner recency source lookup failed: {e}")
+
+        if source_time_map:
+            def _recency_key(item: Dict[str, Any]) -> str:
+                sid = str(item.get("source_id") or "")
+                # lexical ISO timestamp sort works for RFC3339 strings.
+                return source_time_map.get(sid, "")
+
+            context_data.sort(key=_recency_key, reverse=True)
+            latest_source_id = str(context_data[0].get("source_id") or "")
+            if latest_source_id:
+                latest_only = [
+                    item for item in context_data
+                    if str(item.get("source_id") or "") == latest_source_id
+                ]
+                if latest_only:
+                    context_data = latest_only
     
     # Use the dynamic system prompt (Phase 4)
     system_msg, persona_trace = build_system_prompt_with_trace(state)
@@ -495,27 +713,59 @@ async def planner_node(state: TwinState):
     context_str = ""
     for i, res in enumerate(context_data):
         text = res.get("text", "")
-        date_info = res.get("metadata", {}).get("effective_from", "Unknown Date")
+        source_id = res.get("source_id", "Unknown")
+        date_info = (
+            res.get("metadata", {}).get("effective_from")
+            or source_time_map.get(str(source_id))
+            or "Unknown Date"
+        )
         source = res.get("source_id", "Unknown")
         context_str += f"[{i}] (Date: {date_info} | ID: {source}): {text}\n"
+
+    deterministic_plan = _deterministic_token_plan(
+        user_query=user_query,
+        context_data=context_data,
+    )
+    if deterministic_plan:
+        _normalize_plan_citations(deterministic_plan, context_data)
+        return {
+            "planning_output": deterministic_plan,
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + ["Planner: Used deterministic token plan."],
+        }
 
     planner_prompt = f"""
 {system_msg}
 
 CURRENT MODE: {mode}
+PERSON_SPECIFIC: {bool(state.get("target_owner_scope"))}
+USER QUESTION:
+{user_query}
+
 EVIDENCE:
 {context_str if context_str else "No evidence retrieved."}
 
 TASK:
 1. Identify the core points for the user's answer (max 3).
+   - Must answer the USER QUESTION directly first.
+   - If the question asks for an exact token/string/phrase, copy it verbatim from EVIDENCE.
 2. If in TEACHING mode, generate 2-3 specific questions for the owner.
 3. Select a follow-up question to keep the conversation going.
 4. If evidence is present, map points to citations.
+   - citations MUST be evidence source IDs from the "ID: ..." field.
+5. If evidence is insufficient:
+   - If CURRENT MODE is QA_FACT and PERSON_SPECIFIC is false: answer using general knowledge (citations may be empty).
+   - Otherwise: state uncertainty explicitly and avoid invented facts.
+6. If USER QUESTION asks for latest/recent, prioritize the newest EVIDENCE Date and do not mix older sources.
+7. Preserve concrete identifiers from EVIDENCE verbatim (tokens, markers, IDs) when present.
 
 OUTPUT FORMAT (STRICT JSON):
 {{
     "answer_points": ["point 1", "point 2"],
-    "citations": ["Source_ID_1", "Source_ID_2"],
+    "citations": ["source_id_1", "source_id_2"],
     "follow_up_question": "...",
     "confidence": 0.0-1.0,
     "teaching_questions": ["q1", "q2"],
@@ -529,6 +779,7 @@ OUTPUT FORMAT (STRICT JSON):
             temperature=0,
             max_tokens=900,
         )
+        _normalize_plan_citations(plan, context_data)
         
         return {
             "planning_output": plan,
@@ -555,16 +806,23 @@ async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
     plan = state.get("planning_output", {})
     mode = state.get("dialogue_mode", "QA_FACT")
+    user_query = next((m.content for m in reversed(state.get("messages") or []) if isinstance(m, HumanMessage)), "")
     
     realizer_prompt = f"""You are the Voice Realizer for a Digital Twin. 
     Take the structured plan and rewrite it into a short, natural, conversational response.
     
+    USER QUESTION:
+    {user_query}
+
     PLAN:
     {json.dumps(plan, indent=2)}
     
     CONSTRAINTS:
     - 1 to 3 sentences total.
+    - The first sentence must directly answer USER QUESTION.
     - Sound like a real person, not a bot.
+    - Preserve concrete identifiers (tokens/markers/IDs) verbatim from PLAN.
+    - Do not mention raw citation IDs in prose.
     - Include the follow-up question at the end.
     - If teaching: explain briefly that you need their input to be certain.
     - NO FAKE SOURCES. Use citations provided in the plan if any.
@@ -605,8 +863,8 @@ async def realizer_node(state: TwinState):
         }
     except Exception as e:
         print(f"Realizer error: {e}")
-        from langchain_core.messages import AIMessage
-        return {"messages": [AIMessage(content="I'm having trouble finding the words right now.")]}
+        fallback_text = _build_realizer_fallback(plan, user_query)
+        return {"messages": [AIMessage(content=fallback_text)], "citations": plan.get("citations", [])}
 
 def create_twin_agent(
     twin_id: str,
@@ -644,6 +902,12 @@ def create_twin_agent(
                     all_results.append(item)
                     if "source_id" in item:
                         citations.append(item["source_id"])
+
+        # Keep highest-confidence evidence first for downstream planner prompts.
+        try:
+            all_results.sort(key=lambda x: float(x.get("score", 0.0) or 0.0), reverse=True)
+        except Exception:
+            pass
 
         return {
             "retrieved_context": {"results": all_results},

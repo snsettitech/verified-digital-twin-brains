@@ -32,7 +32,7 @@ async def test_evidence_gate_requires_teaching_on_empty_context():
 
     state = {
         "dialogue_mode": "QA_FACT",
-        "target_owner_scope": False,
+        "target_owner_scope": True,
         "retrieved_context": {"results": []},
         "messages": [HumanMessage(content="Where did I grow up?")],
         "requires_evidence": True,

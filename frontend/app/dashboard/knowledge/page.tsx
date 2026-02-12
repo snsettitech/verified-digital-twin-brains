@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useTwin } from '@/lib/context/TwinContext';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import UnifiedIngestion from '@/components/ingestion/UnifiedIngestion';
+import RealtimeIngestion from '@/components/ingestion/RealtimeIngestion';
 import KnowledgeGraph from '@/components/Knowledge/KnowledgeGraph';
 import { API_BASE_URL, API_ENDPOINTS } from '@/lib/constants';
 
@@ -223,6 +224,9 @@ export default function KnowledgePage() {
         onComplete={() => fetchData()}
         onError={(err) => setError(err)}
       />
+
+      {/* Phase 5 Realtime Ingestion */}
+      <RealtimeIngestion twinId={twinId} onComplete={() => fetchData()} />
 
       {error && (
         <div className="bg-red-50 border border-red-100 text-red-600 p-6 rounded-[2rem] text-sm font-bold flex items-center gap-4">

@@ -72,6 +72,11 @@ export const API_ENDPOINTS = {
   INGEST_PODCAST: (twinId: string) => `/ingest/podcast/${twinId}`,
   INGEST_X: (twinId: string) => `/ingest/x/${twinId}`,
   INGEST_EXTRACT_NODES: (sourceId: string) => `/ingest/extract-nodes/${sourceId}`,
+  INGEST_REALTIME_START: (twinId: string) => `/ingest/realtime/sessions/${twinId}/start`,
+  INGEST_REALTIME_APPEND: (sessionId: string) => `/ingest/realtime/sessions/${sessionId}/append`,
+  INGEST_REALTIME_COMMIT: (sessionId: string) => `/ingest/realtime/sessions/${sessionId}/commit`,
+  INGEST_REALTIME_SESSION: (sessionId: string) => `/ingest/realtime/sessions/${sessionId}`,
+  INGEST_REALTIME_HEALTH: '/ingest/realtime/health',
   
   // Jobs
   JOBS: '/jobs',

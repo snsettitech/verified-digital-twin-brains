@@ -376,17 +376,36 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
     """
     contexts = []
     for match in verified_results.get("matches", []):
-        if match["score"] > 0.3:
+        score = match.get("score", 0)
+        if score > 0.3:
+            metadata = match.get("metadata", {}) or {}
+            text = metadata.get("text")
+            
+            # Skip if no text (try to fetch from verified_qna table)
+            if not text:
+                verified_id = metadata.get("verified_id")
+                if verified_id:
+                    try:
+                        vq_res = supabase.table("verified_qna").select("answer").eq("id", verified_id).single().execute()
+                        if vq_res.data:
+                            text = vq_res.data.get("answer", "")
+                    except Exception as e:
+                        print(f"[Retrieval] Failed to fetch verified_qna {verified_id}: {e}")
+                
+                if not text:
+                    print(f"[Retrieval] Skipping verified match without text")
+                    continue
+            
             contexts.append({
-                "text": match["metadata"]["text"],
+                "text": text,
                 "score": 1.0,  # Boost verified
-                "source_id": match["metadata"].get("source_id", "verified_memory"),
+                "source_id": metadata.get("source_id", "verified_memory"),
                 "is_verified": True,
-                "category": match["metadata"].get("category", "FACT"),
-                "tone": match["metadata"].get("tone", "Assertive"),
-                "opinion_topic": match["metadata"].get("opinion_topic"),
-                "opinion_stance": match["metadata"].get("opinion_stance"),
-                "opinion_intensity": match["metadata"].get("opinion_intensity")
+                "category": metadata.get("category", "FACT"),
+                "tone": metadata.get("tone", "Assertive"),
+                "opinion_topic": metadata.get("opinion_topic"),
+                "opinion_stance": metadata.get("opinion_stance"),
+                "opinion_intensity": metadata.get("opinion_intensity")
             })
     return contexts
 
@@ -403,6 +422,26 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
     """
     raw_general_chunks = []
     for match in merged_general_hits:
+        metadata = match.get("metadata", {}) or {}
+        
+        # Skip matches without text content
+        text = metadata.get("text")
+        if not text:
+            # Try to fetch text from chunks table using chunk_id
+            chunk_id = metadata.get("chunk_id")
+            if chunk_id:
+                try:
+                    chunk_res = supabase.table("chunks").select("content").eq("id", chunk_id).single().execute()
+                    if chunk_res.data:
+                        text = chunk_res.data.get("content", "")
+                except Exception as e:
+                    print(f"[Retrieval] Failed to fetch chunk {chunk_id}: {e}")
+            
+            # If still no text, skip this match
+            if not text:
+                print(f"[Retrieval] Skipping match without text (chunk_id: {metadata.get('chunk_id', 'unknown')})")
+                continue
+        
         raw_score = match.get("score", 0.0)
         raw_rrf_score = match.get("rrf_score", 0.0)
         try:
@@ -413,18 +452,19 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
             rrf_score = float(raw_rrf_score)
         except Exception:
             rrf_score = 0.0
+            
         raw_general_chunks.append({
-            "text": match["metadata"]["text"],
+            "text": text,
             "score": score,
             "rrf_score": rrf_score,
-            "source_id": match["metadata"].get("source_id", "unknown"),
-            "chunk_id": match["metadata"].get("chunk_id", "unknown"),
+            "source_id": metadata.get("source_id", "unknown"),
+            "chunk_id": metadata.get("chunk_id", "unknown"),
             "is_verified": False,
-            "category": match["metadata"].get("category", "FACT"),
-            "tone": match["metadata"].get("tone", "Neutral"),
-            "opinion_topic": match["metadata"].get("opinion_topic"),
-            "opinion_stance": match["metadata"].get("opinion_stance"),
-            "opinion_intensity": match["metadata"].get("opinion_intensity")
+            "category": metadata.get("category", "FACT"),
+            "tone": metadata.get("tone", "Neutral"),
+            "opinion_topic": metadata.get("opinion_topic"),
+            "opinion_stance": metadata.get("opinion_stance"),
+            "opinion_intensity": metadata.get("opinion_intensity")
         })
     return raw_general_chunks
 

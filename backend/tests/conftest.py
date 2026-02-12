@@ -17,7 +17,17 @@ if backend_dir not in sys.path:
 
 # Ensure feature flags and dev mode are consistent for tests
 os.environ.setdefault("ENABLE_ENHANCED_INGESTION", "true")
+os.environ.setdefault("ENABLE_REALTIME_INGESTION", "true")
 os.environ.setdefault("DEV_MODE", "false")
+
+# Satisfy backend startup env validation during test imports.
+# These values are non-functional placeholders; tests should mock network calls.
+os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
+os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
+os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key")
+os.environ.setdefault("PINECONE_INDEX_NAME", "test-pinecone-index")
+os.environ.setdefault("OPENAI_API_KEY", "sk-test")
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 
 # Ensure langfuse decorator doesn't break FastAPI signatures in tests
 def _noop_observe(*args, **kwargs):
@@ -33,3 +43,14 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "network: mark test as requiring network access (skipped in CI)"
     )
+
+
+@pytest.fixture(autouse=True)
+def _reset_embedding_circuit_breaker():
+    # Prevent cross-test coupling from the global circuit breaker state.
+    try:
+        from modules.embeddings import reset_embedding_circuit_breaker
+
+        reset_embedding_circuit_breaker()
+    except Exception:
+        pass

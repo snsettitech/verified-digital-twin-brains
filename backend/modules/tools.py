@@ -3,6 +3,29 @@ from modules.retrieval import retrieve_context
 from typing import List, Dict, Any, Optional
 import os
 
+
+def _is_relation_query(query: str) -> bool:
+    q = (query or "").lower()
+    relation_terms = [
+        "relationship",
+        "related",
+        "connected",
+        "connection",
+        "network",
+        "between",
+        "linked",
+        "graph",
+    ]
+    return any(term in q for term in relation_terms)
+
+
+def _is_exact_or_recency_fact_query(query: str) -> bool:
+    q = (query or "").lower()
+    exact_terms = ["exact", "verbatim", "token", "marker", "phrase", "quote"]
+    recency_terms = ["latest", "recent", "newest", "most recent", "just ingested"]
+    return any(term in q for term in exact_terms + recency_terms)
+
+
 def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversation_history: list = None):
     """
     Creates a tool for retrieving context from the digital twin's knowledge base.
@@ -94,30 +117,37 @@ def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversatio
         # Vector search (Pinecone)
         contexts = await retrieve_context(expanded_query, twin_id, group_id=group_id)
         
-        # Graph search (Supabase nodes table)
+        # Graph search (Supabase nodes table) only for relationship-style queries.
         graph_results = []
-        try:
-            from modules.observability import supabase
-            nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 20}).execute()
-            if nodes_res.data:
-                query_words = set(expanded_query.lower().split())
-                for node in nodes_res.data:
-                    name = (node.get("name") or "").lower()
-                    desc = (node.get("description") or "").lower()
-                    # Check if any query word matches node name or description
-                    if any(word in name or word in desc for word in query_words if len(word) > 2):
-                        graph_results.append({
-                            "text": f"{node['name']}: {node['description']}",
-                            "source_id": f"graph-{node['id'][:8]}",
-                            "score": 0.85,  # High confidence for graph knowledge
-                            "is_graph": True,
-                            "category": node.get("type", "KNOWLEDGE")
-                        })
-        except Exception as e:
-            print(f"Graph search error: {e}")
+        include_graph = _is_relation_query(expanded_query) and not _is_exact_or_recency_fact_query(expanded_query)
+        if include_graph:
+            try:
+                from modules.observability import supabase
+                nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 20}).execute()
+                if nodes_res.data:
+                    query_words = set(expanded_query.lower().split())
+                    for node in nodes_res.data:
+                        name = (node.get("name") or "").lower()
+                        desc = (node.get("description") or "").lower()
+                        # Check if any query word matches node name or description
+                        if any(word in name or word in desc for word in query_words if len(word) > 2):
+                            graph_results.append({
+                                "text": f"{node['name']}: {node['description']}",
+                                "source_id": f"graph-{node['id'][:8]}",
+                                # Keep graph hints below high-confidence vector hits.
+                                "score": 0.35,
+                                "is_graph": True,
+                                "category": node.get("type", "KNOWLEDGE")
+                            })
+            except Exception as e:
+                print(f"Graph search error: {e}")
         
-        # Merge: Graph results first (higher priority), then vector results
-        all_results = graph_results + contexts
+        # Merge results and preserve best-confidence snippets first.
+        all_results = contexts + graph_results
+        try:
+            all_results.sort(key=lambda x: float(x.get("score", 0.0) or 0.0), reverse=True)
+        except Exception:
+            pass
         return json.dumps(_normalize(all_results))
     
     return search_knowledge_base

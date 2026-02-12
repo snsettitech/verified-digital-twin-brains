@@ -84,6 +84,13 @@ validate_worker_environment()
 from modules.job_queue import dequeue_job, get_redis_client, get_queue_length
 from modules._core.scribe_engine import process_graph_extraction_job, process_content_extraction_job
 from modules.persona_feedback_learning_jobs import process_feedback_learning_job
+from modules.realtime_ingestion import process_realtime_job
+from modules.realtime_stream_queue import (
+    ack_realtime_stream_message,
+    dequeue_realtime_stream_job,
+    get_realtime_stream_metrics,
+    streams_available,
+)
 from modules.training_jobs import process_training_job
 
 # Graceful shutdown
@@ -120,14 +127,24 @@ async def worker_loop():
         # Job queue falls back to DB-backed dequeue when REDIS_URL is not configured.
         print("[Worker] INFO: REDIS_URL not configured/available - using DB-backed queue polling")
         print("[Worker] TIP: Configure REDIS_URL for lower latency and horizontal scaling")
+    if streams_available():
+        stream_metrics = get_realtime_stream_metrics()
+        print(
+            "[Worker] Realtime stream enabled "
+            f"(stream={stream_metrics.get('stream')}, group={stream_metrics.get('group')}, "
+            f"pending={stream_metrics.get('pending')})"
+        )
+    else:
+        print("[Worker] Realtime stream disabled/unavailable; using legacy queue for realtime jobs")
 
     consecutive_empty_polls = 0
     jobs_processed = 0
 
     while not shutdown_event.is_set():
         try:
-            # Poll for job
-            job = dequeue_job()
+            # Poll realtime stream first, then fallback to regular queue.
+            stream_job = dequeue_realtime_stream_job(worker_id) if streams_available() else None
+            job = stream_job or dequeue_job()
             
             if job:
                 consecutive_empty_polls = 0
@@ -136,6 +153,13 @@ async def worker_loop():
                 job_id = job.get("job_id")
                 job_type = job.get("job_type")
                 metadata = job.get("metadata", {})
+                stream_message_id = job.get("stream_message_id")
+
+                if not job_id:
+                    print("[Worker] Skipping malformed job payload (missing job_id)")
+                    if stream_message_id:
+                        ack_realtime_stream_message(stream_message_id)
+                    continue
                 
                 print(f"[Worker] Processing job {job_id} ({job_type})")
                 
@@ -150,6 +174,8 @@ async def worker_loop():
                         success = await process_graph_extraction_job(job_id)
                     elif job_type == "feedback_learning":
                         success = await process_feedback_learning_job(job_id)
+                    elif job_type == "realtime_ingestion":
+                        success = await process_realtime_job(job_id)
                     elif job_type in ["ingestion", "reindex", "health_check"]:
                         # Training jobs with automatic retry logic
                         from modules.training_jobs import process_training_job_with_retry
@@ -165,8 +191,37 @@ async def worker_loop():
                     success = False
                 
                 duration = asyncio.get_event_loop().time() - start_time
-                status_symbol = "✅" if success else "❌"
-                print(f"[Worker] {status_symbol} Job {job_id} finished in {duration:.2f}s")
+                status_symbol = "OK" if success else "FAIL"
+                print(f"[Worker] [{status_symbol}] Job {job_id} finished in {duration:.2f}s")
+                if stream_message_id and success:
+                    acked = ack_realtime_stream_message(stream_message_id)
+                    if not acked:
+                        print(f"[Worker] WARN: failed to ACK stream message {stream_message_id}")
+                elif stream_message_id and not success and job_type == "realtime_ingestion":
+                    # Poison-message protection:
+                    # if job reached terminal status, ACK to avoid infinite redelivery loop.
+                    try:
+                        from modules.observability import supabase
+
+                        job_row = (
+                            supabase.table("jobs")
+                            .select("status")
+                            .eq("id", job_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        status = None
+                        if job_row.data:
+                            status = str(job_row.data[0].get("status") or "").lower()
+                        if status in {"failed", "complete", "needs_attention"}:
+                            acked = ack_realtime_stream_message(stream_message_id)
+                            if acked:
+                                print(
+                                    "[Worker] ACKed terminal failed realtime stream message "
+                                    f"{stream_message_id} (status={status})"
+                                )
+                    except Exception as ack_err:
+                        print(f"[Worker] WARN: terminal ACK check failed for stream message {stream_message_id}: {ack_err}")
                 
             else:
                 consecutive_empty_polls += 1

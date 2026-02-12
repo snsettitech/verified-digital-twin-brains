@@ -27,6 +27,8 @@ Last updated: 2026-02-09
 - Migration state includes:
   - `phase7_feedback_learning_loop`
   - `add_feedback_learning_job_type`
+  - `20260213_phase5_realtime_ingestion`
+  - `20260213_phase5_add_realtime_job_type`
 
 ## 2) Deployment strategy (recommended + fallbacks)
 
@@ -42,6 +44,12 @@ Why: your infra is already live and configured for Git auto-deploy.
 1. Create clone services on Render from a release branch.
 2. Validate canary URL and worker behavior.
 3. Promote by merging same commit to `main`.
+
+Phase 5 note:
+- `render.yaml` defines dedicated canary services with realtime ingestion enabled:
+  - `verified-digital-twin-backend-canary`
+  - `verified-digital-twin-worker-canary`
+- Keep the main services realtime flag off until canary is stable.
 
 ### Fallback B: Vercel claimable preview (emergency frontend)
 1. Use `scripts/deploy.sh frontend` or Vercel deploy workflow for preview.
@@ -93,6 +101,11 @@ Feature/perf:
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
 - `ENABLE_VC_ROUTES=false` (unless actively used)
+- Phase 5 realtime ingestion:
+  - Main services: `ENABLE_REALTIME_INGESTION=false`
+  - Canary services: `ENABLE_REALTIME_INGESTION=true`
+  - Optional (recommended for canary): `REDIS_URL` to enable Redis Streams lane
+  - Knobs (optional): `REALTIME_MIN_CHARS_DELTA`, `REALTIME_MIN_SECONDS_BETWEEN_INDEX`, `REALTIME_USE_REDIS_STREAMS`
 
 Feedback learning:
 - `FEEDBACK_LEARNING_MIN_EVENTS=5` (or your chosen threshold)
@@ -163,7 +176,11 @@ YouTube pipeline (if used):
    - submit feedback
    - verify event is stored
    - verify job enqueue/processing path
-4. Regression:
+4. Phase 5 realtime ingestion smoke (canary first):
+   - In frontend, point `NEXT_PUBLIC_BACKEND_URL` to the canary backend URL
+   - Dashboard -> Left Brain -> Realtime Stream: start session, append a marker chunk, commit
+   - Verify a new Source appears and can be retrieved via chat
+5. Regression:
    - run persona regression runner against production-like config
 
 ## 6) Scheduling and background automation
@@ -227,4 +244,3 @@ If any criterion fails -> `NO-GO` and rollback immediately.
 5. Post-deploy smoke:
    - frontend + backend endpoint checks
    - feedback-learning end-to-end test.
-
