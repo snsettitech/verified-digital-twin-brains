@@ -104,7 +104,7 @@ export default function DashboardPage() {
       if (currentTwinId) {
         // Fetch real dashboard stats
         try {
-          const statsResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.METRICS_DASHBOARD(currentTwinId)}?days=30`);
+          const statsResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_DASHBOARD(currentTwinId)}?days=30`);
           if (statsResponse.ok) {
             const data = await statsResponse.json();
             setStats({
@@ -123,7 +123,7 @@ export default function DashboardPage() {
 
         // Fetch real activity feed
         try {
-          const activityResponse = await fetch(`${API_BASE_URL}${API_ENDPOINTS.METRICS_ACTIVITY(currentTwinId)}?limit=5`);
+          const activityResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_ACTIVITY(currentTwinId)}?limit=5`);
           if (activityResponse.ok) {
             const data = await activityResponse.json();
             setRecentActivity(data.map((item: any) => ({
@@ -154,7 +154,7 @@ export default function DashboardPage() {
 
     setLoadingConversations(true);
     try {
-      const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.METRICS_CONVERSATIONS(twinId)}?limit=20`);
+      const response = await authFetchStandalone(`${API_ENDPOINTS.METRICS_CONVERSATIONS(twinId)}?limit=20`);
       if (response.ok) {
         const data = await response.json();
         setConversations(data);

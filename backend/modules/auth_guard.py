@@ -397,6 +397,25 @@ def verify_owner(authorization: str = Header(None)) -> Dict[str, Any]:
     
     try:
         auth_context = authenticate_request(token)
+
+        # Enrich auth context with tenant_id for routes that enforce tenant
+        # ownership but currently only depend on verify_owner.
+        if not auth_context.get("tenant_id"):
+            try:
+                tenant_id = resolve_tenant_id(
+                    user_id=auth_context.get("user_id"),
+                    email=auth_context.get("email"),
+                    create_if_missing=False,
+                )
+                auth_context["tenant_id"] = tenant_id
+            except HTTPException as exc:
+                if exc.status_code == status.HTTP_404_NOT_FOUND:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="User has no tenant association",
+                    )
+                raise
+
         return auth_context
     except AuthenticationError as e:
         raise HTTPException(
@@ -434,7 +453,21 @@ def get_current_user(
         return None
     
     try:
-        return authenticate_request(token)
+        auth_context = authenticate_request(token)
+
+        # Best-effort tenant enrichment to reduce duplicate tenant lookups in
+        # downstream handlers. Keep this non-blocking for compatibility.
+        if not auth_context.get("tenant_id"):
+            try:
+                auth_context["tenant_id"] = resolve_tenant_id(
+                    user_id=auth_context.get("user_id"),
+                    email=auth_context.get("email"),
+                    create_if_missing=False,
+                )
+            except HTTPException:
+                pass
+
+        return auth_context
     except AuthenticationError:
         return None
 
@@ -780,7 +813,37 @@ def ensure_twin_active(twin_id: str) -> bool:
     from modules.observability import supabase
     
     try:
-        result = supabase.table("twins").select("id, status").eq("id", twin_id).single().execute()
+        # Prefer status-aware check when the column exists.
+        try:
+            result = (
+                supabase.table("twins")
+                .select("id, status")
+                .eq("id", twin_id)
+                .single()
+                .execute()
+            )
+        except Exception as status_query_error:
+            # Backward compatibility for environments where `twins.status`
+            # has not been migrated yet.
+            err = str(status_query_error).lower()
+            status_column_missing = (
+                "status" in err
+                and (
+                    "does not exist" in err
+                    or "column" in err
+                    or "pgrst204" in err
+                )
+            )
+            if not status_column_missing:
+                raise
+
+            result = (
+                supabase.table("twins")
+                .select("id")
+                .eq("id", twin_id)
+                .single()
+                .execute()
+            )
         
         if not result.data:
             raise HTTPException(
@@ -788,7 +851,7 @@ def ensure_twin_active(twin_id: str) -> bool:
                 detail=f"Twin {twin_id} not found"
             )
         
-        # Check if twin is active (if status field exists)
+        # Check if twin is active (only when status field is present)
         twin_status = result.data.get("status")
         if twin_status and twin_status not in ["active", "live", None]:
             raise HTTPException(
