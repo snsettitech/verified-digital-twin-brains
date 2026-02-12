@@ -19,6 +19,8 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: COHERE_API_KEY
+        sync: false
       - key: CEREBRAS_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -109,6 +111,8 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: COHERE_API_KEY
+        sync: false
       - key: CEREBRAS_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -198,6 +202,8 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: COHERE_API_KEY
+        sync: false
       - key: CEREBRAS_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
@@ -286,6 +292,8 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: OPENAI_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
         sync: false
       - key: CEREBRAS_API_KEY
         sync: false
