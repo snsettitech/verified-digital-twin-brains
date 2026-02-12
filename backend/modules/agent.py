@@ -2,8 +2,7 @@ import os
 import asyncio
 import json
 from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -22,6 +21,7 @@ from modules.persona_prompt_variant_store import (
 )
 from modules.persona_spec import PersonaSpec
 from modules.persona_spec_store import get_active_persona_spec
+from modules.inference_router import invoke_json, invoke_text
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -119,7 +119,6 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
         # Using more snippets for a comprehensive view
         all_content = "\n---\n".join(analysis_texts[:25])
         
-        client = ChatOpenAI(model="gpt-4o-mini", temperature=0, model_kwargs={"response_format": {"type": "json_object"}})
         analysis_prompt = f"""You are a linguistic expert analyzing a user's writing style to create a 'Digital Twin' persona.
         Analyze the following snippets of text from the user.
         
@@ -131,10 +130,13 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
         
         TEXT SNIPPETS:
         {all_content}"""
-        
-        res = await client.ainvoke([HumanMessage(content=analysis_prompt)])
-        import json
-        persona_data = json.loads(res.content)
+
+        persona_data, _route_meta = await invoke_json(
+            [{"role": "user", "content": analysis_prompt}],
+            task="structured",
+            temperature=0,
+            max_tokens=700,
+        )
         
         # 4. Persist the profile back to the twin settings
         try:
@@ -370,9 +372,12 @@ async def router_node(state: TwinState):
     """
     
     try:
-        router_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, model_kwargs={"response_format": {"type": "json_object"}})
-        res = await router_llm.ainvoke([SystemMessage(content=router_prompt)])
-        plan = json.loads(res.content)
+        plan, _route_meta = await invoke_json(
+            [{"role": "system", "content": router_prompt}],
+            task="router",
+            temperature=0,
+            max_tokens=320,
+        )
         print(f"[Router] Plan: {plan}")
         
         mode = plan.get("mode", "QA_FACT")
@@ -453,9 +458,12 @@ async def evidence_gate_node(state: TwinState):
             }}
             """
             try:
-                verifier_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, model_kwargs={"response_format": {"type": "json_object"}})
-                res = await verifier_llm.ainvoke([SystemMessage(content=verifier_prompt)])
-                v_res = json.loads(res.content)
+                v_res, _route_meta = await invoke_json(
+                    [{"role": "system", "content": verifier_prompt}],
+                    task="verifier",
+                    temperature=0,
+                    max_tokens=220,
+                )
                 
                 if not v_res.get("is_sufficient"):
                     requires_teaching = True
@@ -515,9 +523,12 @@ OUTPUT FORMAT (STRICT JSON):
 }}
 """
     try:
-        planner_llm = ChatOpenAI(model="gpt-4o", temperature=0, model_kwargs={"response_format": {"type": "json_object"}})
-        res = await planner_llm.ainvoke([SystemMessage(content=planner_prompt)])
-        plan = json.loads(res.content)
+        plan, _route_meta = await invoke_json(
+            [{"role": "system", "content": planner_prompt}],
+            task="planner",
+            temperature=0,
+            max_tokens=900,
+        )
         
         return {
             "planning_output": plan,
@@ -544,7 +555,6 @@ async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
     plan = state.get("planning_output", {})
     mode = state.get("dialogue_mode", "QA_FACT")
-    llm = ChatOpenAI(model="gpt-4o", temperature=0.7)
     
     realizer_prompt = f"""You are the Voice Realizer for a Digital Twin. 
     Take the structured plan and rewrite it into a short, natural, conversational response.
@@ -561,7 +571,13 @@ async def realizer_node(state: TwinState):
     """
     
     try:
-        res = await llm.ainvoke([SystemMessage(content=realizer_prompt)])
+        realized_text, route_meta = await invoke_text(
+            [{"role": "system", "content": realizer_prompt}],
+            task="realizer",
+            temperature=0.7,
+            max_tokens=500,
+        )
+        res = AIMessage(content=realized_text)
         
         # Post-process for citations and teaching metadata (Phase 4)
         citations = plan.get("citations", [])
@@ -577,6 +593,10 @@ async def realizer_node(state: TwinState):
             res.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
         if state.get("persona_prompt_variant"):
             res.additional_kwargs["persona_prompt_variant"] = state.get("persona_prompt_variant")
+        if route_meta:
+            res.additional_kwargs["inference_provider"] = route_meta.get("provider")
+            res.additional_kwargs["inference_model"] = route_meta.get("model")
+            res.additional_kwargs["inference_latency_ms"] = route_meta.get("latency_ms")
         
         return {
             "messages": [res],

@@ -19,6 +19,7 @@ from modules.specializations import get_specialization, get_all_specializations
 from modules.clients import get_pinecone_index
 from modules.graph_context import get_graph_stats
 from modules.governance import AuditLogger
+from modules.tenant_guard import derive_creator_ids
 from datetime import datetime
 
 
@@ -134,6 +135,9 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         data = {
             "name": requested_name,
             "tenant_id": tenant_id,  # Always from resolve_tenant_id
+            # Creator ID is the isolation root for Delphi namespace strategy.
+            # Use authenticated creator claim first; fallback is deterministic tenant mapping.
+            "creator_id": (derive_creator_ids(user) or [f"tenant_{tenant_id}"])[0],
             "description": request.description or f"{requested_name}'s digital twin",
             "specialization": request.specialization,
             "settings": request.settings or {}

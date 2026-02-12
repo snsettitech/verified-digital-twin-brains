@@ -3,6 +3,13 @@ uvicorn
 supabase
 pinecone
 openai
+
+# Hugging Face for local embeddings (20x faster than OpenAI)
+sentence-transformers>=3.0.0
+huggingface-hub>=0.24.0
+
+# Cerebras for fast inference (10x faster than OpenAI)
+cerebras-cloud-sdk>=1.0.0
 pydantic
 python-dotenv
 python-multipart

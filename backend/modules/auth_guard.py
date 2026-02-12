@@ -367,64 +367,6 @@ def resolve_tenant_id(user_id: str, email: str = None, create_if_missing: bool =
         raise HTTPException(status_code=500, detail=f"Failed to resolve tenant: {str(e)}")
 
 
-def verify_owner(authorization: str = Header(None)) -> Dict[str, Any]:
-    """
-    Dependency for FastAPI to verify the request owner.
-    
-    Args:
-        authorization: Authorization header
-        
-    Returns:
-        User dict if authentication succeeds
-        
-    Raises:
-        HTTPException: If authentication fails
-    """
-    if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header required",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
-    token = get_token_from_header(authorization)
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization format. Expected: Bearer <token>",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    
-    try:
-        auth_context = authenticate_request(token)
-
-        # Enrich auth context with tenant_id for routes that enforce tenant
-        # ownership but currently only depend on verify_owner.
-        if not auth_context.get("tenant_id"):
-            try:
-                tenant_id = resolve_tenant_id(
-                    user_id=auth_context.get("user_id"),
-                    email=auth_context.get("email"),
-                    create_if_missing=False,
-                )
-                auth_context["tenant_id"] = tenant_id
-            except HTTPException as exc:
-                if exc.status_code == status.HTTP_404_NOT_FOUND:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="User has no tenant association",
-                    )
-                raise
-
-        return auth_context
-    except AuthenticationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-
 def get_current_user(
     request: Request = None,
     authorization: str = Header(None),
@@ -470,6 +412,67 @@ def get_current_user(
         return auth_context
     except AuthenticationError:
         return None
+
+
+def verify_owner(
+    user: Optional[Dict[str, Any]] = Depends(get_current_user),
+    authorization: str = Header(None),
+) -> Dict[str, Any]:
+    """
+    Dependency for FastAPI to verify the request owner.
+
+    Primary auth source is `get_current_user` (supports dependency overrides in tests).
+    Falls back to explicit header parsing when needed.
+    """
+    # Primary path: use get_current_user so dependency overrides in tests and
+    # internal tooling continue to work.
+    if isinstance(user, dict) and user.get("user_id"):
+        auth_context = dict(user)
+    else:
+        # Fallback path: explicit header parsing for direct invocations.
+        if not authorization:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authorization header required",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+        token = get_token_from_header(authorization)
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization format. Expected: Bearer <token>",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+        try:
+            auth_context = authenticate_request(token)
+        except AuthenticationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=str(e),
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+
+    # Enrich auth context with tenant_id for routes that enforce tenant
+    # ownership but currently only depend on verify_owner.
+    if not auth_context.get("tenant_id"):
+        try:
+            tenant_id = resolve_tenant_id(
+                user_id=auth_context.get("user_id"),
+                email=auth_context.get("email"),
+                create_if_missing=False,
+            )
+            auth_context["tenant_id"] = tenant_id
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User has no tenant association",
+                )
+            raise
+
+    return auth_context
 
 
 def require_tenant(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:

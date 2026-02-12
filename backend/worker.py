@@ -15,7 +15,6 @@ def validate_worker_environment():
     required_vars = [
         ("SUPABASE_URL", "Database connection"),
         ("SUPABASE_SERVICE_KEY", "Database authentication"),
-        ("OPENAI_API_KEY", "OpenAI API for embeddings and LLM"),
         ("PINECONE_API_KEY", "Pinecone vector search"),
         ("PINECONE_INDEX_NAME", "Pinecone index name"),
     ]
@@ -30,6 +29,26 @@ def validate_worker_environment():
         value = os.getenv(var)
         if not value:
             missing.append(f"  - {var}: {description}")
+
+    # Provider-aware key requirements (Phase 4 hybrid inference support).
+    openai_key = os.getenv("OPENAI_API_KEY")
+    cerebras_key = os.getenv("CEREBRAS_API_KEY")
+    anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
+    inference_provider = os.getenv("INFERENCE_PROVIDER", "openai").lower()
+    asr_provider = os.getenv("YOUTUBE_ASR_PROVIDER", "openai").lower()
+
+    # Require at least one model provider key for LLM operations.
+    if not any([openai_key, cerebras_key, anthropic_key]):
+        missing.append("  - One of OPENAI_API_KEY/CEREBRAS_API_KEY/ANTHROPIC_API_KEY is required")
+
+    # Require OPENAI key when active providers explicitly depend on it.
+    if embedding_provider == "openai" and not openai_key:
+        missing.append("  - OPENAI_API_KEY required when EMBEDDING_PROVIDER=openai")
+    if inference_provider == "openai" and not openai_key:
+        missing.append("  - OPENAI_API_KEY required when INFERENCE_PROVIDER=openai")
+    if asr_provider == "openai" and not openai_key:
+        missing.append("  - OPENAI_API_KEY required when YOUTUBE_ASR_PROVIDER=openai")
     
     if missing:
         print("=" * 70)
@@ -52,9 +71,8 @@ def validate_worker_environment():
     if not supabase_url.startswith("https://"):
         print(f"[WARN] SUPABASE_URL should start with https://, got: {supabase_url[:30]}...")
     
-    # Validate OpenAI key format
-    openai_key = os.getenv("OPENAI_API_KEY", "")
-    if not openai_key.startswith("sk-"):
+    # Validate OpenAI key format when present
+    if openai_key and not openai_key.startswith("sk-"):
         print(f"[WARN] OPENAI_API_KEY should start with 'sk-', check your key format")
     
     print("[OK] Worker environment validation passed")

@@ -19,10 +19,26 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
       - key: PINECONE_API_KEY
         sync: false
       - key: PINECONE_INDEX_NAME
         sync: false
+      - key: EMBEDDING_PROVIDER
+        value: "openai"
+      - key: EMBEDDING_TARGET_DIMENSION
+        value: "3072"
+      - key: INFERENCE_PROVIDER
+        value: "openai"
+      - key: INFERENCE_ROUTING_MODE
+        value: "auto"
+      - key: INFERENCE_FALLBACK_ENABLED
+        value: "true"
       - key: ALLOWED_ORIGINS
         value: "https://digitalbrains.vercel.app,https://*.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
       - key: GIT_SHA
@@ -75,10 +91,26 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
       - key: PINECONE_API_KEY
         sync: false
       - key: PINECONE_INDEX_NAME
         sync: false
+      - key: EMBEDDING_PROVIDER
+        value: "openai"
+      - key: EMBEDDING_TARGET_DIMENSION
+        value: "3072"
+      - key: INFERENCE_PROVIDER
+        value: "openai"
+      - key: INFERENCE_ROUTING_MODE
+        value: "auto"
+      - key: INFERENCE_FALLBACK_ENABLED
+        value: "true"
       - key: WORKER_ENABLED
         value: "true"
       - key: WORKER_POLL_INTERVAL

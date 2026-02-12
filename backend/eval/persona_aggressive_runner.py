@@ -704,6 +704,9 @@ def _load_dataset(path: Optional[str]) -> RoleplayDataset:
 def _resolve_generator(mode: str, model: str) -> DraftGenerator:
     mode_norm = (mode or "auto").strip().lower()
     has_openai_key = bool(os.getenv("OPENAI_API_KEY"))
+    # Keep test runs deterministic/stable even when local OpenAI keys are present.
+    if mode_norm == "auto" and os.getenv("PYTEST_CURRENT_TEST"):
+        return HeuristicDraftGenerator()
     if mode_norm == "heuristic":
         return HeuristicDraftGenerator()
     if mode_norm == "openai":
