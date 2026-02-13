@@ -545,6 +545,45 @@ async def retry_training_job_endpoint(job_id: str, user=Depends(verify_owner)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# ISSUE-001: /ingestion-jobs aliases (backward compatible)
+# These endpoints mirror /training-jobs but use clearer terminology.
+# The /training-jobs endpoints remain functional for backward compatibility.
+# ============================================================================
+
+@router.post("/ingestion-jobs/process-queue")
+async def process_ingestion_queue_endpoint(twin_id: Optional[str] = None, user=Depends(verify_owner)):
+    """
+    Process queued ingestion jobs for the authenticated user's twins.
+    Alias for /training-jobs/process-queue with clearer terminology.
+    """
+    # Delegate to existing training-jobs implementation
+    return await process_queue_endpoint(twin_id=twin_id, user=user)
+
+
+@router.get("/ingestion-jobs/{job_id}")
+async def get_ingestion_job_endpoint(job_id: str, user=Depends(get_current_user)):
+    """Get ingestion job details. Alias for /training-jobs/{job_id}."""
+    return await get_training_job_endpoint(job_id=job_id, user=user)
+
+
+@router.get("/ingestion-jobs")
+async def list_ingestion_jobs_endpoint(
+    twin_id: str,
+    status: Optional[str] = None,
+    limit: int = 100,
+    user=Depends(get_current_user)
+):
+    """List ingestion jobs for a twin. Alias for /training-jobs."""
+    return await list_training_jobs_endpoint(twin_id=twin_id, status=status, limit=limit, user=user)
+
+
+@router.post("/ingestion-jobs/{job_id}/retry")
+async def retry_ingestion_job_endpoint(job_id: str, user=Depends(verify_owner)):
+    """Retry a failed ingestion job. Alias for /training-jobs/{job_id}/retry."""
+    return await retry_training_job_endpoint(job_id=job_id, user=user)
+
+
 class ExtractNodesRequest(BaseModel):
     """Request to extract graph nodes from an ingested source."""
     max_chunks: Optional[int] = 10  # Limit chunks to control cost

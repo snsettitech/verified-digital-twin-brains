@@ -6,6 +6,8 @@ export interface Citation {
   id: string;
   filename?: string | null;
   citation_url?: string | null;
+  confidence_score?: number;
+  chunk_preview?: string;
 }
 
 interface CitationsDrawerProps {
@@ -116,29 +118,55 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                   </svg>
                 </div>
-                <p className="text-slate-500">No sources available</p>
+                <p className="text-slate-500">No sources available for this response</p>
+                <p className="text-sm text-slate-400 mt-2">
+                  Try asking a question about your uploaded documents
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {citations.map((citation, index) => (
                   <div 
                     key={citation.id}
-                    className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors"
+                    className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors focus-within:ring-2 focus-within:ring-indigo-500"
+                    tabIndex={0}
                   >
                     <div className="flex items-start gap-3">
                       <span className="flex-shrink-0 w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">
                         {index + 1}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-900 break-words">
-                          {citation.filename || 'Unknown Source'}
-                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-slate-900 break-words">
+                            {citation.filename || 'Unknown Source'}
+                          </p>
+                          {/* Confidence Score Badge */}
+                          {citation.confidence_score !== undefined && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              citation.confidence_score >= 0.7 
+                                ? 'bg-green-100 text-green-700' 
+                                : citation.confidence_score >= 0.4
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {(citation.confidence_score * 100).toFixed(0)}% match
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Chunk Preview */}
+                        {citation.chunk_preview && (
+                          <p className="mt-2 text-sm text-slate-600 line-clamp-3 italic">
+                            &ldquo;{citation.chunk_preview}&rdquo;
+                          </p>
+                        )}
+                        
                         {citation.citation_url && (
                           <a
                             href={citation.citation_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700"
+                            className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,8 +175,8 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
                             View source
                           </a>
                         )}
-                        <p className="mt-1 text-xs text-slate-400 font-mono">
-                          ID: {citation.id.slice(0, 8)}...
+                        <p className="mt-2 text-xs text-slate-400 font-mono">
+                          Source ID: {citation.id.slice(0, 8)}...
                         </p>
                       </div>
                     </div>

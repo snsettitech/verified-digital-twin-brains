@@ -14,6 +14,7 @@ from routers import (
     persona_specs,
     decision_capture,
     ingestion,
+    ingestion_realtime,
     youtube_preflight,
     twins,
     actions,
@@ -42,6 +43,27 @@ from routers import (
 )
 from modules.specializations import get_specialization
 
+# ISSUE-003: Feature flag definitions (moved here for proper ordering)
+# Realtime ingestion is now enabled by default. Set ENABLE_REALTIME_INGESTION=false to disable.
+REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "true").lower() == "true"
+# Enhanced ingestion remains opt-in until further validation
+ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
+# Delphi retrieval is now enabled by default. Set ENABLE_DELPHI_RETRIEVAL=false to disable.
+DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
+# VC routes remain opt-in
+VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
+
+def print_feature_flag_summary():
+    """Print enabled/disabled feature summary for observability."""
+    print("-" * 60)
+    print("Feature Flag Status:")
+    print(f"  Realtime Ingestion: {'ENABLED' if REALTIME_INGESTION_ENABLED else 'DISABLED'}")
+    print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
+    print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
+    print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
+    print("-" * 60)
+    sys.stdout.flush()
+
 app = FastAPI(title="Verified Digital Twin Brain API")
 
 # Add Dynamic CORS middleware with wildcard pattern support
@@ -69,6 +91,12 @@ app.include_router(training_sessions.router)
 app.include_router(persona_specs.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
+# Use feature flags defined at top of file
+if REALTIME_INGESTION_ENABLED:
+    app.include_router(ingestion_realtime.router)
+    print("[INFO] Realtime ingestion routes enabled (ENABLE_REALTIME_INGESTION=true)")
+else:
+    print("[INFO] Realtime ingestion routes disabled (ENABLE_REALTIME_INGESTION=false)")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 
@@ -86,7 +114,6 @@ app.include_router(jobs.router)
 app.include_router(til.router)
 app.include_router(feedback.router)
 app.include_router(audio.router)
-ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
 if ENHANCED_INGESTION_ENABLED:
     app.include_router(enhanced_ingestion.router)
     print("[INFO] Enhanced ingestion routes enabled (ENABLE_ENHANCED_INGESTION=true)")
@@ -99,7 +126,6 @@ app.include_router(debug_retrieval.router)
 app.include_router(verify.router)
 app.include_router(owner_memory.router)
 
-DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "false").lower() == "true"
 if DELPHI_RETRIEVAL_ENABLED:
     app.include_router(retrieval_delphi.router)
     print("[INFO] Delphi retrieval routes enabled (ENABLE_DELPHI_RETRIEVAL=true)")
@@ -114,7 +140,6 @@ else:
 # 1. VC routes should only be available when VC is actively used
 # 2. VC imports/dependencies should not be loaded globally
 # 3. This prevents VC-related startup errors from breaking vanilla deployments
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 if VC_ROUTES_ENABLED:
     try:
         from api import vc_routes
@@ -123,6 +148,9 @@ if VC_ROUTES_ENABLED:
     except ImportError as e:
         print(f"[WARN] VC routes not available (ImportError): {e}")
         print("   VC routes will be disabled. Set ENABLE_VC_ROUTES=false to suppress this warning.")
+
+# Print feature flag summary after all routers loaded
+print_feature_flag_summary()
 
 # ============================================================================
 # P0 Deployment: Health Check Endpoint

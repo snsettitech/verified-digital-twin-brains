@@ -3,6 +3,7 @@ import asyncio
 from typing import List, Dict, Any, Optional, Set
 from modules.clients import get_openai_client, get_pinecone_index, get_cohere_client
 from modules.verified_qna import match_verified_qna
+from modules.owner_memory_store import find_owner_memory_candidates
 from modules.observability import supabase
 from modules.access_groups import get_default_group
 from modules.delphi_namespace import (
@@ -231,6 +232,64 @@ def _format_verified_match_context(verified_match: Dict[str, Any]) -> Dict[str, 
         "tone": "Assertive",
         "citations": verified_match.get("citations", [])
     }
+
+
+def _format_owner_memory_match_context(owner_memory_match: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Format an owner-approved memory match as a context entry.
+    This has highest precedence because it is directly owner-authored.
+    """
+    memory_id = owner_memory_match.get("id")
+    return {
+        "text": owner_memory_match.get("value", ""),
+        "score": 1.0,
+        "source_id": f"owner_memory_{memory_id}" if memory_id else "owner_memory",
+        "is_owner_memory": True,
+        "owner_memory_match": True,
+        "verified_qna_match": False,
+        "memory_type": owner_memory_match.get("memory_type"),
+        "topic_normalized": owner_memory_match.get("topic_normalized"),
+        "category": "FACT",
+        "tone": "Assertive",
+        "citations": [],
+    }
+
+
+def _match_owner_memory(query: str, twin_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Find a high-confidence owner memory candidate for this query.
+    Only active/verified memories with strong similarity are eligible.
+    """
+    try:
+        # Limit owner-memory override to owner-specific/stance-like questions.
+        from modules.identity_gate import classify_query
+
+        if not classify_query(query).get("requires_owner"):
+            return None
+
+        candidates = find_owner_memory_candidates(
+            query=query,
+            twin_id=twin_id,
+            topic_normalized=None,
+            memory_type=None,
+            limit=1,
+        )
+        if not candidates:
+            return None
+        best = candidates[0]
+        status = str(best.get("status") or "").lower()
+        if status not in {"active", "verified"}:
+            return None
+
+        score = float(best.get("_score", 0.0) or 0.0)
+        confidence = float(best.get("confidence", 0.0) or 0.0)
+        # Keep threshold strict to avoid accidental overreach on weak matches.
+        if score < 0.82 and confidence < 0.85:
+            return None
+        return best
+    except Exception as e:
+        print(f"[Retrieval] Owner memory lookup failed: {e}")
+        return None
 
 
 def _prepare_search_queries(query: str) -> List[str]:
@@ -522,7 +581,23 @@ async def retrieve_context_with_verified_first(
             # If no default group exists, proceed without group filtering (backward compatibility)
             group_id = None
     
-    # STEP 1: Check Verified QnA first (highest priority) - P1-C: 2s timeout
+    # STEP 1: Check owner-approved memory first (highest priority).
+    # If unavailable/weak, continue to verified QnA and vectors.
+    owner_memory_match = None
+    try:
+        owner_memory_match = await asyncio.wait_for(
+            asyncio.to_thread(_match_owner_memory, query, twin_id),
+            timeout=1.0,
+        )
+    except asyncio.TimeoutError:
+        print("[Retrieval] Owner memory lookup timed out after 1s, continuing.")
+    except Exception as e:
+        print(f"[Retrieval] Owner memory lookup failed: {e}, continuing.")
+
+    if owner_memory_match:
+        return [_format_owner_memory_match_context(owner_memory_match)]
+
+    # STEP 2: Check Verified QnA (next priority) - P1-C: 2s timeout
     try:
         verified_match = await asyncio.wait_for(
             match_verified_qna(query, twin_id, group_id=group_id, use_exact=True, use_semantic=True, exact_threshold=0.7, semantic_threshold=0.75),
@@ -539,7 +614,7 @@ async def retrieve_context_with_verified_first(
         # Found a high-confidence verified answer - return immediately
         return [_format_verified_match_context(verified_match)]
     
-    # STEP 2: No verified match - proceed with vector retrieval
+    # STEP 3: No high-priority match - proceed with vector retrieval
     return await retrieve_context_vectors(query, twin_id, creator_id=creator_id, group_id=group_id, top_k=top_k)
 
 

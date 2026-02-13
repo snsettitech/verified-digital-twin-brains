@@ -26,3 +26,105 @@ export const resolveApiHostLabel = () => {
     return base.replace(/^https?:\/\//, '');
   }
 };
+
+// ============================================================================
+// ISSUE-001: Knowledge Ingestion Jobs API
+// Typed API methods for ingestion job management
+// ============================================================================
+
+export interface IngestionJob {
+  id: string;
+  source_id: string;
+  twin_id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  job_type: string;
+  priority: number;
+  error_message?: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface ProcessQueueResult {
+  processed: number;
+  failed: number;
+  remaining: number;
+  message?: string;
+}
+
+/**
+ * Knowledge Ingestion Jobs API
+ * 
+ * Manage document ingestion and indexing jobs for digital twins.
+ * These endpoints use the clearer "ingestion" terminology (ISSUE-001).
+ */
+export const ingestionJobsApi = {
+  /**
+   * List all ingestion jobs for a twin
+   */
+  list: async (twinId: string): Promise<IngestionJob[]> => {
+    const base = resolveApiBaseUrl();
+    const res = await fetch(`${base}/ingestion-jobs?twin_id=${twinId}`, {
+      headers: { 'Authorization': `Bearer ${await getAuthToken()}` }
+    });
+    if (!res.ok) throw new Error(`Failed to fetch jobs: ${res.status}`);
+    return res.json();
+  },
+
+  /**
+   * Get a single ingestion job by ID
+   */
+  get: async (jobId: string): Promise<IngestionJob> => {
+    const base = resolveApiBaseUrl();
+    const res = await fetch(`${base}/ingestion-jobs/${jobId}`, {
+      headers: { 'Authorization': `Bearer ${await getAuthToken()}` }
+    });
+    if (!res.ok) throw new Error(`Failed to fetch job: ${res.status}`);
+    return res.json();
+  },
+
+  /**
+   * Retry a failed ingestion job
+   */
+  retry: async (jobId: string): Promise<{ status: string; job_id: string }> => {
+    const base = resolveApiBaseUrl();
+    const res = await fetch(`${base}/ingestion-jobs/${jobId}/retry`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${await getAuthToken()}` }
+    });
+    if (!res.ok) throw new Error(`Failed to retry job: ${res.status}`);
+    return res.json();
+  },
+
+  /**
+   * Process the ingestion queue for a twin
+   */
+  processQueue: async (twinId: string): Promise<ProcessQueueResult> => {
+    const base = resolveApiBaseUrl();
+    const res = await fetch(`${base}/ingestion-jobs/process-queue?twin_id=${twinId}`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${await getAuthToken()}` }
+    });
+    if (!res.ok) throw new Error(`Failed to process queue: ${res.status}`);
+    return res.json();
+  }
+};
+
+// Helper to get auth token - handles various auth methods
+async function getAuthToken(): Promise<string> {
+  // Try to get token from various sources
+  if (typeof window !== 'undefined') {
+    // Check for Supabase session
+    const supabaseToken = localStorage.getItem('supabase.auth.token');
+    if (supabaseToken) {
+      try {
+        const parsed = JSON.parse(supabaseToken);
+        return parsed.access_token || '';
+      } catch {
+        // Fall through
+      }
+    }
+  }
+  return '';
+}

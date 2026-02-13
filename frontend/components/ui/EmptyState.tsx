@@ -15,17 +15,15 @@ interface EmptyStateProps {
   illustration: EmptyStateIllustration;
   title: string;
   description: string;
-  primaryAction?: {
-    label: string;
-    href?: string;
-    onClick?: () => void;
-  };
-  secondaryAction?: {
-    label: string;
-    href?: string;
-    onClick?: () => void;
-  };
+  primaryAction?: EmptyStateAction;
+  secondaryAction?: EmptyStateAction;
   className?: string;
+}
+
+interface EmptyStateAction {
+  label: string;
+  href?: string;
+  onClick?: () => void;
 }
 
 // SVG Illustrations
@@ -137,6 +135,31 @@ const Illustrations: Record<EmptyStateIllustration, React.ReactNode> = {
   ),
 };
 
+interface ActionButtonProps {
+  action: EmptyStateAction;
+  variant: 'primary' | 'secondary';
+}
+
+function ActionButton({ action, variant }: ActionButtonProps) {
+  const baseClasses = variant === 'primary'
+    ? 'px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2'
+    : 'px-6 py-2.5 bg-white text-slate-700 font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2';
+
+  if (action.href) {
+    return (
+      <Link href={action.href} className={baseClasses}>
+        {action.label}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" onClick={action.onClick} className={baseClasses}>
+      {action.label}
+    </button>
+  );
+}
+
 export function EmptyState({
   illustration,
   title,
@@ -145,28 +168,6 @@ export function EmptyState({
   secondaryAction,
   className = '',
 }: EmptyStateProps) {
-  const ActionButton = ({ action, variant }: { action: typeof primaryAction; variant: 'primary' | 'secondary' }) => {
-    if (!action) return null;
-
-    const baseClasses = variant === 'primary'
-      ? 'px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2'
-      : 'px-6 py-2.5 bg-white text-slate-700 font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2';
-
-    if (action.href) {
-      return (
-        <Link href={action.href} className={baseClasses}>
-          {action.label}
-        </Link>
-      );
-    }
-
-    return (
-      <button onClick={action.onClick} className={baseClasses}>
-        {action.label}
-      </button>
-    );
-  };
-
   return (
     <div className={`flex flex-col items-center justify-center text-center p-8 ${className}`}>
       {/* Illustration */}
@@ -245,7 +246,7 @@ export function EmptyKnowledge({ onAddSource }: { onAddSource?: () => void }) {
     <EmptyState
       illustration="knowledge-empty"
       title="Build your knowledge base"
-      description="Upload documents, connect URLs, or paste text to train your twin."
+      description="Upload documents, connect URLs, or paste text to build your twin knowledge."
       primaryAction={{
         label: 'Add Source',
         onClick: onAddSource,

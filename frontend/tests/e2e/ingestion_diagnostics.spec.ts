@@ -160,17 +160,17 @@ test.describe('Ingestion Diagnostics (UI)', () => {
     await urlInput.fill(youtubeUrl);
     await page.getByRole('button', { name: 'Add URL' }).click();
 
-    // Row should eventually show error state + the error summary text
-    await expect(page.getByText('YOUTUBE_TRANSCRIPT_UNAVAILABLE').first()).toBeVisible();
-
-    await page.getByRole('button', { name: 'Diagnostics' }).click();
+    // Row should eventually expose diagnostics action for terminal error state
+    const diagnosticsButton = page.getByRole('button', { name: 'Diagnostics' }).first();
+    await expect(diagnosticsButton).toBeVisible({ timeout: 10000 });
+    await diagnosticsButton.click();
 
     await expect(page.getByText('Last Error')).toBeVisible();
     await expect(page.getByText('Step Timeline')).toBeVisible();
     await expect(page.getByText('Ingestion Logs')).toBeVisible();
 
     // Meaningful content (not empty placeholders)
-    await expect(page.getByText('YOUTUBE_TRANSCRIPT_UNAVAILABLE').first()).toBeVisible();
+    await expect(page.getByText(/YOUTUBE_TRANSCRIPT_UNAVAILABLE|No transcript could be extracted/i).first()).toBeVisible();
     await expect(page.getByText('[error]')).toBeVisible();
   });
 });

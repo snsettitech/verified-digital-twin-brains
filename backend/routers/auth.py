@@ -271,8 +271,10 @@ async def get_connectors(user=Depends(get_current_user)):
     return []
 
 
-# API Keys
-@router.post("/api-keys")
+# API Keys (legacy twin-scoped endpoints)
+# NOTE: Canonical tenant-scoped API key endpoints live in routers/api_keys.py under /api-keys.
+# These auth-scoped routes are retained for backward compatibility without path collisions.
+@router.post("/auth/api-keys")
 async def create_api_key_endpoint(request: ApiKeyCreateRequest, user=Depends(verify_owner)):
     """Create a new API key for a twin"""
     try:
@@ -285,12 +287,12 @@ async def create_api_key_endpoint(request: ApiKeyCreateRequest, user=Depends(ver
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/api-keys")
+@router.get("/auth/api-keys")
 async def list_api_keys_endpoint(twin_id: str, user=Depends(verify_owner)):
     """List all API keys for a twin"""
     return list_api_keys(twin_id)
 
-@router.delete("/api-keys/{key_id}")
+@router.delete("/auth/api-keys/{key_id}")
 async def revoke_api_key_endpoint(key_id: str, user=Depends(verify_owner)):
     """Revoke an API key"""
     success = revoke_api_key(key_id)
@@ -298,7 +300,7 @@ async def revoke_api_key_endpoint(key_id: str, user=Depends(verify_owner)):
         raise HTTPException(status_code=404, detail="API key not found")
     return {"status": "success"}
 
-@router.patch("/api-keys/{key_id}")
+@router.patch("/auth/api-keys/{key_id}")
 async def update_api_key_endpoint(key_id: str, request: ApiKeyUpdateRequest, user=Depends(verify_owner)):
     """Update API key metadata"""
     success = update_api_key(

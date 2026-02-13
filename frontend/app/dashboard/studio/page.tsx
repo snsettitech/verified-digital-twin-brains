@@ -82,8 +82,8 @@ export default function StudioPage() {
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
           <p className="text-slate-500 mb-6">Create a digital twin first to access the Persona Studio.</p>
-          <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
-            Create Your Twin
+          <a href="/dashboard" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+            Go to Dashboard
           </a>
         </div>
       </div>

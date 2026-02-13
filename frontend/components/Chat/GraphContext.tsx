@@ -73,7 +73,7 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
             <div className="bg-slate-50 rounded-xl p-4 mb-4 border border-slate-200">
                 <div className="flex items-center gap-2 text-slate-500">
                     <span className="text-lg">🧠</span>
-                    <span className="text-sm">No interview data yet. Complete the Right Brain interview to train your twin.</span>
+                    <span className="text-sm">No interview data yet. Complete the Right Brain interview to improve your twin responses.</span>
                 </div>
             </div>
         );

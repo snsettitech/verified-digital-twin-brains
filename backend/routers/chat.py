@@ -26,6 +26,7 @@ from modules.interaction_context import (
 )
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
+from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
@@ -51,6 +52,55 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
+
+
+def _uncertainty_message(interaction_context: Optional[str]) -> str:
+    return f"{UNCERTAINTY_RESPONSE}{owner_guidance_suffix(interaction_context)}"
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(str(value))
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_citation_details(citations: List[str], twin_id: str) -> List[dict]:
+    """
+    Resolve source UUID citations into UI-friendly details.
+    Leaves non-UUID citations as bare ids.
+    """
+    citation_details: List[dict] = []
+    try:
+        source_ids = [c for c in (citations or []) if isinstance(c, str) and _is_uuid(c)]
+        by_id = {}
+        if source_ids:
+            src_res = (
+                supabase.table("sources")
+                .select("id, filename, citation_url")
+                .in_("id", source_ids)
+                .eq("twin_id", twin_id)
+                .execute()
+            )
+            for row in (src_res.data or []):
+                by_id[str(row.get("id"))] = row
+
+        for citation in (citations or []):
+            row = by_id.get(str(citation))
+            if row:
+                citation_details.append(
+                    {
+                        "id": row.get("id"),
+                        "filename": row.get("filename"),
+                        "citation_url": row.get("citation_url"),
+                    }
+                )
+            else:
+                citation_details.append({"id": citation})
+    except Exception as e:
+        logger.warning(f"Citation resolution failed (non-blocking): {e}")
+    return citation_details
 
 @router.get("/share/resolve/{handle}")
 async def resolve_share_handle(handle: str):
@@ -475,7 +525,8 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     "options": gate.get("options", []),
                     "memory_write_proposal": gate.get("memory_write_proposal", {}),
                     "status": "pending_owner",
-                    "conversation_id": conversation_id
+                    "conversation_id": conversation_id,
+                    "identity_gate_mode": gate.get("gate_mode"),
                 }
                 yield json.dumps(clarify_event) + "\n"
                 return
@@ -593,7 +644,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                                 full_response = msg.content
 
             # If model fell back despite having citations, try a deterministic extract
-            fallback_message = "I don't have this specific information in my knowledge base."
+            fallback_message = _uncertainty_message(resolved_context.context.value)
             if full_response.strip() == fallback_message and citations:
                 needs_exact = re.search(r"(exact|verbatim|only the exact).*(phrase|quote|line)", query.lower())
                 if needs_exact:
@@ -612,35 +663,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             # Determine if graph was likely used (no external citations and has graph)
             graph_used = graph_stats["has_graph"] and len(citations) == 0
             
-            # Resolve citations into real source records for UI (no fake "Source 1").
-            citation_details = []
-            try:
-                def _is_uuid(val: str) -> bool:
-                    try:
-                        uuid.UUID(str(val))
-                        return True
-                    except Exception:
-                        return False
-
-                source_ids = [c for c in (citations or []) if isinstance(c, str) and _is_uuid(c)]
-                by_id = {}
-                if source_ids:
-                    src_res = supabase.table("sources").select("id, filename, citation_url").in_("id", source_ids).eq("twin_id", twin_id).execute()
-                    for row in (src_res.data or []):
-                        by_id[str(row.get("id"))] = row
-
-                for c in (citations or []):
-                    row = by_id.get(str(c))
-                    if row:
-                        citation_details.append({
-                            "id": row.get("id"),
-                            "filename": row.get("filename"),
-                            "citation_url": row.get("citation_url"),
-                        })
-                    else:
-                        citation_details.append({"id": c})
-            except Exception as e:
-                logger.warning(f"Citation resolution failed (non-blocking): {e}")
+            citation_details = _resolve_citation_details(citations, twin_id)
 
             draft_for_audit = full_response if full_response else fallback_message
             audited_response, audited_intent_label, audited_module_ids = await _apply_persona_audit(
@@ -680,6 +703,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     "graph_used": graph_used
                 },
                 "decision_trace": decision_trace,
+                "identity_gate_mode": gate.get("gate_mode"),
                 "effective_conversation_id": conversation_id,
                 **context_trace,
             })
@@ -690,7 +714,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                 print(f"[Chat] Yielding content: {len(full_response)} chars")
                 yield json.dumps({"type": "content", "token": full_response, "content": full_response}) + "\n"
             else:
-                fallback = "I don't have this specific information in my knowledge base."
+                fallback = _uncertainty_message(resolved_context.context.value)
                 print(f"[Chat] Fallback emitted: {fallback}")
                 yield json.dumps({"type": "content", "token": fallback, "content": fallback}) + "\n"
 
@@ -957,36 +981,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                 "status": "pending_owner",
                 "conversation_id": conversation_id,
                 "session_id": session_id,
+                "identity_gate_mode": gate.get("gate_mode"),
                 **context_trace,
             }) + "\n"
         return StreamingResponse(widget_clarify_stream(), media_type="text/event-stream")
 
     owner_memory_context = gate.get("owner_memory_context", "")
     owner_memory_refs = gate.get("owner_memory_refs", [])
-    owner_memory_candidates = gate.get("owner_memory") or []
-    owner_memory_topics = [
-        (m.get("topic_normalized") or m.get("topic"))
-        for m in owner_memory_candidates
-        if (m.get("topic_normalized") or m.get("topic"))
-    ]
-    owner_memory_candidates = gate.get("owner_memory") or []
-    owner_memory_topics = [
-        (m.get("topic_normalized") or m.get("topic"))
-        for m in owner_memory_candidates
-        if (m.get("topic_normalized") or m.get("topic"))
-    ]
-    owner_memory_candidates = gate.get("owner_memory") or []
-    owner_memory_topics = [
-        (m.get("topic_normalized") or m.get("topic"))
-        for m in owner_memory_candidates
-        if (m.get("topic_normalized") or m.get("topic"))
-    ]
-    owner_memory_candidates = gate.get("owner_memory") or []
-    owner_memory_topics = [
-        (m.get("topic_normalized") or m.get("topic"))
-        for m in owner_memory_candidates
-        if (m.get("topic_normalized") or m.get("topic"))
-    ]
     owner_memory_candidates = gate.get("owner_memory") or []
     owner_memory_topics = [
         (m.get("topic_normalized") or m.get("topic"))
@@ -1036,7 +1037,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                     if msg.content:
                         final_content += msg.content
 
-        fallback_message = "I don't have this specific information in my knowledge base."
+        fallback_message = _uncertainty_message(resolved_context.context.value)
         draft_for_audit = final_content if final_content else fallback_message
         final_content, intent_label, module_ids = await _apply_persona_audit(
             twin_id=twin_id,
@@ -1050,17 +1051,20 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             conversation_id=conversation_id,
             interaction_context=resolved_context.context.value,
         )
+        citation_details = _resolve_citation_details(citations, twin_id)
 
         output = {
             "type": "metadata",
             "confidence_score": confidence_score,
             "citations": citations,
+            "citation_details": citation_details,
             "conversation_id": conversation_id,
             "owner_memory_refs": owner_memory_refs,
             "owner_memory_topics": owner_memory_topics,
             "intent_label": intent_label,
             "module_ids": module_ids,
             "session_id": session_id,
+            "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
         }
         yield json.dumps(output) + "\n"
@@ -1207,6 +1211,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             "clarification_id": clarif.get("id") if clarif else None,
             "question": gate.get("question"),
             "options": gate.get("options", []),
+            "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
         }
 
@@ -1222,6 +1227,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
     try:
         final_response = ""
         citations = []
+        confidence_score = 0.0
         intent_label = None
         module_ids = []
         async for event in run_agent_stream(
@@ -1237,6 +1243,9 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
                 next_citations = tools_payload.get("citations")
                 if isinstance(next_citations, list):
                     citations = next_citations
+                next_confidence = tools_payload.get("confidence_score")
+                if isinstance(next_confidence, (int, float)):
+                    confidence_score = float(next_confidence)
             if agent_payload:
                 messages = agent_payload.get("messages", [])
                 if not messages:
@@ -1266,7 +1275,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             if acknowledgments:
                 final_response += "\n\n" + " ".join(acknowledgments)
 
-        fallback_message = "I don't have this specific information in my knowledge base."
+        fallback_message = _uncertainty_message(resolved_context.context.value)
         draft_for_audit = final_response if final_response else fallback_message
         final_response, intent_label, module_ids = await _apply_persona_audit(
             twin_id=twin_id,
@@ -1282,6 +1291,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
         )
         
         citations = _normalize_json(citations)
+        citation_details = _normalize_json(_resolve_citation_details(citations, twin_id))
         owner_memory_refs = _normalize_json(owner_memory_refs)
         owner_memory_topics = _normalize_json(owner_memory_topics)
 
@@ -1289,11 +1299,14 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             "status": "answer",
             "response": final_response,
             "citations": citations,
+            "citation_details": citation_details,
+            "confidence_score": confidence_score,
             "owner_memory_refs": owner_memory_refs,
             "owner_memory_topics": owner_memory_topics,
             "intent_label": intent_label,
             "module_ids": module_ids,
             "used_owner_memory": bool(owner_memory_refs),
+            "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
         }
     except Exception as e:

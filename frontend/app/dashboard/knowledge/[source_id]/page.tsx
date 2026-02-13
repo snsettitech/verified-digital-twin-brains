@@ -25,7 +25,7 @@ interface HealthCheck {
   check_type: string;
   status: string;
   message: string;
-  metadata: any;
+  metadata: unknown;
   created_at: string;
 }
 
@@ -33,11 +33,11 @@ interface IngestionLog {
   id: string;
   log_level: string;
   message: string;
-  metadata: any;
+  metadata: unknown;
   created_at: string;
 }
 
-interface TrainingJob {
+interface IngestionJob {
   id: string;
   source_id?: string;
   status: string;
@@ -60,7 +60,7 @@ export default function SourceDetailsPage() {
   const [source, setSource] = useState<Source | null>(null);
   const [healthChecks, setHealthChecks] = useState<HealthCheck[]>([]);
   const [logs, setLogs] = useState<IngestionLog[]>([]);
-  const [trainingJob, setTrainingJob] = useState<TrainingJob | null>(null);
+  const [ingestionJob, setIngestionJob] = useState<IngestionJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'health' | 'logs'>('overview');
 
@@ -90,12 +90,12 @@ export default function SourceDetailsPage() {
         setLogs(logsData);
       }
 
-      // Fetch training job if exists
-      const jobsRes = await get(`/training-jobs?twin_id=${twinId}`);
+      // Fetch ingestion job if exists
+      const jobsRes = await get(`/ingestion-jobs?twin_id=${twinId}`);
       if (jobsRes.ok) {
         const jobs = await jobsRes.json();
-        const job = jobs.find((j: TrainingJob) => j.source_id === sourceId);
-        setTrainingJob(job || null);
+        const job = jobs.find((j: IngestionJob) => j.source_id === sourceId);
+        setIngestionJob(job || null);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -153,7 +153,7 @@ export default function SourceDetailsPage() {
             onClick={() => router.back()}
             className="text-slate-500 hover:text-slate-700 mb-4 text-sm font-bold"
           >
-            ← Back
+            {'<-'} Back
           </button>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">{source.filename}</h1>
         </div>
@@ -164,7 +164,7 @@ export default function SourceDetailsPage() {
         {['overview', 'health', 'logs'].map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab as any)}
+            onClick={() => setActiveTab(tab as 'overview' | 'health' | 'logs')}
             className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === tab
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -211,15 +211,15 @@ export default function SourceDetailsPage() {
             )}
           </div>
 
-          {trainingJob && (
+          {ingestionJob && (
             <div className="border-t border-slate-200 pt-6">
-              <h3 className="text-sm font-black text-slate-800 mb-4">Training Job</h3>
+              <h3 className="text-sm font-black text-slate-800 mb-4">Ingestion Job</h3>
               <div className="bg-slate-50 p-4 rounded-xl">
                 <p className="text-sm text-slate-600">
-                  Status: <span className="font-bold">{trainingJob.status}</span>
+                  Status: <span className="font-bold">{ingestionJob.status}</span>
                 </p>
-                {trainingJob.error_message && (
-                  <p className="text-sm text-red-600 mt-2">{trainingJob.error_message}</p>
+                {ingestionJob.error_message && (
+                  <p className="text-sm text-red-600 mt-2">{ingestionJob.error_message}</p>
                 )}
               </div>
             </div>

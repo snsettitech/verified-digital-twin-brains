@@ -299,6 +299,38 @@ export default function ChatWidget({
                       Verified: {(msg.confidence_score * 100).toFixed(0)}%
                     </div>
                   )}
+                  {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {msg.citations.map((source, idx) => {
+                        const detail = msg.citation_details?.[idx];
+                        const label = detail?.filename || source || `Source ${idx + 1}`;
+                        const href = detail?.citation_url || undefined;
+                        return (
+                          <span
+                            key={`${idx}-${label}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+                          >
+                            <span>Source {idx + 1}</span>
+                            {href ? (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="truncate max-w-[110px] underline"
+                                title={href}
+                              >
+                                {label}
+                              </a>
+                            ) : (
+                              <span className="truncate max-w-[110px]" title={String(label)}>
+                                {label}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -378,7 +410,7 @@ export default function ChatWidget({
         {!isOpen && (
           <div className="absolute right-full mr-3 top-1/2 -translate-y-1/2 px-2 py-1 bg-slate-800 text-white text-xs rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap border border-white/10 shadow-xl">
             <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[10px] font-mono">⌘K</kbd>
+              <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-[10px] font-mono">Cmd/Ctrl+K</kbd>
               to open
             </span>
             <div className="absolute left-full top-1/2 -translate-y-1/2 -ml-1 w-2 h-2 bg-slate-800 border-t border-r border-white/10 rotate-45"></div>

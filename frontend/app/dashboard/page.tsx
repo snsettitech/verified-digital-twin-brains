@@ -69,7 +69,7 @@ export default function DashboardPage() {
         } else {
           setSystemStatus('offline');
         }
-      } catch (error) {
+      } catch {
         setSystemStatus('offline');
       }
     };
@@ -125,8 +125,8 @@ export default function DashboardPage() {
         try {
           const activityResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_ACTIVITY(currentTwinId)}?limit=5`);
           if (activityResponse.ok) {
-            const data = await activityResponse.json();
-            setRecentActivity(data.map((item: any) => ({
+            const data: ActivityItem[] = await activityResponse.json();
+            setRecentActivity(data.map((item) => ({
               id: item.id,
               type: item.type,
               title: item.title,
@@ -171,7 +171,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1">Welcome back! Here's how your twin is performing.</p>
+          <p className="text-slate-500 mt-1">Welcome back! Here&apos;s how your twin is performing.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-white shadow-sm">
@@ -261,7 +261,7 @@ export default function DashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Train Twin */}
+        {/* Interview Twin - ISSUE-001: Changed from "Train" to "Interview" for clarity */}
         <Link href="/dashboard/interview" className="group">
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-2xl text-white shadow-xl shadow-indigo-200 hover:shadow-2xl transition-all duration-300 h-full relative overflow-hidden">
             <div className="absolute top-0 right-0 p-6 opacity-10">
@@ -274,8 +274,8 @@ export default function DashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold mb-1">Train Your Twin</h3>
-            <p className="text-indigo-100 text-sm opacity-90">Conduct cognitive interview</p>
+            <h3 className="text-xl font-bold mb-1">Interview Your Twin</h3>
+            <p className="text-indigo-100 text-sm opacity-90">Capture your voice and decisions</p>
             <div className="mt-4 inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-wider">
               Recommended
             </div>
@@ -497,7 +497,7 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-xs text-emerald-500 mt-2">
                   {stats.responseRate >= 90 ? '✅ Excellent! Your twin responds to most questions.' :
-                    stats.responseRate >= 70 ? '⚠️ Good, but some questions may need more training.' :
+                    stats.responseRate >= 70 ? '⚠️ Good, but some questions may need more verified knowledge.' :
                       '❌ Low response rate. Consider adding more knowledge.'}
                 </p>
               </div>
@@ -520,7 +520,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-red-500 mt-2">
                   {stats.escalationRate <= 5 ? '✅ Very few questions escalated.' :
                     stats.escalationRate <= 15 ? '⚠️ Some questions need owner review.' :
-                      '❌ High escalation rate. Train your twin more.'}
+                      '❌ High escalation rate. Add more verified knowledge.'}
                 </p>
               </div>
             </div>

@@ -339,9 +339,10 @@ export default function Home() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
+            {/* ISSUE-001: Updated step 2 terminology from "Train" to "Capture" */}
             {[
               { num: '01', icon: '📤', title: 'Connect Your Content', desc: 'Upload documents, connect URLs, or paste text. We support PDFs, Notion, YouTube transcripts, and more.' },
-              { num: '02', icon: '🧠', title: 'Train Your Twin', desc: 'Answer a few questions to capture your voice, decision style, and expertise boundaries. Takes 5 minutes.' },
+              { num: '02', icon: '🧠', title: 'Capture Your Voice', desc: 'Answer a few questions to capture your voice, decision style, and expertise boundaries. Takes 5 minutes.' },
               { num: '03', icon: '🚀', title: 'Share Everywhere', desc: 'Get a shareable link, embed on your website, or integrate with Slack, Discord, or your API.' },
             ].map((step, i) => (
               <div 

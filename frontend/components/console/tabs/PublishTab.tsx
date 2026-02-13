@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 
 interface PublishTabProps {
     twinId: string;
@@ -14,13 +15,30 @@ interface PublishTabProps {
 interface VerificationStatus {
     is_ready: boolean;
     issues: string[];
-    last_verified_at: string | null;
-    last_verified_status: string;
-    counts: {
-        vectors: number;
-        chunks: number;
-        live_sources: number;
-    };
+    last_verified_at?: string | null;
+    last_verified_status?: string;
+    vectors_count?: number;
+    graph_nodes?: number;
+}
+
+interface QualityTestResult {
+    test_name: string;
+    passed: boolean;
+    has_answer: boolean;
+    has_citations: boolean;
+    confidence_score: number;
+    answer_preview: string;
+    issues: string[];
+}
+
+interface QualityVerificationResult {
+    status: 'PASS' | 'FAIL';
+    overall_score: number;
+    tests_run: number;
+    tests_passed: number;
+    test_results: QualityTestResult[];
+    issues: string[];
+    verified_at: string;
 }
 
 export function PublishTab({
@@ -31,26 +49,53 @@ export function PublishTab({
     onTogglePublic,
     onRegenerateLink
 }: PublishTabProps) {
+    const { get, post } = useAuthFetch();
     const [copied, setCopied] = useState(false);
     const [embedCopied, setEmbedCopied] = useState(false);
     const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
-    const [loadingStatus, setLoadingStatus] = React.useState(true);
+    const [qualityResult, setQualityResult] = useState<QualityVerificationResult | null>(null);
+    const [loadingStatus, setLoadingStatus] = useState(true);
+    const [runningQualitySuite, setRunningQualitySuite] = useState(false);
+    const [qualityError, setQualityError] = useState<string | null>(null);
 
-    React.useEffect(() => {
-        const fetchStatus = async () => {
-            try {
-                const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-                const res = await fetch(`${backendUrl}/twins/${twinId}/verification-status`);
-                const data = await res.json();
-                setVerificationStatus(data);
-            } catch (err) {
-                console.error("Failed to fetch verification status", err);
-            } finally {
-                setLoadingStatus(false);
+    const fetchStatus = useCallback(async () => {
+        setLoadingStatus(true);
+        try {
+            const res = await get(`/twins/${twinId}/verification-status`);
+            if (!res.ok) {
+                throw new Error(`Failed to fetch verification status (${res.status})`);
             }
-        };
-        fetchStatus();
-    }, [twinId]);
+            const data = await res.json();
+            setVerificationStatus(data);
+        } catch (err) {
+            console.error('Failed to fetch verification status', err);
+        } finally {
+            setLoadingStatus(false);
+        }
+    }, [get, twinId]);
+
+    useEffect(() => {
+        void fetchStatus();
+    }, [fetchStatus]);
+
+    const runQualitySuite = useCallback(async () => {
+        setRunningQualitySuite(true);
+        setQualityError(null);
+        try {
+            const res = await post(`/verify/twins/${twinId}/quality-suite`);
+            const data = await res.json();
+            if (!res.ok) {
+                throw new Error(data?.detail || `Quality verification failed (${res.status})`);
+            }
+            setQualityResult(data as QualityVerificationResult);
+            await fetchStatus();
+        } catch (err: any) {
+            console.error('Failed to run quality suite', err);
+            setQualityError(err?.message || 'Failed to run quality verification suite.');
+        } finally {
+            setRunningQualitySuite(false);
+        }
+    }, [fetchStatus, post, twinId]);
 
     const defaultShareLink = shareLink || '';
     const canShare = Boolean(defaultShareLink);
@@ -77,77 +122,123 @@ export function PublishTab({
         setTimeout(() => setEmbedCopied(false), 2000);
     };
 
+    const qualityPass = qualityResult?.status === 'PASS';
+
     return (
         <div className="p-6 space-y-6 max-w-3xl">
-            {/* Verification Status Card */}
-            <div className={`border rounded-2xl p-6 transition-colors ${loadingStatus ? 'bg-white/5 border-white/10' :
-                    verificationStatus?.is_ready
+            <div className={`border rounded-2xl p-6 transition-colors ${
+                loadingStatus
+                    ? 'bg-white/5 border-white/10'
+                    : verificationStatus?.is_ready
                         ? 'bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20'
                         : 'bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/20'
-                }`}>
-                <div className="flex items-center justify-between">
+            }`}>
+                <div className="flex items-start justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <h3 className="text-lg font-semibold text-white">Verification Status</h3>
                             {verificationStatus?.is_ready ? (
-                                <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                                <span className="bg-green-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
                                     VERIFIED
                                 </span>
                             ) : (
-                                <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded-full">
                                     VERIFICATION REQUIRED
                                 </span>
                             )}
                         </div>
                         <p className="text-slate-300 text-sm">
                             {verificationStatus?.is_ready
-                                ? "Your twin is ready for public access."
-                                : "You must run 'Verify Retrieval' in the Simulator before publishing."}
+                                ? 'Your twin is ready for public access.'
+                                : 'Run quality verification before publishing.'}
                         </p>
-                        {!verificationStatus?.is_ready && verificationStatus?.issues && (
+                        {verificationStatus && (
+                            <div className="mt-2 text-xs text-slate-300">
+                                Vectors: {verificationStatus.vectors_count ?? 0} | Graph nodes: {verificationStatus.graph_nodes ?? 0}
+                            </div>
+                        )}
+                        {!verificationStatus?.is_ready && verificationStatus?.issues?.length ? (
                             <ul className="mt-2 text-xs text-yellow-200/80 list-disc list-inside">
                                 {verificationStatus.issues.map((issue, i) => (
                                     <li key={i}>{issue}</li>
                                 ))}
                             </ul>
-                        )}
+                        ) : null}
                     </div>
+                    <button
+                        onClick={() => void runQualitySuite()}
+                        disabled={runningQualitySuite}
+                        className="px-4 py-2 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-60"
+                    >
+                        {runningQualitySuite ? 'Running...' : 'Run Quality Suite'}
+                    </button>
                 </div>
+                {qualityError ? (
+                    <div className="mt-3 text-xs text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+                        {qualityError}
+                    </div>
+                ) : null}
+                {qualityResult ? (
+                    <div className="mt-4 border-t border-white/10 pt-4 space-y-3">
+                        <div className="flex items-center gap-2 text-sm">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${qualityPass ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                {qualityResult.status}
+                            </span>
+                            <span className="text-slate-300">
+                                {qualityResult.tests_passed}/{qualityResult.tests_run} tests passed
+                            </span>
+                            <span className="text-slate-400 text-xs">
+                                ({(qualityResult.overall_score * 100).toFixed(0)}%)
+                            </span>
+                        </div>
+                        <div className="space-y-2">
+                            {qualityResult.test_results.map((test, idx) => (
+                                <div key={idx} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="text-sm text-white font-medium">{test.test_name}</div>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${test.passed ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>
+                                            {test.passed ? 'PASS' : 'FAIL'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-1 text-xs text-slate-300">
+                                        Confidence: {(test.confidence_score * 100).toFixed(0)}% | Citations: {test.has_citations ? 'Yes' : 'No'} | Answer: {test.has_answer ? 'Yes' : 'No'}
+                                    </div>
+                                    {!test.passed && test.issues?.length ? (
+                                        <ul className="mt-1 text-xs text-rose-200 list-disc list-inside">
+                                            {test.issues.map((issue, i) => (
+                                                <li key={i}>{issue}</li>
+                                            ))}
+                                        </ul>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null}
             </div>
 
-            {/* Sharing Toggle */}
             <div className={`bg-white/5 border border-white/10 rounded-2xl p-6 ${!verificationStatus?.is_ready && 'opacity-50 grayscale-[0.5]'}`}>
                 <div className="flex items-center justify-between">
                     <div>
                         <h3 className="text-lg font-semibold text-white mb-1">Public Sharing</h3>
-                        <p className="text-slate-400 text-sm">Allow anyone with the link to chat with your twin</p>
+                        <p className="text-slate-400 text-sm">Allow anyone with the link to chat with your twin.</p>
                     </div>
-                    <div className="relative group">
-                        <button
-                            onClick={() => {
-                                if (verificationStatus?.is_ready) {
-                                    onTogglePublic?.(!isPublic);
-                                }
-                            }}
-                            disabled={!verificationStatus?.is_ready}
-                            className={`relative w-14 h-7 rounded-full transition-colors ${!verificationStatus?.is_ready
-                                    ? 'bg-slate-700 cursor-not-allowed'
-                                    : isPublic ? 'bg-emerald-500' : 'bg-slate-600'
-                                }`}
-                        >
-                            <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${isPublic ? 'left-8' : 'left-1'
-                                }`} />
-                        </button>
-                        {!verificationStatus?.is_ready && (
-                            <div className="absolute bottom-full right-0 mb-2 w-48 px-3 py-2 bg-black/90 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                                Capability locked. Please verify your twin first.
-                            </div>
-                        )}
-                    </div>
+                    <button
+                        onClick={() => {
+                            if (verificationStatus?.is_ready) {
+                                onTogglePublic?.(!isPublic);
+                            }
+                        }}
+                        disabled={!verificationStatus?.is_ready}
+                        className={`relative w-14 h-7 rounded-full transition-colors ${
+                            !verificationStatus?.is_ready ? 'bg-slate-700 cursor-not-allowed' : isPublic ? 'bg-emerald-500' : 'bg-slate-600'
+                        }`}
+                    >
+                        <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-transform ${isPublic ? 'left-8' : 'left-1'}`} />
+                    </button>
                 </div>
 
-                {isPublic && (
+                {isPublic ? (
                     <div className="mt-6 pt-6 border-t border-white/10">
                         <label className="block text-sm font-medium text-slate-300 mb-2">Share Link</label>
                         <div className="flex gap-2">
@@ -160,12 +251,11 @@ export function PublishTab({
                             <button
                                 onClick={handleCopyLink}
                                 disabled={!canShare}
-                                className={`px-4 py-3 text-sm font-medium rounded-xl transition-colors ${copied
-                                    ? 'bg-emerald-500/20 text-emerald-400'
-                                    : 'bg-white/10 text-white hover:bg-white/15'
-                                    }`}
+                                className={`px-4 py-3 text-sm font-medium rounded-xl transition-colors ${
+                                    copied ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white hover:bg-white/15'
+                                }`}
                             >
-                                {copied ? '✓ Copied' : 'Copy'}
+                                {copied ? 'Copied' : 'Copy'}
                             </button>
                         </div>
                         <button
@@ -175,13 +265,12 @@ export function PublishTab({
                             Regenerate link
                         </button>
                     </div>
-                )}
+                ) : null}
             </div>
 
-            {/* Embed Code */}
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
                 <h3 className="text-lg font-semibold text-white mb-1">Embed Widget</h3>
-                <p className="text-slate-400 text-sm mb-4">Add a chat widget to your website</p>
+                <p className="text-slate-400 text-sm mb-4">Add a chat widget to your website.</p>
 
                 <div className="relative">
                     <pre className="p-4 bg-slate-900 border border-white/10 rounded-xl text-xs text-slate-300 overflow-x-auto">
@@ -189,58 +278,15 @@ export function PublishTab({
                     </pre>
                     <button
                         onClick={handleCopyEmbed}
-                        className={`absolute top-2 right-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${embedCopied
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-white/10 text-white hover:bg-white/15'
-                            }`}
+                        className={`absolute top-2 right-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                            embedCopied ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white hover:bg-white/15'
+                        }`}
                     >
-                        {embedCopied ? '✓ Copied' : 'Copy'}
+                        {embedCopied ? 'Copied' : 'Copy'}
                     </button>
                 </div>
             </div>
 
-            {/* Integration Options */}
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Integrations</h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                    {[
-                        { name: 'Slack', icon: '💬', status: 'coming' },
-                        { name: 'Discord', icon: '🎮', status: 'coming' },
-                        { name: 'WhatsApp', icon: '📱', status: 'coming' },
-                        { name: 'API Access', icon: '🔗', status: 'available' }
-                    ].map((integration) => (
-                        <div
-                            key={integration.name}
-                            className={`p-4 border rounded-xl relative overflow-hidden ${integration.status === 'available'
-                                ? 'bg-white/5 border-white/10 hover:bg-white/10 cursor-pointer'
-                                : 'bg-white/[0.02] border-white/5 opacity-60 grayscale'
-                                } transition-all`}
-                        >
-                            {integration.status === 'coming' && (
-                                <span className="absolute top-2 right-2 text-[10px] font-medium px-2 py-0.5 bg-slate-700 text-slate-400 rounded-full">
-                                    Soon
-                                </span>
-                            )}
-                            <div className="flex items-center gap-3">
-                                <span className={`text-2xl ${integration.status === 'coming' ? 'opacity-50' : ''}`}>
-                                    {integration.icon}
-                                </span>
-                                <div>
-                                    <p className={`font-medium ${integration.status === 'available' ? 'text-white' : 'text-slate-400'}`}>
-                                        {integration.name}
-                                    </p>
-                                    <p className={`text-xs ${integration.status === 'available' ? 'text-emerald-400' : 'text-slate-600'}`}>
-                                        {integration.status === 'available' ? '✓ Available' : 'Coming soon'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Preview */}
             <div className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 rounded-2xl p-6">
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold">
@@ -248,7 +294,7 @@ export function PublishTab({
                     </div>
                     <div>
                         <h3 className="text-lg font-semibold text-white">{twinName}</h3>
-                        <p className="text-slate-400 text-sm">Your digital twin is ready to share</p>
+                        <p className="text-slate-400 text-sm">Preview your public twin page.</p>
                     </div>
                 </div>
                 <a
@@ -257,9 +303,6 @@ export function PublishTab({
                     className="mt-4 inline-flex items-center gap-2 text-sm text-indigo-400 hover:text-indigo-300"
                 >
                     Preview public page
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
                 </a>
             </div>
         </div>

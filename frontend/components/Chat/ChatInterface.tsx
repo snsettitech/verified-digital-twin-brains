@@ -6,6 +6,7 @@ import MessageList, { Message } from './MessageList';
 import SuggestedQuestions from './SuggestedQuestions';
 import { useTwin } from '@/lib/context/TwinContext';
 import { resolveApiBaseUrl } from '@/lib/api';
+import { API_ENDPOINTS } from '@/lib/constants';
 
 const STREAM_IDLE_TIMEOUT_MS = 60000;
 
@@ -47,6 +48,7 @@ export default function ChatInterface({
   const [clarification, setClarification] = useState<any | null>(null);
   const [clarifyAnswer, setClarifyAnswer] = useState('');
   const [clarifyOption, setClarifyOption] = useState<string | null>(null);
+  const [effectiveConversationId, setEffectiveConversationId] = useState<string | null>(conversationId || null);
   const [debugOpen, setDebugOpen] = useState(false);
   const [lastDebug, setLastDebug] = useState<{
     decision?: string;
@@ -70,6 +72,10 @@ export default function ChatInterface({
     return `simulator_chat_${resolvedTenantId}_${twinId}_${contextStorageKey}`;
   }, [tenantId, user?.tenant_id, twinId, contextStorageKey]);
   const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
+
+  useEffect(() => {
+    setEffectiveConversationId(conversationId || null);
+  }, [conversationId]);
 
   const getAuthToken = useCallback(async (): Promise<string | null> => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -137,6 +143,83 @@ export default function ChatInterface({
     onMemoryUpdated?.();
     setMessages((prev) => [...prev, { role: 'assistant', content: 'Saved to memory.', timestamp: Date.now() }]);
   }, [apiBaseUrl, getAuthToken, onMemoryUpdated, twinId, isE2EBypass]);
+
+  const submitFeedback = useCallback(async (payload: {
+    messageIndex: number;
+    score: 1 | -1;
+    reason: string;
+  }) => {
+    const token = await getAuthToken();
+    if (!token && !isE2EBypass) throw new Error('Not authenticated');
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const traceId = `local-${twinId}-${Date.now()}-${payload.messageIndex}`;
+    const interactionContext =
+      mode === 'training'
+        ? 'owner_training'
+        : mode === 'public'
+          ? 'public_share'
+          : 'owner_chat';
+
+    const res = await fetch(`${apiBaseUrl}/feedback/${encodeURIComponent(traceId)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        score: payload.score,
+        reason: payload.reason,
+        message_id: String(payload.messageIndex),
+        twin_id: twinId,
+        conversation_id: effectiveConversationId || undefined,
+        interaction_context: interactionContext,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to submit feedback (${res.status})`);
+    }
+  }, [apiBaseUrl, effectiveConversationId, getAuthToken, isE2EBypass, mode, twinId]);
+
+  const submitCorrection = useCallback(async (payload: {
+    messageIndex: number;
+    question: string;
+    correctedAnswer: string;
+    topicNormalized?: string;
+    memoryType?: string;
+  }) => {
+    const token = await getAuthToken();
+    if (!token && !isE2EBypass) throw new Error('Not authenticated');
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const res = await fetch(`${apiBaseUrl}${API_ENDPOINTS.OWNER_CORRECTIONS(twinId)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        question: payload.question,
+        corrected_answer: payload.correctedAnswer,
+        topic_normalized: payload.topicNormalized,
+        memory_type: payload.memoryType || 'belief',
+        create_verified_qna_entry: true,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to apply correction (${res.status})`);
+    }
+
+    onMemoryUpdated?.();
+  }, [apiBaseUrl, getAuthToken, isE2EBypass, onMemoryUpdated, twinId]);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -317,6 +400,9 @@ export default function ChatInterface({
                 ) {
                   onConversationStarted(data.conversation_id);
                 }
+                if (data.conversation_id) {
+                  setEffectiveConversationId(data.conversation_id);
+                }
                 const summaries = Array.isArray(data.owner_memory_summaries)
                   ? data.owner_memory_summaries
                   : [];
@@ -405,6 +491,9 @@ export default function ChatInterface({
               data.conversation_id !== conversationId
             ) {
               onConversationStarted(data.conversation_id);
+            }
+            if (data.conversation_id) {
+              setEffectiveConversationId(data.conversation_id);
             }
             const summaries = Array.isArray(data.owner_memory_summaries)
               ? data.owner_memory_summaries
@@ -537,8 +626,15 @@ export default function ChatInterface({
         loading={loading}
         isSearching={isSearching}
         enableRemember={mode !== 'public'}
+        enableFeedback={mode !== 'public'}
         twinId={twinId}
         onRemember={rememberMemory}
+        onTeachQuestion={(question) => {
+          if (mode === 'public') return;
+          void sendMessage(question);
+        }}
+        onSubmitFeedback={submitFeedback}
+        onSubmitCorrection={mode !== 'public' ? submitCorrection : undefined}
       />
 
       {/* Input */}
@@ -731,7 +827,7 @@ export default function ChatInterface({
         </div>
         <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span>Powered by verified knowledge • End-to-end encrypted</span>
+          <span>Powered by verified knowledge - End-to-end encrypted</span>
         </div>
       </div>
     </div>

@@ -176,7 +176,7 @@ export default function EscalationsPage() {
                           <label className="block text-xs font-semibold text-slate-600 mb-1">Your Verified Answer *</label>
                           <textarea
                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none"
-                            placeholder="Provide the correct information to train your twin..."
+                            placeholder="Provide the correct information to improve your twin..."
                             rows={4}
                             value={ownerAnswers[esc.id] || ''}
                             onChange={(e) => setOwnerAnswers({ ...ownerAnswers, [esc.id]: e.target.value })}

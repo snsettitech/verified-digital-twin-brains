@@ -60,7 +60,7 @@ export function AddContentStep({
     return (
         <WizardStep
             title="Add Your Content"
-            description="Upload documents or add web content to train your twin"
+            description="Upload documents or add web content to build your twin knowledge"
         >
             <div className="max-w-xl mx-auto">
                 {/* Tab Switcher */}

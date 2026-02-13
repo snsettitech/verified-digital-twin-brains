@@ -43,6 +43,11 @@ Why: your infra is already live and configured for Git auto-deploy.
 2. Validate canary URL and worker behavior.
 3. Promote by merging same commit to `main`.
 
+Phase 5 note:
+- `render.yaml` defines dedicated canary services with realtime ingestion enabled:
+  - `verified-digital-twin-backend-canary`
+  - `verified-digital-twin-worker-canary`
+- Stable defaults are now enabled on all services; use explicit opt-out for rollback.
 ### Fallback B: Vercel claimable preview (emergency frontend)
 1. Use `scripts/deploy.sh frontend` or Vercel deploy workflow for preview.
 2. Validate frontend against current backend.
@@ -93,6 +98,14 @@ Feature/perf:
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
 - `ENABLE_VC_ROUTES=false` (unless actively used)
+- Phase 5 realtime ingestion:
+  - Default: `ENABLE_REALTIME_INGESTION=true`
+  - Emergency rollback: set `ENABLE_REALTIME_INGESTION=false`
+  - Optional (recommended for canary): `REDIS_URL` to enable Redis Streams lane
+  - Knobs (optional): `REALTIME_MIN_CHARS_DELTA`, `REALTIME_MIN_SECONDS_BETWEEN_INDEX`, `REALTIME_USE_REDIS_STREAMS`
+- Delphi retrieval:
+  - Default: `ENABLE_DELPHI_RETRIEVAL=true`
+  - Emergency rollback: set `ENABLE_DELPHI_RETRIEVAL=false`
 
 Feedback learning:
 - `FEEDBACK_LEARNING_MIN_EVENTS=5` (or your chosen threshold)

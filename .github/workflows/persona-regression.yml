@@ -39,7 +39,14 @@ jobs:
             backend/tests/test_chat_interaction_context.py \
             backend/tests/test_interaction_context.py \
             backend/tests/test_training_sessions_router.py \
-            backend/tests/test_decision_capture_router.py
+            backend/tests/test_decision_capture_router.py \
+            backend/tests/test_identity_gate_training.py \
+            backend/tests/test_feedback_router.py \
+            backend/tests/test_owner_corrections_router.py \
+            backend/tests/test_retrieval_owner_memory_priority.py \
+            backend/tests/test_publish_quality_gate.py \
+            backend/tests/test_escalations_verified_qna_contract.py \
+            backend/tests/test_public_chat_citation_details.py
 
       - name: Run blocking persona regression gate
         run: |

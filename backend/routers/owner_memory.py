@@ -15,6 +15,7 @@ from modules.owner_memory_store import (
     get_owner_memory
 )
 from modules.memory_events import create_memory_event
+from modules.verified_qna import create_verified_qna
 from pydantic import BaseModel, Field
 
 
@@ -32,6 +33,14 @@ class OwnerMemoryUpdateRequest(BaseModel):
     value: Optional[str] = None
     stance: Optional[str] = None
     intensity: Optional[int] = None
+
+
+class OwnerCorrectionRequest(BaseModel):
+    question: str = Field(..., description="Original user/public question")
+    corrected_answer: str = Field(..., description="Owner-approved corrected answer")
+    topic_normalized: Optional[str] = Field(None, description="Optional memory topic; inferred from answer when omitted")
+    memory_type: str = Field("belief", description="belief | preference | stance | lens | tone_rule")
+    create_verified_qna_entry: bool = Field(True, description="Also write corrected answer to verified_qna")
 
 
 router = APIRouter(tags=["owner-memory"])
@@ -150,6 +159,92 @@ async def create_owner_memory_endpoint(
         print(f"[OwnerMemory] audit log failed: {e}")
 
     return {"status": "created", "owner_memory_id": new_memory.get("id")}
+
+
+@router.post("/twins/{twin_id}/owner-corrections")
+async def create_owner_correction_endpoint(
+    twin_id: str,
+    request: OwnerCorrectionRequest,
+    user=Depends(verify_owner)
+):
+    """
+    Owner-authored correction flow for rapid teaching from conversation.
+    Writes structured memory and optionally promotes answer to verified_qna.
+    """
+    verify_twin_ownership(twin_id, user)
+
+    question = (request.question or "").strip()
+    corrected_answer = (request.corrected_answer or "").strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="question is required")
+    if not corrected_answer:
+        raise HTTPException(status_code=422, detail="corrected_answer is required")
+
+    allowed_types = {"belief", "preference", "stance", "lens", "tone_rule"}
+    if request.memory_type not in allowed_types:
+        raise HTTPException(status_code=422, detail="Invalid memory_type")
+
+    topic = (request.topic_normalized or "").strip() or question[:120]
+    stance = _infer_stance_from_text(corrected_answer) if request.memory_type == "stance" else None
+
+    new_memory = create_owner_memory(
+        twin_id=twin_id,
+        tenant_id=user.get("tenant_id"),
+        topic_normalized=topic,
+        memory_type=request.memory_type,
+        value=corrected_answer,
+        stance=stance,
+        intensity=None,
+        confidence=1.0,
+        provenance={
+            "source_type": "owner_correction",
+            "owner_id": user.get("user_id"),
+            "question": question,
+        },
+        supersede_id=None,
+        status="verified",
+    )
+    if not new_memory:
+        raise HTTPException(status_code=500, detail="Failed to persist owner correction")
+
+    verified_qna_id = None
+    if request.create_verified_qna_entry:
+        try:
+            verified_qna_id = await create_verified_qna(
+                question=question,
+                answer=corrected_answer,
+                owner_id=user.get("user_id"),
+                twin_id=twin_id,
+            )
+        except Exception as e:
+            print(f"[OwnerMemory] create_verified_qna from correction failed: {e}")
+
+    try:
+        await create_memory_event(
+            twin_id=twin_id,
+            tenant_id=user.get("tenant_id"),
+            event_type="owner_memory_write",
+            payload={
+                "owner_memory_id": new_memory.get("id"),
+                "topic": topic,
+                "memory_type": request.memory_type,
+                "question": question,
+                "verified_qna_id": verified_qna_id,
+            },
+            status="applied",
+            source_type="chat_turn",
+            source_id=None,
+        )
+    except Exception as e:
+        print(f"[OwnerMemory] correction audit log failed: {e}")
+
+    return {
+        "status": "applied",
+        "owner_memory_id": new_memory.get("id"),
+        "verified_qna_id": verified_qna_id,
+        "topic": topic,
+        "memory_type": request.memory_type,
+    }
 
 
 @router.patch("/twins/{twin_id}/owner-memory/{memory_id}")
