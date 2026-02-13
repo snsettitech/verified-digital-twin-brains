@@ -93,6 +93,14 @@ export const API_ENDPOINTS = {
   CLARIFICATIONS: (twinId: string) => `/twins/${twinId}/clarifications`,
   CLARIFICATION_RESOLVE: (twinId: string, clarificationId: string) => 
     `/twins/${twinId}/clarifications/${clarificationId}/resolve`,
+  OWNER_CORRECTIONS: (twinId: string) => `/twins/${twinId}/owner-corrections`,
+  // ISSUE-001: Added ingestion-jobs endpoints (clearer terminology)
+  // Training sessions remain for interview functionality (that IS training)
+  INGESTION_JOBS: '/ingestion-jobs',
+  INGESTION_JOB_DETAIL: (jobId: string) => `/ingestion-jobs/${jobId}`,
+  INGESTION_JOBS_RETRY: (jobId: string) => `/ingestion-jobs/${jobId}/retry`,
+  INGESTION_JOBS_PROCESS_QUEUE: '/ingestion-jobs/process-queue',
+  // Legacy endpoints (backward compatible)
   TRAINING_SESSIONS: (twinId: string) => `/twins/${twinId}/training-sessions`,
   TRAINING_SESSION_START: (twinId: string) => `/twins/${twinId}/training-sessions/start`,
   TRAINING_SESSION_STOP: (twinId: string, sessionId: string) => 

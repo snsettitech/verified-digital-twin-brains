@@ -25,6 +25,7 @@ from modules.persona_compiler import compile_prompt_plan
 from modules.persona_fingerprint_gate import run_persona_fingerprint_gate
 from modules.persona_intents import classify_query_intent, normalize_intent_label
 from modules.persona_module_store import list_runtime_modules_for_intent
+from modules.response_policy import UNCERTAINTY_RESPONSE
 from modules.persona_spec import PersonaSpec
 from modules.persona_spec_store import get_active_persona_spec
 
@@ -100,7 +101,7 @@ def _citations_required(intent_label: str, spec: PersonaSpec) -> bool:
 
 def _fallback_response(intent_label: str) -> str:
     if intent_label in {"factual_with_evidence", "sensitive_boundary_or_refusal"}:
-        return "I want to be accurate and safe. I do not have enough verified evidence to answer confidently."
+        return UNCERTAINTY_RESPONSE
     if intent_label == "ambiguity_or_clarify":
         return "I want to answer precisely. Can you clarify the key detail that matters most here?"
     return "I want to give you a precise answer. I need one clarification before I continue."

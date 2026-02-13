@@ -407,7 +407,7 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
                                     </svg>
                                 </div>
                                 <h3 className="text-lg font-semibold text-white mb-1">No knowledge sources yet</h3>
-                                <p className="text-slate-400 text-sm mb-4">Add documents, URLs, or complete an interview to train your twin.</p>
+                                <p className="text-slate-400 text-sm mb-4">Add documents, URLs, or complete an interview to build your twin knowledge.</p>
                                 <button
                                     onClick={() => setShowUploadModal(true)}
                                     className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg"

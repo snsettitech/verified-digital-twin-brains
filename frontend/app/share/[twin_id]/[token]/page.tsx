@@ -8,6 +8,11 @@ interface Message {
     role: 'user' | 'assistant';
     content: string;
     citations?: string[];
+    citation_details?: Array<{
+        id: string;
+        filename?: string | null;
+        citation_url?: string | null;
+    }>;
     used_owner_memory?: boolean;
     owner_memory_topics?: string[];
     confidence_score?: number;
@@ -299,6 +304,7 @@ export default function PublicSharePage() {
                         role: 'assistant',
                         content: data.response || 'No response',
                         citations: data.citations || [],
+                        citation_details: data.citation_details || [],
                         used_owner_memory: Boolean(data.used_owner_memory),
                         owner_memory_topics: Array.isArray(data.owner_memory_topics) ? data.owner_memory_topics : [],
                         confidence_score: data.confidence_score,
@@ -510,14 +516,31 @@ export default function PublicSharePage() {
                                                         {(message.confidence_score * 100).toFixed(0)}%
                                                     </span>
                                                 )}
-                                                {message.citations?.map((_, i) => (
-                                                    <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10 text-[10px] uppercase tracking-wider">
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                                                        </svg>
-                                                        Source {i + 1}
-                                                    </span>
-                                                ))}
+                                                {message.citations?.map((source, i) => {
+                                                    const detail = message.citation_details?.[i];
+                                                    const label = detail?.filename || source || `Source ${i + 1}`;
+                                                    const href = detail?.citation_url || undefined;
+                                                    return (
+                                                        <span key={i} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/10 text-slate-300 border border-white/10 text-[10px] uppercase tracking-wider">
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                                            </svg>
+                                                            {href ? (
+                                                                <a
+                                                                    href={href}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="hover:underline"
+                                                                    title={href}
+                                                                >
+                                                                    {label}
+                                                                </a>
+                                                            ) : (
+                                                                <span title={String(label)}>{label}</span>
+                                                            )}
+                                                        </span>
+                                                    );
+                                                })}
                                             </div>
                                             <AudioButton 
                                                 content={message.content} 
@@ -540,7 +563,7 @@ export default function PublicSharePage() {
                                         <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
                                         <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                                     </div>
-                                    <span className="text-sm text-slate-400">Generating response…</span>
+                                    <span className="text-sm text-slate-400">Generating response...</span>
                                 </div>
                             </div>
                         </div>

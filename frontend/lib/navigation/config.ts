@@ -22,26 +22,48 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         items: [
             { name: 'Dashboard', href: '/dashboard', icon: 'home' },
             { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book' },
-            { name: 'Share', href: '/dashboard/share', icon: 'share' },
+            { name: 'Studio', href: '/dashboard/studio', icon: 'studio' },
+            { name: 'Ingestion Jobs', href: '/dashboard/training-jobs', icon: 'history' },
+            { name: 'Brain Graph', href: '/dashboard/brain', icon: 'activity' },
         ]
     },
     {
-        title: 'Train',
+        title: 'Test & Review',
         items: [
             { name: 'Simulator', href: '/dashboard/simulator', icon: 'chat' },
+            { name: 'Escalations', href: '/dashboard/escalations', icon: 'escalations' },
+            { name: 'Verified QnA', href: '/dashboard/verified-qna', icon: 'check' },
         ]
     },
     {
-        title: 'Share',
+        title: 'Insights',
         items: [
+            { name: 'Metrics', href: '/dashboard/metrics', icon: 'chart' },
+            { name: 'Insights', href: '/dashboard/insights', icon: 'activity' },
+        ]
+    },
+    {
+        title: 'Share & Access',
+        items: [
+            { name: 'Share', href: '/dashboard/share', icon: 'share' },
+            { name: 'Access Groups', href: '/dashboard/access-groups', icon: 'group' },
             { name: 'Widget', href: '/dashboard/widget', icon: 'code' },
             { name: 'API Keys', href: '/dashboard/api-keys', icon: 'key' },
+        ]
+    },
+    {
+        title: 'Automation',
+        items: [
+            { name: 'Actions', href: '/dashboard/actions', icon: 'actions' },
+            { name: 'Jobs', href: '/dashboard/jobs', icon: 'history' },
         ]
     },
     {
         title: 'Settings',
         items: [
             { name: 'Settings', href: '/dashboard/settings', icon: 'settings' },
+            { name: 'Users', href: '/dashboard/users', icon: 'users' },
+            { name: 'Governance', href: '/dashboard/governance', icon: 'governance' },
         ]
     },
     {

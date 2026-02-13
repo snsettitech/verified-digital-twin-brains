@@ -272,30 +272,35 @@ def _create_citation_entries(verified_qna_id: str, citations: List[str]) -> None
 
 
 async def create_verified_qna(
-    escalation_id: str,
     question: str,
     answer: str,
     owner_id: str,
+    escalation_id: Optional[str] = None,
     citations: Optional[List[str]] = None,
-    twin_id: Optional[str] = None
+    twin_id: Optional[str] = None,
+    group_id: Optional[str] = None,
 ) -> str:
     """
     Creates a verified QnA entry in Postgres.
     
     Args:
-        escalation_id: ID of the escalation being resolved
+        escalation_id: Optional escalation ID being resolved
         question: Original question that triggered escalation
         answer: Owner's verified answer
         owner_id: ID of the user creating this QnA
         citations: Optional list of source/chunk IDs
         twin_id: Optional twin_id (will be fetched from escalation if not provided)
+        group_id: Optional group ID (reserved for compatibility; currently unused)
     
     Returns:
         verified_qna_id: UUID of the created verified QnA entry
     """
     # Fetch escalation to get twin_id if not provided
     if not twin_id:
-        twin_id = _get_twin_id_from_escalation(escalation_id)
+        if escalation_id:
+            twin_id = _get_twin_id_from_escalation(escalation_id)
+        else:
+            raise ValueError("Either twin_id or escalation_id is required")
     
     # Generate embedding for question (for semantic matching)
     question_embedding_json = _generate_and_store_embedding(question)

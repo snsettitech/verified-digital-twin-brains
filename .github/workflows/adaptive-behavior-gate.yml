@@ -1,0 +1,80 @@
+name: Adaptive Behavior Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  adaptive-backend:
+    name: Adaptive Backend Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "backend/.python-version"
+          cache: "pip"
+          cache-dependency-path: "backend/requirements.txt"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest
+
+      - name: Run adaptive behavior regression suite
+        run: |
+          pytest -q \
+            backend/tests/test_chat_interaction_context.py \
+            backend/tests/test_identity_gate_training.py \
+            backend/tests/test_feedback_router.py \
+            backend/tests/test_owner_corrections_router.py \
+            backend/tests/test_retrieval_owner_memory_priority.py \
+            backend/tests/test_publish_quality_gate.py \
+            backend/tests/test_escalations_verified_qna_contract.py \
+            backend/tests/test_public_chat_citation_details.py
+        env:
+          SUPABASE_URL: "https://mock.supabase.co"
+          SUPABASE_KEY: "mock-key"
+          SUPABASE_SERVICE_KEY: "mock-service-key"
+          OPENAI_API_KEY: "mock-key"
+          PINECONE_API_KEY: "mock-key"
+          PINECONE_INDEX_NAME: "mock-index"
+          JWT_SECRET: "test-secret"
+          DEV_MODE: "true"
+
+  adaptive-frontend:
+    name: Adaptive Frontend E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: "frontend/.nvmrc"
+          cache: "npm"
+          cache-dependency-path: "frontend/package-lock.json"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run adaptive UX tests
+        run: |
+          npx playwright test \
+            tests/e2e/chat_citations.spec.ts \
+            tests/e2e/chat_teaching.spec.ts \
+            tests/e2e/persona_channel_separation.spec.ts \
+            tests/e2e/persona_training_loop.spec.ts

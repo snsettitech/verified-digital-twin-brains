@@ -5,11 +5,12 @@ Allows users to provide feedback on chat responses with thumbs up/down.
 Stores feedback as Langfuse scores for quality tracking.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Literal, List
 from enum import Enum
 
+from modules.auth_guard import get_current_user, verify_conversation_ownership, verify_twin_ownership
 from modules.observability import supabase
 from modules.persona_feedback_learning import record_feedback_training_event
 from modules.persona_feedback_learning_jobs import enqueue_feedback_learning_job
@@ -48,7 +49,8 @@ class FeedbackResponse(BaseModel):
 @router.post("/feedback/{trace_id}", response_model=FeedbackResponse)
 async def submit_feedback(
     trace_id: str,
-    request: FeedbackRequest
+    request: FeedbackRequest,
+    user=Depends(get_current_user),
 ):
     """
     Submit user feedback for a chat response.
@@ -60,6 +62,11 @@ async def submit_feedback(
     Returns:
         Confirmation of feedback submission
     """
+    if not user or not user.get("user_id"):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if user.get("role") == "visitor":
+        raise HTTPException(status_code=403, detail="Feedback requires authenticated owner/member context")
+
     langfuse_error: Optional[str] = None
     try:
         from langfuse import get_client
@@ -92,8 +99,9 @@ async def submit_feedback(
         langfuse_error = str(e)
 
     resolved_twin_id = request.twin_id
-    if not resolved_twin_id and request.conversation_id:
+    if request.conversation_id:
         try:
+            verify_conversation_ownership(request.conversation_id, user)
             conv_res = (
                 supabase.table("conversations")
                 .select("twin_id")
@@ -102,9 +110,18 @@ async def submit_feedback(
                 .execute()
             )
             if conv_res.data:
-                resolved_twin_id = conv_res.data.get("twin_id")
+                conv_twin_id = conv_res.data.get("twin_id")
+                if request.twin_id and conv_twin_id and str(request.twin_id) != str(conv_twin_id):
+                    raise HTTPException(status_code=403, detail="conversation_id does not belong to twin_id")
+                if not resolved_twin_id:
+                    resolved_twin_id = conv_twin_id
+        except HTTPException:
+            raise
         except Exception:
-            resolved_twin_id = None
+            resolved_twin_id = request.twin_id
+
+    if resolved_twin_id:
+        verify_twin_ownership(resolved_twin_id, user)
 
     try:
         record_feedback_training_event(
@@ -113,13 +130,13 @@ async def submit_feedback(
             reason=request.reason.value,
             comment=request.comment,
             twin_id=resolved_twin_id,
-            tenant_id=None,
+            tenant_id=user.get("tenant_id"),
             conversation_id=request.conversation_id,
             message_id=request.message_id,
             intent_label=request.intent_label,
             module_ids=request.module_ids,
             interaction_context=request.interaction_context,
-            created_by=None,
+            created_by=user.get("user_id"),
         )
     except Exception:
         # Non-blocking; response remains successful if core feedback logging succeeded.
@@ -129,8 +146,8 @@ async def submit_feedback(
         if resolved_twin_id:
             enqueue_feedback_learning_job(
                 twin_id=resolved_twin_id,
-                tenant_id=None,
-                created_by=None,
+                tenant_id=user.get("tenant_id"),
+                created_by=user.get("user_id"),
                 trigger="feedback_event",
                 force=False,
             )

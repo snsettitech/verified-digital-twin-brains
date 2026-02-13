@@ -109,11 +109,13 @@ test.describe('Gate 6: Tenant Isolation', () => {
             await expect(page.locator('textarea[aria-label="Chat message input"]')).toBeVisible();
         });
 
-        test('Right Brain page loads with training interview step', async ({ page }) => {
+        test('Right Brain legacy route redirects to Studio', async ({ page }) => {
             await page.goto('/dashboard/right-brain');
 
-            await expect(page.getByRole('heading', { name: 'Training Module' })).toBeVisible();
-            await expect(page.getByText('Step 2. Interview')).toBeVisible();
+            await expect(page).toHaveURL(/\/dashboard\/studio$/);
+            await expect(
+                page.getByRole('heading', { name: 'Persona Studio' }).or(page.getByRole('heading', { name: 'No Twin Found' }))
+            ).toBeVisible();
         });
 
         test('Brain Graph page loads with graph visualization', async ({ page }) => {

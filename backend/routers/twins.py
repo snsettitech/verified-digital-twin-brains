@@ -48,6 +48,13 @@ def ensure_twin_owner_or_403(twin_id: str, user: dict) -> Dict[str, Any]:
     return twin_res.data
 
 
+def _require_authenticated_user(user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Ensure private twin endpoints fail closed with 401 when auth is missing/invalid."""
+    if not isinstance(user, dict) or not user.get("user_id"):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
 # ============================================================================
 # Twin Create Schema
 # ============================================================================
@@ -93,6 +100,7 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
     Server uses resolve_tenant_id() to determine the correct tenant.
     """
     try:
+        user = _require_authenticated_user(user)
         user_id = user.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -190,6 +198,7 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
 async def list_twins(user=Depends(get_current_user)):
     """List all twins for the authenticated user's tenant (excludes archived)."""
     try:
+        user = _require_authenticated_user(user)
         tenant_id = user.get("tenant_id")
         if not tenant_id:
             # User has no tenant - return empty list (not an error)
@@ -206,6 +215,8 @@ async def list_twins(user=Depends(get_current_user)):
         print(f"[TWINS] Listing twins for tenant {tenant_id}: found {len(twins_list)}")
         
         return twins_list
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[TWINS] ERROR listing twins: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -214,6 +225,7 @@ async def list_twins(user=Depends(get_current_user)):
 @router.get("/twins/{twin_id}")
 async def get_twin(twin_id: str, user=Depends(get_current_user)):
     """Get a specific twin. Verifies ownership."""
+    user = _require_authenticated_user(user)
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
     
@@ -227,6 +239,7 @@ async def get_twin(twin_id: str, user=Depends(get_current_user)):
 @router.get("/twins/{twin_id}/sidebar-config")
 async def get_sidebar_config(twin_id: str, user=Depends(get_current_user)):
     """Get sidebar configuration based on twin's specialization."""
+    user = _require_authenticated_user(user)
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
     
@@ -256,6 +269,7 @@ async def get_twin_graph_stats(twin_id: str, user=Depends(get_current_user)):
         - has_graph: Whether the twin has any graph data
         - top_nodes: Preview of key knowledge items
     """
+    user = _require_authenticated_user(user)
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
     
@@ -281,6 +295,7 @@ async def get_graph_job_status(twin_id: str, user=Depends(get_current_user)):
         - backlog_count: Number of pending/queued jobs
         - recent_errors: List of recent error messages
     """
+    user = _require_authenticated_user(user)
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
     
@@ -345,6 +360,7 @@ async def get_twin_verification_status(twin_id: str, user=Depends(get_current_us
     Check twin readiness for publishing.
     Verifies vectors, graph nodes, and basic retrieval health.
     """
+    user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
     
     status = {
@@ -419,15 +435,102 @@ async def update_twin(twin_id: str, update: TwinSettingsUpdate, user=Depends(ver
     if not update_data:
         raise HTTPException(status_code=400, detail="No data to update")
 
-    # NEW: Reinforce Publish Gating
+    # ISSUE-002: Reinforce Publish Gating with Quality Verification
     if update_data.get("is_public") is True:
-        status = await get_twin_verification_status(twin_id, user)
-        if not status.get("is_ready"):
+        # Check both basic verification AND quality verification
+        basic_status = await get_twin_verification_status(twin_id, user)
+        
+        if not basic_status.get("is_ready"):
             raise HTTPException(
                 status_code=400, 
                 detail={
-                    "message": "Twin cannot be published. Verification required.",
-                    "issues": status.get("issues", [])
+                    "message": "Twin cannot be published. Basic verification required.",
+                    "issues": basic_status.get("issues", [])
+                }
+            )
+        
+        # Also check for recent quality verification PASS
+        try:
+            quality_ver_res = supabase.table("twin_verifications") \
+                .select("*") \
+                .eq("twin_id", twin_id) \
+                .order("created_at", desc=True) \
+                .limit(20) \
+                .execute()
+
+            ver_rows = quality_ver_res.data or []
+            latest_quality_ver = None
+            for row in ver_rows:
+                details = row.get("details", {})
+                if isinstance(details, dict) and "test_results" in details:
+                    latest_quality_ver = row
+                    break
+
+            if not latest_quality_ver:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "Twin cannot be published. Quality verification required.",
+                        "issues": ["Run quality verification suite before publishing."]
+                    }
+                )
+
+            # Check verification age (must be less than 24 hours old)
+            from datetime import datetime
+            try:
+                verification_time = datetime.fromisoformat(latest_quality_ver.get("created_at", "").replace("Z", "+00:00"))
+                age_hours = (datetime.now(verification_time.tzinfo) - verification_time).total_seconds() / 3600
+                if age_hours > 24:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={
+                            "message": "Twin cannot be published. Verification is too old.",
+                            "issues": [f"Last verification was {age_hours:.1f} hours ago. Please re-run quality verification."]
+                        }
+                    )
+            except ValueError:
+                # If we can't parse the date, continue with other checks
+                pass
+
+            # Check quality verification result
+            details = latest_quality_ver.get("details", {})
+            if latest_quality_ver.get("status") != "PASS":
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "Twin cannot be published. Latest verification failed.",
+                        "issues": details.get("issues", ["Verification did not pass."])
+                    }
+                )
+
+            tests_passed = int(details.get("tests_passed", 0) or 0)
+            tests_run = int(details.get("tests_run", 0) or 0)
+            if tests_run < 3:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "Twin cannot be published. Quality verification is incomplete.",
+                        "issues": [f"Expected 3 quality tests, found {tests_run}."]
+                    }
+                )
+            if tests_passed < tests_run:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": f"Twin cannot be published. Only {tests_passed}/{tests_run} quality tests passed.",
+                        "issues": details.get("issues", [])
+                    }
+                )
+                    
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[PublishGate] Error checking quality verification: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Twin cannot be published. Verification check failed.",
+                    "issues": [f"Error: {str(e)}"]
                 }
             )
     
@@ -492,6 +595,7 @@ async def create_access_group(twin_id: str, request: GroupCreateRequest, user=De
 async def get_access_group(group_id: str, user=Depends(get_current_user)):
     """Get access group details."""
     try:
+        _require_authenticated_user(user)
         group = await get_group(group_id)
         if not group:
             raise HTTPException(status_code=404, detail="Access group not found")
@@ -532,6 +636,7 @@ async def delete_access_group(group_id: str, user=Depends(verify_owner)):
 async def list_group_members(group_id: str, user=Depends(get_current_user)):
     """List all members of an access group."""
     try:
+        _require_authenticated_user(user)
         members = await get_group_members(group_id)
         return members
     except Exception as e:
@@ -591,6 +696,7 @@ async def revoke_content_permission(group_id: str, content_type: str, content_id
 async def list_group_permissions(group_id: str, user=Depends(get_current_user)):
     """List all content accessible to a group."""
     try:
+        _require_authenticated_user(user)
         permissions = await get_group_permissions(group_id)
         return permissions
     except Exception as e:
@@ -600,6 +706,7 @@ async def list_group_permissions(group_id: str, user=Depends(get_current_user)):
 async def get_content_groups(content_type: str, content_id: str, user=Depends(get_current_user)):
     """Get all groups that have access to specific content."""
     try:
+        _require_authenticated_user(user)
         group_ids = await get_groups_for_content(content_type, content_id)
         # Fetch group details
         groups = []
@@ -629,6 +736,7 @@ async def set_group_limit_endpoint(
 async def list_group_limits(group_id: str, user=Depends(get_current_user)):
     """List all limits for a group."""
     try:
+        _require_authenticated_user(user)
         limits = await get_group_limits(group_id)
         return limits
     except Exception as e:
@@ -657,6 +765,7 @@ async def set_group_override_endpoint(group_id: str, request: Dict[str, Any], us
 async def list_group_overrides(group_id: str, user=Depends(get_current_user)):
     """List all overrides for a group."""
     try:
+        _require_authenticated_user(user)
         overrides = await get_group_overrides(group_id)
         return overrides
     except Exception as e:

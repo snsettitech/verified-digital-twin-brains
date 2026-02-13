@@ -1,11 +1,9 @@
-'use client';
-
-import TrainingModulePage from '@/components/training/TrainingModulePage';
+import { redirect } from 'next/navigation';
 
 /**
- * Legacy Interview Route
- * Now renders the full Training Module (single-page flow).
+ * Legacy route preserved for backward-compatible links.
+ * Canonical destination for interview/training flows is /dashboard/simulator.
  */
 export default function InterviewPage() {
-    return <TrainingModulePage />;
+    redirect('/dashboard/simulator');
 }

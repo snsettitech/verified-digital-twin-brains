@@ -12,7 +12,7 @@ interface TrainingJob {
   job_type: string;
   priority: number;
   error_message?: string;
-  metadata: any;
+  metadata: Record<string, unknown> | null;
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -23,7 +23,10 @@ interface Source {
   filename: string;
 }
 
-export default function TrainingJobsPage() {
+// ISSUE-001: Renamed component and updated terminology
+// This page now uses "Ingestion Jobs" terminology while maintaining
+// backward compatibility with the /training-jobs API endpoints.
+export default function IngestionJobsPage() {
   const { activeTwin, isLoading: twinLoading } = useTwin();
   const { get, post } = useAuthFetch();
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
@@ -38,8 +41,9 @@ export default function TrainingJobsPage() {
   const fetchData = useCallback(async () => {
     if (!twinId) return;
     try {
+      // ISSUE-001: Use new /ingestion-jobs endpoint (alias for /training-jobs)
       const [jobsRes, sourcesRes] = await Promise.all([
-        get(`/training-jobs?twin_id=${twinId}`),
+        get(`/ingestion-jobs?twin_id=${twinId}`),
         get(`/sources/${twinId}`)
       ]);
 
@@ -75,7 +79,8 @@ export default function TrainingJobsPage() {
 
   const handleRetry = async (jobId: string) => {
     try {
-      const response = await post(`/training-jobs/${jobId}/retry`);
+      // ISSUE-001: Use new /ingestion-jobs endpoint
+      const response = await post(`/ingestion-jobs/${jobId}/retry`);
       if (response.ok) {
         fetchData();
       }
@@ -91,7 +96,8 @@ export default function TrainingJobsPage() {
     setProcessingQueue(true);
     setQueueStatus(null);
     try {
-      const response = await post(`/training-jobs/process-queue?twin_id=${twinId}`);
+      // ISSUE-001: Use new /ingestion-jobs endpoint
+      const response = await post(`/ingestion-jobs/process-queue?twin_id=${twinId}`);
       if (response.ok) {
         const result = await response.json();
         setQueueStatus({
@@ -175,7 +181,7 @@ export default function TrainingJobsPage() {
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
-          <p className="text-slate-500 mb-6">Create a digital twin first to manage training jobs.</p>
+          <p className="text-slate-500 mb-6">Create a digital twin first to manage ingestion jobs.</p>
           <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
             Create Your Twin
           </a>
@@ -188,8 +194,8 @@ export default function TrainingJobsPage() {
     <div className="max-w-6xl mx-auto space-y-10 pb-20">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900">Training Jobs</h1>
-          <p className="text-slate-500 mt-2 font-medium">Monitor and manage content training jobs.</p>
+          <h1 className="text-4xl font-black tracking-tight text-slate-900">Knowledge Ingestion Jobs</h1>
+          <p className="text-slate-500 mt-2 font-medium">Monitor and manage knowledge ingestion and indexing jobs.</p>
         </div>
         <button
           onClick={handleProcessQueue}
@@ -258,9 +264,9 @@ export default function TrainingJobsPage() {
       </div>
 
       {/* Jobs Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <div className="p-8 border-b border-slate-100">
-          <h3 className="text-lg font-black text-slate-800">Training Jobs</h3>
+          <h3 className="text-lg font-black text-slate-800">Ingestion Jobs</h3>
         </div>
 
         {loading ? (
@@ -269,7 +275,7 @@ export default function TrainingJobsPage() {
           </div>
         ) : filteredJobs.length === 0 ? (
           <div className="p-32 text-center">
-            <p className="text-slate-500">No training jobs found</p>
+            <p className="text-slate-500">No ingestion jobs found</p>
           </div>
         ) : (
           <div className="overflow-x-auto">

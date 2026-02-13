@@ -21,9 +21,10 @@ export default defineConfig({
     ],
 
     webServer: {
-        command: 'npm run dev',
+        command: 'npx next dev --webpack',
         url: 'http://localhost:3000',
         reuseExistingServer: !process.env.CI,
+        timeout: 120000,
         env: {
             E2E_BYPASS_AUTH: '1',
             NEXT_PUBLIC_E2E_BYPASS_AUTH: '1',

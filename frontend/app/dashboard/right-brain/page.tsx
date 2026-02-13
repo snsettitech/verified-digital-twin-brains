@@ -1,11 +1,9 @@
-'use client';
-
-import TrainingModulePage from '@/components/training/TrainingModulePage';
+import { redirect } from 'next/navigation';
 
 /**
- * Legacy Right Brain Route
- * Now renders the full Training Module (single-page flow).
+ * Legacy route preserved for backward-compatible links.
+ * Canonical destination for persona editing is /dashboard/studio.
  */
 export default function RightBrainPage() {
-    return <TrainingModulePage />;
+    redirect('/dashboard/studio');
 }

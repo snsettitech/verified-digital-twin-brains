@@ -14,6 +14,8 @@ export interface Message {
     id: string;
     filename?: string | null;
     citation_url?: string | null;
+    confidence_score?: number;
+    chunk_preview?: string;
   }>;
   confidence_score?: number;
   graph_used?: boolean;
@@ -31,6 +33,7 @@ interface MessageListProps {
   loading: boolean;
   isSearching: boolean;
   enableRemember?: boolean;
+  enableFeedback?: boolean;
   twinId?: string;
   onRemember?: (payload: {
     value: string;
@@ -39,6 +42,19 @@ interface MessageListProps {
     stance?: string;
     intensity?: number;
   }) => Promise<void>;
+  onTeachQuestion?: (question: string) => void;
+  onSubmitFeedback?: (payload: {
+    messageIndex: number;
+    score: 1 | -1;
+    reason: string;
+  }) => Promise<void> | void;
+  onSubmitCorrection?: (payload: {
+    messageIndex: number;
+    question: string;
+    correctedAnswer: string;
+    topicNormalized?: string;
+    memoryType?: string;
+  }) => Promise<void> | void;
 }
 
 function formatTimestamp(ts?: number): string {
@@ -131,16 +147,30 @@ function AudioButton({ content, twinId }: { content: string; twinId?: string }) 
 }
 
 // Message reactions for AI feedback
-function MessageReactions({ messageId }: { messageId: number }) {
+function MessageReactions({
+  messageId,
+  onSubmitFeedback
+}: {
+  messageId: number;
+  onSubmitFeedback?: (payload: { messageIndex: number; score: 1 | -1; reason: string }) => Promise<void> | void;
+}) {
   const [reaction, setReaction] = useState<'up' | 'down' | null>(null);
 
-  const handleReaction = (type: 'up' | 'down') => {
+  const handleReaction = async (type: 'up' | 'down') => {
     if (reaction === type) {
       setReaction(null); // Toggle off
     } else {
       setReaction(type);
-      // TODO: Send reaction to backend for analytics
-      console.log(`[Reaction] Message ${messageId}: ${type}`);
+      const payload = {
+        messageIndex: messageId,
+        score: type === 'up' ? 1 : -1,
+        reason: type === 'up' ? 'helpful' : 'incorrect'
+      } as const;
+      try {
+        await onSubmitFeedback?.(payload);
+      } catch (err) {
+        console.error('[Reaction] Feedback submit failed', err);
+      }
     }
   };
 
@@ -196,7 +226,18 @@ export function MessageSkeleton() {
 
 // Memoized component to prevent re-rendering of the message list when input changes.
 // This improves performance significantly as the message list grows.
-const MessageList = React.memo(({ messages, loading, isSearching, enableRemember = false, twinId, onRemember }: MessageListProps) => {
+const MessageList = React.memo(({
+  messages,
+  loading,
+  isSearching,
+  enableRemember = false,
+  enableFeedback = true,
+  twinId,
+  onRemember,
+  onTeachQuestion,
+  onSubmitFeedback,
+  onSubmitCorrection
+}: MessageListProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [rememberingId, setRememberingId] = useState<number | null>(null);
   const [rememberDraft, setRememberDraft] = useState({
@@ -207,6 +248,12 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
   });
   const [rememberSaving, setRememberSaving] = useState(false);
   const [rememberError, setRememberError] = useState<string | null>(null);
+  const [correctingId, setCorrectingId] = useState<number | null>(null);
+  const [correctionAnswer, setCorrectionAnswer] = useState('');
+  const [correctionTopic, setCorrectionTopic] = useState('');
+  const [correctionSaving, setCorrectionSaving] = useState(false);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
+  const [correctionStatus, setCorrectionStatus] = useState<Record<number, 'pending' | 'applied' | 'error'>>({});
 
   // Citations drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -218,6 +265,15 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
   const openCitationsDrawer = (citations: Citation[]) => {
     setActiveCitations(citations);
     setDrawerOpen(true);
+  };
+
+  const findPreviousUserQuestion = (assistantIndex: number): string | null => {
+    for (let i = assistantIndex - 1; i >= 0; i -= 1) {
+      if (messages[i]?.role === 'user' && messages[i]?.content?.trim()) {
+        return messages[i].content.trim();
+      }
+    }
+    return null;
   };
 
   const scrollToBottom = () => {
@@ -284,11 +340,14 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
                       <p className="text-xs font-semibold text-slate-700 mb-3 leading-relaxed">{q}</p>
                       <button
                         onClick={() => {
-                          // TODO: This should ideally trigger the same resolve_clarification flow
-                          // For now, we just copy to input via a custom event or window message
-                          const input = document.querySelector('textarea');
+                          if (onTeachQuestion) {
+                            onTeachQuestion(q);
+                            return;
+                          }
+                          const input = document.querySelector('textarea') as HTMLTextAreaElement | null;
                           if (input) {
-                            input.value = `Regarding: "${q}"... `;
+                            input.value = q;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.focus();
                           }
                         }}
@@ -313,26 +372,57 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
                   <CopyButton content={msg.content} />
                 )}
 
-                {msg.role === 'assistant' && (
-                  <MessageReactions messageId={idx} />
+                {msg.role === 'assistant' && enableFeedback && (
+                  <MessageReactions messageId={idx} onSubmitFeedback={onSubmitFeedback} />
                 )}
                 {msg.role === 'assistant' && enableRemember && (
-                  <button
-                    onClick={() => {
-                      setRememberingId(idx);
-                      setRememberDraft({
-                        topic: '',
-                        memory_type: 'belief',
-                        stance: '',
-                        intensity: 5
-                      });
-                      setRememberError(null);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800"
-                    title="Remember this response"
-                  >
-                    Remember
-                  </button>
+                  <>
+                    <button
+                      onClick={() => {
+                        setRememberingId(idx);
+                        setRememberDraft({
+                          topic: '',
+                          memory_type: 'belief',
+                          stance: '',
+                          intensity: 5
+                        });
+                        setRememberError(null);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800"
+                      title="Remember this response"
+                    >
+                      Remember
+                    </button>
+                    {onSubmitCorrection && (
+                      <button
+                        onClick={() => {
+                          setCorrectingId(idx);
+                          setCorrectionAnswer(msg.content || '');
+                          setCorrectionTopic('');
+                          setCorrectionError(null);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-amber-600 hover:text-amber-800"
+                        title="Correct this response"
+                      >
+                        Correct
+                      </button>
+                    )}
+                    {correctionStatus[idx] === 'pending' ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
+                        Pending
+                      </span>
+                    ) : null}
+                    {correctionStatus[idx] === 'applied' ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+                        Applied
+                      </span>
+                    ) : null}
+                    {correctionStatus[idx] === 'error' ? (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
+                        Error
+                      </span>
+                    ) : null}
+                  </>
                 )}
               </div>
 
@@ -417,11 +507,78 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
                 </div>
               )}
 
+              {msg.role === 'assistant' && correctingId === idx && onSubmitCorrection && (
+                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-amber-700 font-bold">Teach Correction</div>
+                  <textarea
+                    value={correctionAnswer}
+                    onChange={(e) => setCorrectionAnswer(e.target.value)}
+                    rows={4}
+                    className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
+                    placeholder="Enter the corrected answer."
+                  />
+                  <input
+                    type="text"
+                    value={correctionTopic}
+                    onChange={(e) => setCorrectionTopic(e.target.value)}
+                    className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
+                    placeholder="Topic (optional)"
+                  />
+                  {correctionError ? (
+                    <div className="text-[10px] text-rose-600">{correctionError}</div>
+                  ) : null}
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setCorrectingId(null)}
+                      className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-white rounded-lg border border-slate-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const corrected = correctionAnswer.trim();
+                        const question = findPreviousUserQuestion(idx);
+                        if (!corrected) {
+                          setCorrectionError('Corrected answer is required.');
+                          return;
+                        }
+                        if (!question) {
+                          setCorrectionError('Unable to find the related user question for this message.');
+                          return;
+                        }
+                        setCorrectionSaving(true);
+                        setCorrectionStatus((prev) => ({ ...prev, [idx]: 'pending' }));
+                        try {
+                          await onSubmitCorrection({
+                            messageIndex: idx,
+                            question,
+                            correctedAnswer: corrected,
+                            topicNormalized: correctionTopic.trim() || undefined,
+                            memoryType: 'belief',
+                          });
+                          setCorrectionStatus((prev) => ({ ...prev, [idx]: 'applied' }));
+                          setCorrectingId(null);
+                        } catch (err) {
+                          console.error(err);
+                          setCorrectionStatus((prev) => ({ ...prev, [idx]: 'error' }));
+                          setCorrectionError('Failed to apply correction.');
+                        } finally {
+                          setCorrectionSaving(false);
+                        }
+                      }}
+                      disabled={correctionSaving}
+                      className="px-3 py-1.5 text-[10px] font-bold text-white bg-amber-600 rounded-lg disabled:opacity-50"
+                    >
+                      {correctionSaving ? 'Applying...' : 'Apply'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {msg.role === 'assistant' && (msg.citations || msg.confidence_score !== undefined || msg.graph_used || msg.used_owner_memory) && (
                 <div className="flex flex-wrap gap-2 px-1">
                   {msg.used_owner_memory && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-100">
-                      <span>🧠</span>
                       Used Owner Memory
                     </div>
                   )}
@@ -432,7 +589,6 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
                   )}
                   {msg.graph_used && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-indigo-50 text-indigo-700 border-indigo-100">
-                      <span>💡</span>
                       From your interview
                     </div>
                   )}
@@ -503,3 +659,4 @@ const MessageList = React.memo(({ messages, loading, isSearching, enableRemember
 MessageList.displayName = 'MessageList';
 
 export default MessageList;
+

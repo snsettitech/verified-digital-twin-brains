@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-require-imports */
 // Phase 5 E2E canary run (local frontend -> canary backend) using real UI flow.
 // - Starts Next dev server pointed at the Render canary backend
 // - Drives login + realtime ingestion UI + simulator roleplay via Playwright
@@ -284,7 +284,6 @@ async function main() {
       .evaluate(() => {
         try {
           // In Next.js, NEXT_PUBLIC_* variables are inlined at build time.
-          // eslint-disable-next-line no-undef
           const env = (typeof process !== 'undefined' && process.env) ? process.env : {};
           return {
             NEXT_PUBLIC_BACKEND_URL: env.NEXT_PUBLIC_BACKEND_URL || null,

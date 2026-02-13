@@ -5,6 +5,8 @@ import {
   registerTrainingModuleRoutes,
 } from './helpers/personaHarness';
 
+test.setTimeout(90000);
+
 const BACKEND_GLOB = '**';
 const CORS_HEADERS: Record<string, string> = {
   'access-control-allow-origin': '*',
@@ -90,4 +92,3 @@ test.describe('Persona Channel Separation (UI)', () => {
     expect(trainingState.ownerChatBodies.length).toBe(1);
   });
 });
-

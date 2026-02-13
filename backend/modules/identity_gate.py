@@ -145,6 +145,9 @@ async def run_identity_gate(
     - memory_type, topic, owner_memory, owner_memory_refs
     - question, options, memory_write_proposal (if CLARIFY)
     """
+    mode_normalized = "public" if str(mode).lower() == "public" else "owner"
+    is_public_mode = mode_normalized == "public"
+
     classification = classify_query(query)
     requires_owner = classification["requires_owner"]
     memory_type = classification["memory_type"]
@@ -154,6 +157,7 @@ async def run_identity_gate(
             "decision": "ANSWER",
             "requires_owner": False,
             "reason": "not_stance_query",
+            "gate_mode": mode_normalized,
             "owner_memory": [],
             "owner_memory_refs": [],
             "owner_memory_context": ""
@@ -177,6 +181,24 @@ async def run_identity_gate(
     has_conflict = detect_conflicts(candidates[:3]) if candidates else False
 
     if not candidates or best_score < 0.70 or has_conflict:
+        # Public routes can request owner clarification, but cannot mutate memory directly.
+        if is_public_mode:
+            clarification = build_clarification(query, topic, memory_type or "stance")
+            return {
+                "decision": "CLARIFY",
+                "requires_owner": True,
+                "memory_type": memory_type or "stance",
+                "topic": topic,
+                "reason": "missing_or_conflicting_public",
+                "gate_mode": mode_normalized,
+                "question": clarification["question"],
+                "options": clarification["options"],
+                "memory_write_proposal": clarification["memory_write_proposal"],
+                "owner_memory": [],
+                "owner_memory_refs": [],
+                "owner_memory_context": "",
+            }
+
         # Phase 4/5 integration: preference queries are safe to defer to the main agent
         # (which already enforces evidence for person-specific queries) rather than forcing
         # a clarification loop here. This improves UX for realtime-ingested persona facts.
@@ -187,6 +209,7 @@ async def run_identity_gate(
                 "memory_type": memory_type,
                 "topic": topic,
                 "reason": "missing_owner_memory_preference_defer_to_agent",
+                "gate_mode": mode_normalized,
                 "owner_memory": [],
                 "owner_memory_refs": [],
                 "owner_memory_context": ""
@@ -209,6 +232,7 @@ async def run_identity_gate(
                             "memory_type": memory_type,
                             "topic": topic,
                             "reason": "intent_profile_fallback",
+                            "gate_mode": mode_normalized,
                             "owner_memory": intent_memories,
                             "owner_memory_refs": [],
                             "owner_memory_context": format_owner_memory_context(intent_memories)
@@ -220,6 +244,7 @@ async def run_identity_gate(
             "memory_type": memory_type or "stance",
             "topic": topic,
             "reason": "missing_or_conflicting",
+            "gate_mode": mode_normalized,
             "question": clarification["question"],
             "options": clarification["options"],
             "memory_write_proposal": clarification["memory_write_proposal"],
@@ -237,6 +262,7 @@ async def run_identity_gate(
         "memory_type": memory_type,
         "topic": topic,
         "reason": "memory_found",
+        "gate_mode": mode_normalized,
         "owner_memory": candidates[:3],
         "owner_memory_refs": owner_memory_refs,
         "owner_memory_context": owner_memory_context

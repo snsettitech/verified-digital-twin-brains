@@ -452,8 +452,8 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
             {/* Header */}
             <div className="p-6 border-b border-slate-100">
-                <h3 className="text-lg font-black text-slate-800">Train Your Twin</h3>
-                <p className="text-sm text-slate-500 mt-1">Paste a URL or drop a file to add knowledge</p>
+                <h3 className="text-lg font-black text-slate-800">Add Knowledge</h3>
+                <p className="text-sm text-slate-500 mt-1">Paste a URL or drop a file to ingest and index knowledge</p>
             </div>
 
             {/* Input Zone */}
