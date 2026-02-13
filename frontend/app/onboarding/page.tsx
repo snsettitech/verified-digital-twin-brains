@@ -26,6 +26,9 @@ const getOnboardingTwinStorageKey = (userId: string) => `onboardingTwinId:${user
 export default function OnboardingPage() {
   const router = useRouter();
   const supabase = getSupabaseClient();
+  const forceNewTwin =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('new') === '1';
 
   // State
   const [currentStep, setCurrentStep] = useState(0);
@@ -55,6 +58,9 @@ export default function OnboardingPage() {
   // Check if should skip onboarding (returning user with existing twins)
   useEffect(() => {
     const checkExistingTwins = async () => {
+      if (forceNewTwin) {
+        return;
+      }
       try {
         await authFetchStandalone('/auth/sync-user', { method: 'POST' });
         const response = await authFetchStandalone('/auth/my-twins');
@@ -69,7 +75,7 @@ export default function OnboardingPage() {
       }
     };
     checkExistingTwins();
-  }, [router]);
+  }, [router, forceNewTwin]);
 
   const handleStepChange = async (newStep: number) => {
     // Moving from Step 1 to Step 2: Create twin
@@ -96,15 +102,17 @@ export default function OnboardingPage() {
       await authFetchStandalone('/auth/sync-user', { method: 'POST' });
 
       // Check for existing twin
-      const existingRes = await authFetchStandalone('/auth/my-twins');
-      if (existingRes.ok) {
-        const existingTwins = await existingRes.json();
-        if (Array.isArray(existingTwins) && existingTwins.length > 0) {
-          const existingTwinId = existingTwins[0]?.id;
-          if (existingTwinId) {
-            setTwinId(existingTwinId);
-            localStorage.setItem(getOnboardingTwinStorageKey(user.id), existingTwinId);
-            return;
+      if (!forceNewTwin) {
+        const existingRes = await authFetchStandalone('/auth/my-twins');
+        if (existingRes.ok) {
+          const existingTwins = await existingRes.json();
+          if (Array.isArray(existingTwins) && existingTwins.length > 0) {
+            const existingTwinId = existingTwins[0]?.id;
+            if (existingTwinId) {
+              setTwinId(existingTwinId);
+              localStorage.setItem(getOnboardingTwinStorageKey(user.id), existingTwinId);
+              return;
+            }
           }
         }
       }

@@ -40,7 +40,7 @@ export const TwinSelector: React.FC = () => {
     const handleCreateNew = () => {
         // Clear the existing twin check so onboarding shows
         localStorage.removeItem('activeTwinId');
-        router.push('/onboarding');
+        router.push('/onboarding?new=1');
     };
 
     if (loading) {
