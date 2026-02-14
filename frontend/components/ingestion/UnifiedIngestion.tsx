@@ -2,7 +2,9 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
-import { API_BASE_URL, API_ENDPOINTS } from '@/lib/constants';
+import { API_ENDPOINTS } from '@/lib/constants';
+import { resolveApiBaseUrl } from '@/lib/api';
+import { ingestUrlWithFallback, uploadFileWithFallback } from '@/lib/ingestionApi';
 import { useJobPoller } from '@/lib/hooks/useJobPoller';
 
 interface ExtractedNode {
@@ -69,6 +71,7 @@ const POLLING_PROGRESS = {
 
 export default function UnifiedIngestion({ twinId, onComplete, onError }: UnifiedIngestionProps) {
     const supabase = getSupabaseClient();
+    const backendUrl = resolveApiBaseUrl();
     const [input, setInput] = useState('');
     const [detectedType, setDetectedType] = useState<SourceType>('unknown');
     const [stage, setStage] = useState<IngestionStage>('idle');
@@ -171,7 +174,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
             setProgress(80);
 
             const extractResponse = await fetch(
-                `${API_BASE_URL}${API_ENDPOINTS.INGEST_EXTRACT_NODES(sourceId)}`,
+                `${backendUrl}${API_ENDPOINTS.INGEST_EXTRACT_NODES(sourceId)}`,
                 {
                     method: 'POST',
                     headers: {
@@ -244,30 +247,46 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
         try {
             // Step 1: Submit ingestion request
-            const endpoint = `${API_BASE_URL}${sourceConfig[detectedType].endpoint}/${twinId}`;
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${currentToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ url: input.trim() }),
-            });
+            const result =
+                detectedType === 'url'
+                    ? await ingestUrlWithFallback({
+                          backendUrl,
+                          twinId,
+                          url: input.trim(),
+                          headers: { 'Authorization': `Bearer ${currentToken}` },
+                      })
+                    : await (async () => {
+                          const endpoint = `${backendUrl}${sourceConfig[detectedType].endpoint}/${twinId}`;
+                          const response = await fetch(endpoint, {
+                              method: 'POST',
+                              headers: {
+                                  'Authorization': `Bearer ${currentToken}`,
+                                  'Content-Type': 'application/json',
+                              },
+                              body: JSON.stringify({ url: input.trim() }),
+                          });
 
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.detail || 'Ingestion failed');
+                          if (!response.ok) {
+                              const data = await response.json();
+                              throw new Error(data.detail || 'Ingestion failed');
+                          }
+
+                          return response.json();
+                      })();
+            const jobId = typeof result.job_id === 'string' ? result.job_id : null;
+            const sourceId = typeof result.source_id === 'string' ? result.source_id : null;
+            if (!jobId || !sourceId) {
+                throw new Error('Ingestion response missing job details');
             }
 
-            const result = await response.json();
-            setCurrentJobId(result.job_id);
-            setCurrentSourceId(result.source_id);
+            setCurrentJobId(jobId);
+            setCurrentSourceId(sourceId);
             
             // Step 2: Start polling for job completion
             setStage('polling');
             setProgress(30);
             setStatusText('Waiting for processing to complete...');
-            startPolling(result.job_id);
+            startPolling(jobId);
 
         } catch (err: any) {
             setError(err.message || 'Something went wrong');
@@ -291,36 +310,29 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
         setProgress(20);
         setStatusText(`Uploading ${file.name}... (this may take up to 2 minutes)`);
 
-        const formData = new FormData();
-        formData.append('file', file);
-
         // 3-minute timeout for large files
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 180000);
 
         try {
-            const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.INGEST_FILE(twinId)}`, {
-                method: 'POST',
+            const result = await uploadFileWithFallback({
+                backendUrl,
+                twinId,
+                file,
                 headers: { 'Authorization': `Bearer ${currentToken}` },
-                body: formData,
                 signal: controller.signal,
             });
-
             clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.detail || 'Upload failed');
-            }
-
-            const result = await response.json();
+            const sourceId = typeof result.source_id === 'string' ? result.source_id : '';
+            const statusValue = typeof result.status === 'string' ? result.status : 'live';
+            const messageValue = typeof result.message === 'string' ? result.message : 'File already exists';
             
             // Handle duplicate detection
             if (result.duplicate) {
                 setProgress(100);
-                setStatusText(result.message || 'File already exists');
+                setStatusText(messageValue);
                 setStage('complete');
-                onComplete?.({ source_id: result.source_id, status: result.status });
+                onComplete?.({ source_id: sourceId, status: statusValue });
                 
                 setTimeout(() => resetState(), 2000);
                 return;
@@ -328,9 +340,9 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
             
             // For files, processing is synchronous in the endpoint
             // But we still poll to ensure indexing is complete
-            if (result.job_id) {
+            if (typeof result.job_id === 'string') {
                 setCurrentJobId(result.job_id);
-                setCurrentSourceId(result.source_id);
+                setCurrentSourceId(sourceId || null);
                 setToken(currentToken);
                 setStage('polling');
                 startPolling(result.job_id);
@@ -339,7 +351,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 setProgress(100);
                 setStatusText('File uploaded and indexed!');
                 setStage('complete');
-                onComplete?.({ source_id: result.source_id, status: 'live' });
+                onComplete?.({ source_id: sourceId, status: 'live' });
                 
                 setTimeout(() => resetState(), 2000);
             }
@@ -348,6 +360,8 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
             setError(err.message);
             setStage('error');
             resetState();
+        } finally {
+            clearTimeout(timeoutId);
         }
     };
 
@@ -370,44 +384,37 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
         setProgress(20);
         setStatusText(`Uploading ${file.name}... (this may take up to 2 minutes)`);
 
-        const formData = new FormData();
-        formData.append('file', file);
-
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 180000);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/ingest/file/${twinId}`, {
-                method: 'POST',
+            const result = await uploadFileWithFallback({
+                backendUrl,
+                twinId,
+                file,
                 headers: { 'Authorization': `Bearer ${currentToken}` },
-                body: formData,
                 signal: controller.signal,
             });
-
             clearTimeout(timeoutId);
-
-            if (!response.ok) {
-                const data = await response.json();
-                throw new Error(data.detail || 'Upload failed');
-            }
-
-            const result = await response.json();
+            const sourceId = typeof result.source_id === 'string' ? result.source_id : '';
+            const statusValue = typeof result.status === 'string' ? result.status : 'live';
+            const messageValue = typeof result.message === 'string' ? result.message : 'File already exists';
             
             // Handle duplicate detection
             if (result.duplicate) {
                 setProgress(100);
-                setStatusText(result.message || 'File already exists');
+                setStatusText(messageValue);
                 setStage('complete');
-                onComplete?.({ source_id: result.source_id, status: result.status });
+                onComplete?.({ source_id: sourceId, status: statusValue });
                 
                 setTimeout(() => resetState(), 2000);
                 return;
             }
             
             // For files, poll if job_id returned
-            if (result.job_id) {
+            if (typeof result.job_id === 'string') {
                 setCurrentJobId(result.job_id);
-                setCurrentSourceId(result.source_id);
+                setCurrentSourceId(sourceId || null);
                 setToken(currentToken);
                 setStage('polling');
                 startPolling(result.job_id);
@@ -415,7 +422,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 setProgress(100);
                 setStatusText('File uploaded and indexed!');
                 setStage('complete');
-                onComplete?.({ source_id: result.source_id, status: 'live' });
+                onComplete?.({ source_id: sourceId, status: 'live' });
                 
                 setTimeout(() => resetState(), 2000);
             }
@@ -423,6 +430,8 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
         } catch (err: any) {
             setError(err.message);
             setStage('error');
+        } finally {
+            clearTimeout(timeoutId);
         }
     };
 

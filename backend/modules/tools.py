@@ -3,6 +3,7 @@ from modules.retrieval import retrieve_context
 from typing import List, Dict, Any, Optional
 import os
 import re
+import inspect
 
 def get_retrieval_tool(
     twin_id: str,
@@ -98,11 +99,19 @@ def get_retrieval_tool(
                         expanded_query = " ".join(expanded_parts)
         
         # Vector search (Pinecone)
+        retrieval_kwargs = {"group_id": group_id}
+        try:
+            sig = inspect.signature(retrieve_context)
+            if "resolve_default_group" in sig.parameters:
+                retrieval_kwargs["resolve_default_group"] = resolve_default_group
+        except (TypeError, ValueError):
+            # Fallback for mocked/non-inspectable callables used in tests.
+            pass
+
         contexts = await retrieve_context(
             expanded_query,
             twin_id,
-            group_id=group_id,
-            resolve_default_group=resolve_default_group,
+            **retrieval_kwargs,
         )
         
         # Graph fallback (optional): disabled by default to avoid broad, low-precision matches.

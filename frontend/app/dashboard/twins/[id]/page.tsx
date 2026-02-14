@@ -13,6 +13,7 @@ import { PublishTab } from '@/components/console/tabs/PublishTab';
 import { PublicChatTab } from '@/components/console/tabs/PublicChatTab';
 import { SettingsTab } from '@/components/console/tabs/SettingsTab';
 import { resolveApiBaseUrl } from '@/lib/api';
+import { ingestUrlWithFallback, uploadFileWithFallback } from '@/lib/ingestionApi';
 
 interface Twin {
     id: string;
@@ -34,6 +35,9 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
     const searchParams = useSearchParams();
     const router = useRouter();
     const supabase = getSupabaseClient();
+    const isE2EBypass =
+        process.env.NODE_ENV !== 'production' &&
+        process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
 
     const [twin, setTwin] = useState<Twin | null>(null);
     const [shareInfo, setShareInfo] = useState<ShareLinkInfo | null>(null);
@@ -201,6 +205,36 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
         }
     };
 
+    const handleKnowledgeUrlSubmit = useCallback(async (url: string) => {
+        const backendUrl = resolveApiBaseUrl();
+        const headers: Record<string, string> = {};
+
+        if (!isE2EBypass) {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (!token) throw new Error('Not authenticated');
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        await ingestUrlWithFallback({ backendUrl, twinId, url, headers });
+    }, [isE2EBypass, supabase, twinId]);
+
+    const handleKnowledgeUpload = useCallback(async (files: File[]) => {
+        const backendUrl = resolveApiBaseUrl();
+        const headers: Record<string, string> = {};
+
+        if (!isE2EBypass) {
+            const { data: { session } } = await supabase.auth.getSession();
+            const token = session?.access_token;
+            if (!token) throw new Error('Not authenticated');
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        for (const file of files) {
+            await uploadFileWithFallback({ backendUrl, twinId, file, headers });
+        }
+    }, [isE2EBypass, supabase, twinId]);
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen bg-[#0a0a0f]">
@@ -269,7 +303,13 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
                     />
                 );
             case 'knowledge':
-                return <KnowledgeTab twinId={twinId} />;
+                return (
+                    <KnowledgeTab
+                        twinId={twinId}
+                        onUrlSubmit={handleKnowledgeUrlSubmit}
+                        onUpload={handleKnowledgeUpload}
+                    />
+                );
             case 'chat':
                 return <ChatTab twinId={twinId} twinName={twin.name} />;
             case 'training':

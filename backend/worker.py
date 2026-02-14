@@ -14,7 +14,6 @@ def validate_worker_environment():
     """
     required_vars = [
         ("SUPABASE_URL", "Database connection"),
-        ("SUPABASE_SERVICE_KEY", "Database authentication"),
         ("PINECONE_API_KEY", "Pinecone vector search"),
         ("PINECONE_INDEX_NAME", "Pinecone index name"),
     ]
@@ -29,6 +28,11 @@ def validate_worker_environment():
         value = os.getenv(var)
         if not value:
             missing.append(f"  - {var}: {description}")
+
+    # Accept either Supabase key variable for compatibility with API service config.
+    supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    if not supabase_key:
+        missing.append("  - SUPABASE_SERVICE_KEY or SUPABASE_KEY: Database authentication")
 
     # Provider-aware key requirements (Phase 4 hybrid inference support).
     openai_key = os.getenv("OPENAI_API_KEY")

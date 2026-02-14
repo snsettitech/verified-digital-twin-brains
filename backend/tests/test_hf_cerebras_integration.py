@@ -8,6 +8,8 @@ import os
 import time
 from unittest.mock import MagicMock, patch
 
+RUN_CEREBRAS_LIVE_TESTS = os.getenv("RUN_CEREBRAS_LIVE_TESTS", "").lower() in {"1", "true", "yes"}
+
 
 class TestHFEmbeddings:
     """Test Hugging Face local embeddings."""
@@ -118,8 +120,8 @@ class TestCerebrasClient:
     """Test Cerebras inference client."""
     
     @pytest.mark.skipif(
-        not os.getenv("CEREBRAS_API_KEY"),
-        reason="Set CEREBRAS_API_KEY to run Cerebras tests"
+        not (RUN_CEREBRAS_LIVE_TESTS and os.getenv("CEREBRAS_API_KEY")),
+        reason="Set RUN_CEREBRAS_LIVE_TESTS=1 and CEREBRAS_API_KEY to run live Cerebras tests"
     )
     def test_cerebras_initialization(self):
         """Test Cerebras client initializes correctly."""
@@ -132,8 +134,8 @@ class TestCerebrasClient:
         assert client.model == "llama-3.3-70b"
     
     @pytest.mark.skipif(
-        not os.getenv("CEREBRAS_API_KEY"),
-        reason="Set CEREBRAS_API_KEY to run Cerebras tests"
+        not (RUN_CEREBRAS_LIVE_TESTS and os.getenv("CEREBRAS_API_KEY")),
+        reason="Set RUN_CEREBRAS_LIVE_TESTS=1 and CEREBRAS_API_KEY to run live Cerebras tests"
     )
     def test_cerebras_generation(self):
         """Test Cerebras generation works."""
@@ -150,8 +152,8 @@ class TestCerebrasClient:
         print(f"\nCerebras response: {response.choices[0].message.content}")
     
     @pytest.mark.skipif(
-        not os.getenv("CEREBRAS_API_KEY"),
-        reason="Set CEREBRAS_API_KEY to run Cerebras tests"
+        not (RUN_CEREBRAS_LIVE_TESTS and os.getenv("CEREBRAS_API_KEY")),
+        reason="Set RUN_CEREBRAS_LIVE_TESTS=1 and CEREBRAS_API_KEY to run live Cerebras tests"
     )
     def test_cerebras_latency(self):
         """Test Cerebras is fast (<200ms)."""

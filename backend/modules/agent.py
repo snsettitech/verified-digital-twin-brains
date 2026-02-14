@@ -379,6 +379,10 @@ def _is_owner_specific_query(query: str) -> bool:
     if not q:
         return False
     markers = [
+        r"\bwhere (did|do) i\b",
+        r"\bwhen (did|do) i\b",
+        r"\bwho am i\b",
+        r"\bwhat (is|was) my (background|story|experience|history)\b",
         r"\bwhat (do|did) i think\b",
         r"\bwhat('?s| is) my (stance|view|opinion|belief|thesis|principle)\b",
         r"\bmy (stance|view|opinion|belief|thesis|principle)\b",
@@ -604,6 +608,11 @@ async def evidence_gate_node(state: TwinState):
     requires_evidence = state.get("requires_evidence", True)
     interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
     explicit_teaching = _is_explicit_teaching_query(last_human_msg)
+    inferred_owner_specific = (
+        bool(is_specific)
+        or _is_owner_specific_query(last_human_msg)
+        or _is_explicit_source_grounded_query(last_human_msg)
+    )
     
     # Hard Gate Logic
     requires_teaching = False
@@ -618,13 +627,11 @@ async def evidence_gate_node(state: TwinState):
         }
 
     if requires_evidence and not context:
-        if is_specific:
+        if inferred_owner_specific:
+            requires_teaching = True
             if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
-                requires_teaching = True
                 reason = "No evidence retrieved for owner-specific query in training mode."
             else:
-                requires_teaching = False
-                clear_context_for_uncertainty = True
                 reason = "No evidence retrieved for owner-specific query."
         elif interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
             requires_teaching = True
@@ -634,7 +641,7 @@ async def evidence_gate_node(state: TwinState):
             requires_teaching = False
             reason = "No retrieval evidence for generic query; proceeding with general response."
     
-    if (not requires_teaching) and is_specific:
+    if (not requires_teaching) and inferred_owner_specific:
         if not context:
             requires_teaching = True
             reason = "No evidence found for person-specific query."

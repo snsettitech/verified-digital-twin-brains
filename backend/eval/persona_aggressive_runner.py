@@ -696,7 +696,23 @@ def _run_single_cycle(
 
 
 def _load_dataset(path: Optional[str]) -> RoleplayDataset:
-    dataset_path = Path(path) if path else DEFAULT_DATASET
+    if path:
+        dataset_path = Path(path)
+        if not dataset_path.exists():
+            # Allow callers to pass repo-root-relative paths while running from backend/.
+            candidate = Path(BACKEND_DIR).parent / dataset_path
+            if candidate.exists():
+                dataset_path = candidate
+            else:
+                # Also tolerate backend-prefixed paths in tests when cwd is backend.
+                parts = list(dataset_path.parts)
+                if parts and parts[0] == "backend":
+                    backend_prefixed = Path(BACKEND_DIR).joinpath(*parts[1:])
+                    if backend_prefixed.exists():
+                        dataset_path = backend_prefixed
+    else:
+        dataset_path = DEFAULT_DATASET
+
     raw = json.loads(dataset_path.read_text(encoding="utf-8"))
     return RoleplayDataset.model_validate(raw)
 

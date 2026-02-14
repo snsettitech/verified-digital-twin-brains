@@ -47,12 +47,25 @@ export default function AdminDashboard() {
       );
 
       if (healthRes.ok) {
-        const data = await healthRes.json();
-        // Database check included in health endpoint
-        updateService('Database',
-          data.ingestion_diagnostics_schema?.available ? 'healthy' : 'degraded',
-          data.ingestion_diagnostics_schema?.available ? 'Connected' : 'Schema unavailable'
-        );
+        // Deep diagnostics are intentionally separated from `/health`
+        // to keep liveness probes lightweight.
+        try {
+          const deepRes = await fetch(`${API_BASE_URL}/health/deep`, {
+            signal: AbortSignal.timeout(5000)
+          });
+          if (deepRes.ok) {
+            const deepData = await deepRes.json();
+            updateService(
+              'Database',
+              deepData.ingestion_diagnostics_schema?.available ? 'healthy' : 'degraded',
+              deepData.ingestion_diagnostics_schema?.available ? 'Connected' : 'Schema unavailable'
+            );
+          } else {
+            updateService('Database', 'degraded', 'Diagnostics unavailable');
+          }
+        } catch {
+          updateService('Database', 'degraded', 'Diagnostics unavailable');
+        }
       }
     } catch {
       updateService('Backend API', 'unhealthy', 'Connection failed');

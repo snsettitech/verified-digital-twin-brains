@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { API_BASE_URL } from '@/lib/constants';
 
 export function ApiConnectivityBanner() {
@@ -8,36 +8,40 @@ export function ApiConnectivityBanner() {
   const [status, setStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [retryCount, setRetryCount] = useState(0);
 
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        
-        const res = await fetch(`${API_BASE_URL}/health`, {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeout);
-        
-        if (res.ok) {
-          setStatus('online');
-          setIsVisible(false);
-        } else {
-          setStatus('offline');
-          setIsVisible(true);
-        }
-      } catch (err) {
+  const checkConnection = useCallback(async () => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+
+      const res = await fetch(`${API_BASE_URL}/health`, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        setStatus('online');
+        setIsVisible(false);
+      } else {
         setStatus('offline');
         setIsVisible(true);
       }
-    };
-
-    checkConnection();
-    const interval = setInterval(checkConnection, 10000);
-    
-    return () => clearInterval(interval);
+    } catch {
+      setStatus('offline');
+      setIsVisible(true);
+    }
   }, []);
+
+  useEffect(() => {
+    checkConnection();
+  }, [checkConnection]);
+
+  // Poll only while offline to avoid constant background pressure on /health.
+  useEffect(() => {
+    if (status !== 'offline') return;
+    const interval = setInterval(checkConnection, 20000);
+    return () => clearInterval(interval);
+  }, [status, checkConnection]);
 
   const handleRetry = async () => {
     setRetryCount(c => c + 1);
@@ -45,7 +49,7 @@ export function ApiConnectivityBanner() {
     
     try {
       const res = await fetch(`${API_BASE_URL}/health`, {
-        signal: AbortSignal.timeout(5000)
+        signal: AbortSignal.timeout(7000),
       });
       
       if (res.ok) {

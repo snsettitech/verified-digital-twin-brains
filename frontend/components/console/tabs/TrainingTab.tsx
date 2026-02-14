@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { resolveApiBaseUrl } from '@/lib/api';
+import { ingestUrlWithFallback, uploadFileWithFallback } from '@/lib/ingestionApi';
 import { useToast } from '@/components/ui/Toast';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { InterviewView, SimulatorView } from '@/components/training';
@@ -688,24 +689,14 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                     const isE2EBypass =
                                         process.env.NODE_ENV !== 'production' &&
                                         process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
-                                    const headers: Record<string, string> = {
-                                        'Content-Type': 'application/json'
-                                    };
+                                    const headers: Record<string, string> = {};
                                     if (!isE2EBypass) {
                                         const { data: { session } } = await supabase.auth.getSession();
                                         const token = session?.access_token;
                                         if (!token) return;
                                         headers['Authorization'] = `Bearer ${token}`;
                                     }
-                                    const res = await fetch(`${backendUrl}/ingest/url/${twinId}`, {
-                                        method: 'POST',
-                                        headers,
-                                        body: JSON.stringify({ url })
-                                    });
-                                    if (!res.ok) {
-                                        const errText = await res.text();
-                                        throw new Error(errText || 'Ingest failed');
-                                    }
+                                    await ingestUrlWithFallback({ backendUrl, twinId, url, headers });
                                     showToast('URL added to knowledge base', 'success');
                                 } catch (e) {
                                     console.error(e);
@@ -729,19 +720,8 @@ export function TrainingTab({ twinId }: { twinId: string }) {
 
                                     let successCount = 0;
                                     for (const file of files) {
-                                        const formData = new FormData();
-                                        formData.append('file', file);
-                                        const res = await fetch(`${backendUrl}/ingest/file/${twinId}`, {
-                                            method: 'POST',
-                                            headers,
-                                            body: formData
-                                        });
-                                        if (res.ok) {
-                                            successCount++;
-                                        } else {
-                                            const errText = await res.text();
-                                            throw new Error(errText || `Upload failed (${res.status})`);
-                                        }
+                                        await uploadFileWithFallback({ backendUrl, twinId, file, headers });
+                                        successCount++;
                                     }
                                     showToast(`Started processing ${successCount} files`, 'success');
                                 } catch (e) {

@@ -8,6 +8,8 @@ import Step1Identity from '@/components/onboarding/steps/Step1Identity';
 import Step2Knowledge from '@/components/onboarding/steps/Step2Knowledge';
 import Step3Launch from '@/components/onboarding/steps/Step3Launch';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
+import { resolveApiBaseUrl } from '@/lib/api';
+import { ingestUrlWithFallback, uploadFileWithFallback } from '@/lib/ingestionApi';
 
 // 3-Step Streamlined Onboarding
 const WIZARD_STEPS = [
@@ -176,18 +178,17 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
 
   const uploadContentAndFaqs = async () => {
     if (!twinId) return;
+    const backendUrl = resolveApiBaseUrl();
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
 
     // Upload files
     for (const file of uploadedFiles) {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('twin_id', twinId);
-
       try {
-        await authFetchStandalone('/ingest/document', {
-          method: 'POST',
-          body: formData,
-        });
+        await uploadFileWithFallback({ backendUrl, twinId, file, headers });
       } catch (error) {
         console.error('Error uploading file:', error);
       }
@@ -196,10 +197,7 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
     // Submit URLs
     for (const url of pendingUrls) {
       try {
-        await authFetchStandalone('/ingest/url', {
-          method: 'POST',
-          body: JSON.stringify({ url, twin_id: twinId }),
-        });
+        await ingestUrlWithFallback({ backendUrl, twinId, url, headers });
       } catch (error) {
         console.error('Error submitting URL:', error);
       }

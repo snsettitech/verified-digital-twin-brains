@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useTwin } from '@/lib/context/TwinContext';
 import { TwinSelector } from './ui/TwinSelector';
 import { createClient } from '@/lib/supabase/client';
 import { SIDEBAR_CONFIG, APP_NAME, APP_TAGLINE } from '@/lib/navigation/config';
@@ -44,13 +43,16 @@ function getIcon(name: string) {
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { activeTwin, setActiveTwin } = useTwin();
   const [collapsed, setCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleTwinChange = (twinId: string) => {
-    setActiveTwin(twinId);
-  };
+  const allNavItems = SIDEBAR_CONFIG.flatMap((section) => section.items);
+  const activeHref = allNavItems
+    .filter((item) => {
+      if (!pathname) return false;
+      return pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(`${item.href}/`));
+    })
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -100,7 +102,7 @@ export default function Sidebar() {
             )}
             <div className="space-y-1">
               {section.items.map((item: NavItem) => {
-                const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+                const isActive = activeHref === item.href;
                 return (
                   <Link
                     key={item.name}

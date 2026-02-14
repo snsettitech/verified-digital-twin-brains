@@ -30,7 +30,12 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
     {
         title: 'Test & Review',
         items: [
-            { name: 'Simulator', href: '/dashboard/simulator', icon: 'chat' },
+            { name: 'Simulator Hub', href: '/dashboard/simulator', icon: 'chat' },
+            { name: 'Simulator Owner', href: '/dashboard/simulator/owner', icon: 'chat' },
+            { name: 'Simulator Training', href: '/dashboard/simulator/training', icon: 'training' },
+            { name: 'Simulator Public', href: '/dashboard/simulator/public', icon: 'share' },
+            { name: 'Simulator Workflow', href: '/dashboard/simulator/workflow', icon: 'history' },
+            { name: 'Retrieval Debug', href: '/dashboard/simulator/retrieval-debug', icon: 'activity' },
             { name: 'Escalations', href: '/dashboard/escalations', icon: 'escalations' },
             { name: 'Verified QnA', href: '/dashboard/verified-qna', icon: 'check' },
         ]

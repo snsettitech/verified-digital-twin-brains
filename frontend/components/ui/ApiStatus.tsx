@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '@/lib/constants';
 
 interface VersionInfo {
@@ -33,8 +33,10 @@ export function ApiStatus() {
   const [error, setError] = useState<string | null>(null);
   const [lastCheck, setLastCheck] = useState<Date>(new Date());
   const [expanded, setExpanded] = useState(false);
+  const versionLoadedRef = useRef(false);
+  const corsLoadedRef = useRef(false);
 
-  const checkConnection = useCallback(async () => {
+  const checkConnection = useCallback(async (refreshMetadata = false) => {
     setStatus('checking');
     setError(null);
     
@@ -54,48 +56,53 @@ export function ApiStatus() {
       const healthData: HealthInfo = await healthRes.json();
       setStatus('online');
 
-      // /version is optional: use it when available, otherwise fall back to /health metadata.
-      let resolvedVersion: VersionInfo = {
-        git_sha: 'unknown',
-        build_time: 'unknown',
-        environment: process.env.NODE_ENV || 'unknown',
-        service: healthData.service || 'unknown',
-        version: healthData.version || 'unknown',
-      };
+      // /version is optional. Fetch once by default, and on explicit refresh.
+      if (refreshMetadata || !versionLoadedRef.current) {
+        let resolvedVersion: VersionInfo = {
+          git_sha: 'unknown',
+          build_time: 'unknown',
+          environment: process.env.NODE_ENV || 'unknown',
+          service: healthData.service || 'unknown',
+          version: healthData.version || 'unknown',
+        };
 
-      try {
-        const versionRes = await fetch(`${API_BASE_URL}/version`, {
-          signal: AbortSignal.timeout(3000)
-        });
+        try {
+          const versionRes = await fetch(`${API_BASE_URL}/version`, {
+            signal: AbortSignal.timeout(3000)
+          });
 
-        if (versionRes.ok) {
-          resolvedVersion = await versionRes.json();
+          if (versionRes.ok) {
+            resolvedVersion = await versionRes.json();
+          }
+        } catch {
+          // Ignore optional /version failures.
         }
-      } catch {
-        // Ignore optional /version failures.
+        versionLoadedRef.current = true;
+        setVersion(resolvedVersion);
       }
 
-      setVersion(resolvedVersion);
+      // /cors-test is optional. Fetch once by default, and on explicit refresh.
+      if (refreshMetadata || !corsLoadedRef.current) {
+        try {
+          const corsRes = await fetch(`${API_BASE_URL}/cors-test`, {
+            signal: AbortSignal.timeout(3000)
+          });
 
-      // /cors-test is optional: only apply when endpoint exists and returns data.
-      try {
-        const corsRes = await fetch(`${API_BASE_URL}/cors-test`, {
-          signal: AbortSignal.timeout(3000)
-        });
+          if (corsRes.ok) {
+            const corsData = await corsRes.json();
+            setCorsTest(corsData);
+            corsLoadedRef.current = true;
 
-        if (corsRes.ok) {
-          const corsData = await corsRes.json();
-          setCorsTest(corsData);
-
-          if (!corsData.is_allowed) {
-            setStatus('cors-error');
-            setError(`Origin not in CORS allowlist: ${corsData.origin}`);
+            if (!corsData.is_allowed) {
+              setStatus('cors-error');
+              setError(`Origin not in CORS allowlist: ${corsData.origin}`);
+            }
+          } else {
+            setCorsTest(null);
           }
-        } else {
+        } catch {
           setCorsTest(null);
         }
-      } catch {
-        setCorsTest(null);
       }
     } catch (err: any) {
       if (err.name === 'AbortError' || err.name === 'TimeoutError') {
@@ -114,8 +121,8 @@ export function ApiStatus() {
   }, []);
 
   useEffect(() => {
-    checkConnection();
-    const interval = setInterval(checkConnection, 30000);
+    checkConnection(true);
+    const interval = setInterval(() => checkConnection(false), 60000);
     return () => clearInterval(interval);
   }, [checkConnection]);
 
@@ -244,7 +251,7 @@ export function ApiStatus() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                checkConnection();
+                checkConnection(true);
               }}
               className="flex-1 bg-white/50 hover:bg-white/80 rounded px-3 py-1.5 text-xs font-medium transition-colors"
             >
