@@ -46,3 +46,4 @@ flashrank
 pydub
 imageio-ffmpeg
 redis
+langfuse>=2.0.0
