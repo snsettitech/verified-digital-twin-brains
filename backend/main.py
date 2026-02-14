@@ -175,8 +175,21 @@ print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare
 print_feature_flag_summary()
 
 # ============================================================================
-# P0 Deployment: Health Check Endpoint
+# P0 Deployment: Health Check & Startup Probe Endpoints
 # ============================================================================
+
+@app.get("/startup", tags=["health"])
+async def startup_probe():
+    """
+    Startup probe - returns immediately during startup.
+    Used by Render to know when the app is ready to receive traffic.
+    """
+    return {
+        "status": "starting",
+        "service": "verified-digital-twin-brain-api",
+        "timestamp": time.time(),
+    }
+
 
 @app.get("/health", tags=["health"])
 async def health_check():
