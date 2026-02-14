@@ -32,9 +32,46 @@ class TimeRangeMetrics:
 class MetricsCollector:
     """Collects metrics from Langfuse."""
     
-    def __init__(self):
+    def __init__(self, twin_id: Optional[str] = None):
+        # Backward-compatible optional scope hint used by callers.
+        self._twin_id = twin_id
         self._langfuse_available = False
+        self._request_count = 0
+        self._latency_ms: List[float] = []
         self._init_langfuse()
+
+    def record_request(self) -> None:
+        """Record a request event (lightweight, backward-compatible)."""
+        self._request_count += 1
+
+    def record_latency(self, phase: str, latency_ms: float) -> None:
+        """Record latency metric for a phase."""
+        try:
+            self._latency_ms.append(float(latency_ms))
+        except Exception:
+            return
+
+    def flush(self) -> None:
+        """Flush collected metrics to Langfuse when available."""
+        if not self._langfuse_available:
+            return
+        try:
+            if self._request_count:
+                self._client.score(
+                    name="requests_count",
+                    value=self._request_count,
+                    data_type="NUMERIC",
+                )
+            if self._latency_ms:
+                avg_latency = sum(self._latency_ms) / len(self._latency_ms)
+                self._client.score(
+                    name="agent_latency_ms",
+                    value=avg_latency,
+                    data_type="NUMERIC",
+                )
+            self._client.flush()
+        except Exception as e:
+            logger.debug(f"Failed to flush metrics collector data: {e}")
     
     def _init_langfuse(self):
         """Initialize Langfuse client."""

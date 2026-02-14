@@ -178,12 +178,16 @@ def get_public_group_for_twin(twin_id: str) -> Optional[Dict[str, Any]]:
     Returns None if no public group exists.
     """
     try:
-        response = supabase.table("access_groups").select("*").eq("twin_id", twin_id).eq("is_public", True).single().execute()
-        
-        if response.data:
-            return response.data
-        else:
-            return None
+        response = (
+            supabase.table("access_groups")
+            .select("*")
+            .eq("twin_id", twin_id)
+            .eq("is_public", True)
+            .limit(1)
+            .execute()
+        )
+        rows = response.data or []
+        return rows[0] if rows else None
     except Exception as e:
         print(f"Error getting public group for twin: {e}")
         return None

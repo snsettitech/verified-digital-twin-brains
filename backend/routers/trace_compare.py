@@ -27,7 +27,10 @@ async def compare_traces(
     - Error comparison
     """
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         
@@ -113,7 +116,10 @@ async def compare_batch(
     Returns summary statistics across all traces.
     """
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         

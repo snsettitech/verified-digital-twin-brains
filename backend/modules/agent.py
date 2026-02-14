@@ -8,19 +8,23 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 try:
-    from langfuse import observe
-    try:
-        from langfuse.decorators import langfuse_context
-    except ImportError:
-        from langfuse import langfuse_context
+    from langfuse.decorators import observe, langfuse_context
+    _langfuse_available = True
 except ImportError:
+    _langfuse_available = False
+
     def observe(*args, **kwargs):
-        def decorator(func): return func
+        def decorator(func):
+            return func
         return decorator
-    
+
     class _MockLangfuseContext:
-        def update_current_trace(self, *args, **kwargs): pass
-        def update_current_observation(self, *args, **kwargs): pass
+        def update_current_trace(self, *args, **kwargs):
+            pass
+
+        def update_current_observation(self, *args, **kwargs):
+            pass
+
     langfuse_context = _MockLangfuseContext()
 
 from modules.tools import get_retrieval_tool
@@ -486,6 +490,48 @@ def _is_explicit_teaching_query(query: str) -> bool:
     )
     return any(marker in q for marker in markers)
 
+
+def _is_entity_probe_query(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    patterns = (
+        r"^\s*do you know(?: about)?\s+.+",
+        r"^\s*what is\s+.+",
+        r"^\s*who is\s+.+",
+        r"^\s*tell me about\s+.+",
+        r"^\s*can you explain\s+.+",
+    )
+    return any(re.search(p, q) for p in patterns)
+
+
+def _build_router_prompt(user_query: str, interaction_context: str) -> str:
+    return f"""You are a Strategic Dialogue Router for a Digital Twin.
+Classify the user's intent to determine retrieval and evidence requirements.
+
+USER QUERY: {user_query}
+INTERACTION CONTEXT: {interaction_context}
+
+MODES:
+- SMALLTALK: Greetings, brief pleasantries, "how are you".
+- QA_FACT: Questions about objective facts, events, or public knowledge.
+- QA_RELATIONSHIP: Questions about people, entities, or connections (Graph needed).
+- STANCE_GLOBAL: Questions about beliefs, opinions, core philosophy, or "what do I think about".
+- REPAIR: User complaining about being robotic, generic, or incorrect.
+- TEACHING: Only when user explicitly asks to teach/correct OR context is owner_training and evidence is missing.
+
+INTENT ATTRIBUTES:
+- is_person_specific: True if the question asks for MY (the owner's) specific view, decision, preference, or experience.
+
+OUTPUT FORMAT (JSON):
+{{
+    "mode": "SMALLTALK | QA_FACT | QA_RELATIONSHIP | STANCE_GLOBAL | REPAIR | TEACHING",
+    "is_person_specific": bool,
+    "requires_evidence": bool,
+    "reasoning": "Brief explanation"
+}}
+"""
+
     # Define the nodes
 @observe(name="router_node")
 async def router_node(state: TwinState):
@@ -512,43 +558,26 @@ async def router_node(state: TwinState):
     generic_coaching_heuristic = _is_generic_business_coaching_query(last_human_msg)
     explicit_source_grounded = _is_explicit_source_grounded_query(last_human_msg)
     
-    # Try to use Langfuse-managed prompt, fallback to inline
+    # Try Langfuse-managed prompt, but hard-fallback to strict inline prompt when
+    # the fetched prompt is too generic (e.g., default one-liner).
+    router_prompt = ""
     try:
         from modules.langfuse_prompt_manager import compile_prompt
-        router_prompt = compile_prompt(
+        candidate = compile_prompt(
             "router",
             variables={
                 "user_query": last_human_msg,
                 "interaction_context": interaction_context,
             }
         )
+        lowered = (candidate or "").lower()
+        if all(marker in lowered for marker in ["output format", "\"mode\"", "\"requires_evidence\""]):
+            router_prompt = candidate
     except Exception:
-        # Fallback to inline prompt
-        router_prompt = f"""You are a Strategic Dialogue Router for a Digital Twin.
-Classify the user's intent to determine retrieval and evidence requirements.
+        router_prompt = ""
 
-USER QUERY: {last_human_msg}
-INTERACTION CONTEXT: {interaction_context}
-
-MODES:
-- SMALLTALK: Greetings, brief pleasantries, "how are you".
-- QA_FACT: Questions about objective facts, events, or public knowledge.
-- QA_RELATIONSHIP: Questions about people, entities, or connections (Graph needed).
-- STANCE_GLOBAL: Questions about beliefs, opinions, core philosophy, or "what do I think about".
-- REPAIR: User complaining about being robotic, generic, or incorrect.
-- TEACHING: Only when user explicitly asks to teach/correct OR context is owner_training and evidence is missing.
-
-INTENT ATTRIBUTES:
-- is_person_specific: True if the question asks for MY (the owner's) specific view, decision, preference, or experience.
-
-OUTPUT FORMAT (JSON):
-{{
-    "mode": "SMALLTALK | QA_FACT | QA_RELATIONSHIP | STANCE_GLOBAL | REPAIR | TEACHING",
-    "is_person_specific": bool,
-    "requires_evidence": bool,
-    "reasoning": "Brief explanation"
-}}
-"""
+    if not router_prompt:
+        router_prompt = _build_router_prompt(last_human_msg, interaction_context)
     
     try:
         plan, _route_meta = await invoke_json(
@@ -576,6 +605,12 @@ OUTPUT FORMAT (JSON):
                 mode = "QA_FACT"
             is_specific = False
             req_evidence = False
+
+        # Entity probe queries ("do you know X", "what is X") should use retrieval.
+        if _is_entity_probe_query(last_human_msg):
+            if mode == "SMALLTALK":
+                mode = "QA_FACT"
+            req_evidence = True
 
         # Owner conversational mode default:
         # unless user explicitly asks for owner/source-grounded evidence, keep
@@ -610,8 +645,21 @@ OUTPUT FORMAT (JSON):
         if is_specific:
             req_evidence = True
             
-        # Sub-query generation for the next step (retrieval)
+        # Sub-query generation for retrieval. Entity probes benefit from a
+        # normalized factual variant ("what is X") in addition to raw phrasing.
         sub_queries = [last_human_msg] if mode != "SMALLTALK" else []
+        if mode != "SMALLTALK" and _is_entity_probe_query(last_human_msg):
+            lowered = (last_human_msg or "").strip().lower()
+            m = re.search(
+                r"^\s*(?:do you know(?: about)?|what is|who is|tell me about|can you explain)\s+(.+?)\s*\??$",
+                lowered,
+            )
+            if m:
+                entity = m.group(1).strip()
+                if entity:
+                    normalized = f"what is {entity}"
+                    if normalized not in sub_queries:
+                        sub_queries.insert(0, normalized)
         
         return {
             "dialogue_mode": mode,
@@ -837,6 +885,69 @@ async def planner_node(state: TwinState):
             ],
         }
 
+    # Deterministic direct-answer path for "do you know X" when evidence exists.
+    # This avoids drifting into persona intros for factual probe queries.
+    if context_data and re.search(r"^\s*do you know(?: about)?\s+.+", (user_query or "").strip().lower()):
+        evidence_lines = []
+        for idx, res in enumerate(context_data[:3]):
+            text = (res.get("text") or "").strip()
+            source_id = res.get("source_id", "unknown")
+            if text:
+                evidence_lines.append(f"[{idx}] source={source_id}: {text[:500]}")
+        evidence_blob = "\n".join(evidence_lines)
+
+        direct_prompt = f"""You are answering a factual probe.
+User asked: "{user_query}"
+
+Use only this evidence:
+{evidence_blob}
+
+Rules:
+- Answer directly in 1-2 sentences.
+- Start with "Yes," only if evidence supports it.
+- Do not introduce yourself.
+- Do not add coaching boilerplate.
+- If evidence is weak, say that clearly.
+"""
+        try:
+            direct_answer, _meta = await invoke_text(
+                [{"role": "system", "content": direct_prompt}],
+                task="realizer",
+                temperature=0.2,
+                max_tokens=220,
+            )
+            answer = (direct_answer or "").strip()
+        except Exception:
+            answer = ""
+
+        if not answer:
+            answer = "I have partial context, but I need a bit more detail to answer that precisely."
+
+        citation_ids: List[str] = []
+        for ctx in context_data:
+            source_id = ctx.get("source_id")
+            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
+                citation_ids.append(source_id)
+        citation_ids = citation_ids[:3]
+
+        return {
+            "planning_output": {
+                "answer_points": [answer],
+                "citations": citation_ids,
+                "follow_up_question": "",
+                "confidence": 0.55,
+                "teaching_questions": [],
+                "reasoning_trace": "Deterministic direct-answer plan for do-you-know probe.",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Planner: deterministic direct-answer path for do-you-know query."
+            ],
+        }
+
     # Owner-specific requests without sufficient evidence should be explicit
     # about uncertainty; only owner_training mode should prompt for teaching.
     if not context_data and target_owner_scope and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL", "TEACHING"}:
@@ -949,11 +1060,12 @@ CURRENT MODE: {mode}
 EVIDENCE:
 {context_str if context_str else "No evidence retrieved."}
 
-TASK:
-1. Identify the core points for the user's answer (max 3).
+    TASK:
+1. Identify the core points for the user's answer (max 3) and answer directly.
 2. If in TEACHING mode, generate 2-3 specific questions for the owner.
-3. Select a follow-up question to keep the conversation going.
+3. Add a follow-up question ONLY when genuinely needed to unblock the user.
 4. If evidence is present, map points to citations.
+5. If query pattern is "do you know X" or "what is X", answer with specific facts about X first.
 
 OUTPUT FORMAT (STRICT JSON):
 {{
@@ -972,6 +1084,24 @@ OUTPUT FORMAT (STRICT JSON):
             temperature=0,
             max_tokens=900,
         )
+
+        # Prevent fabricated citation IDs from planner output.
+        valid_source_ids = {
+            str(res.get("source_id"))
+            for res in context_data
+            if isinstance(res.get("source_id"), str) and res.get("source_id")
+        }
+        raw_citations = plan.get("citations", []) if isinstance(plan, dict) else []
+        sanitized_citations: List[str] = []
+        if isinstance(raw_citations, list):
+            for c in raw_citations:
+                c_str = str(c)
+                if c_str in valid_source_ids and c_str not in sanitized_citations:
+                    sanitized_citations.append(c_str)
+        if not sanitized_citations and valid_source_ids:
+            sanitized_citations = list(valid_source_ids)[:3]
+        plan["citations"] = sanitized_citations
+
         if mode != "TEACHING":
             plan["teaching_questions"] = []
         
@@ -1024,7 +1154,7 @@ async def realizer_node(state: TwinState):
     CONSTRAINTS:
     - 1 to 3 sentences total.
     - Sound like a real person, not a bot.
-    - Include the follow-up question at the end.
+    - Include follow-up question ONLY if `follow_up_question` is non-empty and needed.
     - If teaching: explain briefly that you need their input to be certain.
     - NO FAKE SOURCES. Use citations provided in the plan if any.
     """
@@ -1189,18 +1319,6 @@ def create_twin_agent(
     
     checkpointer = get_checkpointer()
     return workflow.compile(checkpointer=checkpointer) if checkpointer else workflow.compile()
-
-# Langfuse v3 tracing
-try:
-    from langfuse import observe
-    _langfuse_available = True
-except ImportError:
-    _langfuse_available = False
-    def observe(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
-
 
 @observe(name="agent_response")
 async def run_agent_stream(

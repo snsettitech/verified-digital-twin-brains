@@ -168,9 +168,10 @@ class CostTracker:
             logger.error(f"Failed to get cost summary: {e}")
             return {"error": str(e)}
     
-    def get_optimization_suggestions(self, usage_data: Dict) -> List[str]:
+    def get_optimization_suggestions(self, usage_data: Dict) -> "List[str]":
         """Get cost optimization suggestions."""
-        suggestions = []
+        from typing import List
+        suggestions: List[str] = []
         
         # Check if using expensive models
         model_breakdown = usage_data.get("model_breakdown", {})

@@ -25,23 +25,13 @@ _observe = None
 _get_client = None
 
 try:
-    from langfuse import observe
+    from langfuse.decorators import observe, langfuse_context
     _langfuse_available = True
-    # In some v3 versions, langfuse_context is in langfuse.decorators, 
-    # but in 3.14.1 it might be missing or elsewhere.
+    _observe = observe
     try:
-        from langfuse.decorators import langfuse_context
-    except ImportError:
-        try:
-            from langfuse import langfuse_context
-        except ImportError:
-            class MockContext:
-                def update_current_trace(self, *args, **kwargs): pass
-                def update_current_observation(self, *args, **kwargs): pass
-                def update(self, *args, **kwargs): pass
-                def __enter__(self): return self
-                def __exit__(self, *args): pass
-            langfuse_context = MockContext()
+        from langfuse import get_client as _get_client
+    except Exception:
+        _get_client = None
     
     logger.info("Langfuse SDK loaded successfully")
 except ImportError:

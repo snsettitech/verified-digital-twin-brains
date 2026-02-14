@@ -1153,7 +1153,7 @@ async def retrieve_context_vectors(
     cohere_client = get_cohere_client()
     if _langfuse_available and final_contexts:
         try:
-            langfuse.update_current_observation(
+            langfuse_context.update_current_observation(
                 metadata={
                     "doc_ids": [c.get("source_id", "unknown")[:50] for c in final_contexts],
                     "similarity_scores": [round(c.get("score", 0.0), 3) for c in final_contexts],

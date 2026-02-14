@@ -36,6 +36,9 @@ class LangfusePromptManager:
         self._client = None
         self._local_cache: Dict[str, Dict[str, Any]] = {}
         self._langfuse_available = False
+        self._fetch_remote_prompts = (
+            os.getenv("LANGFUSE_PROMPT_FETCH_ENABLED", "false").lower() == "true"
+        )
         self._init_client()
     
     def _init_client(self):
@@ -88,7 +91,7 @@ class LangfusePromptManager:
             return self._local_cache[cache_key]
         
         # Try Langfuse if available
-        if fetch_if_missing and self._langfuse_available:
+        if fetch_if_missing and self._langfuse_available and self._fetch_remote_prompts:
             try:
                 prompt = self._fetch_from_langfuse(name, version, label)
                 if prompt:
@@ -242,8 +245,24 @@ class LangfusePromptManager:
                 "vocabulary patterns, and communication preferences."
             ),
             "router": (
-                "You are a Strategic Dialogue Router for a Digital Twin. "
-                "Classify the user's intent to determine retrieval and evidence requirements."
+                "You are a Strategic Dialogue Router for a Digital Twin.\n"
+                "Classify the user's intent to determine retrieval and evidence requirements.\n\n"
+                "USER QUERY: {user_query}\n"
+                "INTERACTION CONTEXT: {interaction_context}\n\n"
+                "MODES:\n"
+                "- SMALLTALK: Greetings, brief pleasantries, \"how are you\".\n"
+                "- QA_FACT: Questions about objective facts, events, or public knowledge.\n"
+                "- QA_RELATIONSHIP: Questions about people, entities, or connections.\n"
+                "- STANCE_GLOBAL: Questions about beliefs/opinions.\n"
+                "- REPAIR: User complaining about robotic or incorrect output.\n"
+                "- TEACHING: Explicit user correction/teaching only.\n\n"
+                "OUTPUT FORMAT (JSON):\n"
+                "{{\n"
+                "  \"mode\": \"SMALLTALK | QA_FACT | QA_RELATIONSHIP | STANCE_GLOBAL | REPAIR | TEACHING\",\n"
+                "  \"is_person_specific\": bool,\n"
+                "  \"requires_evidence\": bool,\n"
+                "  \"reasoning\": \"Brief explanation\"\n"
+                "}}"
             ),
             "planner": (
                 "You are a Response Planner for a Digital Twin. "

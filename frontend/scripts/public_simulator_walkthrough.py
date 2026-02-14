@@ -148,6 +148,20 @@ def run_public_ui_prompt(page, twin_id: str, prompt: str) -> Dict[str, Any]:
     }
 
 
+def ensure_logged_in(page, target_url: str) -> None:
+    page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+    if "/auth/login" not in page.url:
+        return
+
+    email = os.environ["TEST_ACCOUNT_EMAIL"]
+    password = os.environ["TEST_ACCOUNT_PASSWORD"]
+    page.fill('input[type="email"]', email)
+    page.fill('input[type="password"]', password)
+    page.click('button:has-text("Sign in")')
+    page.wait_for_url(re.compile(r".*/dashboard.*"), timeout=60000)
+    page.goto(target_url, wait_until="domcontentloaded", timeout=60000)
+
+
 def main() -> None:
     load_env_file(REPO_ROOT / ".env")
     load_env_file(REPO_ROOT / "backend" / ".env")
@@ -171,7 +185,7 @@ def main() -> None:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1440, "height": 900})
         page = context.new_page()
-        page.goto(simulator_url, wait_until="domcontentloaded", timeout=60000)
+        ensure_logged_in(page, simulator_url)
         page.wait_for_selector('textarea[aria-label="Chat message input"]', timeout=60000)
 
         for prompt in PROMPTS:

@@ -69,7 +69,10 @@ async def get_recent_traces(
 ):
     """Get recent traces for dashboard."""
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            return {"traces": [], "count": 0, "error": "Langfuse not available"}
         
         client = Langfuse()
         from_time = datetime.utcnow() - timedelta(hours=24)

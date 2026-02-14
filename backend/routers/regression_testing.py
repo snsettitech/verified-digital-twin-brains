@@ -90,7 +90,10 @@ async def list_regression_datasets(
 ):
     """List available datasets for regression testing."""
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         datasets = client.get_datasets()
@@ -119,7 +122,10 @@ async def get_test_result(
     # In production, this would fetch from a database
     # For now, we search in Langfuse traces
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         traces = client.fetch_traces(
@@ -161,10 +167,14 @@ async def save_baseline(
         tag: Tag for this baseline (e.g., "v1.2.3")
     """
     try:
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
+        
         runner = get_regression_runner()
         
         # Get current scores from dataset
-        from langfuse import Langfuse
         client = Langfuse()
         dataset = client.get_dataset(dataset_name)
         
@@ -196,7 +206,10 @@ async def list_baselines(
 ):
     """List available baseline tags for a dataset."""
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         dataset = client.get_dataset(dataset_name)

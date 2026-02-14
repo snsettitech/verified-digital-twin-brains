@@ -23,11 +23,7 @@ from modules.inference_cerebras import CerebrasClient
 logger = logging.getLogger(__name__)
 
 try:
-    from langfuse import observe
-    try:
-        from langfuse.decorators import langfuse_context
-    except ImportError:
-        from langfuse import langfuse_context
+    from langfuse.decorators import observe, langfuse_context
 except ImportError:
     class _LangfuseContextNoop:
         def update_current_observation(self, *args, **kwargs):
@@ -130,9 +126,24 @@ async def _call_openai(
 ) -> Tuple[str, str]:
     client = get_async_openai_client()
     model = OPENAI_JSON_MODEL if json_mode else OPENAI_MODEL
+    openai_messages = list(messages)
+    if json_mode:
+        has_json_instruction = any(
+            "json" in str((m or {}).get("content", "")).lower()
+            for m in openai_messages
+        )
+        if not has_json_instruction:
+            openai_messages = [
+                {
+                    "role": "system",
+                    "content": "Return a valid JSON object only. Do not include markdown fences.",
+                },
+                *openai_messages,
+            ]
+
     kwargs: Dict[str, Any] = {
         "model": model,
-        "messages": messages,
+        "messages": openai_messages,
         "temperature": temperature,
         "max_tokens": max_tokens,
         "timeout": PROVIDER_TIMEOUT_SECONDS,

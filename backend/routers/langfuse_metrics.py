@@ -194,7 +194,10 @@ async def search_traces(
         Matching traces
     """
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         from_time = datetime.utcnow() - timedelta(hours=from_hours)

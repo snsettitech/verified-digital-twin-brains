@@ -133,7 +133,10 @@ async def get_dataset_export_stats(
 ):
     """Get dataset statistics for export planning."""
     try:
-        from langfuse import Langfuse
+        try:
+            from langfuse import Langfuse
+        except ImportError:
+            raise HTTPException(status_code=503, detail="Langfuse not available")
         
         client = Langfuse()
         dataset = client.get_dataset(dataset_name)

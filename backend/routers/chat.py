@@ -34,24 +34,46 @@ import re
 import json
 import asyncio
 import uuid
+import os
+from contextlib import contextmanager
 
 # Langfuse v3 tracing
 try:
-    from langfuse import observe, get_client, propagate_attributes
-    try:
-        from langfuse.decorators import langfuse_context
-    except ImportError:
-        from langfuse import langfuse_context
+    from langfuse.decorators import observe, langfuse_context
     _langfuse_available = True
-    _langfuse_client = get_client()
-except ImportError:
+
+    try:
+        from langfuse import get_client
+        _langfuse_client = get_client()
+    except Exception:
+        try:
+            from langfuse import Langfuse
+            _langfuse_client = Langfuse()
+        except Exception:
+            _langfuse_client = None
+
+    try:
+        from langfuse import propagate_attributes as _propagate_attributes
+        propagate_attributes = _propagate_attributes
+    except Exception:
+        @contextmanager
+        def propagate_attributes(**kwargs):
+            try:
+                langfuse_context.update_current_trace(
+                    user_id=kwargs.get("user_id"),
+                    session_id=kwargs.get("session_id"),
+                    metadata=kwargs.get("metadata") or {},
+                )
+            except Exception:
+                pass
+            yield
+except Exception:
     _langfuse_available = False
     _langfuse_client = None
     def observe(*args, **kwargs):
         def decorator(func):
             return func
         return decorator
-    from contextlib import contextmanager
     @contextmanager
     def propagate_attributes(**kwargs):
         yield
