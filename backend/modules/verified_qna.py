@@ -5,8 +5,32 @@ import uuid
 import json
 from typing import List, Optional, Dict, Any, Tuple
 from difflib import SequenceMatcher
+import re
 from modules.observability import supabase
 from modules.embeddings import get_embedding, cosine_similarity
+
+QNA_STOPWORDS = {
+    "the", "a", "an", "and", "or", "but", "if", "then", "else", "when", "what", "how", "why",
+    "is", "are", "was", "were", "be", "been", "being", "do", "does", "did", "should", "would",
+    "could", "can", "will", "my", "your", "their", "our", "about", "on", "in", "for", "to",
+    "of", "with", "by", "at", "from", "as", "this", "that", "it", "we", "i", "you"
+}
+
+
+def _normalize_tokens(text: str) -> List[str]:
+    if not text:
+        return []
+    normalized = re.sub(r"[^a-zA-Z0-9\s-]", " ", text.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return [tok for tok in normalized.split() if tok and tok not in QNA_STOPWORDS]
+
+
+def _token_overlap_score(a: str, b: str) -> float:
+    a_tokens = set(_normalize_tokens(a))
+    b_tokens = set(_normalize_tokens(b))
+    if not a_tokens or not b_tokens:
+        return 0.0
+    return len(a_tokens & b_tokens) / float(len(a_tokens | b_tokens))
 
 
 def _fetch_verified_qna_entries(
@@ -104,7 +128,8 @@ def _semantic_match_query(
     """
     best_match = None
     best_score = current_best_score
-    
+    best_overlap = 0.0
+
     try:
         # Generate embedding for the query
         query_embedding = get_embedding(query)
@@ -122,10 +147,20 @@ def _semantic_match_query(
                 # Calculate cosine similarity
                 similarity = cosine_similarity(query_embedding, stored_embedding)
                 
+                # Guardrail: semantic-only matches must keep some lexical grounding to avoid
+                # unrelated interview snippets winning on broad embedding similarity.
+                overlap = _token_overlap_score(query, qna.get("question", ""))
+                grounded = overlap >= 0.12 or similarity >= 0.90
+                if not grounded:
+                    continue
+
                 # Update best match if similarity exceeds threshold and is better than current best
-                if similarity >= semantic_threshold and similarity > best_score:
+                if similarity >= semantic_threshold and (
+                    similarity > best_score or (similarity == best_score and overlap > best_overlap)
+                ):
                     best_score = similarity
                     best_match = qna
+                    best_overlap = overlap
             except (json.JSONDecodeError, ValueError, TypeError) as e:
                 # Skip entries with invalid embeddings
                 print(f"Warning: Invalid embedding for QnA {qna.get('id')}: {e}")
@@ -347,30 +382,38 @@ async def match_verified_qna(
     if not qna_entries:
         return None
     
-    best_match = None
-    best_score = 0.0
-    
+    exact_match = None
+    exact_score = 0.0
+    semantic_match = None
+    semantic_score = 0.0
+
     # Exact matching: Compare query with question using fuzzy matching
     if use_exact:
-        best_match, best_score = _exact_match_query(query, qna_entries, exact_threshold)
+        exact_match, exact_score = _exact_match_query(query, qna_entries, exact_threshold)
         # If perfect match found, return immediately
-        if best_score == 1.0 and best_match:
-            return _format_match_result(best_match, best_score)
-    
+        if exact_score == 1.0 and exact_match:
+            result = _format_match_result(exact_match, exact_score)
+            result["match_type"] = "exact"
+            return result
+
     # Semantic matching: Use Postgres embeddings (stored as JSON)
     if use_semantic:
-        best_match, best_score = _semantic_match_query(
-            query, qna_entries, semantic_threshold, best_score
+        semantic_match, semantic_score = _semantic_match_query(
+            query, qna_entries, semantic_threshold, 0.0
         )
-    
-    # Return best match if it exceeds the appropriate threshold
-    threshold = exact_threshold if use_exact and not use_semantic else (
-        semantic_threshold if use_semantic and not use_exact else min(exact_threshold, semantic_threshold)
-    )
-    
-    if best_match and best_score >= threshold:
-        return _format_match_result(best_match, best_score)
-    
+
+    candidates: List[Tuple[str, Dict[str, Any], float]] = []
+    if exact_match and exact_score >= exact_threshold:
+        candidates.append(("exact", exact_match, exact_score))
+    if semantic_match and semantic_score >= semantic_threshold:
+        candidates.append(("semantic", semantic_match, semantic_score))
+
+    if candidates:
+        match_type, best_match, best_score = max(candidates, key=lambda c: c[2])
+        result = _format_match_result(best_match, best_score)
+        result["match_type"] = match_type
+        return result
+
     return None
 
 

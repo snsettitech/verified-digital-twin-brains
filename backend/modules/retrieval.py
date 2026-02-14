@@ -760,7 +760,15 @@ async def retrieve_context_with_verified_first(
     try:
         with measure_phase("verified_qna_lookup", twin_id):
             verified_match = await asyncio.wait_for(
-                match_verified_qna(query, twin_id, group_id=group_id, use_exact=True, use_semantic=True, exact_threshold=0.7, semantic_threshold=0.75),
+                match_verified_qna(
+                    query,
+                    twin_id,
+                    group_id=group_id,
+                    use_exact=True,
+                    use_semantic=True,
+                    exact_threshold=0.80,
+                    semantic_threshold=0.84,
+                ),
                 timeout=2.0
             )
     except asyncio.TimeoutError:
@@ -770,14 +778,26 @@ async def retrieve_context_with_verified_first(
         log_retrieval_event("error", {"phase": "verified_qna_lookup", "twin_id": twin_id, "error": str(e)})
         print(f"[Retrieval] Verified QnA lookup failed: {e}, falling back to vector retrieval")
     
-    if verified_match and verified_match.get("similarity_score", 0) >= 0.7:
+    if verified_match:
+        match_type = str(verified_match.get("match_type") or "semantic")
+        similarity = float(verified_match.get("similarity_score", 0.0) or 0.0)
+        min_similarity = 0.80 if match_type == "exact" else 0.84
+        if similarity < min_similarity:
+            print(
+                f"[Retrieval] Verified QnA rejected: type={match_type} "
+                f"similarity={similarity:.3f} < {min_similarity:.2f}"
+            )
+            verified_match = None
+
+    if verified_match:
         total_time = time.time() - retrieval_start
         log_retrieval_event("retrieval_complete", {
             "twin_id": twin_id,
             "source": "verified_qna",
             "contexts_found": 1,
             "total_duration_ms": round(total_time * 1000, 2),
-            "similarity_score": verified_match.get("similarity_score")
+            "similarity_score": verified_match.get("similarity_score"),
+            "match_type": verified_match.get("match_type", "unknown"),
         })
         return [_format_verified_match_context(verified_match)]
     
