@@ -102,6 +102,19 @@ def _resolve_citation_details(citations: List[str], twin_id: str) -> List[dict]:
         logger.warning(f"Citation resolution failed (non-blocking): {e}")
     return citation_details
 
+
+def _merge_citations(existing: List[str], incoming: Optional[List[str]]) -> List[str]:
+    """
+    Keep non-empty citation evidence stable across streamed tool events.
+    Later empty arrays should not erase previously discovered citations.
+    """
+    if not isinstance(incoming, list):
+        return existing
+    normalized = [str(c).strip() for c in incoming if isinstance(c, str) and str(c).strip()]
+    if normalized:
+        return normalized
+    return existing
+
 @router.get("/share/resolve/{handle}")
 async def resolve_share_handle(handle: str):
     """
@@ -609,8 +622,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     # Capture metadata from tools
                     if tools_payload:
                         next_citations = tools_payload.get("citations")
-                        if isinstance(next_citations, list):
-                            citations = next_citations
+                        citations = _merge_citations(citations, next_citations)
                         next_confidence = tools_payload.get("confidence_score")
                         if isinstance(next_confidence, (int, float)):
                             confidence_score = float(next_confidence)
@@ -661,7 +673,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                         print(f"[Chat] Fallback override failed: {e}")
             
             # Determine if graph was likely used (no external citations and has graph)
-            graph_used = graph_stats["has_graph"] and len(citations) == 0
+            graph_used = any(str(c).startswith("graph-") for c in (citations or []))
             
             citation_details = _resolve_citation_details(citations, twin_id)
 
@@ -1015,8 +1027,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
 
             if tools_payload:
                 next_citations = tools_payload.get("citations")
-                if isinstance(next_citations, list):
-                    citations = next_citations
+                citations = _merge_citations(citations, next_citations)
                 next_confidence = tools_payload.get("confidence_score")
                 if isinstance(next_confidence, (int, float)):
                     confidence_score = float(next_confidence)
@@ -1241,8 +1252,7 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             tools_payload, agent_payload = _extract_stream_payload(event)
             if tools_payload:
                 next_citations = tools_payload.get("citations")
-                if isinstance(next_citations, list):
-                    citations = next_citations
+                citations = _merge_citations(citations, next_citations)
                 next_confidence = tools_payload.get("confidence_score")
                 if isinstance(next_confidence, (int, float)):
                     confidence_score = float(next_confidence)

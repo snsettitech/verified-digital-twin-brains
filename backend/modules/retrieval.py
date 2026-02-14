@@ -42,8 +42,8 @@ def _int_env(name: str, default: int) -> int:
 RETRIEVAL_QUERY_PREP_TIMEOUT = _float_env("RETRIEVAL_QUERY_PREP_TIMEOUT_SECONDS", 6.0)
 RETRIEVAL_EMBEDDING_TIMEOUT = _float_env("RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 8.0)
 RETRIEVAL_VECTOR_TIMEOUT = _float_env("RETRIEVAL_VECTOR_TIMEOUT_SECONDS", 8.0)
-RETRIEVAL_PER_NAMESPACE_TIMEOUT = _float_env("RETRIEVAL_PER_NAMESPACE_TIMEOUT_SECONDS", 2.5)
-RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 4))
+RETRIEVAL_PER_NAMESPACE_TIMEOUT = _float_env("RETRIEVAL_PER_NAMESPACE_TIMEOUT_SECONDS", 5.0)
+RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 3))
 
 
 def log_retrieval_event(event_type: str, data: Dict[str, Any]):
@@ -396,7 +396,6 @@ async def _execute_pinecone_queries(
         return []
 
     index = get_pinecone_index()
-    loop = asyncio.get_event_loop()
 
     resolved_creator = creator_id or resolve_creator_id_for_twin(twin_id)
     dual_read_enabled = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
@@ -455,7 +454,7 @@ async def _execute_pinecone_queries(
                 return index.query(**query_params)
 
             return await asyncio.wait_for(
-                loop.run_in_executor(None, _fetch),
+                asyncio.to_thread(_fetch),
                 timeout=RETRIEVAL_PER_NAMESPACE_TIMEOUT,
             )
 
@@ -483,6 +482,39 @@ async def _execute_pinecone_queries(
         # PHASE 2 FIX: Better logging for debugging
         if failed_namespaces:
             print(f"[Retrieval] Warning: {len(failed_namespaces)}/{len(namespace_candidates)} namespaces failed: {failed_namespaces}")
+
+        # Hotfix: if all namespaces timed out/failed, retry once against primary namespace
+        # with an extended timeout to avoid false "no knowledge" responses.
+        if not merged_matches and failed_namespaces and len(failed_namespaces) == len(namespace_candidates):
+            primary_ns = namespace_candidates[0]
+            try:
+                print(
+                    f"[Retrieval] All namespace queries failed; retrying primary namespace "
+                    f"{primary_ns} with extended timeout"
+                )
+
+                def _retry_fetch():
+                    query_params = {
+                        "vector": embedding,
+                        "top_k": top_k,
+                        "include_metadata": True,
+                        "namespace": primary_ns,
+                    }
+                    if is_verified:
+                        query_params["filter"] = {"is_verified": {"$eq": True}}
+                    return index.query(**query_params)
+
+                retry_result = await asyncio.wait_for(
+                    asyncio.to_thread(_retry_fetch),
+                    timeout=max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.0, 8.0),
+                )
+                retry_matches = _extract_matches(retry_result)
+                if retry_matches:
+                    merged_matches.extend(retry_matches)
+                    success_count = max(success_count, 1)
+                    print(f"[Retrieval] Primary namespace retry succeeded: {len(retry_matches)} matches")
+            except Exception as retry_error:
+                print(f"[Retrieval] Primary namespace retry failed ({primary_ns}): {type(retry_error).__name__}: {retry_error}")
         
         if not merged_matches:
             print(f"[Retrieval] No matches found in any namespace. Checked: {namespace_candidates}")
@@ -600,6 +632,15 @@ def _filter_by_group_permissions(
     ).eq("content_type", "source").execute()
     
     allowed_source_ids = {str(perm["content_id"]) for perm in (permissions_response.data or [])}
+
+    # Backward compatibility: legacy twins may have no content_permissions rows yet.
+    # In that case, do not hard-deny all contexts.
+    if not allowed_source_ids:
+        print(
+            f"[Retrieval] Group filtering bypassed: no content_permissions rows for group {group_id}. "
+            "Allowing contexts for legacy compatibility."
+        )
+        return contexts
     
     # Filter contexts to only include chunks from allowed sources
     # Also allow verified memory (is_verified=True chunks) - they're always accessible

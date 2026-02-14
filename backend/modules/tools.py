@@ -2,6 +2,7 @@ from langchain.tools import tool
 from modules.retrieval import retrieve_context
 from typing import List, Dict, Any, Optional
 import os
+import re
 
 def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversation_history: list = None):
     """
@@ -94,30 +95,51 @@ def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversatio
         # Vector search (Pinecone)
         contexts = await retrieve_context(expanded_query, twin_id, group_id=group_id)
         
-        # Graph search (Supabase nodes table)
+        # Graph fallback (optional): disabled by default to avoid broad, low-precision matches.
         graph_results = []
-        try:
-            from modules.observability import supabase
-            nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 20}).execute()
-            if nodes_res.data:
-                query_words = set(expanded_query.lower().split())
-                for node in nodes_res.data:
-                    name = (node.get("name") or "").lower()
-                    desc = (node.get("description") or "").lower()
-                    # Check if any query word matches node name or description
-                    if any(word in name or word in desc for word in query_words if len(word) > 2):
+        graph_fallback_enabled = os.getenv("ENABLE_GRAPH_RETRIEVAL_FALLBACK", "false").lower() == "true"
+        if graph_fallback_enabled and not contexts:
+            try:
+                from modules.observability import supabase
+
+                stop_words = {
+                    "the", "and", "for", "with", "that", "this", "from", "have", "what", "when",
+                    "where", "which", "who", "whom", "know", "does", "your", "about", "into",
+                    "just", "like", "they", "them", "their", "would", "could", "should", "you",
+                    "are", "was", "were", "has", "had", "can", "did", "not"
+                }
+                query_terms = [
+                    term for term in re.findall(r"[a-z0-9]{4,}", expanded_query.lower())
+                    if term not in stop_words
+                ]
+
+                if query_terms:
+                    nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 20}).execute()
+                    for node in (nodes_res.data or []):
+                        name = (node.get("name") or "")
+                        desc = (node.get("description") or "")
+                        haystack = f"{name} {desc}".lower()
+                        matched_terms = [
+                            term for term in query_terms
+                            if re.search(rf"\\b{re.escape(term)}\\b", haystack)
+                        ]
+                        if not matched_terms:
+                            continue
+
+                        score = min(0.9, 0.65 + (0.1 * len(matched_terms)))
                         graph_results.append({
-                            "text": f"{node['name']}: {node['description']}",
-                            "source_id": f"graph-{node['id'][:8]}",
-                            "score": 0.85,  # High confidence for graph knowledge
+                            "text": f"{name}: {desc}",
+                            "source_id": f"graph-{str(node.get('id', ''))[:8]}",
+                            "score": score,
                             "is_graph": True,
-                            "category": node.get("type", "KNOWLEDGE")
+                            "category": node.get("type", "KNOWLEDGE"),
+                            "matched_terms": matched_terms,
                         })
-        except Exception as e:
-            print(f"Graph search error: {e}")
-        
-        # Merge: Graph results first (higher priority), then vector results
-        all_results = graph_results + contexts
+            except Exception as e:
+                print(f"Graph search error: {e}")
+
+        # Keep source-grounded vector retrieval as primary. Graph fallback is additive only when enabled.
+        all_results = contexts + graph_results
         return json.dumps(_normalize(all_results))
     
     return search_knowledge_base

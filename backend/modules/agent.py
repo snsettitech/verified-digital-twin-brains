@@ -22,6 +22,7 @@ from modules.persona_prompt_variant_store import (
 from modules.persona_spec import PersonaSpec
 from modules.persona_spec_store import get_active_persona_spec
 from modules.inference_router import invoke_json, invoke_text
+from modules.response_policy import UNCERTAINTY_RESPONSE
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -487,6 +488,7 @@ async def planner_node(state: TwinState):
     """Pass A: Strategic Planning & Logic (Structured JSON)"""
     mode = state.get("dialogue_mode", "QA_FACT")
     context_data = state.get("retrieved_context", {}).get("results", [])
+    user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
     
     # Use the dynamic system prompt (Phase 4)
     system_msg, persona_trace = build_system_prompt_with_trace(state)
@@ -498,6 +500,29 @@ async def planner_node(state: TwinState):
         date_info = res.get("metadata", {}).get("effective_from", "Unknown Date")
         source = res.get("source_id", "Unknown")
         context_str += f"[{i}] (Date: {date_info} | ID: {source}): {text}\n"
+
+    # Deterministic safety fallback: no evidence means no speculative answer.
+    if mode == "TEACHING" and not context_data:
+        return {
+            "planning_output": {
+                "answer_points": [UNCERTAINTY_RESPONSE],
+                "citations": [],
+                "follow_up_question": "Can you share the source or clarify what I should say for this?",
+                "confidence": 0.2,
+                "teaching_questions": [
+                    f"What should I answer when asked: \"{user_query}\"?",
+                    "Do you have a source, quote, or document I should use for this topic?",
+                ],
+                "reasoning_trace": "No evidence retrieved; deterministic uncertainty response used.",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Planner: deterministic uncertainty plan (TEACHING + no evidence)."
+            ],
+        }
 
     planner_prompt = f"""
 {system_msg}
@@ -605,7 +630,31 @@ async def realizer_node(state: TwinState):
         }
     except Exception as e:
         print(f"Realizer error: {e}")
-        return {"messages": [AIMessage(content="I'm having trouble finding the words right now.")]}
+        answer_points = plan.get("answer_points", []) if isinstance(plan, dict) else []
+        follow_up = (plan.get("follow_up_question") if isinstance(plan, dict) else None) or ""
+        fallback_base = " ".join(
+            [p for p in answer_points if isinstance(p, str) and p.strip()][:2]
+        ).strip()
+        if not fallback_base:
+            fallback_base = UNCERTAINTY_RESPONSE
+        fallback_text = f"{fallback_base} {follow_up}".strip()
+
+        fallback_msg = AIMessage(content=fallback_text)
+        fallback_msg.additional_kwargs["teaching_questions"] = (
+            plan.get("teaching_questions", []) if isinstance(plan, dict) else []
+        )
+        fallback_msg.additional_kwargs["planning_output"] = plan if isinstance(plan, dict) else {}
+        fallback_msg.additional_kwargs["dialogue_mode"] = mode
+        fallback_msg.additional_kwargs["intent_label"] = state.get("intent_label")
+        fallback_msg.additional_kwargs["module_ids"] = state.get("persona_module_ids") or []
+
+        return {
+            "messages": [fallback_msg],
+            "citations": plan.get("citations", []) if isinstance(plan, dict) else [],
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Realizer: deterministic fallback used after exception."
+            ],
+        }
 
 def create_twin_agent(
     twin_id: str,
