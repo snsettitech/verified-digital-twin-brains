@@ -3,6 +3,7 @@ import asyncio
 import time
 import logging
 import json
+import re
 from typing import List, Dict, Any, Optional, Set
 from contextlib import contextmanager
 from modules.clients import get_openai_client, get_pinecone_index, get_cohere_client
@@ -47,6 +48,87 @@ RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 1
 RETRIEVAL_TOP_K_VERIFIED = max(1, _int_env("RETRIEVAL_TOP_K_VERIFIED", 3))
 RETRIEVAL_TOP_K_GENERAL = max(4, _int_env("RETRIEVAL_TOP_K_GENERAL", 8))
 RETRIEVAL_PRIMARY_RETRY_ENABLED = os.getenv("RETRIEVAL_PRIMARY_RETRY_ENABLED", "false").lower() == "true"
+RETRIEVAL_STRONG_VECTOR_FLOOR = _float_env("RETRIEVAL_STRONG_VECTOR_FLOOR", 0.82)
+RETRIEVAL_ANCHOR_MIN_TOKEN_LEN = max(3, _int_env("RETRIEVAL_ANCHOR_MIN_TOKEN_LEN", 4))
+
+_QUERY_STOPWORDS: Set[str] = {
+    "a", "an", "and", "are", "as", "ask", "at", "be", "by", "can", "do", "for",
+    "from", "have", "hello", "help", "hi", "how", "i", "in", "is", "it", "know",
+    "me", "my", "of", "on", "or", "please", "tell", "that", "the", "this", "to",
+    "want", "what", "when", "where", "who", "why", "with", "yes", "you", "your",
+    "about",
+}
+
+
+def _token_variants(token: str) -> Set[str]:
+    t = (token or "").strip().lower()
+    if not t:
+        return set()
+    variants = {t}
+    if len(t) > 4 and t.endswith("ies"):
+        variants.add(f"{t[:-3]}y")
+    if len(t) > 4 and t.endswith("s"):
+        variants.add(t[:-1])
+    return variants
+
+
+def _extract_anchor_terms(query: str) -> Set[str]:
+    text = (query or "").strip().lower()
+    if not text:
+        return set()
+    tokens = re.findall(r"[a-z0-9][a-z0-9_-]*", text)
+    anchors: Set[str] = set()
+    for token in tokens:
+        if len(token) < RETRIEVAL_ANCHOR_MIN_TOKEN_LEN or token in _QUERY_STOPWORDS:
+            continue
+        anchors.update(_token_variants(token))
+    return anchors
+
+
+def _text_has_anchor_overlap(text: str, anchors: Set[str]) -> bool:
+    if not anchors:
+        return False
+    text_tokens = re.findall(r"[a-z0-9][a-z0-9_-]*", (text or "").lower())
+    normalized_tokens: Set[str] = set()
+    for token in text_tokens:
+        normalized_tokens.update(_token_variants(token))
+    return bool(anchors.intersection(normalized_tokens))
+
+
+def _apply_anchor_relevance_filter(contexts: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
+    """
+    Remove clearly off-topic retrieval hits.
+
+    Weak semantic matches can still return nearest-neighbor chunks that are unrelated.
+    We keep contexts when:
+    - they match explicit query anchors (keyword overlap), or
+    - they are extremely strong semantic matches.
+    """
+    if not contexts:
+        return contexts
+
+    anchors = _extract_anchor_terms(query)
+    if not anchors:
+        return contexts
+
+    filtered: List[Dict[str, Any]] = []
+    for ctx in contexts:
+        if ctx.get("is_verified"):
+            filtered.append(ctx)
+            continue
+
+        text = str(ctx.get("text", ""))
+        vector_score = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
+        if _text_has_anchor_overlap(text, anchors) or vector_score >= RETRIEVAL_STRONG_VECTOR_FLOOR:
+            filtered.append(ctx)
+
+    if len(filtered) != len(contexts):
+        print(
+            "[Retrieval] Anchor relevance filter dropped "
+            f"{len(contexts) - len(filtered)} context(s). anchors={sorted(anchors)}"
+        )
+
+    return filtered
 
 
 def log_retrieval_event(event_type: str, data: Dict[str, Any]):
@@ -598,6 +680,7 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
             contexts.append({
                 "text": match["metadata"]["text"],
                 "score": 1.0,  # Boost verified
+                "vector_score": 1.0,
                 "source_id": match["metadata"].get("source_id", "verified_memory"),
                 "is_verified": True,
                 "category": match["metadata"].get("category", "FACT"),
@@ -634,6 +717,7 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
         raw_general_chunks.append({
             "text": match["metadata"]["text"],
             "score": score,
+            "vector_score": score,
             "rrf_score": rrf_score,
             "source_id": match["metadata"].get("source_id", "unknown"),
             "chunk_id": match["metadata"].get("chunk_id", "unknown"),
@@ -734,7 +818,8 @@ async def retrieve_context_with_verified_first(
     twin_id: str,
     creator_id: Optional[str] = None,
     group_id: Optional[str] = None,
-    top_k: int = 5
+    top_k: int = 5,
+    resolve_default_group: bool = True,
 ) -> List[Dict[str, Any]]:
     """
     Retrieval pipeline with verified-first order: Check verified QnA → vectors → tools.
@@ -755,8 +840,8 @@ async def retrieve_context_with_verified_first(
     # PHASE 4: Start tracking retrieval metrics
     retrieval_start = time.time()
     
-    # Resolve group_id to default if None
-    if group_id is None:
+    # Resolve group_id to default if None (public/group-filtered paths only).
+    if group_id is None and resolve_default_group:
         try:
             with measure_phase("group_resolution", twin_id):
                 default_group = await get_default_group(twin_id)
@@ -1004,12 +1089,13 @@ async def retrieve_context_vectors(
             max_rerank_score = max((float(res.get("score", 0) or 0) for res in results), default=0)
             if max_rerank_score < 0.001:
                 print("[Retrieval] Rerank scores too low. Using vector scores.")
-                final_contexts = unique_contexts[:top_k]
+                final_contexts = [dict(c) for c in unique_contexts[:top_k]]
             else:
                 # Reconstruct sorted contexts
                 for res in results:
                     original_idx = int(res["id"])
-                    ctx = unique_contexts[original_idx]
+                    ctx = dict(unique_contexts[original_idx])
+                    ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
                     ctx["score"] = float(res.get("score", 0.0) or 0.0) # Update score with rerank score
                     final_contexts.append(ctx)
                 
@@ -1018,11 +1104,19 @@ async def retrieve_context_vectors(
                 print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
         except Exception as e:
             print(f"[Retrieval] Reranking failed: {e}. Falling back to vector scores.")
-            final_contexts = unique_contexts[:top_k]
+            final_contexts = [dict(c) for c in unique_contexts[:top_k]]
     else:
         # Fallback if no ranker
-        final_contexts = unique_contexts[:top_k]
+        final_contexts = [dict(c) for c in unique_contexts[:top_k]]
 
+    # Keep raw vector score available after reranking updates score.
+    for ctx in final_contexts:
+        if "vector_score" not in ctx:
+            ctx["vector_score"] = float(ctx.get("score", 0.0) or 0.0)
+
+    # Drop weak off-topic hits before handing context to the planner.
+    final_contexts = _apply_anchor_relevance_filter(final_contexts, query)
+    
     
     namespace = get_namespace(creator_id, twin_id)
     print(f"[Retrieval] Found {len(final_contexts)} contexts for twin_id={twin_id} (namespace={namespace})")
@@ -1069,7 +1163,8 @@ async def retrieve_context(
     twin_id: str, 
     creator_id: Optional[str] = None,
     group_id: Optional[str] = None, 
-    top_k: int = 5
+    top_k: int = 5,
+    resolve_default_group: bool = True,
 ):
     """
     Main retrieval function - uses verified-first order.
@@ -1083,7 +1178,12 @@ async def retrieve_context(
         top_k: Number of results to return
     """
     return await retrieve_context_with_verified_first(
-        query, twin_id, creator_id=creator_id, group_id=group_id, top_k=top_k
+        query,
+        twin_id,
+        creator_id=creator_id,
+        group_id=group_id,
+        top_k=top_k,
+        resolve_default_group=resolve_default_group,
     )
 
 

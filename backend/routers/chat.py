@@ -68,6 +68,26 @@ def _query_requires_strict_grounding(query: str) -> bool:
     q = (query or "").strip().lower()
     if not q:
         return False
+    q_plain = re.sub(r"[^a-z0-9\s']", "", q).strip()
+
+    conversational_exempt_markers = (
+        "hi",
+        "hello",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "what's up",
+        "whats up",
+        "who are you",
+        "introduce yourself",
+        "tell me about yourself",
+    )
+    if q in conversational_exempt_markers or q_plain in conversational_exempt_markers:
+        return False
+    if any(marker in q for marker in ("how's your day", "hows your day")):
+        return False
 
     explicit_source_requests = (
         "based on my sources",
@@ -370,6 +390,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
         raise HTTPException(status_code=422, detail="query is required")
     conversation_id = request.conversation_id
     group_id = request.group_id
+    requested_group_id = request.group_id
     resolved_context = resolve_owner_chat_context(request, user or {}, twin_id)
     mode = identity_gate_mode_for_context(resolved_context.context)
     context_trace = trace_fields(resolved_context)
@@ -639,6 +660,7 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     conversation_id=conversation_id,
                     owner_memory_context=owner_memory_context,
                     interaction_context=resolved_context.context.value,
+                    enforce_group_filtering=(resolved_context.is_public or bool(requested_group_id)),
                 ).__aiter__()
 
                 pending_task = None
@@ -717,13 +739,20 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
 
             # Safety override: if we ended with no evidence and no owner-memory refs,
             # force uncertainty response instead of a generic/hallucinated answer.
+            strict_grounding = _query_requires_strict_grounding(query)
+            if strict_grounding:
+                print(
+                    f"[Chat] Strict grounding ON context={resolved_context.context.value} "
+                    f"mode={dialogue_mode} query='{query[:120]}'"
+                )
             if (
                 full_response
                 and full_response.strip()
                 and full_response.strip() != fallback_message
                 and not citations
                 and not owner_memory_refs
-                and _query_requires_strict_grounding(query)
+                and strict_grounding
+                and str(dialogue_mode).upper() != "SMALLTALK"
             ):
                 print("[Chat] Safety override: no evidence available; forcing uncertainty response")
                 full_response = fallback_message

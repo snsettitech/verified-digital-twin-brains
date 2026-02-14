@@ -5,36 +5,45 @@ from modules.agent import evidence_gate_node
 
 
 @pytest.mark.asyncio
-async def test_generic_query_without_evidence_stays_conversational():
+async def test_evidence_gate_owner_chat_verifier_fail_clears_context(monkeypatch):
+    async def fake_invoke_json(*args, **kwargs):
+        return {"is_sufficient": False, "reason": "irrelevant context"}, {"provider": "test"}
+
+    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
+
     state = {
-        "messages": [HumanMessage(content="do you know antler")],
         "dialogue_mode": "QA_FACT",
-        "target_owner_scope": False,
+        "target_owner_scope": True,
         "requires_evidence": True,
-        "retrieved_context": {"results": []},
         "interaction_context": "owner_chat",
+        "messages": [HumanMessage(content="What do I think about X?")],
+        "retrieved_context": {"results": [{"text": "unrelated", "source_id": "s1"}]},
         "reasoning_history": [],
     }
 
-    result = await evidence_gate_node(state)
-
-    assert result["requires_teaching"] is False
-    assert result["dialogue_mode"] == "QA_FACT"
+    out = await evidence_gate_node(state)
+    assert out["dialogue_mode"] == "QA_FACT"
+    assert out["requires_teaching"] is False
+    assert out["retrieved_context"] == {"results": []}
 
 
 @pytest.mark.asyncio
-async def test_owner_specific_query_without_evidence_requires_teaching():
+async def test_evidence_gate_owner_training_verifier_fail_keeps_teaching(monkeypatch):
+    async def fake_invoke_json(*args, **kwargs):
+        return {"is_sufficient": False, "reason": "irrelevant context"}, {"provider": "test"}
+
+    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
+
     state = {
-        "messages": [HumanMessage(content="what is my stance on antler")],
-        "dialogue_mode": "STANCE_GLOBAL",
+        "dialogue_mode": "TEACHING",
         "target_owner_scope": True,
         "requires_evidence": True,
-        "retrieved_context": {"results": []},
-        "interaction_context": "owner_chat",
+        "interaction_context": "owner_training",
+        "messages": [HumanMessage(content="Teach this")],
+        "retrieved_context": {"results": [{"text": "unrelated", "source_id": "s1"}]},
         "reasoning_history": [],
     }
 
-    result = await evidence_gate_node(state)
-
-    assert result["requires_teaching"] is True
-    assert result["dialogue_mode"] == "TEACHING"
+    out = await evidence_gate_node(state)
+    assert out["dialogue_mode"] == "TEACHING"
+    assert out["requires_teaching"] is True

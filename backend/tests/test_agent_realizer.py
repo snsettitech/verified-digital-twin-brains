@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from modules.agent import realizer_node
+from modules.response_policy import UNCERTAINTY_RESPONSE
 
 
 @pytest.mark.asyncio
@@ -34,4 +35,4 @@ async def test_realizer_fallback_message_on_invoke_failure():
         result = await realizer_node(state)
 
     assert "messages" in result
-    assert result["messages"][0].content == "I'm having trouble finding the words right now."
+    assert result["messages"][0].content == UNCERTAINTY_RESPONSE

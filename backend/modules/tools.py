@@ -4,7 +4,12 @@ from typing import List, Dict, Any, Optional
 import os
 import re
 
-def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversation_history: list = None):
+def get_retrieval_tool(
+    twin_id: str,
+    group_id: Optional[str] = None,
+    conversation_history: list = None,
+    resolve_default_group: bool = True,
+):
     """
     Creates a tool for retrieving context from the digital twin's knowledge base.
     If group_id is provided, filters results by group permissions.
@@ -93,7 +98,12 @@ def get_retrieval_tool(twin_id: str, group_id: Optional[str] = None, conversatio
                         expanded_query = " ".join(expanded_parts)
         
         # Vector search (Pinecone)
-        contexts = await retrieve_context(expanded_query, twin_id, group_id=group_id)
+        contexts = await retrieve_context(
+            expanded_query,
+            twin_id,
+            group_id=group_id,
+            resolve_default_group=resolve_default_group,
+        )
         
         # Graph fallback (optional): disabled by default to avoid broad, low-precision matches.
         graph_results = []

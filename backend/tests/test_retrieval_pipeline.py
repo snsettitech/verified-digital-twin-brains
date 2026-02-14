@@ -237,6 +237,61 @@ class TestGroupFiltering:
             assert result[0]["source_id"] == "doc-1"
 
 
+class TestAnchorRelevanceFiltering:
+    """Test off-topic filtering for weak retrieval matches."""
+
+    async def test_anchor_filter_drops_off_topic_contexts(self):
+        from modules.retrieval import _apply_anchor_relevance_filter
+
+        contexts = [
+            {
+                "text": "This chunk is about AI agents and workflows.",
+                "score": 0.02,
+                "vector_score": 0.02,
+                "is_verified": False,
+            },
+            {
+                "text": "Antler is a global early-stage VC firm backing founders.",
+                "score": 0.03,
+                "vector_score": 0.03,
+                "is_verified": False,
+            },
+        ]
+
+        filtered = _apply_anchor_relevance_filter(contexts, "do you know antler")
+        assert len(filtered) == 1
+        assert "Antler" in filtered[0]["text"]
+
+    async def test_anchor_filter_keeps_strong_semantic_match_even_without_keyword(self):
+        from modules.retrieval import _apply_anchor_relevance_filter
+
+        contexts = [
+            {
+                "text": "Y Combinator supports founders at seed stage.",
+                "score": 0.21,
+                "vector_score": 0.91,
+                "is_verified": False,
+            }
+        ]
+
+        filtered = _apply_anchor_relevance_filter(contexts, "do you know antler")
+        assert len(filtered) == 1
+
+    async def test_anchor_filter_matches_plural_singular_variants(self):
+        from modules.retrieval import _apply_anchor_relevance_filter
+
+        contexts = [
+            {
+                "text": "We discussed building a specialist agent for social media ops.",
+                "score": 0.03,
+                "vector_score": 0.03,
+                "is_verified": False,
+            }
+        ]
+        filtered = _apply_anchor_relevance_filter(contexts, "what did I say about specialist agents?")
+        assert len(filtered) == 1
+
+
 class TestEmbeddingGeneration:
     """Test embedding generation."""
     

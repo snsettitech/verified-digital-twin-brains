@@ -1,6 +1,7 @@
 import os
 import asyncio
 import json
+import re
 from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
@@ -316,8 +317,9 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
     prompt = f"""You are the AI Digital Twin of the owner (ID: {twin_id}).
 YOUR PRINCIPLES (Immutable):
 - Use first-person ("I", "my").
-- Every claim MUST be supported by retrieved context.
-- If context is missing, say you don't know.
+- Owner-specific factual claims MUST be supported by retrieved context.
+- If context is missing for owner-specific claims, say you don't know.
+- For greetings/general coaching without owner-specific claims, stay conversational and helpful.
 - Be concise by default.
 - PUBLIC INTRO and INTENT PROFILE are owner-provided facts and may be used for self-description.
 
@@ -347,6 +349,7 @@ def _is_smalltalk_query(query: str) -> bool:
     q = (query or "").strip().lower()
     if not q:
         return False
+    q_plain = re.sub(r"[^a-z0-9\s']", "", q)
     smalltalk_markers = {
         "hi",
         "hello",
@@ -357,8 +360,18 @@ def _is_smalltalk_query(query: str) -> bool:
         "how are you",
         "what's up",
         "whats up",
+        "who are you",
+        "what are you",
+        "introduce yourself",
+        "tell me about yourself",
+        "what can you do",
+        "can you help me",
     }
-    return q in smalltalk_markers or any(marker in q for marker in {"how's your day", "hows your day"})
+    return (
+        q in smalltalk_markers
+        or q_plain in smalltalk_markers
+        or any(marker in q for marker in {"how's your day", "hows your day"})
+    )
 
 
 def _is_owner_specific_query(query: str) -> bool:
@@ -374,6 +387,69 @@ def _is_owner_specific_query(query: str) -> bool:
         r"\bfrom my (sources|documents|knowledge)\b",
     ]
     return any(re.search(pattern, q) for pattern in markers)
+
+
+def _is_generic_business_coaching_query(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    coaching_markers = (
+        "gtm",
+        "go to market",
+        "go-to-market",
+        "icp",
+        "positioning",
+        "plg",
+        "founder-led",
+        "sales-led",
+        "runway",
+        "pricing",
+        "startup",
+        "founder",
+        "traction",
+        "funnel",
+        "pipeline",
+        "activation",
+        "retention",
+        "churn",
+        "interview",
+        "customer interview",
+        "buyer",
+        "objection",
+        "pilot",
+        "metrics",
+        "kpi",
+        "action items",
+        "90-day",
+        "90 day",
+        "week 1",
+        "week one",
+        "month 1",
+        "month one",
+        "plan",
+        "strategy",
+        "cadence",
+        "what should i do",
+        "how should i",
+        "help me",
+    )
+    return any(marker in q for marker in coaching_markers)
+
+
+def _is_explicit_source_grounded_query(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    markers = (
+        "based on my sources",
+        "from my sources",
+        "from my documents",
+        "from my knowledge",
+        "cite",
+        "citation",
+        "according to my",
+    )
+    return any(marker in q for marker in markers)
 
 
 def _is_explicit_teaching_query(query: str) -> bool:
@@ -412,6 +488,8 @@ async def router_node(state: TwinState):
 
     owner_specific_heuristic = _is_owner_specific_query(last_human_msg)
     explicit_teaching = _is_explicit_teaching_query(last_human_msg)
+    generic_coaching_heuristic = _is_generic_business_coaching_query(last_human_msg)
+    explicit_source_grounded = _is_explicit_source_grounded_query(last_human_msg)
     
     router_prompt = f"""You are a Strategic Dialogue Router for a Digital Twin.
     Classify the user's intent to determine retrieval and evidence requirements.
@@ -458,6 +536,28 @@ async def router_node(state: TwinState):
             is_specific = True
             req_evidence = True
 
+        # Generic coaching should not be forced into owner-specific/teaching lanes
+        # unless user explicitly asks about the owner's personal stance or sources.
+        if generic_coaching_heuristic and not owner_specific_heuristic and not explicit_teaching:
+            if mode in {"STANCE_GLOBAL", "TEACHING"}:
+                mode = "QA_FACT"
+            is_specific = False
+            req_evidence = False
+
+        # Owner conversational mode default:
+        # unless user explicitly asks for owner/source-grounded evidence, keep
+        # generic prompts fluent and avoid noisy retrieval misses.
+        if (
+            interaction_context in {"owner_chat", "owner_training"}
+            and not is_specific
+            and not explicit_source_grounded
+            and not explicit_teaching
+        ):
+            if mode in {"STANCE_GLOBAL", "TEACHING"}:
+                mode = "QA_FACT"
+            is_specific = False
+            req_evidence = False
+
         if mode == "TEACHING" and interaction_context != "owner_training" and not explicit_teaching:
             mode = "QA_FACT"
 
@@ -479,6 +579,14 @@ async def router_node(state: TwinState):
         }
     except Exception as e:
         print(f"Router error: {e}")
+        if _is_smalltalk_query(last_human_msg):
+            fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK")
+            return {
+                "dialogue_mode": "SMALLTALK",
+                "intent_label": fallback_intent,
+                "requires_evidence": False,
+                "sub_queries": [],
+            }
         fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="QA_FACT")
         return {
             "dialogue_mode": "QA_FACT",
@@ -500,6 +608,7 @@ async def evidence_gate_node(state: TwinState):
     # Hard Gate Logic
     requires_teaching = False
     reason = "Sufficient evidence found."
+    clear_context_for_uncertainty = False
 
     if mode == "SMALLTALK":
         return {
@@ -510,8 +619,13 @@ async def evidence_gate_node(state: TwinState):
 
     if requires_evidence and not context:
         if is_specific:
-            requires_teaching = True
-            reason = "No evidence retrieved for owner-specific query."
+            if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
+                requires_teaching = True
+                reason = "No evidence retrieved for owner-specific query in training mode."
+            else:
+                requires_teaching = False
+                clear_context_for_uncertainty = True
+                reason = "No evidence retrieved for owner-specific query."
         elif interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
             requires_teaching = True
             reason = "Training context without evidence; collecting owner guidance."
@@ -552,14 +666,24 @@ async def evidence_gate_node(state: TwinState):
                 )
                 
                 if not v_res.get("is_sufficient"):
-                    requires_teaching = True
-                    reason = f"Verifier: {v_res.get('reason')}"
+                    if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
+                        requires_teaching = True
+                        reason = f"Verifier (training): {v_res.get('reason')}"
+                    else:
+                        requires_teaching = False
+                        clear_context_for_uncertainty = True
+                        reason = f"Verifier failed: {v_res.get('reason')}"
             except Exception as e:
                 print(f"Verifier error: {e}")
                 # Fallback to simple context check
                 if len(context) < 1:
-                    requires_teaching = True
-                    reason = "Fallback: Insufficient context length."
+                    if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
+                        requires_teaching = True
+                        reason = "Fallback: Insufficient context length in training mode."
+                    else:
+                        requires_teaching = False
+                        clear_context_for_uncertainty = True
+                        reason = "Fallback: Insufficient context length."
 
     if requires_teaching:
         new_mode = "TEACHING"
@@ -569,17 +693,21 @@ async def evidence_gate_node(state: TwinState):
     else:
         new_mode = mode
     
-    return {
+    result = {
         "dialogue_mode": new_mode,
         "requires_teaching": requires_teaching,
         "reasoning_history": (state.get("reasoning_history") or []) + [f"Gate: {'FAIL -> TEACHING' if requires_teaching else 'PASS'}. {reason}"]
     }
+    if clear_context_for_uncertainty:
+        result["retrieved_context"] = {"results": []}
+    return result
 
 async def planner_node(state: TwinState):
     """Pass A: Strategic Planning & Logic (Structured JSON)"""
     mode = state.get("dialogue_mode", "QA_FACT")
     context_data = state.get("retrieved_context", {}).get("results", [])
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
+    target_owner_scope = bool(state.get("target_owner_scope", False))
     
     # Use the dynamic system prompt (Phase 4)
     system_msg, persona_trace = build_system_prompt_with_trace(state)
@@ -591,6 +719,128 @@ async def planner_node(state: TwinState):
         date_info = res.get("metadata", {}).get("effective_from", "Unknown Date")
         source = res.get("source_id", "Unknown")
         context_str += f"[{i}] (Date: {date_info} | ID: {source}): {text}\n"
+
+    if mode == "SMALLTALK":
+        q_lower = (user_query or "").strip().lower()
+        settings = state.get("full_settings") if isinstance(state.get("full_settings"), dict) else {}
+        public_intro = ((settings or {}).get("public_intro") or "").strip() if isinstance(settings, dict) else ""
+        identity_markers = (
+            "who are you",
+            "what are you",
+            "introduce yourself",
+            "tell me about yourself",
+            "what can you do",
+        )
+
+        if any(marker in q_lower for marker in identity_markers):
+            if public_intro:
+                answer = public_intro
+            else:
+                answer = "I am your AI digital twin. I can help with coaching and answers grounded in your knowledge."
+            follow_up = "What would you like to talk about?"
+        else:
+            answer = "Hi there! How can I assist you today?"
+            follow_up = "What would you like to discuss?"
+
+        return {
+            "planning_output": {
+                "answer_points": [answer],
+                "citations": [],
+                "follow_up_question": follow_up,
+                "confidence": 0.8,
+                "teaching_questions": [],
+                "reasoning_trace": "Deterministic smalltalk plan.",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Planner: deterministic smalltalk plan."
+            ],
+        }
+
+    # Owner-specific requests without sufficient evidence should be explicit
+    # about uncertainty; only owner_training mode should prompt for teaching.
+    if not context_data and target_owner_scope and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL", "TEACHING"}:
+        interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
+        is_training_context = interaction_context == "owner_training"
+        return {
+            "planning_output": {
+                "answer_points": [UNCERTAINTY_RESPONSE],
+                "citations": [],
+                "follow_up_question": (
+                    "Can you share the source or clarify what I should say for this?"
+                    if is_training_context
+                    else ""
+                ),
+                "confidence": 0.2,
+                "teaching_questions": (
+                    [
+                        f"What should I answer when asked: \"{user_query}\"?",
+                        "Do you have a source, quote, or document I should use for this topic?",
+                    ]
+                    if is_training_context
+                    else []
+                ),
+                "reasoning_trace": "Owner-specific query without sufficient evidence.",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Planner: deterministic owner uncertainty plan (insufficient evidence)."
+            ],
+        }
+
+    # Deterministic generic fallback: if no owner evidence is available for a
+    # non-owner-specific query, keep the conversation useful with general help.
+    if not context_data and not target_owner_scope and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL"}:
+        generic_prompt = f"""You are Shambhavi, a pragmatic VC partner running founder office hours.
+Answer the user's message using general startup/VC knowledge.
+
+Rules:
+- Do NOT claim this came from owner's private sources or documents.
+- Be useful first: give concrete guidance, not generic filler.
+- If the user asks for tactical help (GTM, pricing, pilots, interviews, metrics), provide a compact action plan.
+- Prefer 3-5 bullets for action plans, each with one specific action and one measurable check.
+- If context is missing, ask one clarifying question after giving a reasonable default.
+- Keep tone direct, calm, and coach-like.
+
+User message: {user_query}
+"""
+        try:
+            generic_answer, _meta = await invoke_text(
+                [{"role": "system", "content": generic_prompt}],
+                task="realizer",
+                temperature=0.3,
+                max_tokens=320,
+            )
+            answer = (generic_answer or "").strip()
+        except Exception:
+            answer = ""
+
+        if not answer:
+            answer = "Happy to help. Share a bit more context and I can give you a concrete recommendation."
+
+        return {
+            "planning_output": {
+                "answer_points": [answer],
+                "citations": [],
+                "follow_up_question": "",
+                "confidence": 0.45,
+                "teaching_questions": [],
+                "reasoning_trace": "No owner evidence for non-owner-specific query; general fallback answer.",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Planner: deterministic general fallback plan (no evidence, non-owner-specific)."
+            ],
+        }
 
     # Deterministic safety fallback: no evidence means no speculative answer.
     if mode == "TEACHING" and not context_data:
@@ -645,6 +895,8 @@ OUTPUT FORMAT (STRICT JSON):
             temperature=0,
             max_tokens=900,
         )
+        if mode != "TEACHING":
+            plan["teaching_questions"] = []
         
         return {
             "planning_output": plan,
@@ -750,6 +1002,7 @@ async def realizer_node(state: TwinState):
 def create_twin_agent(
     twin_id: str,
     group_id: Optional[str] = None,
+    resolve_default_group: bool = True,
     system_prompt_override: str = None,
     full_settings: dict = None,
     graph_context: str = "",
@@ -758,7 +1011,12 @@ def create_twin_agent(
 ):
     # Retrieve-only tool setup needs to stay inside or be passed
     from modules.tools import get_retrieval_tool
-    retrieval_tool = get_retrieval_tool(twin_id, group_id=group_id, conversation_history=conversation_history)
+    retrieval_tool = get_retrieval_tool(
+        twin_id,
+        group_id=group_id,
+        conversation_history=conversation_history,
+        resolve_default_group=resolve_default_group,
+    )
 
     async def retrieve_hybrid_node(state: TwinState):
         """Phase 2: Executing planned retrieval (Audit 1: Parallel & Robust)"""
@@ -837,6 +1095,7 @@ async def run_agent_stream(
     conversation_id: Optional[str] = None,
     owner_memory_context: str = "",
     interaction_context: str = "owner_chat",
+    enforce_group_filtering: bool = True,
 ):
     """
     Runs the agent and yields events from the graph.
@@ -901,9 +1160,12 @@ async def run_agent_stream(
         except Exception as e:
             print(f"[GraphRAG] Retrieval failed, falling back to RAG-lite. Error: {e}")
 
+    effective_group_id = group_id if enforce_group_filtering else None
+
     agent = create_twin_agent(
         twin_id,
-        group_id=group_id,
+        group_id=effective_group_id,
+        resolve_default_group=enforce_group_filtering,
         system_prompt_override=system_prompt,
         full_settings=settings,
         graph_context=graph_context,
