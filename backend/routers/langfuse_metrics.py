@@ -43,7 +43,7 @@ async def get_dashboard_metrics(
 @router.get("/quality")
 async def get_quality_metrics(
     hours: int = Query(default=24, ge=1, le=168),
-    interval: str = Query(default="hour", regex="^(hour|day)$"),
+    interval: str = Query(default="hour", pattern="^(hour|day)$"),
     user=Depends(get_current_user)
 ):
     """
@@ -176,7 +176,7 @@ async def get_dataset_stats(
 @router.get("/traces/search")
 async def search_traces(
     query: Optional[str] = None,
-    status: Optional[str] = Query(default=None, regex="^(success|error)$"),
+    status: Optional[str] = Query(default=None, pattern="^(success|error)$"),
     from_hours: int = Query(default=24, ge=1, le=168),
     limit: int = Query(default=50, ge=1, le=100),
     user=Depends(require_admin)

@@ -1,137 +1,21 @@
-# Render Blueprint for FastAPI Backend
 services:
-  # Main API Web Service
   - type: web
-    name: verified-digital-twin-backend
-    runtime: python
-    pythonVersion: "3.12.0"
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    name: verified-digital-twin-brain-api
+    env: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    healthCheckTimeout: 300
+    buildFilter:
+      paths:
+        - backend/**
+      ignoredPaths:
+        - frontend/**
+        - "**/*.md"
     envVars:
-      - key: SUPABASE_URL
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LANGFUSE_PUBLIC_KEY
         sync: false
-      - key: SUPABASE_KEY
+      - key: LANGFUSE_SECRET_KEY
         sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: CEREBRAS_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: HF_TOKEN
-        sync: false
-      - key: PINECONE_API_KEY
-        sync: false
-      - key: PINECONE_INDEX_NAME
-        sync: false
-      - key: EMBEDDING_PROVIDER
-        value: "openai"
-      - key: EMBEDDING_TARGET_DIMENSION
-        value: "3072"
-      - key: INFERENCE_PROVIDER
-        value: "openai"
-      - key: INFERENCE_ROUTING_MODE
-        value: "auto"
-      - key: INFERENCE_FALLBACK_ENABLED
-        value: "true"
-      - key: ALLOWED_ORIGINS
-        value: "https://digitalbrains.vercel.app,https://*.vercel.app,http://localhost:3000,http://127.0.0.1:3000"
-      - key: GIT_SHA
-        value: "{{ .Render.gitSha }}"
-      - key: BUILD_TIME
-        value: "{{ .Render.buildTime }}"
-      - key: DEV_MODE
-        value: "false"
-      - key: GRAPH_RAG_ENABLED
-        value: "true"
-      - key: CONTENT_EXTRACT_MAX_CHUNKS
-        value: "6"
-      - key: PORT
-        value: "8000"
-      - key: YOUTUBE_COOKIES_FILE
-        sync: false
-      - key: YOUTUBE_PROXY
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: YOUTUBE_MAX_RETRIES
-        value: "5"
-      - key: YOUTUBE_ASR_MODEL
-        value: "whisper-large-v3"
-      - key: YOUTUBE_ASR_PROVIDER
-        value: "openai"
-      - key: YOUTUBE_LANGUAGE_DETECTION
-        value: "true"
-      - key: YOUTUBE_PII_SCRUB
-        value: "true"
-      - key: YOUTUBE_VERBOSE_LOGGING
-        value: "false"
-
-  # Background Worker for Job Queue Processing
-  - type: worker
-    name: verified-digital-twin-worker
-    runtime: python
-    pythonVersion: "3.12.0"
-    rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: python worker.py
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
-        sync: false
-      - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: JWT_SECRET
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: CEREBRAS_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: HF_TOKEN
-        sync: false
-      - key: PINECONE_API_KEY
-        sync: false
-      - key: PINECONE_INDEX_NAME
-        sync: false
-      - key: EMBEDDING_PROVIDER
-        value: "openai"
-      - key: EMBEDDING_TARGET_DIMENSION
-        value: "3072"
-      - key: INFERENCE_PROVIDER
-        value: "openai"
-      - key: INFERENCE_ROUTING_MODE
-        value: "auto"
-      - key: INFERENCE_FALLBACK_ENABLED
-        value: "true"
-      - key: WORKER_ENABLED
-        value: "true"
-      - key: WORKER_POLL_INTERVAL
-        value: "5"
-      - key: CONTENT_EXTRACT_MAX_CHUNKS
-        value: "6"
-      - key: YOUTUBE_COOKIES_FILE
-        sync: false
-      - key: YOUTUBE_PROXY
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: YOUTUBE_MAX_RETRIES
-        value: "5"
-      - key: YOUTUBE_ASR_MODEL
-        value: "whisper-large-v3"
-      - key: YOUTUBE_ASR_PROVIDER
-        value: "openai"
-      - key: YOUTUBE_LANGUAGE_DETECTION
-        value: "true"
-      - key: YOUTUBE_PII_SCRUB
-        value: "true"
-      - key: YOUTUBE_VERBOSE_LOGGING
-        value: "false"
