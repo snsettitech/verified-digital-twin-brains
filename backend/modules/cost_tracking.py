@@ -5,7 +5,7 @@ Track token usage and costs for optimization.
 """
 import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 

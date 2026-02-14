@@ -3,6 +3,7 @@ uvicorn
 supabase
 pinecone
 openai
+langfuse>=3.14.1
 
 # Hugging Face for local embeddings (20x faster than OpenAI)
 sentence-transformers>=3.0.0
