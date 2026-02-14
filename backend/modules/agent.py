@@ -198,6 +198,7 @@ class TwinState(TypedDict):
     graph_context: Optional[str]
     owner_memory_context: Optional[str]
     system_prompt_override: Optional[str]
+    interaction_context: Optional[str]
 
 def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any]]:
     """
@@ -341,16 +342,82 @@ def build_system_prompt(state: TwinState) -> str:
     prompt, _ = build_system_prompt_with_trace(state)
     return prompt
 
+
+def _is_smalltalk_query(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    smalltalk_markers = {
+        "hi",
+        "hello",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "what's up",
+        "whats up",
+    }
+    return q in smalltalk_markers or any(marker in q for marker in {"how's your day", "hows your day"})
+
+
+def _is_owner_specific_query(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    markers = [
+        r"\bwhat (do|did) i think\b",
+        r"\bwhat('?s| is) my (stance|view|opinion|belief|thesis|principle)\b",
+        r"\bmy (stance|view|opinion|belief|thesis|principle)\b",
+        r"\bhow do i (approach|decide|evaluate)\b",
+        r"\bbased on my (sources|documents|knowledge)\b",
+        r"\bfrom my (sources|documents|knowledge)\b",
+    ]
+    return any(re.search(pattern, q) for pattern in markers)
+
+
+def _is_explicit_teaching_query(query: str) -> bool:
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+    markers = (
+        "teach me",
+        "learn this",
+        "remember this",
+        "save this memory",
+        "correct this answer",
+        "update your memory",
+    )
+    return any(marker in q for marker in markers)
+
     # Define the nodes
 async def router_node(state: TwinState):
     """Phase 4 Orchestrator: Intent Classification & Routing"""
     messages = state["messages"]
     last_human_msg = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
+    interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
+
+    # Deterministic fast-path keeps obvious greetings and owner-specific prompts stable.
+    if _is_smalltalk_query(last_human_msg):
+        return {
+            "dialogue_mode": "SMALLTALK",
+            "intent_label": classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK"),
+            "target_owner_scope": False,
+            "requires_evidence": False,
+            "sub_queries": [],
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Router: deterministic SMALLTALK fast-path"
+            ],
+        }
+
+    owner_specific_heuristic = _is_owner_specific_query(last_human_msg)
+    explicit_teaching = _is_explicit_teaching_query(last_human_msg)
     
     router_prompt = f"""You are a Strategic Dialogue Router for a Digital Twin.
     Classify the user's intent to determine retrieval and evidence requirements.
     
     USER QUERY: {last_human_msg}
+    INTERACTION CONTEXT: {interaction_context}
     
     MODES:
     - SMALLTALK: Greetings, brief pleasantries, "how are you".
@@ -358,7 +425,7 @@ async def router_node(state: TwinState):
     - QA_RELATIONSHIP: Questions about people, entities, or connections (Graph needed).
     - STANCE_GLOBAL: Questions about beliefs, opinions, core philosophy, or "what do I think about".
     - REPAIR: User complaining about being robotic, generic, or incorrect.
-    - TEACHING: Explicit request for the twin to learn or the twin needing more info (Fallback).
+    - TEACHING: Only when user explicitly asks to teach/correct OR context is owner_training and evidence is missing.
     
     INTENT ATTRIBUTES:
     - is_person_specific: True if the question asks for MY (the owner's) specific view, decision, preference, or experience.
@@ -385,8 +452,16 @@ async def router_node(state: TwinState):
         is_specific = plan.get("is_person_specific", False)
         req_evidence = plan.get("requires_evidence", True)
         intent_label = classify_query_intent(last_human_msg, dialogue_mode=mode)
-        
-        # Phase 4 Enforcement: Person-specific queries MUST have evidence verification
+
+        # Deterministic guardrails over model output.
+        if owner_specific_heuristic:
+            is_specific = True
+            req_evidence = True
+
+        if mode == "TEACHING" and interaction_context != "owner_training" and not explicit_teaching:
+            mode = "QA_FACT"
+
+        # Person-specific queries MUST have evidence verification.
         if is_specific:
             req_evidence = True
             
@@ -419,6 +494,8 @@ async def evidence_gate_node(state: TwinState):
     context = state.get("retrieved_context", {}).get("results", [])
     last_human_msg = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
     requires_evidence = state.get("requires_evidence", True)
+    interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
+    explicit_teaching = _is_explicit_teaching_query(last_human_msg)
     
     # Hard Gate Logic
     requires_teaching = False
@@ -432,8 +509,16 @@ async def evidence_gate_node(state: TwinState):
         }
 
     if requires_evidence and not context:
-        requires_teaching = True
-        reason = "No evidence retrieved for an evidence-required query."
+        if is_specific:
+            requires_teaching = True
+            reason = "No evidence retrieved for owner-specific query."
+        elif interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
+            requires_teaching = True
+            reason = "Training context without evidence; collecting owner guidance."
+        else:
+            # Keep generic/public conversations fluent even when retrieval is empty.
+            requires_teaching = False
+            reason = "No retrieval evidence for generic query; proceeding with general response."
     
     if (not requires_teaching) and is_specific:
         if not context:
@@ -476,7 +561,13 @@ async def evidence_gate_node(state: TwinState):
                     requires_teaching = True
                     reason = "Fallback: Insufficient context length."
 
-    new_mode = "TEACHING" if requires_teaching else mode
+    if requires_teaching:
+        new_mode = "TEACHING"
+    elif mode == "TEACHING":
+        # TEACHING should not leak into normal chat turns without explicit trigger.
+        new_mode = "QA_FACT"
+    else:
+        new_mode = mode
     
     return {
         "dialogue_mode": new_mode,
@@ -744,7 +835,8 @@ async def run_agent_stream(
     system_prompt: str = None,
     group_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
-    owner_memory_context: str = ""
+    owner_memory_context: str = "",
+    interaction_context: str = "owner_chat",
 ):
     """
     Runs the agent and yields events from the graph.
@@ -844,7 +936,8 @@ async def run_agent_stream(
         "full_settings": settings,
         "graph_context": graph_context,
         "owner_memory_context": owner_memory_context,
-        "system_prompt_override": system_prompt
+        "system_prompt_override": system_prompt,
+        "interaction_context": interaction_context,
     }
     
     # Phase 10: Metrics instrumentation

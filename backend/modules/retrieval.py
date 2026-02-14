@@ -43,7 +43,10 @@ RETRIEVAL_QUERY_PREP_TIMEOUT = _float_env("RETRIEVAL_QUERY_PREP_TIMEOUT_SECONDS"
 RETRIEVAL_EMBEDDING_TIMEOUT = _float_env("RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 10.0)
 RETRIEVAL_VECTOR_TIMEOUT = _float_env("RETRIEVAL_VECTOR_TIMEOUT_SECONDS", 20.0)
 RETRIEVAL_PER_NAMESPACE_TIMEOUT = _float_env("RETRIEVAL_PER_NAMESPACE_TIMEOUT_SECONDS", 8.0)
-RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 2))
+RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 1))
+RETRIEVAL_TOP_K_VERIFIED = max(1, _int_env("RETRIEVAL_TOP_K_VERIFIED", 3))
+RETRIEVAL_TOP_K_GENERAL = max(4, _int_env("RETRIEVAL_TOP_K_GENERAL", 8))
+RETRIEVAL_PRIMARY_RETRY_ENABLED = os.getenv("RETRIEVAL_PRIMARY_RETRY_ENABLED", "false").lower() == "true"
 
 
 def log_retrieval_event(event_type: str, data: Dict[str, Any]):
@@ -439,7 +442,7 @@ async def _execute_pinecone_queries(
 
     async def pinecone_query(embedding: List[float], is_verified: bool = False) -> Dict[str, Any]:
         """Execute one query across namespace candidates and merge."""
-        top_k = 5 if is_verified else 20
+        top_k = RETRIEVAL_TOP_K_VERIFIED if is_verified else RETRIEVAL_TOP_K_GENERAL
         primary_ns = namespace_candidates[0]
 
         async def query_namespace(namespace: str):
@@ -455,8 +458,8 @@ async def _execute_pinecone_queries(
                 return index.query(**query_params)
 
             attempts: List[float] = [RETRIEVAL_PER_NAMESPACE_TIMEOUT]
-            # Primary namespace gets one longer retry before we give up.
-            if namespace == primary_ns:
+            # Optional retry for primary namespace only (disabled by default to avoid long tail timeouts).
+            if RETRIEVAL_PRIMARY_RETRY_ENABLED and namespace == primary_ns:
                 attempts.append(max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.0, 12.0))
 
             last_error: Optional[Exception] = None
@@ -508,9 +511,13 @@ async def _execute_pinecone_queries(
         if failed_namespaces:
             print(f"[Retrieval] Warning: {len(failed_namespaces)}/{len(namespace_candidates)} namespaces failed: {failed_namespaces}")
 
-        # Hotfix: if all namespaces failed, retry once against primary namespace with
-        # an extended timeout to avoid false "no knowledge" responses.
-        if not merged_matches and failed_namespaces and len(failed_namespaces) == len(namespace_candidates):
+        # Optional hotfix retry only when explicitly enabled.
+        if (
+            RETRIEVAL_PRIMARY_RETRY_ENABLED
+            and not merged_matches
+            and failed_namespaces
+            and len(failed_namespaces) == len(namespace_candidates)
+        ):
             primary_ns = namespace_candidates[0]
             try:
                 print(

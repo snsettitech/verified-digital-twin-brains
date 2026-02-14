@@ -637,7 +637,8 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                     history=langchain_history,
                     group_id=group_id,
                     conversation_id=conversation_id,
-                    owner_memory_context=owner_memory_context
+                    owner_memory_context=owner_memory_context,
+                    interaction_context=resolved_context.context.value,
                 ).__aiter__()
 
                 pending_task = None
@@ -1077,7 +1078,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             system_prompt,
             group_id=group_id,
             conversation_id=conversation_id,
-            owner_memory_context=owner_memory_context
+            owner_memory_context=owner_memory_context,
+            interaction_context=resolved_context.context.value,
         ):
             tools_payload, agent_payload = _extract_stream_payload(event)
 
@@ -1303,7 +1305,8 @@ async def public_chat_endpoint(twin_id: str, token: str, request: PublicChatRequ
             history,
             group_id=group_id,
             conversation_id=conversation_id,
-            owner_memory_context=owner_memory_context
+            owner_memory_context=owner_memory_context,
+            interaction_context=resolved_context.context.value,
         ):
             tools_payload, agent_payload = _extract_stream_payload(event)
             if tools_payload:
