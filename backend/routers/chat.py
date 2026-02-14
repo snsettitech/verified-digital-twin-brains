@@ -37,7 +37,7 @@ import uuid
 
 # Langfuse v3 tracing
 try:
-    from langfuse import observe, get_client
+    from langfuse import observe, get_client, propagate_attributes
     _langfuse_available = True
     _langfuse_client = get_client()
 except ImportError:
@@ -47,6 +47,11 @@ except ImportError:
         def decorator(func):
             return func
         return decorator
+    from contextlib import contextmanager
+    @contextmanager
+    def propagate_attributes(**kwargs):
+        yield
+
 
 import logging
 
@@ -426,24 +431,17 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             group_id = conversation_row["group_id"]
 
     # Update Langfuse trace with session and user info (v3 pattern)
-    if _langfuse_available and _langfuse_client:
-        try:
-            import os
-            release = os.getenv("LANGFUSE_RELEASE", "dev")
-            # Get current observation and call update_trace on it
-            current_obs = _langfuse_client.get_current_observation()
-            if current_obs and hasattr(current_obs, 'update_trace'):
-                current_obs.update_trace(
-                    session_id=conversation_id,
-                    user_id=twin_id,
-                    metadata={
-                        "group_id": group_id,
-                        "query_length": len(query) if query else 0,
-                        "release": release,
-                    }
-                )
-        except Exception as e:
-            logger.warning(f"Langfuse trace update failed: {e}")
+    import os
+    release = os.getenv("LANGFUSE_RELEASE", "dev")
+    langfuse_prop = propagate_attributes(
+        user_id=twin_id,
+        session_id=conversation_id,
+        metadata={
+            "group_id": str(group_id) if group_id else None,
+            "query_length": str(len(query)) if query else "0",
+            "release": release,
+        }
+    )
 
     # Determine user's group
     try:
@@ -908,7 +906,8 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
             except Exception as cleanup_err:
                 print(f"[Chat] Cleanup error (non-critical): {cleanup_err}")
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+    with langfuse_prop:
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 @router.get("/conversations/{twin_id}")
 async def list_conversations_endpoint(twin_id: str, user=Depends(get_current_user)):

@@ -10,6 +10,7 @@ import { SimulatorView } from '@/components/training';
 export default function SimulatorPublicPage() {
     const { activeTwin } = useTwin();
     const [shareUrl, setShareUrl] = useState<string>('');
+    const [shareToken, setShareToken] = useState<string | null>(null);
     const [loadingShare, setLoadingShare] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -39,11 +40,21 @@ export default function SimulatorPublicPage() {
             }
 
             const payload = await res.json();
-            setShareUrl(payload?.share_url || '');
+            const nextShareUrl = payload?.share_url || '';
+            setShareUrl(nextShareUrl);
+            try {
+                const parsed = new URL(nextShareUrl);
+                const segments = parsed.pathname.split('/').filter(Boolean);
+                const token = segments.length >= 3 ? segments[segments.length - 1] : null;
+                setShareToken(token);
+            } catch {
+                setShareToken(null);
+            }
         } catch (err) {
             console.error(err);
             setError('Failed to load public share link.');
             setShareUrl('');
+            setShareToken(null);
         } finally {
             setLoadingShare(false);
         }
@@ -98,7 +109,7 @@ export default function SimulatorPublicPage() {
                     </div>
                 </div>
 
-                <SimulatorView twinId={activeTwin?.id} mode="public" />
+                <SimulatorView twinId={activeTwin?.id} mode="public" publicShareToken={shareToken} />
             </div>
         </div>
     );

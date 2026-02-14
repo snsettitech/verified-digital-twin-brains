@@ -5,12 +5,6 @@
             "display_name": "Digital Twin",
             "description": "General-purpose digital twin for knowledge management and conversation",
             "manifest_path": "modules/specializations/vanilla/manifest.json"
-        },
-        {
-            "id": "vc",
-            "display_name": "VC Brain",
-            "description": "Venture Capital specialization for deal flow, due diligence, and portfolio management",
-            "manifest_path": "modules/specializations/vc/manifest.json"
         }
     ]
 }

@@ -6,6 +6,7 @@ based on Owner Memory availability and conflicts.
 """
 
 from typing import Dict, Any, List, Optional
+import os
 import re
 
 from modules.owner_memory_store import (
@@ -43,6 +44,7 @@ GOAL_KEYWORDS = {"goal", "goals", "objective", "objectives", "aim", "aims", "tar
 INTENT_KEYWORDS = {"intent", "intention"}
 CONSTRAINT_KEYWORDS = {"constraint", "constraints", "limitation", "limitations", "restricted", "must", "can't", "cannot"}
 BOUNDARY_KEYWORDS = {"boundary", "boundaries", "won't", "will not", "never"}
+PUBLIC_CLARIFICATION_QUEUE_ENABLED = os.getenv("ENABLE_PUBLIC_CLARIFICATION_QUEUE", "false").lower() == "true"
 
 
 def _contains_any(text: str, keywords: set) -> bool:
@@ -184,6 +186,18 @@ async def run_identity_gate(
     if not candidates or best_score < 0.70 or has_conflict:
         # Public routes can request owner clarification, but cannot mutate memory directly.
         if is_public_mode:
+            if not PUBLIC_CLARIFICATION_QUEUE_ENABLED:
+                return {
+                    "decision": "ANSWER",
+                    "requires_owner": True,
+                    "memory_type": memory_type or "stance",
+                    "topic": topic,
+                    "reason": "public_clarification_disabled",
+                    "gate_mode": mode_normalized,
+                    "owner_memory": [],
+                    "owner_memory_refs": [],
+                    "owner_memory_context": "",
+                }
             clarification = build_clarification(query, topic, memory_type or "stance")
             return {
                 "decision": "CLARIFY",

@@ -48,7 +48,7 @@ RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 1
 RETRIEVAL_TOP_K_VERIFIED = max(1, _int_env("RETRIEVAL_TOP_K_VERIFIED", 3))
 RETRIEVAL_TOP_K_GENERAL = max(4, _int_env("RETRIEVAL_TOP_K_GENERAL", 8))
 RETRIEVAL_PRIMARY_RETRY_ENABLED = os.getenv("RETRIEVAL_PRIMARY_RETRY_ENABLED", "false").lower() == "true"
-RETRIEVAL_STRONG_VECTOR_FLOOR = _float_env("RETRIEVAL_STRONG_VECTOR_FLOOR", 0.82)
+RETRIEVAL_STRONG_VECTOR_FLOOR = _float_env("RETRIEVAL_STRONG_VECTOR_FLOOR", 0.70)
 RETRIEVAL_ANCHOR_MIN_TOKEN_LEN = max(3, _int_env("RETRIEVAL_ANCHOR_MIN_TOKEN_LEN", 4))
 
 _QUERY_STOPWORDS: Set[str] = {
@@ -127,6 +127,18 @@ def _apply_anchor_relevance_filter(contexts: List[Dict[str, Any]], query: str) -
             "[Retrieval] Anchor relevance filter dropped "
             f"{len(contexts) - len(filtered)} context(s). anchors={sorted(anchors)}"
         )
+
+    if not filtered and contexts:
+        fallback = sorted(
+            contexts,
+            key=lambda c: float(c.get("vector_score", c.get("score", 0.0)) or 0.0),
+            reverse=True,
+        )[: min(2, len(contexts))]
+        print(
+            "[Retrieval] Anchor relevance filter removed all contexts; "
+            f"restoring top-{len(fallback)} by vector score as fallback."
+        )
+        return fallback
 
     return filtered
 
@@ -239,8 +251,7 @@ def get_ranker():
 
 # Langfuse v3 tracing
 try:
-    from langfuse import observe
-    import langfuse
+    from langfuse.decorators import observe, langfuse_context
     _langfuse_available = True
 except ImportError:
     _langfuse_available = False
@@ -1158,6 +1169,7 @@ async def retrieve_context_vectors(
     return final_contexts
 
 
+@observe(name="retrieval")
 async def retrieve_context(
     query: str, 
     twin_id: str, 

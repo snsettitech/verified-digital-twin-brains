@@ -10,6 +10,7 @@ interface SimulatorViewProps {
     onBack?: () => void;
     mode?: 'owner' | 'public' | 'training';
     trainingSessionId?: string | null;
+    publicShareToken?: string | null;
 }
 
 /**
@@ -17,7 +18,7 @@ interface SimulatorViewProps {
  * 
  * Reusable component for the Twin Simulator.
  */
-export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionId }: SimulatorViewProps) {
+export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionId, publicShareToken }: SimulatorViewProps) {
     const { activeTwin, isLoading } = useTwin();
     const effectiveTwinId = twinId || activeTwin?.id;
     const contextKey = `${mode}:${trainingSessionId || 'none'}`;
@@ -145,6 +146,7 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
                     resetKey={resetCounter}
                     mode={mode}
                     trainingSessionId={trainingSessionId}
+                    publicShareToken={publicShareToken}
                 />
             </div>
         </div>

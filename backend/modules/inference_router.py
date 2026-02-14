@@ -22,6 +22,20 @@ from modules.inference_cerebras import CerebrasClient
 
 logger = logging.getLogger(__name__)
 
+try:
+    from langfuse.decorators import observe, langfuse_context
+except ImportError:
+    class _LangfuseContextNoop:
+        def update_current_observation(self, *args, **kwargs):
+            return None
+
+    langfuse_context = _LangfuseContextNoop()
+
+    def observe(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+
 # Backward-compatible control flag.
 DEFAULT_PROVIDER = os.getenv("INFERENCE_PROVIDER", "openai").lower()
 ROUTING_MODE = os.getenv("INFERENCE_ROUTING_MODE", "auto").lower()
@@ -194,6 +208,7 @@ async def _call_anthropic(
     return "".join(text_chunks).strip(), ANTHROPIC_MODEL
 
 
+@observe(as_type="generation")
 async def _call_provider(
     provider: str,
     messages: List[Dict[str, str]],
@@ -202,6 +217,10 @@ async def _call_provider(
     temperature: float,
     max_tokens: int,
 ) -> Tuple[str, str]:
+    langfuse_context.update_current_observation(
+        name=f"llm_{provider}",
+        input=messages,
+    )
     if provider == "openai":
         return await _call_openai(
             messages,
@@ -325,4 +344,3 @@ async def invoke_json(
             logger.warning("[InferenceRouter] provider=%s failed json task=%s: %s", provider, task, e)
 
     raise RuntimeError(f"All providers failed for JSON task '{task}': {attempts}")
-

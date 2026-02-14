@@ -18,6 +18,7 @@ export default function ChatInterface({
   tenantId,
   mode = 'owner',
   trainingSessionId,
+  publicShareToken,
   onMemoryUpdated
 }: {
   twinId: string;
@@ -27,6 +28,7 @@ export default function ChatInterface({
   tenantId?: string | null;
   mode?: 'owner' | 'public' | 'training';
   trainingSessionId?: string | null;
+  publicShareToken?: string | null;
   onMemoryUpdated?: () => void;
 }) {
   const { user } = useTwin();
@@ -321,10 +323,64 @@ export default function ChatInterface({
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
+      const usePublicShareEndpoint = mode === 'public' && !!publicShareToken;
+      abortRef.current = new AbortController();
+
+      if (usePublicShareEndpoint) {
+        const response = await fetch(`${apiBaseUrl}/public/chat/${twinId}/${publicShareToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            conversation_history: messages
+              .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+              .map((msg) => ({ role: msg.role, content: msg.content }))
+          }),
+          signal: abortRef.current.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status})`);
+        }
+
+        const data = await response.json();
+        setIsSearching(false);
+        setMessages((prev) => {
+          const next = [...prev];
+          const lastMsg = { ...next[next.length - 1] };
+
+          if (data.status === 'queued') {
+            lastMsg.content = data.message || 'Queued for owner confirmation.';
+            lastMsg.confidence_score = 0;
+            lastMsg.citations = [];
+          } else {
+            lastMsg.content = data.response || 'No response generated.';
+            lastMsg.confidence_score = data.confidence_score;
+            lastMsg.citations = data.citations;
+            lastMsg.citation_details = data.citation_details;
+            lastMsg.owner_memory_refs = data.owner_memory_refs || [];
+            lastMsg.owner_memory_topics = data.owner_memory_topics || [];
+            lastMsg.used_owner_memory = Boolean(data.used_owner_memory);
+            lastMsg.teaching_questions = [];
+          }
+
+          next[next.length - 1] = lastMsg;
+          return next;
+        });
+
+        setLastDebug({
+          decision: data.status === 'queued' ? 'CLARIFY_QUEUED' : (data.intent_label || 'ANSWER'),
+          used_owner_memory: Boolean(data.used_owner_memory),
+          owner_memory_refs: Array.isArray(data.owner_memory_refs) ? data.owner_memory_refs : [],
+          owner_memory_topics: Array.isArray(data.owner_memory_topics) ? data.owner_memory_topics : [],
+          clarification_id: data.clarification_id || null
+        });
+        return;
+      }
+
       const token = await getAuthToken();
       if (!token && !isE2EBypass) throw new Error('Not authenticated');
 
-      abortRef.current = new AbortController();
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
@@ -629,10 +685,9 @@ export default function ChatInterface({
         enableFeedback={mode !== 'public'}
         twinId={twinId}
         onRemember={rememberMemory}
-        onTeachQuestion={(question) => {
-          if (mode === 'public') return;
+        onTeachQuestion={mode !== 'public' ? ((question) => {
           void sendMessage(question);
-        }}
+        }) : undefined}
         onSubmitFeedback={submitFeedback}
         onSubmitCorrection={mode !== 'public' ? submitCorrection : undefined}
       />

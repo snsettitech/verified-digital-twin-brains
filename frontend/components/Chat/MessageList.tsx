@@ -329,7 +329,7 @@ const MessageList = React.memo(({
               </div>
 
               {/* Teaching Cards (Phase 4) */}
-              {msg.role === 'assistant' && msg.teaching_questions && msg.teaching_questions.length > 0 && (
+              {msg.role === 'assistant' && onTeachQuestion && msg.teaching_questions && msg.teaching_questions.length > 0 && (
                 <div className="mt-3 space-y-2 max-w-sm animate-in slide-in-from-left-2 duration-300">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></div>
@@ -340,16 +340,7 @@ const MessageList = React.memo(({
                       <p className="text-xs font-semibold text-slate-700 mb-3 leading-relaxed">{q}</p>
                       <button
                         onClick={() => {
-                          if (onTeachQuestion) {
-                            onTeachQuestion(q);
-                            return;
-                          }
-                          const input = document.querySelector('textarea') as HTMLTextAreaElement | null;
-                          if (input) {
-                            input.value = q;
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                            input.focus();
-                          }
+                          onTeachQuestion?.(q);
                         }}
                         className="w-full py-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-colors border border-yellow-100"
                       >

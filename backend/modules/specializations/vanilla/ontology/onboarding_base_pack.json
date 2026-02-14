@@ -24,6 +24,20 @@
             "description": "Who will use this twin",
             "value_type": "string",
             "required": true
+        },
+        {
+            "node_type": "intent.boundaries",
+            "label": "Boundaries",
+            "description": "What the twin should avoid or never do",
+            "value_type": "string",
+            "required": false
+        },
+        {
+            "node_type": "intent.output_style",
+            "label": "Output Style",
+            "description": "How the twin should communicate",
+            "value_type": "string",
+            "required": false
         }
     ],
     "required_nodes": [

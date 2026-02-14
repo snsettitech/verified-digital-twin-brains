@@ -34,12 +34,12 @@ def get_next_slot(policy: Dict[str, Any], filled_slots: Dict[str, Any]) -> Optio
             
     return None
 
-def load_ontology_templates(spec_name: str) -> List[Dict[str, Any]]:
+def load_ontology_templates(spec_name: str = "vanilla") -> List[Dict[str, Any]]:
     """
-    Load question templates from the specialization's ontology pack.
+    Load question templates from the Digital Twin ontology pack.
     
     Args:
-        spec_name: Name of the specialization (e.g., "vc", "vanilla")
+        spec_name: Platform name (defaults to "vanilla")
     
     Returns:
         List of question template dicts

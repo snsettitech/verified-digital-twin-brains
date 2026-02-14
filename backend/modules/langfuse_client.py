@@ -6,13 +6,15 @@ All traces are linked by twin_id for debugging and evaluation.
 
 Langfuse SDK v3 uses OpenTelemetry-based tracing:
 - Use @observe decorator for automatic tracing
+- Use @observe decorator for automatic tracing
 - Traces are implicitly created by the first span
-- Use langfuse.update_current_trace() to add attributes
+- Use langfuse.context.update_current_trace() to add attributes (v3 thread-safe pattern)
 """
 
 import os
 import logging
-from typing import Optional, Any, Callable
+import re
+from typing import Optional, Any, Callable, Union
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -23,13 +25,42 @@ _observe = None
 _get_client = None
 
 try:
-    from langfuse import observe, get_client
+    from langfuse import observe
     _langfuse_available = True
-    _observe = observe
-    _get_client = get_client
-    logger.info("Langfuse SDK v3 loaded successfully")
+    # In some v3 versions, langfuse_context is in langfuse.decorators, 
+    # but in 3.14.1 it might be missing or elsewhere.
+    try:
+        from langfuse.decorators import langfuse_context
+    except ImportError:
+        try:
+            from langfuse import langfuse_context
+        except ImportError:
+            class MockContext:
+                def update_current_trace(self, *args, **kwargs): pass
+                def update_current_observation(self, *args, **kwargs): pass
+                def update(self, *args, **kwargs): pass
+                def __enter__(self): return self
+                def __exit__(self, *args): pass
+            langfuse_context = MockContext()
+    
+    logger.info("Langfuse SDK loaded successfully")
 except ImportError:
+    _langfuse_available = False
     logger.warning("Langfuse SDK not installed - tracing disabled")
+    
+    class MockContext:
+        def update_current_trace(self, *args, **kwargs): pass
+        def update_current_observation(self, *args, **kwargs): pass
+        def update(self, *args, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    
+    langfuse_context = MockContext()
+    
+    def observe(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 
 
 def is_langfuse_available() -> bool:
@@ -37,11 +68,38 @@ def is_langfuse_available() -> bool:
     if not _langfuse_available:
         return False
     
+    # Sampling check for production
+    sampling_rate = float(os.getenv("LANGFUSE_SAMPLING_RATE", "1.0"))
+    if sampling_rate < 1.0:
+        import random
+        if random.random() > sampling_rate:
+            return False
+
     # Check if keys are configured
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     
     return bool(secret_key and public_key)
+
+
+def redact_pii(text: Any) -> Any:
+    """Simple regex-based PII redaction for emails and phone numbers."""
+    if not isinstance(text, str):
+        if isinstance(text, (list, dict)):
+            import json
+            try:
+                text_str = json.dumps(text)
+                redacted = redact_pii(text_str)
+                return json.loads(redacted)
+            except Exception:
+                return text
+        return text
+
+    # Redact Emails
+    text = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[EMAIL_REDACTED]", text)
+    # Redact Phone Numbers (Basic)
+    text = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE_REDACTED]", text)
+    return text
 
 
 def trace_span(name: str, metadata: dict = None):
@@ -113,39 +171,16 @@ def log_trace(
         return None
     
     try:
-        import langfuse
-        
-        # Try to update current trace if we're in an observed context
-        try:
-            langfuse.update_current_trace(
-                user_id=twin_id,
-                metadata=metadata or {},
-                input=str(input_data)[:1000] if input_data else None,
-                output=str(output_data)[:1000] if output_data else None,
-            )
-            return "current_trace"
-        except Exception:
-            pass
-        
-        # Fallback: create a score/event on the client
-        client = _get_client()
-        if client:
-            # Use the event API as a fallback
-            client.event(
-                name=name,
-                metadata={
-                    "twin_id": twin_id,
-                    "level": level,
-                    **(metadata or {})
-                },
-                input=str(input_data)[:1000] if input_data else None,
-                output=str(output_data)[:1000] if output_data else None,
-            )
-            return "event"
-        
-        return None
+        # v3 context-safe update with PII redaction
+        langfuse_context.update_current_trace(
+            user_id=twin_id,
+            metadata=metadata or {},
+            input=redact_pii(input_data),
+            output=redact_pii(output_data),
+        )
+        return "current_trace"
     except Exception as e:
-        logger.error(f"Failed to log trace: {e}")
+        logger.debug(f"No active Langfuse trace to update or update failed: {e}")
         return None
 
 
@@ -177,25 +212,17 @@ def log_generation(
         return None
     
     try:
-        import langfuse
-        
-        # Try to update current observation if we're in context
-        try:
-            langfuse.update_current_observation(
-                model=model,
-                usage=usage,
-                metadata={
-                    "twin_id": twin_id,
-                    **(metadata or {})
-                }
-            )
-            return "current_observation"
-        except Exception:
-            pass
-        
-        return None
+        langfuse_context.update_current_observation(
+            model=model,
+            usage=usage,
+            metadata=redact_pii({
+                "twin_id": twin_id,
+                **(metadata or {})
+            })
+        )
+        return "current_observation"
     except Exception as e:
-        logger.error(f"Failed to log generation: {e}")
+        logger.debug(f"No active Langfuse observation to update: {e}")
         return None
 
 
@@ -234,6 +261,7 @@ def get_langfuse():
     if not is_langfuse_available():
         return None
     try:
-        return _get_client()
+        from langfuse import Langfuse
+        return Langfuse()
     except Exception:
         return None

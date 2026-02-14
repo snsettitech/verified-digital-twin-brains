@@ -7,6 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
+from langfuse.decorators import observe
 from modules.tools import get_retrieval_tool
 from modules.observability import supabase
 from modules.persona_compiler import (
@@ -471,6 +472,7 @@ def _is_explicit_teaching_query(query: str) -> bool:
     return any(marker in q for marker in markers)
 
     # Define the nodes
+@observe(name="router_node")
 async def router_node(state: TwinState):
     """Phase 4 Orchestrator: Intent Classification & Routing"""
     messages = state["messages"]
@@ -561,6 +563,18 @@ async def router_node(state: TwinState):
                 mode = "QA_FACT"
             is_specific = False
             req_evidence = False
+
+        # Public-facing conversations should not drift into owner-training lanes
+        # unless the user explicitly asks for owner-specific/source-grounded behavior.
+        if (
+            interaction_context in {"public_share", "public_widget"}
+            and not owner_specific_heuristic
+            and not explicit_source_grounded
+            and not explicit_teaching
+        ):
+            if mode in {"STANCE_GLOBAL", "TEACHING"}:
+                mode = "QA_FACT"
+            is_specific = False
 
         if mode == "TEACHING" and interaction_context != "owner_training" and not explicit_teaching:
             mode = "QA_FACT"
@@ -709,6 +723,7 @@ async def evidence_gate_node(state: TwinState):
         result["retrieved_context"] = {"results": []}
     return result
 
+@observe(name="planner_node")
 async def planner_node(state: TwinState):
     """Pass A: Strategic Planning & Logic (Structured JSON)"""
     mode = state.get("dialogue_mode", "QA_FACT")
@@ -926,6 +941,7 @@ OUTPUT FORMAT (STRICT JSON):
             "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
         }
 
+@observe(name="realizer_node")
 async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
     plan = state.get("planning_output", {})
