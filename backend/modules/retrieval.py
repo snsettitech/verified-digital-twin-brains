@@ -40,10 +40,10 @@ def _int_env(name: str, default: int) -> int:
 
 # Retrieval timing budgets (env-overridable) keep chat responsive under load.
 RETRIEVAL_QUERY_PREP_TIMEOUT = _float_env("RETRIEVAL_QUERY_PREP_TIMEOUT_SECONDS", 6.0)
-RETRIEVAL_EMBEDDING_TIMEOUT = _float_env("RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 8.0)
-RETRIEVAL_VECTOR_TIMEOUT = _float_env("RETRIEVAL_VECTOR_TIMEOUT_SECONDS", 8.0)
-RETRIEVAL_PER_NAMESPACE_TIMEOUT = _float_env("RETRIEVAL_PER_NAMESPACE_TIMEOUT_SECONDS", 5.0)
-RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 3))
+RETRIEVAL_EMBEDDING_TIMEOUT = _float_env("RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 10.0)
+RETRIEVAL_VECTOR_TIMEOUT = _float_env("RETRIEVAL_VECTOR_TIMEOUT_SECONDS", 20.0)
+RETRIEVAL_PER_NAMESPACE_TIMEOUT = _float_env("RETRIEVAL_PER_NAMESPACE_TIMEOUT_SECONDS", 8.0)
+RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 2))
 
 
 def log_retrieval_event(event_type: str, data: Dict[str, Any]):
@@ -440,6 +440,7 @@ async def _execute_pinecone_queries(
     async def pinecone_query(embedding: List[float], is_verified: bool = False) -> Dict[str, Any]:
         """Execute one query across namespace candidates and merge."""
         top_k = 5 if is_verified else 20
+        primary_ns = namespace_candidates[0]
 
         async def query_namespace(namespace: str):
             def _fetch():
@@ -453,10 +454,34 @@ async def _execute_pinecone_queries(
                     query_params["filter"] = {"is_verified": {"$eq": True}}
                 return index.query(**query_params)
 
-            return await asyncio.wait_for(
-                asyncio.to_thread(_fetch),
-                timeout=RETRIEVAL_PER_NAMESPACE_TIMEOUT,
-            )
+            attempts: List[float] = [RETRIEVAL_PER_NAMESPACE_TIMEOUT]
+            # Primary namespace gets one longer retry before we give up.
+            if namespace == primary_ns:
+                attempts.append(max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.0, 12.0))
+
+            last_error: Optional[Exception] = None
+            for attempt_idx, attempt_timeout in enumerate(attempts, start=1):
+                try:
+                    return await asyncio.wait_for(
+                        asyncio.to_thread(_fetch),
+                        timeout=attempt_timeout,
+                    )
+                except asyncio.TimeoutError as e:
+                    last_error = e
+                    if attempt_idx < len(attempts):
+                        print(
+                            f"[Retrieval] Namespace {namespace} timed out after {attempt_timeout:.1f}s "
+                            f"(attempt {attempt_idx}/{len(attempts)}), retrying."
+                        )
+                        continue
+                    raise
+                except Exception as e:
+                    last_error = e
+                    raise
+
+            if last_error:
+                raise last_error
+            raise RuntimeError(f"Unexpected namespace query failure for {namespace}")
 
         namespace_results = await asyncio.gather(
             *[query_namespace(ns) for ns in namespace_candidates],
@@ -483,8 +508,8 @@ async def _execute_pinecone_queries(
         if failed_namespaces:
             print(f"[Retrieval] Warning: {len(failed_namespaces)}/{len(namespace_candidates)} namespaces failed: {failed_namespaces}")
 
-        # Hotfix: if all namespaces timed out/failed, retry once against primary namespace
-        # with an extended timeout to avoid false "no knowledge" responses.
+        # Hotfix: if all namespaces failed, retry once against primary namespace with
+        # an extended timeout to avoid false "no knowledge" responses.
         if not merged_matches and failed_namespaces and len(failed_namespaces) == len(namespace_candidates):
             primary_ns = namespace_candidates[0]
             try:
@@ -506,7 +531,7 @@ async def _execute_pinecone_queries(
 
                 retry_result = await asyncio.wait_for(
                     asyncio.to_thread(_retry_fetch),
-                    timeout=max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.0, 8.0),
+                    timeout=max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5, 14.0),
                 )
                 retry_matches = _extract_matches(retry_result)
                 if retry_matches:
@@ -903,7 +928,27 @@ async def retrieve_context_vectors(
         creator_id=creator_id,
         timeout=RETRIEVAL_VECTOR_TIMEOUT,
     )
-    
+
+    # Fallback pass: if the full pipeline failed, retry a single direct query embedding.
+    if not all_results:
+        print(
+            "[Retrieval] Primary vector pipeline returned no results; attempting minimal "
+            "single-query fallback."
+        )
+        try:
+            fallback_embedding = await asyncio.wait_for(
+                asyncio.to_thread(get_embedding, query),
+                timeout=min(RETRIEVAL_EMBEDDING_TIMEOUT, 8.0),
+            )
+            all_results = await _execute_pinecone_queries(
+                [fallback_embedding],
+                twin_id,
+                creator_id=creator_id,
+                timeout=max(RETRIEVAL_VECTOR_TIMEOUT, RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5),
+            )
+        except Exception as e:
+            print(f"[Retrieval] Minimal fallback retrieval failed: {e}")
+
     if not all_results:
         return []
     

@@ -671,6 +671,19 @@ async def chat(twin_id: str, request: ChatRequest, user=Depends(get_current_user
                                 print("[Chat] Fallback override: extracted exact line from context")
                     except Exception as e:
                         print(f"[Chat] Fallback override failed: {e}")
+
+            # Safety override: if we ended with no evidence and no owner-memory refs,
+            # force uncertainty response instead of a generic/hallucinated answer.
+            if (
+                full_response
+                and full_response.strip()
+                and full_response.strip() != fallback_message
+                and not citations
+                and not owner_memory_refs
+            ):
+                print("[Chat] Safety override: no evidence available; forcing uncertainty response")
+                full_response = fallback_message
+                confidence_score = 0.0
             
             # Determine if graph was likely used (no external citations and has graph)
             graph_used = any(str(c).startswith("graph-") for c in (citations or []))
