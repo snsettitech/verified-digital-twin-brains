@@ -1,0 +1,8 @@
+# Developer/test dependencies.
+#
+# Includes runtime deps plus test tooling.
+
+-r requirements.txt
+
+pytest
+pytest-asyncio

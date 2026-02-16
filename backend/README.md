@@ -38,6 +38,16 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    pip install -r requirements.txt
    ```
 
+   Optional ML features (local HF embeddings + FlashRank reranker):
+   ```bash
+   pip install -r requirements-ml.txt
+   ```
+
+   Developer/test tooling:
+   ```bash
+   pip install -r requirements-dev.txt
+   ```
+
 2. **Environment Variables**:
    Create a `.env` file based on `.env.example`:
    ```env

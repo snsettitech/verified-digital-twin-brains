@@ -4,9 +4,9 @@ supabase
 pinecone
 openai
 
-# Hugging Face for local embeddings (20x faster than OpenAI)
-sentence-transformers>=3.0.0
-huggingface-hub>=0.24.0
+# Optional local embedding/reranking dependencies were moved to:
+#   requirements-ml.txt
+# Production defaults use EMBEDDING_PROVIDER=openai and ENABLE_FLASHRANK=false.
 
 # Cerebras for fast inference (10x faster than OpenAI)
 cerebras-cloud-sdk>=1.0.0
@@ -24,8 +24,6 @@ python-jose[cryptography]
 passlib[bcrypt]
 composio-langchain
 cohere
-pytest
-pytest-asyncio
 httpx
 yt-dlp
 feedparser
@@ -42,7 +40,6 @@ graphiti-core>=0.5.0
 neo4j>=5.26.0
 python-docx
 openpyxl
-flashrank
 pydub
 imageio-ffmpeg
 redis
