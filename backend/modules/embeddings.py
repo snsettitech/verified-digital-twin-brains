@@ -4,9 +4,9 @@ Embeddings Module: Centralized embedding generation and utilities.
 This module provides unified embedding generation functions to avoid duplication
 across ingestion, verified_qna, and retrieval modules.
 
-PROVIDER SUPPORT (NEW):
+PROVIDER SUPPORT:
 - OpenAI: text-embedding-3-large (default, 3072 dims)
-- Hugging Face Local: all-MiniLM-L6-v2 (384 dims, 20x faster)
+- Hugging Face: API-backed or local backend (dimension depends on selected model)
 
 Environment Variables:
 - EMBEDDING_PROVIDER: "openai" (default) or "huggingface"
@@ -184,7 +184,7 @@ def _get_embedding_openai(text: str) -> List[float]:
 
 
 def _get_embedding_huggingface(text: str) -> List[float]:
-    """Generate embedding using local Hugging Face model."""
+    """Generate embedding using configured Hugging Face backend."""
     from modules.embeddings_hf import HFEmbeddingClient
     
     client = HFEmbeddingClient()

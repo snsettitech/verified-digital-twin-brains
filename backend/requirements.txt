@@ -4,8 +4,9 @@ supabase
 pinecone
 openai
 
-# Optional local embedding/reranking dependencies were moved to:
-#   requirements-ml.txt
+# Optional embedding/reranking dependencies were moved to:
+#   requirements-ml.txt        (production-safe: HF API + rerankers)
+#   requirements-ml-local.txt  (heavy local HF model runtime)
 # Production defaults use EMBEDDING_PROVIDER=openai and ENABLE_FLASHRANK=false.
 
 # Cerebras for fast inference (10x faster than OpenAI)

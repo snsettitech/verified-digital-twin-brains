@@ -237,6 +237,9 @@ else:
     _flashrank_available = False
     _ranker_instance = None
 
+_cohere_rerank_enabled = os.getenv("ENABLE_COHERE_RERANK", "true").lower() == "true"
+_cohere_rerank_model = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5")
+
 def get_ranker():
     """Lazy load FlashRank to avoid startup overhead."""
     global _ranker_instance
@@ -247,6 +250,110 @@ def get_ranker():
         except Exception as e:
             print(f"Failed to initialize FlashRank: {e}")
     return _ranker_instance
+
+
+def _rerank_with_cohere(
+    query: str,
+    contexts: List[Dict[str, Any]],
+    top_k: int,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Rerank contexts with Cohere when configured.
+    Returns None when unavailable or rerank fails.
+    """
+    if not _cohere_rerank_enabled or not contexts:
+        return None
+
+    cohere_client = get_cohere_client()
+    if cohere_client is None:
+        return None
+
+    try:
+        response = cohere_client.rerank(
+            model=_cohere_rerank_model,
+            query=query,
+            documents=[c.get("text", "") for c in contexts],
+            top_n=min(max(1, top_k), len(contexts)),
+        )
+        results = getattr(response, "results", None)
+        if results is None and isinstance(response, dict):
+            results = response.get("results")
+        if not isinstance(results, list):
+            return None
+
+        reranked: List[Dict[str, Any]] = []
+        for item in results:
+            if isinstance(item, dict):
+                idx = item.get("index")
+                score = item.get("relevance_score", item.get("score", 0.0))
+            else:
+                idx = getattr(item, "index", None)
+                score = getattr(item, "relevance_score", getattr(item, "score", 0.0))
+
+            if idx is None:
+                continue
+            try:
+                original_idx = int(idx)
+                if original_idx < 0 or original_idx >= len(contexts):
+                    continue
+                ctx = dict(contexts[original_idx])
+                ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
+                ctx["score"] = float(score or 0.0)
+                reranked.append(ctx)
+            except Exception:
+                continue
+
+        if not reranked:
+            return None
+
+        max_rerank_score = max((float(c.get("score", 0.0) or 0.0) for c in reranked), default=0.0)
+        if max_rerank_score < 0.001:
+            print("[Retrieval] Cohere rerank scores too low. Falling back.")
+            return None
+
+        print(f"[Retrieval] Cohere reranked {len(contexts)} -> {len(reranked[:top_k])} contexts")
+        return reranked[:top_k]
+    except Exception as e:
+        print(f"[Retrieval] Cohere reranking failed: {e}. Falling back.")
+        return None
+
+
+def _rerank_with_flashrank(
+    query: str,
+    contexts: List[Dict[str, Any]],
+    top_k: int,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Rerank contexts with FlashRank when configured.
+    Returns None when unavailable or rerank fails.
+    """
+    ranker = get_ranker()
+    if ranker is None or not contexts:
+        return None
+
+    try:
+        passages = [{"id": str(i), "text": c["text"], "meta": c} for i, c in enumerate(contexts)]
+        rerank_request = RerankRequest(query=query, passages=passages)
+        results = ranker.rerank(rerank_request)
+
+        max_rerank_score = max((float(res.get("score", 0) or 0) for res in results), default=0.0)
+        if max_rerank_score < 0.001:
+            print("[Retrieval] FlashRank scores too low. Falling back.")
+            return None
+
+        reranked: List[Dict[str, Any]] = []
+        for res in results:
+            original_idx = int(res["id"])
+            ctx = dict(contexts[original_idx])
+            ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
+            ctx["score"] = float(res.get("score", 0.0) or 0.0)
+            reranked.append(ctx)
+
+        print(f"[Retrieval] FlashRank reranked {len(contexts)} -> {len(reranked[:top_k])} contexts")
+        return reranked[:top_k]
+    except Exception as e:
+        print(f"[Retrieval] FlashRank reranking failed: {e}. Falling back.")
+        return None
 
 
 # Langfuse v3 tracing
@@ -1081,43 +1188,22 @@ async def retrieve_context_vectors(
     print(f"DEBUG: Unique contexts before rerank: {len(unique_contexts)}")
     
     # 8. Rerank
+    # Priority: Cohere (remote) -> FlashRank (local) -> vector score fallback.
+    final_contexts: List[Dict[str, Any]] = []
+    rerank_provider_used = "vector"
 
-    final_contexts = []
-    ranker = get_ranker()
-    # ranker = None # FORCE DISABLE
-    
-    if ranker and unique_contexts:
-        try:
-            # Prepare for reranking
-            passages = [
-                {"id": str(i), "text": c["text"], "meta": c} 
-                for i, c in enumerate(unique_contexts)
-            ]
-            
-            rerank_request = RerankRequest(query=query, passages=passages)
-            results = ranker.rerank(rerank_request)
+    if unique_contexts:
+        cohere_reranked = _rerank_with_cohere(query, unique_contexts, top_k)
+        if cohere_reranked:
+            final_contexts = cohere_reranked
+            rerank_provider_used = "cohere"
+        else:
+            flashrank_reranked = _rerank_with_flashrank(query, unique_contexts, top_k)
+            if flashrank_reranked:
+                final_contexts = flashrank_reranked
+                rerank_provider_used = "flashrank"
 
-            max_rerank_score = max((float(res.get("score", 0) or 0) for res in results), default=0)
-            if max_rerank_score < 0.001:
-                print("[Retrieval] Rerank scores too low. Using vector scores.")
-                final_contexts = [dict(c) for c in unique_contexts[:top_k]]
-            else:
-                # Reconstruct sorted contexts
-                for res in results:
-                    original_idx = int(res["id"])
-                    ctx = dict(unique_contexts[original_idx])
-                    ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
-                    ctx["score"] = float(res.get("score", 0.0) or 0.0) # Update score with rerank score
-                    final_contexts.append(ctx)
-                
-                # Limit to requested top_k
-                final_contexts = final_contexts[:top_k]
-                print(f"[Retrieval] Reranked {len(unique_contexts)} -> {len(final_contexts)} contexts")
-        except Exception as e:
-            print(f"[Retrieval] Reranking failed: {e}. Falling back to vector scores.")
-            final_contexts = [dict(c) for c in unique_contexts[:top_k]]
-    else:
-        # Fallback if no ranker
+    if not final_contexts:
         final_contexts = [dict(c) for c in unique_contexts[:top_k]]
 
     # Keep raw vector score available after reranking updates score.
@@ -1150,7 +1236,6 @@ async def retrieve_context_vectors(
         c["verified_qna_match"] = False
     
     # Log RAG metrics to Langfuse
-    cohere_client = get_cohere_client()
     if _langfuse_available and final_contexts:
         try:
             langfuse_context.update_current_observation(
@@ -1158,7 +1243,10 @@ async def retrieve_context_vectors(
                     "doc_ids": [c.get("source_id", "unknown")[:50] for c in final_contexts],
                     "similarity_scores": [round(c.get("score", 0.0), 3) for c in final_contexts],
                     "chunk_lengths": [len(c.get("text", "")) for c in final_contexts],
-                    "reranked": cohere_client is not None,
+                    "reranked": rerank_provider_used != "vector",
+                    "rerank_provider": rerank_provider_used,
+                    "cohere_rerank_enabled": _cohere_rerank_enabled,
+                    "flashrank_enabled": _flashrank_enabled,
                     "top_k": top_k,
                     "total_retrieved": len(final_contexts),
                 }
@@ -1287,6 +1375,8 @@ async def get_retrieval_health_status(twin_id: Optional[str] = None) -> Dict[str
         "delphi_dual_read": dual_read,
         "flashrank_enabled": _flashrank_enabled,
         "flashrank_available": _flashrank_available,
+        "cohere_rerank_enabled": _cohere_rerank_enabled,
+        "cohere_rerank_model": _cohere_rerank_model,
         "query_prep_timeout_s": RETRIEVAL_QUERY_PREP_TIMEOUT,
         "embedding_timeout_s": RETRIEVAL_EMBEDDING_TIMEOUT,
         "vector_timeout_s": RETRIEVAL_VECTOR_TIMEOUT,

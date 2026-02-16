@@ -416,8 +416,10 @@ async def _apply_persona_audit(
                 trace_id = None
                 try:
                     from langfuse.decorators import langfuse_context
-                    # Try to get trace ID from context
-                    trace_id = getattr(langfuse_context, 'current_trace_id', None)
+                    if hasattr(langfuse_context, "get_current_trace_id"):
+                        trace_id = langfuse_context.get_current_trace_id()
+                    if not trace_id:
+                        trace_id = getattr(langfuse_context, "current_trace_id", None)
                 except Exception:
                     pass
                 

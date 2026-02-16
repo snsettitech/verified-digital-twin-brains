@@ -38,9 +38,14 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    pip install -r requirements.txt
    ```
 
-   Optional ML features (HF embeddings, FlashRank, Cohere reranker):
+   Optional production-safe ML features (HF API embeddings, FlashRank, Cohere reranker):
    ```bash
    pip install -r requirements-ml.txt
+   ```
+
+   Optional local HF embeddings (heavier: sentence-transformers/torch):
+   ```bash
+   pip install -r requirements-ml-local.txt
    ```
 
    Developer/test tooling:
@@ -57,6 +62,19 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    SUPABASE_URL=...
    SUPABASE_KEY=...
    JWT_SECRET=...
+   LANGFUSE_PUBLIC_KEY=...
+   LANGFUSE_SECRET_KEY=...
+   LANGFUSE_HOST=https://cloud.langfuse.com
+
+   # HF embeddings on starter plan (API-backed)
+   EMBEDDING_PROVIDER=huggingface
+   HF_EMBEDDING_BACKEND=inference_api
+   HF_API_TOKEN=...
+
+   # Reranking
+   ENABLE_FLASHRANK=true
+   ENABLE_COHERE_RERANK=true
+   COHERE_API_KEY=...
    ```
 
 3. **Run Application**:

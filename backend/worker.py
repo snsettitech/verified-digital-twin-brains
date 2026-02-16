@@ -38,7 +38,9 @@ def validate_worker_environment():
     openai_key = os.getenv("OPENAI_API_KEY")
     cerebras_key = os.getenv("CEREBRAS_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+    hf_api_token = os.getenv("HF_API_TOKEN") or os.getenv("HUGGINGFACEHUB_API_TOKEN")
     embedding_provider = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
+    hf_embedding_backend = os.getenv("HF_EMBEDDING_BACKEND", "auto").lower()
     inference_provider = os.getenv("INFERENCE_PROVIDER", "openai").lower()
     asr_provider = os.getenv("YOUTUBE_ASR_PROVIDER", "openai").lower()
 
@@ -49,6 +51,11 @@ def validate_worker_environment():
     # Require OPENAI key when active providers explicitly depend on it.
     if embedding_provider == "openai" and not openai_key:
         missing.append("  - OPENAI_API_KEY required when EMBEDDING_PROVIDER=openai")
+    if embedding_provider == "huggingface":
+        if hf_embedding_backend in {"inference_api", "api", "inference"} and not hf_api_token:
+            missing.append("  - HF_API_TOKEN (or HUGGINGFACEHUB_API_TOKEN) required when EMBEDDING_PROVIDER=huggingface and HF_EMBEDDING_BACKEND=inference_api")
+        if hf_embedding_backend == "auto" and not hf_api_token:
+            print("[WARN] EMBEDDING_PROVIDER=huggingface with HF_EMBEDDING_BACKEND=auto and no HF_API_TOKEN; worker will try local embeddings.")
     if inference_provider == "openai" and not openai_key:
         missing.append("  - OPENAI_API_KEY required when INFERENCE_PROVIDER=openai")
     if asr_provider == "openai" and not openai_key:

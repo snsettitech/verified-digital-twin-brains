@@ -1,11 +1,12 @@
-# Optional ML dependencies (not required for default production path).
+# Optional production-safe ML dependencies.
 #
-# Install this file if you explicitly enable either:
-# - EMBEDDING_PROVIDER=huggingface
-# - ENABLE_FLASHRANK=true
-# - COHERE_API_KEY is set (Cohere reranker)
+# This file is tuned for starter-plan stability:
+# - Cohere reranking (remote API)
+# - FlashRank reranking (local ONNX)
+# - HF embeddings via inference API (no local torch model required)
+#
+# To enable *local* sentence-transformers embeddings, additionally install:
+#   requirements-ml-local.txt
 
-sentence-transformers>=3.0.0
-huggingface-hub>=0.24.0
 flashrank
 cohere
