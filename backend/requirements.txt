@@ -23,7 +23,6 @@ PyPDF2
 python-jose[cryptography]
 passlib[bcrypt]
 composio-langchain
-cohere
 httpx
 yt-dlp
 feedparser

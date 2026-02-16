@@ -1,8 +1,12 @@
 import os
 from pinecone import Pinecone
 from openai import OpenAI, AsyncOpenAI
-import cohere
 from dotenv import load_dotenv
+
+try:
+    import cohere
+except ImportError:
+    cohere = None
 
 load_dotenv()
 
@@ -16,8 +20,10 @@ def get_cohere_client():
     global _cohere_client
     if _cohere_client is None:
         api_key = os.getenv("COHERE_API_KEY")
-        if api_key:
+        if api_key and cohere is not None:
             _cohere_client = cohere.ClientV2(api_key=api_key)
+        elif api_key and cohere is None:
+            print("Warning: cohere package not installed. Run: pip install -r requirements-ml.txt")
     return _cohere_client
 
 def get_openai_client():

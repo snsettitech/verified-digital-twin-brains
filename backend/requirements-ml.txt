@@ -3,7 +3,9 @@
 # Install this file if you explicitly enable either:
 # - EMBEDDING_PROVIDER=huggingface
 # - ENABLE_FLASHRANK=true
+# - COHERE_API_KEY is set (Cohere reranker)
 
 sentence-transformers>=3.0.0
 huggingface-hub>=0.24.0
 flashrank
+cohere

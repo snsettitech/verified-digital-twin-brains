@@ -38,7 +38,7 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    pip install -r requirements.txt
    ```
 
-   Optional ML features (local HF embeddings + FlashRank reranker):
+   Optional ML features (HF embeddings, FlashRank, Cohere reranker):
    ```bash
    pip install -r requirements-ml.txt
    ```
