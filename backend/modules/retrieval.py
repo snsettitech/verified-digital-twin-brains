@@ -7,7 +7,7 @@ import re
 from typing import List, Dict, Any, Optional, Set
 from contextlib import contextmanager
 from modules.clients import get_openai_client, get_pinecone_index, get_cohere_client
-from modules.langfuse_sdk import langfuse_context, observe
+from modules.langfuse_sdk import is_enabled as is_langfuse_enabled, langfuse_context, observe
 from modules.verified_qna import match_verified_qna
 from modules.owner_memory_store import find_owner_memory_candidates
 from modules.observability import supabase
@@ -24,6 +24,7 @@ from modules.embeddings import get_embedding, get_embeddings_async
 
 # PHASE 4: Structured logging for observability
 logger = logging.getLogger(__name__)
+_langfuse_available = is_langfuse_enabled()
 
 
 def _float_env(name: str, default: float) -> float:
