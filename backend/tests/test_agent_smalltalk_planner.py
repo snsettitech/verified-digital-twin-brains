@@ -193,6 +193,42 @@ async def test_planner_comparison_query_unlabeled_evidence_uses_source_faithful(
 
 
 @pytest.mark.asyncio
+async def test_planner_general_evidence_query_uses_source_faithful(monkeypatch):
+    def fake_prompt_builder(_state):
+        return ("system", {"intent_label": "factual_with_evidence", "module_ids": []})
+
+    monkeypatch.setattr("modules.agent.build_system_prompt_with_trace", fake_prompt_builder)
+
+    state = {
+        "dialogue_mode": "QA_FACT",
+        "messages": [HumanMessage(content="What is my incident response approach?")],
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "src-1",
+                    "score": 0.82,
+                    "text": (
+                        "My incident response approach is to stabilize systems first, then communicate "
+                        "status every 15 minutes until recovery. I run a blameless postmortem with clear "
+                        "owners and due dates for follow-up actions."
+                    ),
+                }
+            ]
+        },
+        "target_owner_scope": False,
+        "full_settings": {},
+        "intent_label": "factual_with_evidence",
+    }
+
+    result = await planner_node(state)
+    plan = result["planning_output"]
+    assert plan["citations"] == ["src-1"]
+    assert plan["render_strategy"] == "source_faithful"
+    assert any("incident response" in point.lower() for point in plan["answer_points"])
+    assert "source-faithful extraction" in plan["reasoning_trace"].lower()
+
+
+@pytest.mark.asyncio
 async def test_realizer_source_faithful_plan_avoids_paraphrase(monkeypatch):
     async def fail_invoke_text(*args, **kwargs):
         raise AssertionError("invoke_text should not be called in source_faithful mode")

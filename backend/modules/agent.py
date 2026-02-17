@@ -1113,6 +1113,7 @@ Rules:
                 "follow_up_question": "",
                 "confidence": 0.55,
                 "teaching_questions": [],
+                "render_strategy": "source_faithful",
                 "reasoning_trace": "Deterministic direct-answer plan for do-you-know probe.",
             },
             "intent_label": persona_trace.get("intent_label"),
@@ -1324,6 +1325,89 @@ Rules:
                 "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
                 "reasoning_history": (state.get("reasoning_history") or []) + [
                     "Planner: deterministic comparison plan from recommendation evidence."
+                ],
+            }
+
+    # Deterministic source-faithful path for all evidence-backed document QA.
+    # This keeps answers extractive and avoids conversational rewrites that can
+    # drift from retrieved text.
+    if context_data and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL"}:
+        query_tokens = [
+            t for t in re.findall(r"[a-z0-9][a-z0-9._-]*", (user_query or "").lower())
+            if len(t) > 2 and t not in {"the", "and", "for", "with", "from", "that", "this", "are", "you", "your"}
+        ]
+
+        def _normalize_extract(raw: str) -> str:
+            return re.sub(r"\s+", " ", (raw or "").strip().lstrip("-*").strip())
+
+        scored_sentences: Dict[str, Dict[str, float]] = {}
+        citation_ids: List[str] = []
+        order_idx = 0
+
+        for ctx in context_data[:5]:
+            source_id = ctx.get("source_id")
+            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
+                citation_ids.append(source_id)
+
+            text = (ctx.get("text") or "").strip()
+            if not text:
+                continue
+
+            vector_score = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
+            for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
+                sentence = _normalize_extract(raw)
+                if not sentence or len(sentence) < 18:
+                    continue
+
+                lowered = sentence.lower()
+                overlap = sum(1 for tok in query_tokens if tok in lowered)
+                label_bonus = 2 if lowered.startswith(("recommendation:", "assumptions:", "why:")) else 0
+                score = float(overlap * 2 + label_bonus) + min(vector_score, 1.0)
+
+                existing = scored_sentences.get(sentence)
+                if existing is None or score > float(existing.get("score", 0.0)):
+                    scored_sentences[sentence] = {"score": score, "order": float(order_idx)}
+                order_idx += 1
+
+        ranked = sorted(
+            scored_sentences.items(),
+            key=lambda item: (-float(item[1].get("score", 0.0)), float(item[1].get("order", 0.0))),
+        )
+
+        answer_points = [sentence for sentence, _meta in ranked[:3]]
+
+        if not answer_points:
+            fallback_lines: List[str] = []
+            for ctx in context_data[:3]:
+                for raw_line in (ctx.get("text") or "").splitlines():
+                    line = _normalize_extract(raw_line)
+                    if line and line not in fallback_lines:
+                        fallback_lines.append(line)
+                    if len(fallback_lines) >= 3:
+                        break
+                if len(fallback_lines) >= 3:
+                    break
+            answer_points = fallback_lines[:3]
+
+        if answer_points:
+            max_score = max((float(meta.get("score", 0.0)) for _s, meta in ranked[:3]), default=0.0)
+            confidence = 0.82 if max_score >= 1.0 else 0.72
+            return {
+                "planning_output": {
+                    "answer_points": answer_points,
+                    "citations": citation_ids[:3],
+                    "follow_up_question": "",
+                    "confidence": confidence,
+                    "teaching_questions": [],
+                    "render_strategy": "source_faithful",
+                    "reasoning_trace": "Deterministic source-faithful extraction from retrieved evidence.",
+                },
+                "intent_label": persona_trace.get("intent_label"),
+                "persona_module_ids": persona_trace.get("module_ids", []),
+                "persona_spec_version": persona_trace.get("persona_spec_version"),
+                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+                "reasoning_history": (state.get("reasoning_history") or []) + [
+                    "Planner: deterministic source-faithful plan from retrieved context."
                 ],
             }
 

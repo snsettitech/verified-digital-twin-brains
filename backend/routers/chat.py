@@ -582,6 +582,7 @@ async def chat(
             dialogue_mode = "ANSWER"
             intent_label = None
             module_ids = []
+            render_strategy = None
             requires_evidence = None
             target_owner_scope = None
             router_reason = None
@@ -785,12 +786,20 @@ async def chat(
                                     teaching_questions = msg.additional_kwargs["teaching_questions"]
                                 if "planning_output" in msg.additional_kwargs:
                                     planning_output = msg.additional_kwargs["planning_output"]
+                                    if isinstance(planning_output, dict):
+                                        plan_render = planning_output.get("render_strategy")
+                                        if isinstance(plan_render, str) and plan_render.strip():
+                                            render_strategy = plan_render
                                 if "dialogue_mode" in msg.additional_kwargs:
                                     dialogue_mode = msg.additional_kwargs["dialogue_mode"]
                                 if "intent_label" in msg.additional_kwargs:
                                     intent_label = msg.additional_kwargs["intent_label"]
                                 if "module_ids" in msg.additional_kwargs:
                                     module_ids = msg.additional_kwargs["module_ids"] or []
+                                if "render_strategy" in msg.additional_kwargs:
+                                    raw_render = msg.additional_kwargs["render_strategy"]
+                                    if isinstance(raw_render, str) and raw_render.strip():
+                                        render_strategy = raw_render
                                 if "requires_evidence" in msg.additional_kwargs:
                                     raw_requires = msg.additional_kwargs["requires_evidence"]
                                     if isinstance(raw_requires, bool):
@@ -860,18 +869,27 @@ async def chat(
             citation_details = _resolve_citation_details(citations, twin_id)
 
             draft_for_audit = full_response if full_response else fallback_message
-            audited_response, audited_intent_label, audited_module_ids = await _apply_persona_audit(
-                twin_id=twin_id,
-                user_query=query,
-                draft_response=draft_for_audit,
-                intent_label=intent_label,
-                module_ids=module_ids,
-                citations=citations,
-                context_trace=context_trace,
-                tenant_id=user.get("tenant_id") if user else None,
-                conversation_id=conversation_id,
-                interaction_context=resolved_context.context.value,
-            )
+            source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
+            if source_faithful:
+                audited_response, audited_intent_label, audited_module_ids = (
+                    draft_for_audit,
+                    intent_label,
+                    module_ids,
+                )
+                context_trace["rewrite_applied"] = False
+            else:
+                audited_response, audited_intent_label, audited_module_ids = await _apply_persona_audit(
+                    twin_id=twin_id,
+                    user_query=query,
+                    draft_response=draft_for_audit,
+                    intent_label=intent_label,
+                    module_ids=module_ids,
+                    citations=citations,
+                    context_trace=context_trace,
+                    tenant_id=user.get("tenant_id") if user else None,
+                    conversation_id=conversation_id,
+                    interaction_context=resolved_context.context.value,
+                )
             full_response = audited_response
             intent_label = audited_intent_label or intent_label
             module_ids = audited_module_ids or module_ids
@@ -894,6 +912,7 @@ async def chat(
                 "target_owner_scope": target_owner_scope,
                 "router_reason": router_reason,
                 "router_knowledge_available": router_knowledge_available,
+                "render_strategy": render_strategy,
                 "router_policy": {
                     "requires_evidence": requires_evidence,
                     "target_owner_scope": target_owner_scope,
@@ -1266,6 +1285,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         confidence_score = 0.0
         intent_label = None
         module_ids = []
+        render_strategy = None
 
         async for event in run_agent_stream(
             twin_id,
@@ -1295,6 +1315,14 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                     if hasattr(msg, "additional_kwargs") and isinstance(msg.additional_kwargs, dict):
                         intent_label = msg.additional_kwargs.get("intent_label", intent_label)
                         module_ids = msg.additional_kwargs.get("module_ids", module_ids) or []
+                        raw_render = msg.additional_kwargs.get("render_strategy")
+                        if isinstance(raw_render, str) and raw_render.strip():
+                            render_strategy = raw_render
+                        planning_output = msg.additional_kwargs.get("planning_output")
+                        if not render_strategy and isinstance(planning_output, dict):
+                            plan_render = planning_output.get("render_strategy")
+                            if isinstance(plan_render, str) and plan_render.strip():
+                                render_strategy = plan_render
                         if msg.additional_kwargs.get("persona_spec_version"):
                             context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                         if msg.additional_kwargs.get("persona_prompt_variant"):
@@ -1304,18 +1332,23 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
 
         fallback_message = _uncertainty_message(resolved_context.context.value)
         draft_for_audit = final_content if final_content else fallback_message
-        final_content, intent_label, module_ids = await _apply_persona_audit(
-            twin_id=twin_id,
-            user_query=query,
-            draft_response=draft_for_audit,
-            intent_label=intent_label,
-            module_ids=module_ids,
-            citations=citations,
-            context_trace=context_trace,
-            tenant_id=None,
-            conversation_id=conversation_id,
-            interaction_context=resolved_context.context.value,
-        )
+        source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
+        if source_faithful:
+            final_content = draft_for_audit
+            context_trace["rewrite_applied"] = False
+        else:
+            final_content, intent_label, module_ids = await _apply_persona_audit(
+                twin_id=twin_id,
+                user_query=query,
+                draft_response=draft_for_audit,
+                intent_label=intent_label,
+                module_ids=module_ids,
+                citations=citations,
+                context_trace=context_trace,
+                tenant_id=None,
+                conversation_id=conversation_id,
+                interaction_context=resolved_context.context.value,
+            )
         citation_details = _resolve_citation_details(citations, twin_id)
 
         output = {
@@ -1328,6 +1361,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "owner_memory_topics": owner_memory_topics,
             "intent_label": intent_label,
             "module_ids": module_ids,
+            "render_strategy": render_strategy,
             "session_id": session_id,
             "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
@@ -1528,6 +1562,7 @@ async def public_chat_endpoint(
             confidence_score = 0.0
             intent_label = None
             module_ids = []
+            render_strategy = None
             async for event in run_agent_stream(
                 twin_id,
                 request.message,
@@ -1553,6 +1588,14 @@ async def public_chat_endpoint(
                         if hasattr(msg, "additional_kwargs") and isinstance(msg.additional_kwargs, dict):
                             intent_label = msg.additional_kwargs.get("intent_label", intent_label)
                             module_ids = msg.additional_kwargs.get("module_ids", module_ids) or []
+                            raw_render = msg.additional_kwargs.get("render_strategy")
+                            if isinstance(raw_render, str) and raw_render.strip():
+                                render_strategy = raw_render
+                            planning_output = msg.additional_kwargs.get("planning_output")
+                            if not render_strategy and isinstance(planning_output, dict):
+                                plan_render = planning_output.get("render_strategy")
+                                if isinstance(plan_render, str) and plan_render.strip():
+                                    render_strategy = plan_render
                             if msg.additional_kwargs.get("persona_spec_version"):
                                 context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                             if msg.additional_kwargs.get("persona_prompt_variant"):
@@ -1575,18 +1618,23 @@ async def public_chat_endpoint(
 
             fallback_message = _uncertainty_message(resolved_context.context.value)
             draft_for_audit = final_response if final_response else fallback_message
-            final_response, intent_label, module_ids = await _apply_persona_audit(
-                twin_id=twin_id,
-                user_query=request.message,
-                draft_response=draft_for_audit,
-                intent_label=intent_label,
-                module_ids=module_ids,
-                citations=citations,
-                context_trace=context_trace,
-                tenant_id=None,
-                conversation_id=conversation_id,
-                interaction_context=resolved_context.context.value,
-            )
+            source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
+            if source_faithful:
+                final_response = draft_for_audit
+                context_trace["rewrite_applied"] = False
+            else:
+                final_response, intent_label, module_ids = await _apply_persona_audit(
+                    twin_id=twin_id,
+                    user_query=request.message,
+                    draft_response=draft_for_audit,
+                    intent_label=intent_label,
+                    module_ids=module_ids,
+                    citations=citations,
+                    context_trace=context_trace,
+                    tenant_id=None,
+                    conversation_id=conversation_id,
+                    interaction_context=resolved_context.context.value,
+                )
             
             citations = _normalize_json(citations)
             citation_details = _normalize_json(_resolve_citation_details(citations, twin_id))
@@ -1603,6 +1651,7 @@ async def public_chat_endpoint(
                 "owner_memory_topics": owner_memory_topics,
                 "intent_label": intent_label,
                 "module_ids": module_ids,
+                "render_strategy": render_strategy,
                 "used_owner_memory": bool(owner_memory_refs),
                 "identity_gate_mode": gate.get("gate_mode"),
                 **context_trace,
