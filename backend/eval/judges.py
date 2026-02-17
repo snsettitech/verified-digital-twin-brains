@@ -112,10 +112,16 @@ async def judge_citation_alignment(
     
     from modules.clients import get_openai_client
     
-    citations_text = "\n".join([
-        f"- {c.get('title', 'Untitled')}: {c.get('content', '')[:200]}"
-        for c in citations[:5]
-    ])
+    citation_lines = []
+    for c in citations[:5]:
+        if isinstance(c, dict):
+            title = str(c.get("title") or c.get("id") or "Untitled")
+            content = str(c.get("content") or c.get("text") or "")
+        else:
+            title = str(c)
+            content = ""
+        citation_lines.append(f"- {title}: {content[:200]}")
+    citations_text = "\n".join(citation_lines)
     
     prompt = f"""You are an expert judge evaluating citation accuracy.
 

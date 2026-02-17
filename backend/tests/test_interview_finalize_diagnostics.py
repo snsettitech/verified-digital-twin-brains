@@ -61,6 +61,7 @@ async def test_finalize_reports_proposal_failures(monkeypatch):
     import modules.zep_memory as zep_memory
 
     sink = {}
+    monkeypatch.setattr(interview, "AUTO_APPROVE_OWNER_MEMORY", True)
     monkeypatch.setattr(interview, "supabase", _Supabase(sink))
     monkeypatch.setattr(zep_memory, "get_zep_client", lambda: _FakeZep())
 
@@ -103,5 +104,5 @@ async def test_finalize_reports_proposal_failures(monkeypatch):
     assert res.proposed_count == 0
     assert res.proposed_failed_count == 1
     assert any("low-confidence" in note for note in res.notes)
-    assert any("could not be saved as proposals" in note for note in res.notes)
+    assert any("could not be saved as verified memories" in note for note in res.notes)
     assert sink["updated"]["metadata"]["proposed_failed_count"] == 1

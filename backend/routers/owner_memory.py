@@ -12,7 +12,8 @@ from modules.owner_memory_store import (
     create_owner_memory,
     find_owner_memory_candidates,
     retract_owner_memory,
-    get_owner_memory
+    get_owner_memory,
+    approve_owner_memory,
 )
 from modules.memory_events import create_memory_event
 from modules.verified_qna import create_verified_qna
@@ -50,6 +51,125 @@ router = APIRouter(tags=["owner-memory"])
 async def list_owner_memory_endpoint(twin_id: str, status: Optional[str] = Query("active"), user=Depends(verify_owner)):
     verify_twin_ownership(twin_id, user)
     return list_owner_memories(twin_id, status=status or "active", limit=200)
+
+
+@router.post("/twins/{twin_id}/owner-memory/{memory_id}/approve")
+async def approve_owner_memory_endpoint(
+    twin_id: str,
+    memory_id: str,
+    user=Depends(verify_owner),
+):
+    """
+    Promote a proposed owner memory to verified so retrieval can use it.
+    """
+    verify_twin_ownership(twin_id, user)
+
+    existing = get_owner_memory(memory_id)
+    if not existing or existing.get("twin_id") != twin_id:
+        raise HTTPException(status_code=404, detail="Owner memory not found")
+
+    current_status = str(existing.get("status") or "").lower()
+    if current_status in {"verified", "active"}:
+        return {
+            "status": "already_approved",
+            "owner_memory_id": memory_id,
+            "memory_status": current_status,
+        }
+    if current_status != "proposed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Only proposed memories can be approved (current status: {current_status or 'unknown'})",
+        )
+
+    approved = approve_owner_memory(
+        mem_id=memory_id,
+        approver_id=user.get("user_id"),
+        expected_status="proposed",
+    )
+    if not approved:
+        raise HTTPException(status_code=500, detail="Failed to approve owner memory")
+
+    try:
+        await create_memory_event(
+            twin_id=twin_id,
+            tenant_id=user.get("tenant_id"),
+            event_type="owner_memory_write",
+            payload={
+                "owner_memory_id": approved.get("id"),
+                "topic": approved.get("topic_normalized"),
+                "memory_type": approved.get("memory_type"),
+                "approval": "proposed_to_verified",
+            },
+            status="applied",
+            source_type="manual",
+            source_id=None,
+        )
+    except Exception as e:
+        print(f"[OwnerMemory] approval audit log failed: {e}")
+
+    return {
+        "status": "approved",
+        "owner_memory_id": approved.get("id"),
+        "from_status": current_status,
+        "to_status": approved.get("status", "verified"),
+    }
+
+
+@router.post("/twins/{twin_id}/owner-memory/approve-proposed")
+async def approve_proposed_owner_memories_endpoint(
+    twin_id: str,
+    limit: int = Query(200, ge=1, le=1000),
+    user=Depends(verify_owner),
+):
+    """
+    Bulk-approve proposed memories for faster bootstrap after interview ingestion.
+    """
+    verify_twin_ownership(twin_id, user)
+
+    proposed_memories = list_owner_memories(twin_id, status="proposed", limit=limit)
+    approved_ids: List[str] = []
+    failed_ids: List[str] = []
+
+    for mem in proposed_memories:
+        mem_id = mem.get("id")
+        if not mem_id:
+            continue
+        updated = approve_owner_memory(
+            mem_id=mem_id,
+            approver_id=user.get("user_id"),
+            expected_status="proposed",
+        )
+        if updated:
+            approved_ids.append(mem_id)
+        else:
+            failed_ids.append(mem_id)
+
+    if approved_ids:
+        try:
+            await create_memory_event(
+                twin_id=twin_id,
+                tenant_id=user.get("tenant_id"),
+                event_type="owner_memory_write",
+                payload={
+                    "approval": "bulk_proposed_to_verified",
+                    "approved_count": len(approved_ids),
+                    "failed_count": len(failed_ids),
+                },
+                status="applied",
+                source_type="manual",
+                source_id=None,
+            )
+        except Exception as e:
+            print(f"[OwnerMemory] bulk approval audit log failed: {e}")
+
+    return {
+        "status": "completed",
+        "proposed_found": len(proposed_memories),
+        "approved_count": len(approved_ids),
+        "failed_count": len(failed_ids),
+        "approved_ids": approved_ids,
+        "failed_ids": failed_ids,
+    }
 
 
 @router.delete("/twins/{twin_id}/owner-memory/{memory_id}")

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from fastapi.responses import StreamingResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Set, Tuple
 from modules.schemas import (
     ChatRequest, ChatMetadata, ChatWidgetRequest, PublicChatRequest, 
     MessageSchema, ConversationSchema
@@ -55,9 +55,363 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
+GROUNDING_VERIFIER_ENABLED = os.getenv("GROUNDING_VERIFIER_ENABLED", "true").lower() == "true"
+GROUNDING_MIN_SUPPORT_RATIO = float(os.getenv("GROUNDING_MIN_SUPPORT_RATIO", "0.78"))
+GROUNDING_MIN_CLAIM_OVERLAP = float(os.getenv("GROUNDING_MIN_CLAIM_OVERLAP", "0.28"))
+GROUNDING_MAX_CONTEXT_SNIPPETS = max(3, int(os.getenv("GROUNDING_MAX_CONTEXT_SNIPPETS", "8")))
+ONLINE_EVAL_POLICY_ENABLED = os.getenv("ONLINE_EVAL_POLICY_ENABLED", "true").lower() == "true"
+ONLINE_EVAL_POLICY_MIN_OVERALL_SCORE = float(os.getenv("ONLINE_EVAL_POLICY_MIN_OVERALL_SCORE", "0.72"))
+ONLINE_EVAL_POLICY_TIMEOUT_SECONDS = float(os.getenv("ONLINE_EVAL_POLICY_TIMEOUT_SECONDS", "8.0"))
+ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS = max(0, int(os.getenv("ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS", "80")))
+ONLINE_EVAL_POLICY_STRICT_ONLY = os.getenv("ONLINE_EVAL_POLICY_STRICT_ONLY", "false").lower() == "true"
+ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FALLBACK_POINTS", "3")))
+
+_GROUNDING_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "have",
+    "i",
+    "in",
+    "is",
+    "it",
+    "my",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "was",
+    "we",
+    "what",
+    "with",
+    "you",
+    "your",
+}
+
 
 def _uncertainty_message(interaction_context: Optional[str]) -> str:
     return f"{UNCERTAINTY_RESPONSE}{owner_guidance_suffix(interaction_context)}"
+
+
+def _grounding_tokens(text: str) -> Set[str]:
+    tokens = re.findall(r"[a-z0-9][a-z0-9._-]*", (text or "").lower())
+    return {tok for tok in tokens if len(tok) > 2 and tok not in _GROUNDING_STOPWORDS}
+
+
+def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    if not isinstance(incoming, list):
+        return existing
+
+    seen = {
+        f"{(row.get('source_id') or '').strip()}::{(row.get('text') or '').strip()[:180]}"
+        for row in existing
+        if isinstance(row, dict)
+    }
+    merged = list(existing)
+
+    for row in incoming:
+        if not isinstance(row, dict):
+            continue
+        text = str(row.get("text") or "").strip()
+        if not text:
+            continue
+        source_id = str(row.get("source_id") or "").strip()
+        sig = f"{source_id}::{text[:180]}"
+        if sig in seen:
+            continue
+        merged.append({"source_id": source_id, "text": text})
+        seen.add(sig)
+        if len(merged) >= GROUNDING_MAX_CONTEXT_SNIPPETS:
+            break
+
+    return merged
+
+
+def _extract_answer_claims(answer: str) -> List[str]:
+    raw = re.split(r"(?<=[.!?])\s+|\n+", (answer or "").strip())
+    claims = []
+    for item in raw:
+        line = item.strip().lstrip("-*").strip()
+        if len(line) < 18:
+            continue
+        claims.append(line)
+    return claims[:6]
+
+
+def _evaluate_grounding_support(answer: str, contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    claims = _extract_answer_claims(answer)
+    if not claims:
+        return {
+            "supported": True,
+            "support_ratio": 1.0,
+            "total_claims": 0,
+            "supported_claims": 0,
+            "unsupported_claims": [],
+        }
+
+    context_token_sets = [_grounding_tokens(str(c.get("text") or "")) for c in contexts if isinstance(c, dict)]
+    if not context_token_sets:
+        return {
+            "supported": False,
+            "support_ratio": 0.0,
+            "total_claims": len(claims),
+            "supported_claims": 0,
+            "unsupported_claims": claims[:3],
+        }
+
+    supported_claims = 0
+    unsupported_claims: List[str] = []
+
+    for claim in claims:
+        claim_tokens = _grounding_tokens(claim)
+        if not claim_tokens:
+            supported_claims += 1
+            continue
+
+        max_overlap = 0.0
+        for token_set in context_token_sets:
+            if not token_set:
+                continue
+            overlap = len(claim_tokens.intersection(token_set)) / float(len(claim_tokens))
+            if overlap > max_overlap:
+                max_overlap = overlap
+
+        if max_overlap >= GROUNDING_MIN_CLAIM_OVERLAP:
+            supported_claims += 1
+        else:
+            unsupported_claims.append(claim)
+
+    support_ratio = supported_claims / float(len(claims))
+    return {
+        "supported": support_ratio >= GROUNDING_MIN_SUPPORT_RATIO,
+        "support_ratio": support_ratio,
+        "total_claims": len(claims),
+        "supported_claims": supported_claims,
+        "unsupported_claims": unsupported_claims[:3],
+    }
+
+
+def _resolve_trace_id(fallback: Optional[str] = None) -> str:
+    trace_id = None
+    try:
+        if hasattr(langfuse_context, "get_current_trace_id"):
+            trace_id = langfuse_context.get_current_trace_id()
+        if not trace_id:
+            trace_id = getattr(langfuse_context, "current_trace_id", None)
+    except Exception:
+        trace_id = None
+    return str(trace_id or fallback or "unknown")
+
+
+def _online_eval_capable() -> bool:
+    if not ONLINE_EVAL_POLICY_ENABLED:
+        return False
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return False
+    if api_key.lower().startswith("mock"):
+        return False
+    return True
+
+
+def _build_eval_context_text(contexts: List[Dict[str, Any]], max_snippets: int = 5, max_chars: int = 4000) -> str:
+    if not contexts or max_chars <= 0:
+        return ""
+
+    lines: List[str] = []
+    remaining = max_chars
+    for idx, row in enumerate(contexts[: max(1, max_snippets)], 1):
+        if not isinstance(row, dict):
+            continue
+        text = str(row.get("text") or "").strip()
+        if not text:
+            continue
+        source_id = str(row.get("source_id") or "unknown").strip() or "unknown"
+        clipped = text[:remaining]
+        lines.append(f"[{idx}] source={source_id}: {clipped}")
+        remaining -= len(clipped)
+        if remaining <= 0:
+            break
+
+    return "\n".join(lines)
+
+
+def _build_eval_citation_payload(citations: List[str], contexts: List[Dict[str, Any]], max_items: int = 5) -> List[Dict[str, str]]:
+    source_text: Dict[str, str] = {}
+    for row in contexts[: max(1, max_items * 2)]:
+        if not isinstance(row, dict):
+            continue
+        source_id = str(row.get("source_id") or "").strip()
+        text = str(row.get("text") or "").strip()
+        if source_id and text and source_id not in source_text:
+            source_text[source_id] = text[:600]
+
+    payload: List[Dict[str, str]] = []
+    seen: Set[str] = set()
+    for raw in citations or []:
+        source_id = str(raw or "").strip()
+        if not source_id or source_id in seen:
+            continue
+        payload.append(
+            {
+                "id": source_id,
+                "title": source_id,
+                "content": source_text.get(source_id, ""),
+            }
+        )
+        seen.add(source_id)
+        if len(payload) >= max_items:
+            return payload
+
+    for source_id, text in source_text.items():
+        if source_id in seen:
+            continue
+        payload.append({"id": source_id, "title": source_id, "content": text})
+        if len(payload) >= max_items:
+            break
+
+    return payload
+
+
+def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, Any]]) -> str:
+    query_tokens = _grounding_tokens(query)
+    ranked: List[Tuple[float, str]] = []
+    seen: Set[str] = set()
+
+    for row in contexts[:GROUNDING_MAX_CONTEXT_SNIPPETS]:
+        if not isinstance(row, dict):
+            continue
+        text = str(row.get("text") or "").strip()
+        if not text:
+            continue
+
+        for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
+            line = raw.strip().lstrip("-*").strip()
+            if len(line) < 18:
+                continue
+            key = line.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+
+            line_tokens = _grounding_tokens(line)
+            overlap = (
+                len(query_tokens.intersection(line_tokens)) / float(len(query_tokens))
+                if query_tokens
+                else 0.0
+            )
+            label_bonus = 0.25 if key.startswith(("recommendation:", "assumptions:", "why:")) else 0.0
+            ranked.append((overlap + label_bonus, line))
+
+    if not ranked:
+        return ""
+
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    points = [line for _score, line in ranked[:ONLINE_EVAL_POLICY_FALLBACK_POINTS]]
+    if not points:
+        return ""
+
+    if any(p.lower().startswith(("recommendation:", "assumptions:", "why:")) for p in points):
+        return "\n".join(points)
+    return " ".join(points)
+
+
+async def _apply_online_eval_policy(
+    *,
+    query: str,
+    response: str,
+    fallback_message: str,
+    contexts: List[Dict[str, Any]],
+    citations: List[str],
+    trace_id: Optional[str],
+    strict_grounding: bool,
+    source_faithful: bool,
+) -> Tuple[str, Dict[str, Any]]:
+    policy_result: Dict[str, Any] = {
+        "enabled": ONLINE_EVAL_POLICY_ENABLED,
+        "ran": False,
+        "skipped_reason": None,
+        "context_chars": 0,
+        "overall_score": None,
+        "needs_review": None,
+        "flags": [],
+        "action": "none",
+    }
+
+    if not ONLINE_EVAL_POLICY_ENABLED:
+        policy_result["skipped_reason"] = "disabled"
+        return response, policy_result
+    if not isinstance(response, str) or not response.strip() or response.strip() == fallback_message:
+        policy_result["skipped_reason"] = "empty_or_fallback_response"
+        return response, policy_result
+    if not contexts:
+        policy_result["skipped_reason"] = "no_context_snippets"
+        return response, policy_result
+    if ONLINE_EVAL_POLICY_STRICT_ONLY and not strict_grounding:
+        policy_result["skipped_reason"] = "strict_only_query_not_strict"
+        return response, policy_result
+    if not _online_eval_capable():
+        policy_result["skipped_reason"] = "llm_judge_unavailable"
+        return response, policy_result
+
+    context_text = _build_eval_context_text(contexts, max_snippets=GROUNDING_MAX_CONTEXT_SNIPPETS)
+    policy_result["context_chars"] = len(context_text)
+    if len(context_text) < ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS:
+        policy_result["skipped_reason"] = "insufficient_context_text"
+        return response, policy_result
+
+    eval_citations = _build_eval_citation_payload(citations, contexts)
+    try:
+        from modules.evaluation_pipeline import get_evaluation_pipeline
+
+        pipeline = get_evaluation_pipeline(threshold=ONLINE_EVAL_POLICY_MIN_OVERALL_SCORE)
+        eval_result = await asyncio.wait_for(
+            pipeline.evaluate_response(
+                trace_id=_resolve_trace_id(trace_id),
+                query=query,
+                response=response,
+                context=context_text,
+                citations=eval_citations,
+                metadata={"online_eval_policy": True},
+            ),
+            timeout=ONLINE_EVAL_POLICY_TIMEOUT_SECONDS,
+        )
+        policy_result["ran"] = True
+        policy_result["overall_score"] = float(eval_result.overall_score)
+        policy_result["needs_review"] = bool(eval_result.needs_review)
+        policy_result["flags"] = list(eval_result.flags or [])
+
+        below_threshold = (
+            eval_result.overall_score is not None
+            and float(eval_result.overall_score) < ONLINE_EVAL_POLICY_MIN_OVERALL_SCORE
+        )
+        low_quality = bool(eval_result.needs_review or below_threshold)
+        if low_quality and not source_faithful:
+            fallback_answer = _build_source_faithful_fallback_answer(query, contexts)
+            if fallback_answer:
+                policy_result["action"] = "fallback_source_faithful"
+                return fallback_answer, policy_result
+            if strict_grounding:
+                policy_result["action"] = "fallback_uncertainty"
+                return fallback_message, policy_result
+
+        return response, policy_result
+    except asyncio.TimeoutError:
+        policy_result["skipped_reason"] = "timeout"
+        return response, policy_result
+    except Exception as e:
+        policy_result["skipped_reason"] = f"error:{type(e).__name__}"
+        return response, policy_result
 
 
 def _query_requires_strict_grounding(query: str) -> bool:
@@ -111,6 +465,24 @@ def _query_requires_strict_grounding(query: str) -> bool:
     if any(re.search(pattern, q) for pattern in owner_specific_patterns):
         return True
 
+    # Only escalate to identity-gate fallback when the query explicitly contains
+    # first-person owner references; avoid over-triggering on generic "we should"
+    # product questions that should remain in soft grounding mode.
+    owner_reference_markers = (
+        " my ",
+        " i ",
+        " me ",
+        " mine ",
+        " myself ",
+        " i'm ",
+        " i've ",
+        " i'd ",
+        " i'll ",
+    )
+    padded = f" {q_plain} "
+    if not any(marker in padded for marker in owner_reference_markers):
+        return False
+
     # Reuse the identity gate classifier as a last-mile signal.
     try:
         from modules.identity_gate import classify_query
@@ -118,6 +490,47 @@ def _query_requires_strict_grounding(query: str) -> bool:
         return bool(classify_query(query).get("requires_owner"))
     except Exception:
         return False
+
+
+def _should_hard_enforce_grounding(
+    *,
+    query: str,
+    strict_grounding: bool,
+    target_owner_scope: Optional[bool],
+    dialogue_mode: Optional[str],
+) -> bool:
+    """
+    Hard grounding should be reserved for high-risk turns:
+    - Explicit source-grounded / owner-specific requests
+    - Queries that clearly ask for personal stance/identity details
+
+    For general retrieval-enabled QA, we prefer soft controls (eval + fallback to
+    source-faithful) over immediate uncertainty downgrades.
+    """
+    if strict_grounding:
+        return True
+    if bool(target_owner_scope):
+        return True
+
+    mode = str(dialogue_mode or "").strip().upper()
+    if mode in {"SMALLTALK", "REPAIR"}:
+        return False
+
+    q = (query or "").strip().lower()
+    if not q:
+        return False
+
+    owner_high_risk_patterns = (
+        r"\bwhat (do|did) i think\b",
+        r"\bwhat('?s| is) my (stance|view|opinion|belief|thesis|principle)\b",
+        r"\bmy (stance|view|opinion|belief|thesis|principle)\b",
+        r"\bhow do i (approach|decide|evaluate)\b",
+        r"\bwhat (is|was) my\b",
+    )
+    if any(re.search(pattern, q) for pattern in owner_high_risk_patterns):
+        return True
+
+    return False
 
 
 def _is_uuid(value: str) -> bool:
@@ -253,7 +666,11 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
         for node_payload in event.values():
             if not isinstance(node_payload, dict):
                 continue
-            if "citations" in node_payload or "confidence_score" in node_payload:
+            if (
+                "citations" in node_payload
+                or "confidence_score" in node_payload
+                or "retrieved_context" in node_payload
+            ):
                 tools_payload = {}
                 if "citations" in node_payload:
                     citations = _normalize_json(node_payload.get("citations"))
@@ -265,6 +682,25 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
                         tools_payload["confidence_score"] = float(confidence)
                     except Exception:
                         pass
+                retrieved_context = node_payload.get("retrieved_context")
+                if isinstance(retrieved_context, dict):
+                    raw_results = retrieved_context.get("results")
+                    if isinstance(raw_results, list):
+                        contexts = []
+                        for row in raw_results:
+                            if not isinstance(row, dict):
+                                continue
+                            text = str(row.get("text") or "").strip()
+                            if not text:
+                                continue
+                            contexts.append(
+                                {
+                                    "source_id": str(row.get("source_id") or "").strip(),
+                                    "text": text,
+                                }
+                            )
+                        if contexts:
+                            tools_payload["contexts"] = contexts[:GROUNDING_MAX_CONTEXT_SNIPPETS]
                 if not tools_payload:
                     tools_payload = None
                 else:
@@ -583,6 +1019,7 @@ async def chat(
             intent_label = None
             module_ids = []
             render_strategy = None
+            retrieved_context_snippets: List[Dict[str, Any]] = []
             requires_evidence = None
             target_owner_scope = None
             router_reason = None
@@ -772,6 +1209,12 @@ async def chat(
                         next_confidence = tools_payload.get("confidence_score")
                         if isinstance(next_confidence, (int, float)):
                             confidence_score = float(next_confidence)
+                        next_contexts = tools_payload.get("contexts")
+                        if isinstance(next_contexts, list):
+                            retrieved_context_snippets = _merge_context_snippets(
+                                retrieved_context_snippets,
+                                next_contexts,
+                            )
                         print(f"[Chat] Tools event: confidence={confidence_score}, citations={len(citations)}")
     
                     # Capture final response and metadata from agent
@@ -893,6 +1336,72 @@ async def chat(
             full_response = audited_response
             intent_label = audited_intent_label or intent_label
             module_ids = audited_module_ids or module_ids
+
+            grounding_result = {
+                "supported": None,
+                "support_ratio": None,
+                "total_claims": 0,
+                "supported_claims": 0,
+                "unsupported_claims": [],
+            }
+            online_eval_result: Dict[str, Any] = {
+                "enabled": ONLINE_EVAL_POLICY_ENABLED,
+                "ran": False,
+                "skipped_reason": "not_run",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            }
+            grounding_enforced = _should_hard_enforce_grounding(
+                query=query,
+                strict_grounding=bool(strict_grounding),
+                target_owner_scope=target_owner_scope if isinstance(target_owner_scope, bool) else None,
+                dialogue_mode=dialogue_mode if isinstance(dialogue_mode, str) else None,
+            )
+            if (
+                GROUNDING_VERIFIER_ENABLED
+                and isinstance(full_response, str)
+                and full_response.strip()
+                and full_response.strip() != fallback_message
+                and retrieved_context_snippets
+            ):
+                grounding_result = _evaluate_grounding_support(full_response, retrieved_context_snippets)
+                context_trace["grounding_support_ratio"] = grounding_result.get("support_ratio")
+                context_trace["grounding_total_claims"] = grounding_result.get("total_claims")
+                context_trace["grounding_supported_claims"] = grounding_result.get("supported_claims")
+                context_trace["grounding_unsupported_claims"] = grounding_result.get("unsupported_claims")
+                context_trace["grounding_verifier_supported"] = grounding_result.get("supported")
+                context_trace["grounding_verifier_enforced"] = grounding_enforced
+
+                if grounding_enforced and not grounding_result.get("supported"):
+                    print(
+                        "[Chat] Grounding verifier failed under strict policy; "
+                        f"support_ratio={grounding_result.get('support_ratio')}"
+                    )
+                    full_response = fallback_message
+                    confidence_score = min(confidence_score, 0.2)
+                    context_trace["grounding_downgraded"] = True
+
+            full_response, online_eval_result = await _apply_online_eval_policy(
+                query=query,
+                response=full_response,
+                fallback_message=fallback_message,
+                contexts=retrieved_context_snippets,
+                citations=citations,
+                trace_id=trace_id or conversation_id,
+                strict_grounding=grounding_enforced,
+                source_faithful=source_faithful,
+            )
+            if online_eval_result.get("action") == "fallback_uncertainty":
+                confidence_score = min(confidence_score, 0.2)
+            elif online_eval_result.get("action") == "fallback_source_faithful":
+                confidence_score = min(confidence_score, 0.6)
+            context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
+            context_trace["online_eval_action"] = online_eval_result.get("action")
+            context_trace["online_eval_score"] = online_eval_result.get("overall_score")
+            context_trace["online_eval_flags"] = online_eval_result.get("flags")
             
             # 3. Send metadata first
             metadata = _normalize_json({
@@ -913,6 +1422,8 @@ async def chat(
                 "router_reason": router_reason,
                 "router_knowledge_available": router_knowledge_available,
                 "render_strategy": render_strategy,
+                "grounding_verifier": grounding_result,
+                "online_eval": online_eval_result,
                 "router_policy": {
                     "requires_evidence": requires_evidence,
                     "target_owner_scope": target_owner_scope,
@@ -949,10 +1460,14 @@ async def chat(
             # 6. Run evaluation (fire-and-forget, non-blocking)
             try:
                 from modules.evaluation_pipeline import evaluate_response_async
-                # Build context text from citations
-                context_text = ""
-                if citations:
+                # Build context text from retrieved chunk snippets (not citation IDs).
+                context_text = _build_eval_context_text(
+                    retrieved_context_snippets,
+                    max_snippets=GROUNDING_MAX_CONTEXT_SNIPPETS,
+                )
+                if not context_text and citations:
                     context_text = "\n".join([str(c) for c in citations[:5]])
+                eval_citations = _build_eval_citation_payload(citations, retrieved_context_snippets)
                 
                 # Get trace_id from current context if available
                 current_trace_id = trace_id  # Use the one from request
@@ -962,7 +1477,7 @@ async def chat(
                     query=query,
                     response=full_response or fallback,
                     context=context_text,
-                    citations=citations
+                    citations=eval_citations
                 )
                 print(f"[Chat] Evaluation triggered for conversation {conversation_id}")
             except Exception as eval_err:
@@ -1286,6 +1801,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         intent_label = None
         module_ids = []
         render_strategy = None
+        retrieved_context_snippets: List[Dict[str, Any]] = []
 
         async for event in run_agent_stream(
             twin_id,
@@ -1305,6 +1821,12 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                 next_confidence = tools_payload.get("confidence_score")
                 if isinstance(next_confidence, (int, float)):
                     confidence_score = float(next_confidence)
+                next_contexts = tools_payload.get("contexts")
+                if isinstance(next_contexts, list):
+                    retrieved_context_snippets = _merge_context_snippets(
+                        retrieved_context_snippets,
+                        next_contexts,
+                    )
 
             if agent_payload:
                 messages = agent_payload.get("messages", [])
@@ -1349,6 +1871,61 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                 conversation_id=conversation_id,
                 interaction_context=resolved_context.context.value,
             )
+        grounding_result = {
+            "supported": None,
+            "support_ratio": None,
+            "total_claims": 0,
+            "supported_claims": 0,
+            "unsupported_claims": [],
+        }
+        online_eval_result: Dict[str, Any] = {
+            "enabled": ONLINE_EVAL_POLICY_ENABLED,
+            "ran": False,
+            "skipped_reason": "not_run",
+            "context_chars": 0,
+            "overall_score": None,
+            "needs_review": None,
+            "flags": [],
+            "action": "none",
+        }
+        strict_grounding = _query_requires_strict_grounding(query)
+        if (
+            GROUNDING_VERIFIER_ENABLED
+            and isinstance(final_content, str)
+            and final_content.strip()
+            and final_content.strip() != fallback_message
+            and strict_grounding
+            and retrieved_context_snippets
+        ):
+            grounding_result = _evaluate_grounding_support(final_content, retrieved_context_snippets)
+            if not grounding_result.get("supported"):
+                final_content = fallback_message
+                confidence_score = min(confidence_score, 0.2)
+                context_trace["grounding_downgraded"] = True
+            context_trace["grounding_support_ratio"] = grounding_result.get("support_ratio")
+            context_trace["grounding_total_claims"] = grounding_result.get("total_claims")
+            context_trace["grounding_supported_claims"] = grounding_result.get("supported_claims")
+            context_trace["grounding_unsupported_claims"] = grounding_result.get("unsupported_claims")
+            context_trace["grounding_verifier_supported"] = grounding_result.get("supported")
+
+        final_content, online_eval_result = await _apply_online_eval_policy(
+            query=query,
+            response=final_content,
+            fallback_message=fallback_message,
+            contexts=retrieved_context_snippets,
+            citations=citations,
+            trace_id=_resolve_trace_id(conversation_id or session_id),
+            strict_grounding=strict_grounding,
+            source_faithful=source_faithful,
+        )
+        if online_eval_result.get("action") == "fallback_uncertainty":
+            confidence_score = min(confidence_score, 0.2)
+        elif online_eval_result.get("action") == "fallback_source_faithful":
+            confidence_score = min(confidence_score, 0.6)
+        context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
+        context_trace["online_eval_action"] = online_eval_result.get("action")
+        context_trace["online_eval_score"] = online_eval_result.get("overall_score")
+        context_trace["online_eval_flags"] = online_eval_result.get("flags")
         citation_details = _resolve_citation_details(citations, twin_id)
 
         output = {
@@ -1362,12 +1939,33 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "intent_label": intent_label,
             "module_ids": module_ids,
             "render_strategy": render_strategy,
+            "grounding_verifier": grounding_result,
+            "online_eval": online_eval_result,
             "session_id": session_id,
             "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
         }
         yield json.dumps(output) + "\n"
         yield json.dumps({"type": "content", "token": final_content, "content": final_content}) + "\n"
+
+        try:
+            from modules.evaluation_pipeline import evaluate_response_async
+            eval_context_text = _build_eval_context_text(
+                retrieved_context_snippets,
+                max_snippets=GROUNDING_MAX_CONTEXT_SNIPPETS,
+            )
+            if not eval_context_text and citations:
+                eval_context_text = "\n".join([str(c) for c in citations[:5]])
+            eval_citations = _build_eval_citation_payload(citations, retrieved_context_snippets)
+            evaluate_response_async(
+                trace_id=_resolve_trace_id(conversation_id or session_id),
+                query=query,
+                response=final_content,
+                context=eval_context_text,
+                citations=eval_citations,
+            )
+        except Exception as eval_err:
+            logger.debug(f"Widget evaluation trigger failed (non-blocking): {eval_err}")
 
         # Record usage
         record_request(session_id, "session", "requests_per_hour")
@@ -1563,6 +2161,7 @@ async def public_chat_endpoint(
             intent_label = None
             module_ids = []
             render_strategy = None
+            retrieved_context_snippets: List[Dict[str, Any]] = []
             async for event in run_agent_stream(
                 twin_id,
                 request.message,
@@ -1579,6 +2178,12 @@ async def public_chat_endpoint(
                     next_confidence = tools_payload.get("confidence_score")
                     if isinstance(next_confidence, (int, float)):
                         confidence_score = float(next_confidence)
+                    next_contexts = tools_payload.get("contexts")
+                    if isinstance(next_contexts, list):
+                        retrieved_context_snippets = _merge_context_snippets(
+                            retrieved_context_snippets,
+                            next_contexts,
+                        )
                 if agent_payload:
                     messages = agent_payload.get("messages", [])
                     if not messages:
@@ -1635,6 +2240,82 @@ async def public_chat_endpoint(
                     conversation_id=conversation_id,
                     interaction_context=resolved_context.context.value,
                 )
+
+            grounding_result = {
+                "supported": None,
+                "support_ratio": None,
+                "total_claims": 0,
+                "supported_claims": 0,
+                "unsupported_claims": [],
+            }
+            online_eval_result: Dict[str, Any] = {
+                "enabled": ONLINE_EVAL_POLICY_ENABLED,
+                "ran": False,
+                "skipped_reason": "not_run",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            }
+            strict_grounding = _query_requires_strict_grounding(request.message)
+            if (
+                GROUNDING_VERIFIER_ENABLED
+                and isinstance(final_response, str)
+                and final_response.strip()
+                and final_response.strip() != fallback_message
+                and strict_grounding
+                and retrieved_context_snippets
+            ):
+                grounding_result = _evaluate_grounding_support(final_response, retrieved_context_snippets)
+                if not grounding_result.get("supported"):
+                    final_response = fallback_message
+                    confidence_score = min(confidence_score, 0.2)
+                    context_trace["grounding_downgraded"] = True
+                context_trace["grounding_support_ratio"] = grounding_result.get("support_ratio")
+                context_trace["grounding_total_claims"] = grounding_result.get("total_claims")
+                context_trace["grounding_supported_claims"] = grounding_result.get("supported_claims")
+                context_trace["grounding_unsupported_claims"] = grounding_result.get("unsupported_claims")
+                context_trace["grounding_verifier_supported"] = grounding_result.get("supported")
+
+            final_response, online_eval_result = await _apply_online_eval_policy(
+                query=request.message,
+                response=final_response,
+                fallback_message=fallback_message,
+                contexts=retrieved_context_snippets,
+                citations=citations,
+                trace_id=trace_id,
+                strict_grounding=strict_grounding,
+                source_faithful=source_faithful,
+            )
+            if online_eval_result.get("action") == "fallback_uncertainty":
+                confidence_score = min(confidence_score, 0.2)
+            elif online_eval_result.get("action") == "fallback_source_faithful":
+                confidence_score = min(confidence_score, 0.6)
+            context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
+            context_trace["online_eval_action"] = online_eval_result.get("action")
+            context_trace["online_eval_score"] = online_eval_result.get("overall_score")
+            context_trace["online_eval_flags"] = online_eval_result.get("flags")
+
+            try:
+                from modules.evaluation_pipeline import evaluate_response_async
+
+                eval_context_text = _build_eval_context_text(
+                    retrieved_context_snippets,
+                    max_snippets=GROUNDING_MAX_CONTEXT_SNIPPETS,
+                )
+                if not eval_context_text and citations:
+                    eval_context_text = "\n".join([str(c) for c in citations[:5]])
+                eval_citations = _build_eval_citation_payload(citations, retrieved_context_snippets)
+                evaluate_response_async(
+                    trace_id=_resolve_trace_id(trace_id),
+                    query=request.message,
+                    response=final_response,
+                    context=eval_context_text,
+                    citations=eval_citations,
+                )
+            except Exception as eval_err:
+                logger.debug(f"Public evaluation trigger failed (non-blocking): {eval_err}")
             
             citations = _normalize_json(citations)
             citation_details = _normalize_json(_resolve_citation_details(citations, twin_id))
@@ -1652,6 +2333,8 @@ async def public_chat_endpoint(
                 "intent_label": intent_label,
                 "module_ids": module_ids,
                 "render_strategy": render_strategy,
+                "grounding_verifier": grounding_result,
+                "online_eval": online_eval_result,
                 "used_owner_memory": bool(owner_memory_refs),
                 "identity_gate_mode": gate.get("gate_mode"),
                 **context_trace,

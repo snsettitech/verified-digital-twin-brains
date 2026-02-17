@@ -193,11 +193,25 @@ async def test_planner_comparison_query_unlabeled_evidence_uses_source_faithful(
 
 
 @pytest.mark.asyncio
-async def test_planner_general_evidence_query_uses_source_faithful(monkeypatch):
+async def test_planner_high_confidence_evidence_uses_synthesis_path(monkeypatch):
     def fake_prompt_builder(_state):
         return ("system", {"intent_label": "factual_with_evidence", "module_ids": []})
 
+    async def fake_invoke_json(*args, **kwargs):
+        return (
+            {
+                "answer_points": ["Your incident response starts with stabilization, then status updates."],
+                "citations": ["src-1"],
+                "follow_up_question": "",
+                "confidence": 0.9,
+                "teaching_questions": [],
+                "reasoning_trace": "planner-output",
+            },
+            {"provider": "test"},
+        )
+
     monkeypatch.setattr("modules.agent.build_system_prompt_with_trace", fake_prompt_builder)
+    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
 
     state = {
         "dialogue_mode": "QA_FACT",
@@ -223,9 +237,74 @@ async def test_planner_general_evidence_query_uses_source_faithful(monkeypatch):
     result = await planner_node(state)
     plan = result["planning_output"]
     assert plan["citations"] == ["src-1"]
+    assert "render_strategy" not in plan
+    assert "stabilization" in plan["answer_points"][0].lower()
+
+
+@pytest.mark.asyncio
+async def test_planner_mid_confidence_evidence_uses_source_faithful(monkeypatch):
+    def fake_prompt_builder(_state):
+        return ("system", {"intent_label": "factual_with_evidence", "module_ids": []})
+
+    monkeypatch.setattr("modules.agent.build_system_prompt_with_trace", fake_prompt_builder)
+
+    state = {
+        "dialogue_mode": "QA_FACT",
+        "messages": [HumanMessage(content="What is my incident response approach?")],
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "src-1",
+                    "score": 0.71,
+                    "text": (
+                        "My incident response approach is to stabilize systems first, then communicate "
+                        "status every 15 minutes until recovery. I run a blameless postmortem with clear "
+                        "owners and due dates for follow-up actions."
+                    ),
+                }
+            ]
+        },
+        "target_owner_scope": False,
+        "full_settings": {},
+        "intent_label": "factual_with_evidence",
+    }
+
+    result = await planner_node(state)
+    plan = result["planning_output"]
+    assert plan["citations"] == ["src-1"]
     assert plan["render_strategy"] == "source_faithful"
     assert any("incident response" in point.lower() for point in plan["answer_points"])
-    assert "source-faithful extraction" in plan["reasoning_trace"].lower()
+    assert "adaptive grounding policy selected extractive" in plan["reasoning_trace"].lower()
+
+
+@pytest.mark.asyncio
+async def test_planner_low_confidence_owner_scope_forces_uncertainty(monkeypatch):
+    def fake_prompt_builder(_state):
+        return ("system", {"intent_label": "owner_position_request", "module_ids": []})
+
+    monkeypatch.setattr("modules.agent.build_system_prompt_with_trace", fake_prompt_builder)
+
+    state = {
+        "dialogue_mode": "QA_FACT",
+        "messages": [HumanMessage(content="What is my stance on remote work?")],
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "src-1",
+                    "score": 0.22,
+                    "text": "Weekly team rituals include planning and demos.",
+                }
+            ]
+        },
+        "target_owner_scope": True,
+        "full_settings": {},
+        "intent_label": "owner_position_request",
+    }
+
+    result = await planner_node(state)
+    plan = result["planning_output"]
+    assert plan["answer_points"][0] == UNCERTAINTY_RESPONSE
+    assert "adaptive grounding policy blocked owner-specific synthesis" in plan["reasoning_trace"].lower()
 
 
 @pytest.mark.asyncio

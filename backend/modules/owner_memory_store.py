@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 import json
 import re
+import os
 
 from modules.observability import supabase
 from modules.embeddings import get_embedding, cosine_similarity
@@ -20,6 +21,9 @@ STOPWORDS = {
     "could", "can", "will", "my", "your", "their", "our", "about", "on", "in", "for", "to",
     "of", "with", "by", "at", "from", "as", "this", "that", "it", "we", "i", "you"
 }
+
+
+AUTO_APPROVE_OWNER_MEMORY = os.getenv("AUTO_APPROVE_OWNER_MEMORY", "true").lower() == "true"
 
 
 def _normalize_text(text: str) -> str:
@@ -77,7 +81,10 @@ def list_owner_memories(twin_id: str, status: Optional[str] = "active", limit: i
         if status and status != "all":
             if status == "active":
                 # Treat verified memories as active for retrieval/UI compatibility
-                query = query.in_("status", ["active", "verified"])
+                statuses = ["active", "verified"]
+                if AUTO_APPROVE_OWNER_MEMORY:
+                    statuses.append("proposed")
+                query = query.in_("status", statuses)
             else:
                 query = query.eq("status", status)
         res = query.order("created_at", desc=True).limit(limit).execute()
@@ -245,10 +252,25 @@ def create_owner_memory(
         except Exception as e:
             print(f"[OwnerMemory] embedding generation failed: {e}")
 
-        provenance = provenance or {}
+        provenance = dict(provenance or {})
         source_type = provenance.get("source_type") or provenance.get("source") or "manual"
         source_id = provenance.get("source_id") or provenance.get("clarification_id")
         owner_id = provenance.get("owner_id")
+
+        requested_status = (status or "verified").strip().lower()
+        final_status = requested_status
+        if AUTO_APPROVE_OWNER_MEMORY and requested_status == "proposed":
+            final_status = "verified"
+            provenance["auto_approved"] = True
+            provenance["auto_approved_at"] = datetime.utcnow().isoformat()
+
+        insert_provenance = dict(provenance)
+        insert_provenance.update({
+            "source_type": source_type,
+            "source_id": source_id,
+            "owner_id": owner_id,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
 
         insert_data = {
             "tenant_id": tenant_id,
@@ -259,14 +281,9 @@ def create_owner_memory(
             "stance": stance,
             "intensity": intensity,
             "confidence": confidence,
-            "status": status or "verified", # Phase 4 Memory Tiers
+            "status": final_status, # Phase 4 Memory Tiers
             "embedding": embedding,
-            "provenance": {
-                "source_type": source_type,
-                "source_id": source_id,
-                "owner_id": owner_id,
-                "timestamp": datetime.utcnow().isoformat()
-            },
+            "provenance": insert_provenance,
             "updated_at": datetime.utcnow().isoformat()
         }
         res = supabase.table("owner_beliefs").insert(insert_data).execute()
@@ -307,6 +324,48 @@ def retract_owner_memory(mem_id: str, reason: Optional[str] = None) -> bool:
     except Exception as e:
         print(f"[OwnerMemory] retract failed: {e}")
         return False
+
+
+def approve_owner_memory(
+    mem_id: str,
+    approver_id: Optional[str] = None,
+    expected_status: Optional[str] = "proposed",
+) -> Optional[Dict[str, Any]]:
+    """
+    Promote a proposed owner memory to verified.
+
+    Returns the updated row, returns existing row for idempotent already-verified
+    records, and returns None for missing/invalid transitions.
+    """
+    try:
+        existing = get_owner_memory(mem_id)
+        if not existing:
+            return None
+
+        current_status = str(existing.get("status") or "").lower()
+        if expected_status and current_status != expected_status:
+            if current_status in {"verified", "active"}:
+                return existing
+            return None
+
+        provenance = existing.get("provenance") or {}
+        if not isinstance(provenance, dict):
+            provenance = {}
+        provenance["approved_at"] = datetime.utcnow().isoformat()
+        if approver_id:
+            provenance["approved_by"] = approver_id
+
+        res = supabase.table("owner_beliefs").update({
+            "status": "verified",
+            "updated_at": datetime.utcnow().isoformat(),
+            "provenance": provenance,
+        }).eq("id", mem_id).execute()
+        if not res.data:
+            return None
+        return res.data[0]
+    except Exception as e:
+        print(f"[OwnerMemory] approve failed: {e}")
+        return None
 
 
 def create_clarification_thread(

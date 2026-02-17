@@ -45,6 +45,17 @@ INTENT_KEYWORDS = {"intent", "intention"}
 CONSTRAINT_KEYWORDS = {"constraint", "constraints", "limitation", "limitations", "restricted", "must", "can't", "cannot"}
 BOUNDARY_KEYWORDS = {"boundary", "boundaries", "won't", "will not", "never"}
 PUBLIC_CLARIFICATION_QUEUE_ENABLED = os.getenv("ENABLE_PUBLIC_CLARIFICATION_QUEUE", "false").lower() == "true"
+AUTO_APPROVE_OWNER_MEMORY = os.getenv("AUTO_APPROVE_OWNER_MEMORY", "true").lower() == "true"
+
+
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+
+IDENTITY_GATE_MIN_SCORE = _float_env("IDENTITY_GATE_MIN_SCORE", 0.58)
 
 
 def _contains_any(text: str, keywords: set) -> bool:
@@ -183,16 +194,16 @@ async def run_identity_gate(
     best_score = candidates[0].get("_score", 0.0) if candidates else 0.0
     has_conflict = detect_conflicts(candidates[:3]) if candidates else False
 
-    if not candidates or best_score < 0.70 or has_conflict:
+    if not candidates or best_score < IDENTITY_GATE_MIN_SCORE or has_conflict:
         # Public routes can request owner clarification, but cannot mutate memory directly.
         if is_public_mode:
-            if not PUBLIC_CLARIFICATION_QUEUE_ENABLED:
+            if AUTO_APPROVE_OWNER_MEMORY or not PUBLIC_CLARIFICATION_QUEUE_ENABLED:
                 return {
                     "decision": "ANSWER",
                     "requires_owner": True,
                     "memory_type": memory_type or "stance",
                     "topic": topic,
-                    "reason": "public_clarification_disabled",
+                    "reason": "auto_approve_mode_public" if AUTO_APPROVE_OWNER_MEMORY else "public_clarification_disabled",
                     "gate_mode": mode_normalized,
                     "owner_memory": [],
                     "owner_memory_refs": [],
@@ -244,7 +255,7 @@ async def run_identity_gate(
                 "owner_memory_refs": [],
                 "owner_memory_context": ""
             }
-        if not candidates or best_score < 0.70:
+        if not candidates or best_score < IDENTITY_GATE_MIN_SCORE:
             if wants_intent or wants_constraints or wants_boundaries:
                 profile = _load_intent_profile(twin_id)
                 if profile:
@@ -267,6 +278,18 @@ async def run_identity_gate(
                             "owner_memory_refs": [],
                             "owner_memory_context": format_owner_memory_context(intent_memories)
                         }
+        if AUTO_APPROVE_OWNER_MEMORY:
+            return {
+                "decision": "ANSWER",
+                "requires_owner": True,
+                "memory_type": memory_type or "stance",
+                "topic": topic,
+                "reason": "auto_approve_mode_owner",
+                "gate_mode": mode_normalized,
+                "owner_memory": [],
+                "owner_memory_refs": [],
+                "owner_memory_context": "",
+            }
         clarification = build_clarification(query, topic, memory_type or "stance")
         return {
             "decision": "CLARIFY",

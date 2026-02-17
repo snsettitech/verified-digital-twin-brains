@@ -1,11 +1,13 @@
 import json
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 
 from main import app
 from modules.auth_guard import get_current_user
+from modules.response_policy import UNCERTAINTY_RESPONSE
 
 
 client = TestClient(app)
@@ -534,6 +536,201 @@ def test_owner_chat_source_faithful_skips_persona_audit_rewrite():
         app.dependency_overrides = {}
 
 
+def test_owner_chat_grounding_verifier_downgrades_strict_unsupported_answer():
+    app.dependency_overrides[get_current_user] = _owner_user
+    gate_mock = AsyncMock(
+        return_value={
+            "decision": "ANSWER",
+            "requires_owner": False,
+            "reason": "test",
+            "owner_memory": [],
+            "owner_memory_refs": [],
+            "owner_memory_context": "",
+        }
+    )
+
+    async def _fake_stream(*_args, **_kwargs):
+        yield {
+            "retrieve": {
+                "citations": ["src-unsupported-1"],
+                "confidence_score": 0.87,
+                "retrieved_context": {
+                    "results": [
+                        {
+                            "source_id": "src-unsupported-1",
+                            "text": "The owner prefers asynchronous standups and weekly retrospectives.",
+                        }
+                    ]
+                },
+            }
+        }
+        msg = AIMessage(content="The owner launched a mobile gaming studio in 2012.")
+        msg.additional_kwargs = {
+            "intent_label": "owner_position_request",
+            "module_ids": ["procedural.decision.cite_first"],
+            "persona_spec_version": "4.2.0",
+        }
+        yield {"realizer": {"messages": [msg]}}
+
+    audit_mock = AsyncMock(
+        return_value=(
+            "The owner launched a mobile gaming studio in 2012.",
+            "owner_position_request",
+            ["procedural.decision.cite_first"],
+        )
+    )
+
+    try:
+        with patch("routers.chat.verify_twin_ownership"), patch(
+            "routers.chat.ensure_twin_active"
+        ), patch(
+            "routers.chat.get_user_group", new=AsyncMock(return_value=None)
+        ), patch(
+            "routers.chat.get_default_group", new=AsyncMock(return_value={"id": "group-1"})
+        ), patch(
+            "routers.chat._fetch_conversation_record",
+            return_value={
+                "id": "conv-1",
+                "twin_id": "twin-1",
+                "group_id": "group-1",
+                "interaction_context": "owner_chat",
+                "training_session_id": None,
+            },
+        ), patch(
+            "routers.chat.get_messages", return_value=[]
+        ), patch(
+            "routers.chat.log_interaction"
+        ), patch(
+            "routers.chat.run_identity_gate", gate_mock
+        ), patch(
+            "routers.chat.run_agent_stream", _fake_stream
+        ), patch(
+            "routers.chat._apply_persona_audit", audit_mock
+        ), patch(
+            "modules.graph_context.get_graph_stats", return_value={"has_graph": False, "node_count": 0}
+        ):
+            resp = client.post(
+                "/chat/twin-1",
+                json={"query": "Based on my sources, what is my remote work preference?", "conversation_id": "conv-1"},
+            )
+            assert resp.status_code == 200
+            blocks = _parse_sse_blocks(resp.text)
+            metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
+            content = next((b for b in blocks if b.get("type") == "content"), None)
+            assert metadata is not None
+            assert content is not None
+            assert metadata["grounding_verifier"]["supported"] is False
+            assert metadata["grounding_verifier"]["support_ratio"] < 0.78
+            assert content["content"].startswith(UNCERTAINTY_RESPONSE)
+    finally:
+        app.dependency_overrides = {}
+
+
+def test_owner_chat_requires_evidence_does_not_force_hard_downgrade_for_non_strict_query():
+    app.dependency_overrides[get_current_user] = _owner_user
+    gate_mock = AsyncMock(
+        return_value={
+            "decision": "ANSWER",
+            "requires_owner": False,
+            "reason": "test",
+            "owner_memory": [],
+            "owner_memory_refs": [],
+            "owner_memory_context": "",
+        }
+    )
+
+    async def _fake_stream(*_args, **_kwargs):
+        yield {
+            "retrieve": {
+                "citations": ["src-general-1"],
+                "confidence_score": 0.84,
+                "retrieved_context": {
+                    "results": [
+                        {
+                            "source_id": "src-general-1",
+                            "text": "For MVPs, managed containers are usually easier to debug and deploy consistently.",
+                        }
+                    ]
+                },
+            }
+        }
+        msg = AIMessage(
+            content=(
+                "Use managed containers first for MVP speed and reliability. "
+                "This approach is always cheaper than serverless in every scenario."
+            )
+        )
+        msg.additional_kwargs = {
+            "dialogue_mode": "QA_FACT",
+            "intent_label": "advice_or_stance",
+            "requires_evidence": True,
+            "target_owner_scope": False,
+            "module_ids": ["procedural.decision.cite_first"],
+        }
+        yield {"realizer": {"messages": [msg]}}
+
+    policy_mock = AsyncMock(
+        return_value=(
+            "Use managed containers first for MVP speed and reliability. This approach is always cheaper than serverless in every scenario.",
+            {
+                "enabled": True,
+                "ran": False,
+                "skipped_reason": "test-bypass",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            },
+        )
+    )
+
+    try:
+        with patch("routers.chat.verify_twin_ownership"), patch(
+            "routers.chat.ensure_twin_active"
+        ), patch(
+            "routers.chat.get_user_group", new=AsyncMock(return_value=None)
+        ), patch(
+            "routers.chat.get_default_group", new=AsyncMock(return_value={"id": "group-1"})
+        ), patch(
+            "routers.chat._fetch_conversation_record",
+            return_value={
+                "id": "conv-1",
+                "twin_id": "twin-1",
+                "group_id": "group-1",
+                "interaction_context": "owner_chat",
+                "training_session_id": None,
+            },
+        ), patch(
+            "routers.chat.get_messages", return_value=[]
+        ), patch(
+            "routers.chat.log_interaction"
+        ), patch(
+            "routers.chat.run_identity_gate", gate_mock
+        ), patch(
+            "routers.chat.run_agent_stream", _fake_stream
+        ), patch(
+            "routers.chat._apply_online_eval_policy", policy_mock
+        ), patch(
+            "modules.graph_context.get_graph_stats", return_value={"has_graph": False, "node_count": 0}
+        ):
+            resp = client.post(
+                "/chat/twin-1",
+                json={"query": "Should we use containers or serverless for our MVP?", "conversation_id": "conv-1"},
+            )
+            assert resp.status_code == 200
+            blocks = _parse_sse_blocks(resp.text)
+            metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
+            content = next((b for b in blocks if b.get("type") == "content"), None)
+            assert metadata is not None
+            assert content is not None
+            assert metadata["grounding_verifier"]["supported"] is False
+            assert metadata.get("grounding_verifier_enforced") is False
+            assert not content["content"].startswith(UNCERTAINTY_RESPONSE)
+    finally:
+        app.dependency_overrides = {}
+
+
 def test_owner_chat_smalltalk_does_not_force_uncertainty_without_citations():
     app.dependency_overrides[get_current_user] = _owner_user
     gate_mock = AsyncMock(
@@ -592,5 +789,165 @@ def test_owner_chat_smalltalk_does_not_force_uncertainty_without_citations():
             content = next((b for b in blocks if b.get("type") == "content"), None)
             assert content is not None
             assert content["content"] == "Hey! Great to chat with you."
+    finally:
+        app.dependency_overrides = {}
+
+
+@pytest.mark.asyncio
+async def test_online_eval_policy_low_score_falls_back_to_source_faithful(monkeypatch):
+    import routers.chat as chat_router
+
+    captured = {}
+
+    class _FakeEvalResult:
+        def __init__(self):
+            self.trace_id = "trace-1"
+            self.overall_score = 0.21
+            self.needs_review = True
+            self.flags = ["low_faithfulness"]
+
+    class _FakePipeline:
+        async def evaluate_response(self, **kwargs):
+            captured.update(kwargs)
+            return _FakeEvalResult()
+
+    monkeypatch.setattr(chat_router, "ONLINE_EVAL_POLICY_ENABLED", True)
+    monkeypatch.setattr(chat_router, "ONLINE_EVAL_POLICY_MIN_OVERALL_SCORE", 0.72)
+    monkeypatch.setattr(chat_router, "ONLINE_EVAL_POLICY_STRICT_ONLY", False)
+    monkeypatch.setattr(chat_router, "_online_eval_capable", lambda: True)
+    monkeypatch.setattr(
+        "modules.evaluation_pipeline.get_evaluation_pipeline",
+        lambda threshold=0.7: _FakePipeline(),
+    )
+
+    rewritten, policy = await chat_router._apply_online_eval_policy(
+        query="Should we use containers or serverless for our MVP?",
+        response="Use what feels right for now.",
+        fallback_message="I don't know.",
+        contexts=[
+            {
+                "source_id": "src-1",
+                "text": "Recommendation: Start with containers on a managed platform for predictable deployments.",
+            },
+            {
+                "source_id": "src-1",
+                "text": "Why: Serverless cold starts and timeout debugging can slow MVP iteration.",
+            },
+        ],
+        citations=["src-1"],
+        trace_id="trace-1",
+        strict_grounding=False,
+        source_faithful=False,
+    )
+
+    assert policy["ran"] is True
+    assert policy["action"] == "fallback_source_faithful"
+    assert "Recommendation:" in rewritten
+    assert "containers" in rewritten.lower()
+    assert "serverless" in rewritten.lower()
+    assert "source=src-1" in (captured.get("context") or "")
+
+
+def test_owner_chat_async_eval_uses_retrieved_chunk_text_context():
+    app.dependency_overrides[get_current_user] = _owner_user
+    gate_mock = AsyncMock(
+        return_value={
+            "decision": "ANSWER",
+            "requires_owner": False,
+            "reason": "test",
+            "owner_memory": [],
+            "owner_memory_refs": [],
+            "owner_memory_context": "",
+        }
+    )
+
+    async def _fake_stream(*_args, **_kwargs):
+        yield {
+            "retrieve": {
+                "citations": ["src-eval-1"],
+                "confidence_score": 0.88,
+                "retrieved_context": {
+                    "results": [
+                        {
+                            "source_id": "src-eval-1",
+                            "text": "Retrieved chunk about containers and serverless tradeoffs.",
+                        }
+                    ]
+                },
+            }
+        }
+        msg = AIMessage(content="Use containers first for MVP speed.")
+        msg.additional_kwargs = {
+            "intent_label": "advice_or_stance",
+            "module_ids": ["procedural.decision.cite_first"],
+        }
+        yield {"realizer": {"messages": [msg]}}
+
+    policy_mock = AsyncMock(
+        return_value=(
+            "Use containers first for MVP speed.",
+            {
+                "enabled": True,
+                "ran": False,
+                "skipped_reason": "test-bypass",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            },
+        )
+    )
+
+    eval_call = {}
+
+    def _capture_eval(**kwargs):
+        eval_call.update(kwargs)
+
+    try:
+        with patch("routers.chat.verify_twin_ownership"), patch(
+            "routers.chat.ensure_twin_active"
+        ), patch(
+            "routers.chat.get_user_group", new=AsyncMock(return_value=None)
+        ), patch(
+            "routers.chat.get_default_group", new=AsyncMock(return_value={"id": "group-1"})
+        ), patch(
+            "routers.chat._fetch_conversation_record",
+            return_value={
+                "id": "conv-1",
+                "twin_id": "twin-1",
+                "group_id": "group-1",
+                "interaction_context": "owner_chat",
+                "training_session_id": None,
+            },
+        ), patch(
+            "routers.chat.get_messages", return_value=[]
+        ), patch(
+            "routers.chat.log_interaction"
+        ), patch(
+            "routers.chat.run_identity_gate", gate_mock
+        ), patch(
+            "routers.chat.run_agent_stream", _fake_stream
+        ), patch(
+            "routers.chat._apply_online_eval_policy", policy_mock
+        ), patch(
+            "modules.graph_context.get_graph_stats", return_value={"has_graph": False, "node_count": 0}
+        ), patch(
+            "modules.evaluation_pipeline.evaluate_response_async", side_effect=_capture_eval
+        ):
+            resp = client.post(
+                "/chat/twin-1",
+                json={"query": "Should we use containers or serverless?", "conversation_id": "conv-1"},
+            )
+            assert resp.status_code == 200
+            blocks = _parse_sse_blocks(resp.text)
+            metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
+            assert metadata is not None
+            assert metadata["online_eval"]["skipped_reason"] == "test-bypass"
+
+            assert "Retrieved chunk about containers and serverless tradeoffs." in (eval_call.get("context") or "")
+            assert eval_call.get("context") != "src-eval-1"
+            assert isinstance(eval_call.get("citations"), list)
+            assert isinstance(eval_call["citations"][0], dict)
     finally:
         app.dependency_overrides = {}

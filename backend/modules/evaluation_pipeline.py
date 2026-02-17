@@ -67,7 +67,7 @@ class EvaluationPipeline:
         query: str,
         response: str,
         context: str,
-        citations: List[str],
+        citations: List[Any],
         metadata: Optional[Dict[str, Any]] = None
     ) -> EvaluationResult:
         """
@@ -249,7 +249,7 @@ class EvaluationPipeline:
         query: str,
         response: str,
         context: str,
-        citations: List[str],
+        citations: List[Any],
         metadata: Optional[Dict[str, Any]] = None
     ):
         """
@@ -292,7 +292,7 @@ def evaluate_response_async(
     query: str,
     response: str,
     context: str,
-    citations: List[str],
+    citations: List[Any],
     threshold: float = 0.7
 ):
     """

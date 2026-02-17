@@ -3,7 +3,7 @@ import asyncio
 import json
 import re
 import time
-from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional
+from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional, Tuple
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -45,6 +45,15 @@ _ROUTER_FORCE_RETRIEVAL_WITH_KNOWLEDGE = (
     os.getenv("ROUTER_FORCE_RETRIEVAL_WITH_KNOWLEDGE", "true").lower() == "true"
 )
 _router_knowledge_cache: Dict[str, Dict[str, Any]] = {}
+
+# Adaptive grounding policy for planner output rendering.
+ADAPTIVE_GROUNDING_POLICY_ENABLED = (
+    os.getenv("ADAPTIVE_GROUNDING_POLICY_ENABLED", "true").lower() == "true"
+)
+ADAPTIVE_GROUNDING_HIGH_SCORE = float(os.getenv("ADAPTIVE_GROUNDING_HIGH_SCORE", "0.82"))
+ADAPTIVE_GROUNDING_HIGH_MARGIN = float(os.getenv("ADAPTIVE_GROUNDING_HIGH_MARGIN", "0.12"))
+ADAPTIVE_GROUNDING_MID_SCORE = float(os.getenv("ADAPTIVE_GROUNDING_MID_SCORE", "0.65"))
+ADAPTIVE_GROUNDING_MID_OVERLAP = float(os.getenv("ADAPTIVE_GROUNDING_MID_OVERLAP", "0.12"))
 
 def get_checkpointer():
     """
@@ -1002,6 +1011,157 @@ async def evidence_gate_node(state: TwinState):
         result["retrieved_context"] = {"results": []}
     return result
 
+
+_PLANNER_QUERY_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "has",
+    "have",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "was",
+    "we",
+    "what",
+    "with",
+    "you",
+    "your",
+}
+
+
+def _planner_query_tokens(query: str) -> List[str]:
+    tokens = re.findall(r"[a-z0-9][a-z0-9._-]*", (query or "").lower())
+    return [tok for tok in tokens if len(tok) > 2 and tok not in _PLANNER_QUERY_STOPWORDS]
+
+
+def _planner_text_tokens(text: str) -> set:
+    tokens = re.findall(r"[a-z0-9][a-z0-9._-]*", (text or "").lower())
+    return {tok for tok in tokens if len(tok) > 2 and tok not in _PLANNER_QUERY_STOPWORDS}
+
+
+def _planner_overlap_ratio(query_tokens: List[str], text: str) -> float:
+    if not query_tokens:
+        return 0.0
+    qset = set(query_tokens)
+    tset = _planner_text_tokens(text)
+    if not tset:
+        return 0.0
+    return len(qset.intersection(tset)) / float(len(qset))
+
+
+def _collect_source_faithful_points(
+    context_data: List[Dict[str, Any]],
+    query_tokens: List[str],
+) -> Tuple[List[str], List[str], float]:
+    def _normalize_extract(raw: str) -> str:
+        return re.sub(r"\s+", " ", (raw or "").strip().lstrip("-*").strip())
+
+    scored_sentences: Dict[str, Dict[str, float]] = {}
+    citation_ids: List[str] = []
+    order_idx = 0
+
+    for ctx in context_data[:5]:
+        source_id = ctx.get("source_id")
+        if isinstance(source_id, str) and source_id and source_id not in citation_ids:
+            citation_ids.append(source_id)
+
+        text = (ctx.get("text") or "").strip()
+        if not text:
+            continue
+
+        vector_score = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
+        for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
+            sentence = _normalize_extract(raw)
+            if not sentence or len(sentence) < 18:
+                continue
+
+            lowered = sentence.lower()
+            overlap = sum(1 for tok in query_tokens if tok in lowered)
+            label_bonus = 2 if lowered.startswith(("recommendation:", "assumptions:", "why:")) else 0
+            score = float(overlap * 2 + label_bonus) + min(vector_score, 1.0)
+
+            existing = scored_sentences.get(sentence)
+            if existing is None or score > float(existing.get("score", 0.0)):
+                scored_sentences[sentence] = {"score": score, "order": float(order_idx)}
+            order_idx += 1
+
+    ranked = sorted(
+        scored_sentences.items(),
+        key=lambda item: (-float(item[1].get("score", 0.0)), float(item[1].get("order", 0.0))),
+    )
+    answer_points = [sentence for sentence, _meta in ranked[:3]]
+
+    if not answer_points:
+        fallback_lines: List[str] = []
+        for ctx in context_data[:3]:
+            for raw_line in (ctx.get("text") or "").splitlines():
+                line = _normalize_extract(raw_line)
+                if line and line not in fallback_lines:
+                    fallback_lines.append(line)
+                if len(fallback_lines) >= 3:
+                    break
+            if len(fallback_lines) >= 3:
+                break
+        answer_points = fallback_lines[:3]
+
+    max_score = max((float(meta.get("score", 0.0)) for _s, meta in ranked[:3]), default=0.0)
+    return answer_points, citation_ids[:3], max_score
+
+
+def _classify_grounding_policy(
+    context_data: List[Dict[str, Any]],
+    user_query: str,
+) -> Dict[str, Any]:
+    if not ADAPTIVE_GROUNDING_POLICY_ENABLED or not context_data:
+        return {"level": "disabled", "top_score": 0.0, "margin": 0.0, "best_overlap": 0.0}
+
+    scores = sorted(
+        [float(ctx.get("score", ctx.get("vector_score", 0.0)) or 0.0) for ctx in context_data],
+        reverse=True,
+    )
+    top_score = scores[0] if scores else 0.0
+    second_score = scores[1] if len(scores) > 1 else 0.0
+    margin = max(0.0, top_score - second_score)
+
+    query_tokens = _planner_query_tokens(user_query)
+    overlap_values = [
+        _planner_overlap_ratio(query_tokens, str(ctx.get("text", "")))
+        for ctx in context_data[:5]
+    ]
+    best_overlap = max(overlap_values, default=0.0)
+
+    if top_score >= ADAPTIVE_GROUNDING_HIGH_SCORE and margin >= ADAPTIVE_GROUNDING_HIGH_MARGIN:
+        level = "high"
+    elif top_score >= ADAPTIVE_GROUNDING_MID_SCORE and best_overlap >= ADAPTIVE_GROUNDING_MID_OVERLAP:
+        level = "mid"
+    else:
+        level = "low"
+
+    return {
+        "level": level,
+        "top_score": top_score,
+        "margin": margin,
+        "best_overlap": best_overlap,
+    }
+
 @observe(name="planner_node")
 async def planner_node(state: TwinState):
     """Pass A: Strategic Planning & Logic (Structured JSON)"""
@@ -1328,86 +1488,64 @@ Rules:
                 ],
             }
 
-    # Deterministic source-faithful path for all evidence-backed document QA.
-    # This keeps answers extractive and avoids conversational rewrites that can
-    # drift from retrieved text.
+    # Adaptive grounding policy:
+    # - high confidence retrieval: allow conversational synthesis (default planner path)
+    # - mid confidence retrieval: keep source-faithful extractive rendering
+    # - low confidence retrieval: owner-specific questions should abstain
     if context_data and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL"}:
-        query_tokens = [
-            t for t in re.findall(r"[a-z0-9][a-z0-9._-]*", (user_query or "").lower())
-            if len(t) > 2 and t not in {"the", "and", "for", "with", "from", "that", "this", "are", "you", "your"}
-        ]
+        profile = _classify_grounding_policy(context_data, user_query)
+        profile_level = profile.get("level", "disabled")
 
-        def _normalize_extract(raw: str) -> str:
-            return re.sub(r"\s+", " ", (raw or "").strip().lstrip("-*").strip())
+        if profile_level == "mid":
+            query_tokens = _planner_query_tokens(user_query)
+            answer_points, citation_ids, max_score = _collect_source_faithful_points(context_data, query_tokens)
+            if answer_points:
+                confidence = 0.78 if max_score >= 1.0 else 0.70
+                return {
+                    "planning_output": {
+                        "answer_points": answer_points,
+                        "citations": citation_ids,
+                        "follow_up_question": "",
+                        "confidence": confidence,
+                        "teaching_questions": [],
+                        "render_strategy": "source_faithful",
+                        "reasoning_trace": (
+                            "Adaptive grounding policy selected extractive rendering "
+                            f"(level=mid, top_score={profile.get('top_score', 0.0):.3f}, "
+                            f"margin={profile.get('margin', 0.0):.3f}, "
+                            f"best_overlap={profile.get('best_overlap', 0.0):.3f})."
+                        ),
+                    },
+                    "intent_label": persona_trace.get("intent_label"),
+                    "persona_module_ids": persona_trace.get("module_ids", []),
+                    "persona_spec_version": persona_trace.get("persona_spec_version"),
+                    "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+                    "reasoning_history": (state.get("reasoning_history") or []) + [
+                        "Planner: adaptive grounding policy chose source-faithful mode (mid confidence)."
+                    ],
+                }
 
-        scored_sentences: Dict[str, Dict[str, float]] = {}
-        citation_ids: List[str] = []
-        order_idx = 0
-
-        for ctx in context_data[:5]:
-            source_id = ctx.get("source_id")
-            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
-                citation_ids.append(source_id)
-
-            text = (ctx.get("text") or "").strip()
-            if not text:
-                continue
-
-            vector_score = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
-            for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
-                sentence = _normalize_extract(raw)
-                if not sentence or len(sentence) < 18:
-                    continue
-
-                lowered = sentence.lower()
-                overlap = sum(1 for tok in query_tokens if tok in lowered)
-                label_bonus = 2 if lowered.startswith(("recommendation:", "assumptions:", "why:")) else 0
-                score = float(overlap * 2 + label_bonus) + min(vector_score, 1.0)
-
-                existing = scored_sentences.get(sentence)
-                if existing is None or score > float(existing.get("score", 0.0)):
-                    scored_sentences[sentence] = {"score": score, "order": float(order_idx)}
-                order_idx += 1
-
-        ranked = sorted(
-            scored_sentences.items(),
-            key=lambda item: (-float(item[1].get("score", 0.0)), float(item[1].get("order", 0.0))),
-        )
-
-        answer_points = [sentence for sentence, _meta in ranked[:3]]
-
-        if not answer_points:
-            fallback_lines: List[str] = []
-            for ctx in context_data[:3]:
-                for raw_line in (ctx.get("text") or "").splitlines():
-                    line = _normalize_extract(raw_line)
-                    if line and line not in fallback_lines:
-                        fallback_lines.append(line)
-                    if len(fallback_lines) >= 3:
-                        break
-                if len(fallback_lines) >= 3:
-                    break
-            answer_points = fallback_lines[:3]
-
-        if answer_points:
-            max_score = max((float(meta.get("score", 0.0)) for _s, meta in ranked[:3]), default=0.0)
-            confidence = 0.82 if max_score >= 1.0 else 0.72
+        if profile_level == "low" and target_owner_scope:
             return {
                 "planning_output": {
-                    "answer_points": answer_points,
-                    "citations": citation_ids[:3],
+                    "answer_points": [UNCERTAINTY_RESPONSE],
+                    "citations": [],
                     "follow_up_question": "",
-                    "confidence": confidence,
+                    "confidence": 0.2,
                     "teaching_questions": [],
-                    "render_strategy": "source_faithful",
-                    "reasoning_trace": "Deterministic source-faithful extraction from retrieved evidence.",
+                    "reasoning_trace": (
+                        "Adaptive grounding policy blocked owner-specific synthesis "
+                        f"(level=low, top_score={profile.get('top_score', 0.0):.3f}, "
+                        f"margin={profile.get('margin', 0.0):.3f}, "
+                        f"best_overlap={profile.get('best_overlap', 0.0):.3f})."
+                    ),
                 },
                 "intent_label": persona_trace.get("intent_label"),
                 "persona_module_ids": persona_trace.get("module_ids", []),
                 "persona_spec_version": persona_trace.get("persona_spec_version"),
                 "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
                 "reasoning_history": (state.get("reasoning_history") or []) + [
-                    "Planner: deterministic source-faithful plan from retrieved context."
+                    "Planner: adaptive grounding policy forced uncertainty for low-confidence owner query."
                 ],
             }
 

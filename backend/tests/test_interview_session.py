@@ -384,6 +384,7 @@ async def test_get_user_context_falls_back_to_owner_memories(monkeypatch):
 
     monkeypatch.setattr(zep_memory, "get_zep_client", lambda: _NoContextZep())
     monkeypatch.setattr(interview, "list_owner_memories", _list_owner_memories)
+    monkeypatch.setattr(interview, "AUTO_APPROVE_OWNER_MEMORY", False)
 
     context = await interview._get_user_context("user-1", "interview", twin_id="twin-1")
     assert "Approved owner memories" in context

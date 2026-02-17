@@ -4,7 +4,7 @@ import time
 import logging
 import json
 import re
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, Tuple
 from contextlib import contextmanager
 from modules.clients import get_openai_client, get_pinecone_index, get_cohere_client
 from modules.langfuse_sdk import is_enabled as is_langfuse_enabled, langfuse_context, observe
@@ -46,12 +46,34 @@ RETRIEVAL_QUERY_PREP_TIMEOUT = _float_env("RETRIEVAL_QUERY_PREP_TIMEOUT_SECONDS"
 RETRIEVAL_EMBEDDING_TIMEOUT = _float_env("RETRIEVAL_EMBEDDING_TIMEOUT_SECONDS", 10.0)
 RETRIEVAL_VECTOR_TIMEOUT = _float_env("RETRIEVAL_VECTOR_TIMEOUT_SECONDS", 20.0)
 RETRIEVAL_PER_NAMESPACE_TIMEOUT = _float_env("RETRIEVAL_PER_NAMESPACE_TIMEOUT_SECONDS", 8.0)
-RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 1))
+RETRIEVAL_INDEX_INIT_TIMEOUT = _float_env("RETRIEVAL_INDEX_INIT_TIMEOUT_SECONDS", 3.0)
+# Query augmentation is enabled by default for higher recall. Keep this bounded.
+RETRIEVAL_MAX_SEARCH_QUERIES = max(1, _int_env("RETRIEVAL_MAX_SEARCH_QUERIES", 4))
+RETRIEVAL_QUERY_EXPANSION_ENABLED = (
+    os.getenv("RETRIEVAL_QUERY_EXPANSION_ENABLED", "true").lower() == "true"
+)
+RETRIEVAL_HYDE_ENABLED = os.getenv("RETRIEVAL_HYDE_ENABLED", "true").lower() == "true"
+RETRIEVAL_HYDE_MIN_ANCHORS = max(2, _int_env("RETRIEVAL_HYDE_MIN_ANCHORS", 3))
 RETRIEVAL_TOP_K_VERIFIED = max(1, _int_env("RETRIEVAL_TOP_K_VERIFIED", 3))
 RETRIEVAL_TOP_K_GENERAL = max(4, _int_env("RETRIEVAL_TOP_K_GENERAL", 8))
 RETRIEVAL_PRIMARY_RETRY_ENABLED = os.getenv("RETRIEVAL_PRIMARY_RETRY_ENABLED", "false").lower() == "true"
 RETRIEVAL_STRONG_VECTOR_FLOOR = _float_env("RETRIEVAL_STRONG_VECTOR_FLOOR", 0.70)
 RETRIEVAL_ANCHOR_MIN_TOKEN_LEN = max(3, _int_env("RETRIEVAL_ANCHOR_MIN_TOKEN_LEN", 4))
+RETRIEVAL_ANCHOR_FALLBACK_MAX = max(2, _int_env("RETRIEVAL_ANCHOR_FALLBACK_MAX", 4))
+RETRIEVAL_MIN_ACCEPTED_SCORE = _float_env("RETRIEVAL_MIN_ACCEPTED_SCORE", 0.0)
+RETRIEVAL_OWNER_MEMORY_MATCH_MIN_SCORE = _float_env("RETRIEVAL_OWNER_MEMORY_MATCH_MIN_SCORE", 0.68)
+RETRIEVAL_OWNER_MEMORY_MATCH_MIN_CONFIDENCE = _float_env("RETRIEVAL_OWNER_MEMORY_MATCH_MIN_CONFIDENCE", 0.70)
+RETRIEVAL_LENIENT_NON_PUBLIC_GROUP_FILTER = (
+    os.getenv("RETRIEVAL_LENIENT_NON_PUBLIC_GROUP_FILTER", "true").lower() == "true"
+)
+AUTO_APPROVE_OWNER_MEMORY = os.getenv("AUTO_APPROVE_OWNER_MEMORY", "true").lower() == "true"
+RETRIEVAL_LEXICAL_FUSION_ENABLED = (
+    os.getenv("RETRIEVAL_LEXICAL_FUSION_ENABLED", "true").lower() == "true"
+)
+RETRIEVAL_LEXICAL_FUSION_ALPHA = min(
+    max(_float_env("RETRIEVAL_LEXICAL_FUSION_ALPHA", 0.22), 0.0),
+    1.0,
+)
 
 _QUERY_STOPWORDS: Set[str] = {
     "a", "an", "and", "are", "as", "ask", "at", "be", "by", "can", "do", "for",
@@ -85,6 +107,153 @@ def _extract_anchor_terms(query: str) -> Set[str]:
             continue
         anchors.update(_token_variants(token))
     return anchors
+
+
+def _normalize_query_text(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", (text or "").strip())
+    return normalized.strip(" \t\r\n-")
+
+
+def _is_entity_lookup_query(query: str) -> bool:
+    q = _normalize_query_text(query).lower()
+    if not q:
+        return False
+    patterns = (
+        r"^\s*do you know(?: about)?\s+.+",
+        r"^\s*what is\s+.+",
+        r"^\s*who is\s+.+",
+        r"^\s*tell me about\s+.+",
+        r"^\s*can you explain\s+.+",
+    )
+    return any(re.search(p, q) for p in patterns)
+
+
+def _should_attempt_query_expansion(query: str) -> bool:
+    if not RETRIEVAL_QUERY_EXPANSION_ENABLED or RETRIEVAL_MAX_SEARCH_QUERIES <= 1:
+        return False
+    q = _normalize_query_text(query)
+    if not q:
+        return False
+    # Keep single-token chatter out of expensive expansion calls.
+    token_count = len(re.findall(r"[a-z0-9][a-z0-9_-]*", q.lower()))
+    return token_count >= 2
+
+
+def _should_attempt_hyde(query: str) -> bool:
+    if not RETRIEVAL_HYDE_ENABLED or RETRIEVAL_MAX_SEARCH_QUERIES <= 1:
+        return False
+    if _is_entity_lookup_query(query):
+        return False
+
+    q = _normalize_query_text(query).lower()
+    anchors = _extract_anchor_terms(q)
+    if len(anchors) < RETRIEVAL_HYDE_MIN_ANCHORS:
+        return False
+
+    reasoning_markers = (
+        "should",
+        "how",
+        "why",
+        "tradeoff",
+        "trade-off",
+        "compare",
+        "versus",
+        " vs ",
+        "recommend",
+        "approach",
+        "strategy",
+        "plan",
+    )
+    if any(marker in q for marker in reasoning_markers):
+        return True
+
+    token_count = len(re.findall(r"[a-z0-9][a-z0-9_-]*", q))
+    return token_count >= 7
+
+
+def _build_search_query_plan(
+    query: str,
+    expanded_queries: List[str],
+    hyde_answer: str,
+    max_queries: int,
+) -> List[Dict[str, Any]]:
+    """
+    Build weighted search plan:
+    - keep original query dominant
+    - include expansions for recall
+    - include HyDE only as a low-weight auxiliary query
+    """
+    plan: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+
+    def _add(candidate: str, *, kind: str, weight: float) -> None:
+        normalized = _normalize_query_text(candidate)
+        if not normalized:
+            return
+        key = normalized.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        plan.append({"text": normalized, "kind": kind, "weight": float(weight)})
+
+    _add(query, kind="original", weight=1.0)
+
+    for candidate in expanded_queries:
+        if len(plan) >= max_queries:
+            break
+        _add(candidate, kind="expansion", weight=0.88)
+
+    if len(plan) < max_queries and hyde_answer and _should_attempt_hyde(query):
+        _add(hyde_answer, kind="hyde", weight=0.72)
+
+    return plan[:max(1, max_queries)] if plan else [{"text": _normalize_query_text(query), "kind": "original", "weight": 1.0}]
+
+
+def _deterministic_query_expansions(query: str) -> List[str]:
+    """
+    Fast, local rewrites used even when LLM query expansion is unavailable.
+    """
+    q = _normalize_query_text(query)
+    if not q:
+        return []
+
+    expansions: List[str] = []
+    lowered = q.lower()
+
+    # Entity probe normalization.
+    m_entity = re.search(
+        r"^\s*(?:do you know(?: about)?|tell me about|can you explain)\s+(.+?)\s*\??$",
+        lowered,
+    )
+    if m_entity:
+        entity = _normalize_query_text(m_entity.group(1))
+        if entity:
+            expansions.append(f"what is {entity}")
+            expansions.append(f"{entity} overview")
+
+    # Comparison normalization for "X or Y" style queries.
+    if " or " in lowered:
+        parts = [p.strip(" ?.,") for p in re.split(r"\bor\b", q, maxsplit=1, flags=re.IGNORECASE)]
+        if len(parts) == 2 and all(parts):
+            left, right = parts[0], parts[1]
+            expansions.append(f"{left} vs {right}")
+            expansions.append(f"tradeoffs {left} versus {right}")
+
+    # Anchor-only compressed query for lexical recall.
+    anchors = sorted(_extract_anchor_terms(q))
+    if anchors:
+        expansions.append(" ".join(anchors[:6]))
+
+    deduped: List[str] = []
+    seen: Set[str] = set()
+    for candidate in expansions:
+        normalized = _normalize_query_text(candidate)
+        key = normalized.lower()
+        if not normalized or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped[:3]
 
 
 def _text_has_anchor_overlap(text: str, anchors: Set[str]) -> bool:
@@ -135,7 +304,7 @@ def _apply_anchor_relevance_filter(contexts: List[Dict[str, Any]], query: str) -
             contexts,
             key=lambda c: float(c.get("vector_score", c.get("score", 0.0)) or 0.0),
             reverse=True,
-        )[: min(2, len(contexts))]
+        )[: min(RETRIEVAL_ANCHOR_FALLBACK_MAX, len(contexts))]
         print(
             "[Retrieval] Anchor relevance filter removed all contexts; "
             f"restoring top-{len(fallback)} by vector score as fallback."
@@ -143,6 +312,46 @@ def _apply_anchor_relevance_filter(contexts: List[Dict[str, Any]], query: str) -
         return fallback
 
     return filtered
+
+
+def _lexical_overlap_score(query: str, text: str) -> float:
+    anchors = _extract_anchor_terms(query)
+    if not anchors:
+        return 0.0
+    text_tokens = set(re.findall(r"[a-z0-9][a-z0-9_-]*", (text or "").lower()))
+    normalized_tokens: Set[str] = set()
+    for token in text_tokens:
+        normalized_tokens.update(_token_variants(token))
+    if not normalized_tokens:
+        return 0.0
+    overlap = len(anchors.intersection(normalized_tokens))
+    return overlap / float(max(len(anchors), 1))
+
+
+def _apply_lexical_fusion(query: str, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Blend semantic/reranker scores with lexical overlap to reduce misses on
+    direct phrase queries while keeping dense retrieval signal dominant.
+    """
+    if not RETRIEVAL_LEXICAL_FUSION_ENABLED or not contexts:
+        return contexts
+
+    fused: List[Dict[str, Any]] = []
+    for ctx in contexts:
+        current_score = float(ctx.get("score", ctx.get("vector_score", 0.0)) or 0.0)
+        lexical_score = _lexical_overlap_score(query, str(ctx.get("text", "")))
+        blended = ((1.0 - RETRIEVAL_LEXICAL_FUSION_ALPHA) * current_score) + (
+            RETRIEVAL_LEXICAL_FUSION_ALPHA * lexical_score
+        )
+
+        enriched = dict(ctx)
+        enriched.setdefault("semantic_score", current_score)
+        enriched["lexical_score"] = lexical_score
+        enriched["score"] = blended
+        fused.append(enriched)
+
+    fused.sort(key=lambda c: float(c.get("score", 0.0) or 0.0), reverse=True)
+    return fused
 
 
 def log_retrieval_event(event_type: str, data: Dict[str, Any]):
@@ -411,7 +620,11 @@ async def generate_hyde_answer(query: str) -> str:
         return query
 
 
-def rrf_merge(results_list: List[List[Dict[str, Any]]], k: int = 60) -> List[Dict[str, Any]]:
+def rrf_merge(
+    results_list: List[List[Dict[str, Any]]],
+    k: int = 60,
+    weights: Optional[List[float]] = None,
+) -> List[Dict[str, Any]]:
     """
     Reciprocal Rank Fusion (RRF) merge of multiple result lists.
     
@@ -425,10 +638,16 @@ def rrf_merge(results_list: List[List[Dict[str, Any]]], k: int = 60) -> List[Dic
     # Build score map: {doc_id: rrf_score}
     score_map: Dict[str, float] = {}
     
-    for results in results_list:
+    for idx, results in enumerate(results_list):
+        weight = 1.0
+        if weights and idx < len(weights):
+            try:
+                weight = max(0.05, float(weights[idx]))
+            except Exception:
+                weight = 1.0
         for rank, hit in enumerate(results, start=1):
             doc_id = hit.get("id", str(hit))
-            score_map[doc_id] = score_map.get(doc_id, 0.0) + 1.0 / (k + rank)
+            score_map[doc_id] = score_map.get(doc_id, 0.0) + (weight / (k + rank))
     
     # Build reverse index: {doc_id: hit}
     doc_map: Dict[str, Dict[str, Any]] = {}
@@ -534,13 +753,18 @@ def _match_owner_memory(query: str, twin_id: str) -> Optional[Dict[str, Any]]:
             return None
         best = candidates[0]
         status = str(best.get("status") or "").lower()
-        if status not in {"active", "verified"}:
+        allowed_statuses = {"active", "verified"}
+        if AUTO_APPROVE_OWNER_MEMORY:
+            allowed_statuses.add("proposed")
+        if status not in allowed_statuses:
             return None
 
         score = float(best.get("_score", 0.0) or 0.0)
         confidence = float(best.get("confidence", 0.0) or 0.0)
-        # Keep threshold strict to avoid accidental overreach on weak matches.
-        if score < 0.82 and confidence < 0.85:
+        if (
+            score < RETRIEVAL_OWNER_MEMORY_MATCH_MIN_SCORE
+            and confidence < RETRIEVAL_OWNER_MEMORY_MATCH_MIN_CONFIDENCE
+        ):
             return None
         return best
     except Exception as e:
@@ -595,8 +819,6 @@ async def _execute_pinecone_queries(
     if not embeddings:
         return []
 
-    index = get_pinecone_index()
-
     resolved_creator = creator_id or resolve_creator_id_for_twin(twin_id)
     dual_read_enabled = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
     namespace_candidates = get_namespace_candidates_for_twin(
@@ -606,6 +828,15 @@ async def _execute_pinecone_queries(
     )
     if not namespace_candidates:
         print("[Retrieval] No namespace candidates available, returning empty contexts")
+        return []
+
+    try:
+        index = await asyncio.wait_for(
+            asyncio.to_thread(get_pinecone_index),
+            timeout=max(1.0, RETRIEVAL_INDEX_INIT_TIMEOUT),
+        )
+    except Exception as e:
+        print(f"[Retrieval] Pinecone index unavailable: {e}")
         return []
 
     def _extract_matches(response: Any) -> List[Dict[str, Any]]:
@@ -891,7 +1122,33 @@ def _filter_by_group_permissions(
     # PHASE 2 FIX: Log filtering results
     if rejected_count > 0:
         print(f"[Retrieval] Group filtering: {len(filtered_contexts)} allowed, {rejected_count} rejected (group: {group_id})")
-    
+
+    # Pragmatic fallback: if non-public group permissions are misconfigured and all
+    # contexts were rejected, keep chat responsive by returning unfiltered results.
+    if (
+        RETRIEVAL_LENIENT_NON_PUBLIC_GROUP_FILTER
+        and contexts
+        and not filtered_contexts
+    ):
+        try:
+            group_res = (
+                supabase.table("access_groups")
+                .select("is_public")
+                .eq("id", group_id)
+                .single()
+                .execute()
+            )
+            is_public_group = bool((group_res.data or {}).get("is_public"))
+        except Exception:
+            is_public_group = False
+
+        if not is_public_group:
+            print(
+                f"[Retrieval] Group filtering fallback applied for non-public group {group_id}; "
+                "returning unfiltered contexts."
+            )
+            return contexts
+
     return filtered_contexts
 
 
@@ -1073,36 +1330,67 @@ async def retrieve_context_vectors(
         return []
 
     # 1. Query prep under a strict timeout budget.
-    expanded_queries: List[str] = [query]
-    hyde_answer = query
-    try:
-        prep_results = await asyncio.wait_for(
-            asyncio.gather(
-                expand_query(query),
-                generate_hyde_answer(query),
-                return_exceptions=True,
-            ),
-            timeout=RETRIEVAL_QUERY_PREP_TIMEOUT,
-        )
-        expanded_raw, hyde_raw = prep_results
-        if isinstance(expanded_raw, list):
-            expanded_queries = [q for q in expanded_raw if isinstance(q, str) and q.strip()] or [query]
-        if isinstance(hyde_raw, str) and hyde_raw.strip():
-            hyde_answer = hyde_raw.strip()
-    except asyncio.TimeoutError:
-        print(f"[Retrieval] Query preparation timed out after {RETRIEVAL_QUERY_PREP_TIMEOUT}s, using original query")
-    except Exception as e:
-        print(f"[Retrieval] Query preparation failed: {e}, using original query")
+    expanded_queries: List[str] = _deterministic_query_expansions(query)
+    hyde_answer = ""
+    prep_tasks: List[Any] = []
+    prep_labels: List[str] = []
 
-    search_queries: List[str] = []
-    for candidate in [query, hyde_answer] + expanded_queries:
-        c = (candidate or "").strip()
-        if c and c not in search_queries:
-            search_queries.append(c)
-        if len(search_queries) >= RETRIEVAL_MAX_SEARCH_QUERIES:
-            break
+    if _should_attempt_query_expansion(query):
+        prep_tasks.append(expand_query(query))
+        prep_labels.append("expand")
+
+    if _should_attempt_hyde(query):
+        prep_tasks.append(generate_hyde_answer(query))
+        prep_labels.append("hyde")
+
+    if prep_tasks:
+        try:
+            prep_results = await asyncio.wait_for(
+                asyncio.gather(*prep_tasks, return_exceptions=True),
+                timeout=RETRIEVAL_QUERY_PREP_TIMEOUT,
+            )
+            for label, raw in zip(prep_labels, prep_results):
+                if isinstance(raw, Exception):
+                    continue
+                if label == "expand" and isinstance(raw, list):
+                    llm_expansions = [
+                        _normalize_query_text(q)
+                        for q in raw
+                        if isinstance(q, str) and _normalize_query_text(q)
+                    ]
+                    expanded_queries.extend(llm_expansions)
+                elif label == "hyde" and isinstance(raw, str) and raw.strip():
+                    hyde_answer = _normalize_query_text(raw)
+        except asyncio.TimeoutError:
+            print(
+                f"[Retrieval] Query preparation timed out after {RETRIEVAL_QUERY_PREP_TIMEOUT}s, "
+                "using reduced query plan."
+            )
+        except Exception as e:
+            print(f"[Retrieval] Query preparation failed: {e}, using reduced query plan")
+
+    search_plan = _build_search_query_plan(
+        query=query,
+        expanded_queries=expanded_queries,
+        hyde_answer=hyde_answer,
+        max_queries=RETRIEVAL_MAX_SEARCH_QUERIES,
+    )
+    search_queries = [entry["text"] for entry in search_plan if isinstance(entry, dict)]
+    search_weights = [float(entry.get("weight", 1.0) or 1.0) for entry in search_plan if isinstance(entry, dict)]
+    search_kinds = [str(entry.get("kind", "original")) for entry in search_plan if isinstance(entry, dict)]
+
     if not search_queries:
         search_queries = [query]
+        search_weights = [1.0]
+        search_kinds = ["original"]
+
+    print(
+        "[Retrieval] Search plan: "
+        + " | ".join(
+            f"{kind}:{weight:.2f}:{text[:80]}"
+            for kind, weight, text in zip(search_kinds, search_weights, search_queries)
+        )
+    )
     
     # 2. Embeddings under timeout with single-query fallback.
     all_embeddings: List[List[float]] = []
@@ -1127,6 +1415,18 @@ async def retrieve_context_vectors(
         except Exception as e:
             print(f"[Retrieval] Single-embedding fallback failed: {e}")
             return []
+
+    if len(all_embeddings) != len(search_queries):
+        aligned = min(len(all_embeddings), len(search_queries))
+        if aligned > 0:
+            all_embeddings = all_embeddings[:aligned]
+            search_queries = search_queries[:aligned]
+            search_weights = search_weights[:aligned]
+            search_kinds = search_kinds[:aligned]
+        else:
+            all_embeddings = []
+    if not all_embeddings:
+        return []
     
     # 3. Parallel Vector Search with bounded timeout.
     all_results = await _execute_pinecone_queries(
@@ -1163,7 +1463,10 @@ async def retrieve_context_vectors(
     general_results_list = [res["matches"] for res in all_results[1:]]
     
     # 4. RRF Merge general results
-    merged_general_hits = rrf_merge(general_results_list)
+    merged_general_hits = rrf_merge(
+        general_results_list,
+        weights=search_weights[: len(general_results_list)],
+    )
     
     # 5. Process matches into contexts
     contexts = _process_verified_matches(verified_results)
@@ -1202,6 +1505,10 @@ async def retrieve_context_vectors(
         if "vector_score" not in ctx:
             ctx["vector_score"] = float(ctx.get("score", 0.0) or 0.0)
 
+    # Hybrid lexical fusion: blend lexical overlap with semantic/rerank score.
+    final_contexts = _apply_lexical_fusion(query, final_contexts)
+    final_contexts = final_contexts[:top_k]
+
     # Drop weak off-topic hits before handing context to the planner.
     final_contexts = _apply_anchor_relevance_filter(final_contexts, query)
     
@@ -1212,11 +1519,13 @@ async def retrieve_context_vectors(
         top_scores = [round(float(c.get("score", 0.0) or 0.0), 3) for c in final_contexts[:3]]
         print(f"[Retrieval] Top scores: {top_scores}")
     
-    # Check if retrieval is too weak - signal for "I don't know" response
-    # Threshold lowered to 0.001 for calibration (FlashRank scores might be low logits or unnormalized)
+    # Optional weak-score cutoff (disabled by default for better recall under constrained plans).
     max_score = max([float(c.get("score", 0.0) or 0.0) for c in final_contexts], default=0.0)
-    if max_score < 0.001 and len(final_contexts) > 0:
-        print(f"[Retrieval] Max score {max_score} < 0.001. Triggering 'I don't know' logic.")
+    if RETRIEVAL_MIN_ACCEPTED_SCORE > 0 and max_score < RETRIEVAL_MIN_ACCEPTED_SCORE and len(final_contexts) > 0:
+        print(
+            f"[Retrieval] Max score {max_score} < {RETRIEVAL_MIN_ACCEPTED_SCORE}. "
+            "Triggering 'I don't know' logic."
+        )
         return []
     elif len(final_contexts) == 0:
         return []
@@ -1238,8 +1547,14 @@ async def retrieve_context_vectors(
                     "rerank_provider": rerank_provider_used,
                     "cohere_rerank_enabled": _cohere_rerank_enabled,
                     "flashrank_enabled": _flashrank_enabled,
+                    "lexical_fusion_enabled": RETRIEVAL_LEXICAL_FUSION_ENABLED,
+                    "lexical_fusion_alpha": RETRIEVAL_LEXICAL_FUSION_ALPHA,
                     "top_k": top_k,
                     "total_retrieved": len(final_contexts),
+                    "search_query_count": len(search_queries),
+                    "search_queries": [q[:120] for q in search_queries],
+                    "search_query_kinds": search_kinds,
+                    "search_query_weights": [round(float(w), 3) for w in search_weights],
                 }
             )
         except Exception as e:
@@ -1368,10 +1683,13 @@ async def get_retrieval_health_status(twin_id: Optional[str] = None) -> Dict[str
         "flashrank_available": _flashrank_available,
         "cohere_rerank_enabled": _cohere_rerank_enabled,
         "cohere_rerank_model": _cohere_rerank_model,
+        "lexical_fusion_enabled": RETRIEVAL_LEXICAL_FUSION_ENABLED,
+        "lexical_fusion_alpha": RETRIEVAL_LEXICAL_FUSION_ALPHA,
         "query_prep_timeout_s": RETRIEVAL_QUERY_PREP_TIMEOUT,
         "embedding_timeout_s": RETRIEVAL_EMBEDDING_TIMEOUT,
         "vector_timeout_s": RETRIEVAL_VECTOR_TIMEOUT,
         "per_namespace_timeout_s": RETRIEVAL_PER_NAMESPACE_TIMEOUT,
+        "index_init_timeout_s": RETRIEVAL_INDEX_INIT_TIMEOUT,
     }
     
     if not dual_read:

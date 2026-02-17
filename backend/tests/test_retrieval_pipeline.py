@@ -9,6 +9,7 @@ import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
 from typing import List, Dict, Any
+from types import SimpleNamespace
 
 # Test configuration
 pytestmark = pytest.mark.asyncio
@@ -151,6 +152,43 @@ class TestRetrievalPipeline:
                         assert len(result) == 2
                         assert result[0]["text"] == "Vector result 1"
 
+    async def test_match_owner_memory_accepts_proposed_when_auto_approve_enabled(self, monkeypatch):
+        """Should accept proposed owner memories in auto-approve mode."""
+        from modules import retrieval
+
+        monkeypatch.setattr(retrieval, "AUTO_APPROVE_OWNER_MEMORY", True)
+        monkeypatch.setattr(
+            retrieval,
+            "find_owner_memory_candidates",
+            lambda **_kwargs: [
+                {"id": "mem-1", "status": "proposed", "_score": 0.95, "confidence": 0.95}
+            ],
+        )
+
+        with patch("modules.identity_gate.classify_query", return_value={"requires_owner": True}):
+            result = retrieval._match_owner_memory("What is your stance on remote work?", "twin-1")
+
+        assert result is not None
+        assert result["id"] == "mem-1"
+
+    async def test_match_owner_memory_rejects_proposed_when_auto_approve_disabled(self, monkeypatch):
+        """Should reject proposed owner memories when auto-approve mode is off."""
+        from modules import retrieval
+
+        monkeypatch.setattr(retrieval, "AUTO_APPROVE_OWNER_MEMORY", False)
+        monkeypatch.setattr(
+            retrieval,
+            "find_owner_memory_candidates",
+            lambda **_kwargs: [
+                {"id": "mem-1", "status": "proposed", "_score": 0.95, "confidence": 0.95}
+            ],
+        )
+
+        with patch("modules.identity_gate.classify_query", return_value={"requires_owner": True}):
+            result = retrieval._match_owner_memory("What is your stance on remote work?", "twin-1")
+
+        assert result is None
+
 
 class TestPineconeQueries:
     """Test Pinecone query execution."""
@@ -236,6 +274,75 @@ class TestGroupFiltering:
             assert len(result) == 1
             assert result[0]["source_id"] == "doc-1"
 
+    async def test_filter_by_group_lenient_non_public_when_all_rejected(self, monkeypatch):
+        """Should fallback for non-public groups when all contexts are rejected."""
+        from modules import retrieval
+
+        contexts = [
+            {"text": "Doc 2", "source_id": "doc-2", "is_verified": False}
+        ]
+
+        class _Query:
+            def __init__(self, table_name):
+                self.table_name = table_name
+            def select(self, *args, **kwargs):
+                return self
+            def eq(self, *args, **kwargs):
+                return self
+            def single(self):
+                return self
+            def execute(self):
+                if self.table_name == "content_permissions":
+                    return SimpleNamespace(data=[{"content_id": "doc-1"}])
+                if self.table_name == "access_groups":
+                    return SimpleNamespace(data={"is_public": False})
+                return SimpleNamespace(data=[])
+
+        class _Supabase:
+            def table(self, name):
+                return _Query(name)
+
+        monkeypatch.setattr(retrieval, "supabase", _Supabase())
+        monkeypatch.setattr(retrieval, "RETRIEVAL_LENIENT_NON_PUBLIC_GROUP_FILTER", True)
+
+        result = retrieval._filter_by_group_permissions(contexts, "group-123")
+        assert len(result) == 1
+        assert result[0]["source_id"] == "doc-2"
+
+    async def test_filter_by_group_keeps_public_group_strict_when_all_rejected(self, monkeypatch):
+        """Should keep strict filtering for public groups."""
+        from modules import retrieval
+
+        contexts = [
+            {"text": "Doc 2", "source_id": "doc-2", "is_verified": False}
+        ]
+
+        class _Query:
+            def __init__(self, table_name):
+                self.table_name = table_name
+            def select(self, *args, **kwargs):
+                return self
+            def eq(self, *args, **kwargs):
+                return self
+            def single(self):
+                return self
+            def execute(self):
+                if self.table_name == "content_permissions":
+                    return SimpleNamespace(data=[{"content_id": "doc-1"}])
+                if self.table_name == "access_groups":
+                    return SimpleNamespace(data={"is_public": True})
+                return SimpleNamespace(data=[])
+
+        class _Supabase:
+            def table(self, name):
+                return _Query(name)
+
+        monkeypatch.setattr(retrieval, "supabase", _Supabase())
+        monkeypatch.setattr(retrieval, "RETRIEVAL_LENIENT_NON_PUBLIC_GROUP_FILTER", True)
+
+        result = retrieval._filter_by_group_permissions(contexts, "group-123")
+        assert result == []
+
 
 class TestAnchorRelevanceFiltering:
     """Test off-topic filtering for weak retrieval matches."""
@@ -290,6 +397,21 @@ class TestAnchorRelevanceFiltering:
         ]
         filtered = _apply_anchor_relevance_filter(contexts, "what did I say about specialist agents?")
         assert len(filtered) == 1
+
+    async def test_lexical_fusion_boosts_keyword_aligned_context(self, monkeypatch):
+        from modules import retrieval
+
+        monkeypatch.setattr(retrieval, "RETRIEVAL_LEXICAL_FUSION_ENABLED", True)
+        monkeypatch.setattr(retrieval, "RETRIEVAL_LEXICAL_FUSION_ALPHA", 0.4)
+
+        contexts = [
+            {"text": "This discusses board meeting cadence.", "score": 0.80, "source_id": "s1"},
+            {"text": "Incident response runbook for pager alerts.", "score": 0.74, "source_id": "s2"},
+        ]
+
+        fused = retrieval._apply_lexical_fusion("incident response approach", contexts)
+        assert fused[0]["source_id"] == "s2"
+        assert fused[0]["lexical_score"] > fused[1]["lexical_score"]
 
 
 class TestEmbeddingGeneration:
@@ -368,6 +490,78 @@ class TestRRFMerge:
         # doc-2 appears in both lists, should have higher RRF score
         doc2 = next(r for r in result if r["id"] == "doc-2")
         assert "rrf_score" in doc2
+
+    async def test_rrf_merge_respects_query_weights(self):
+        """Higher-weight query lists should dominate fused ranking."""
+        from modules.retrieval import rrf_merge
+
+        results_list = [
+            [
+                {"id": "doc-original", "score": 0.81, "metadata": {"text": "Original query match"}},
+                {"id": "doc-shared", "score": 0.79, "metadata": {"text": "Shared"}},
+            ],
+            [
+                {"id": "doc-hyde", "score": 0.99, "metadata": {"text": "HyDE-only"}},
+                {"id": "doc-shared", "score": 0.77, "metadata": {"text": "Shared"}},
+            ],
+        ]
+
+        # Original query should be weighted more than auxiliary query.
+        result = rrf_merge(results_list, weights=[1.0, 0.35])
+        assert result[0]["id"] in {"doc-original", "doc-shared"}
+        assert result[0]["id"] != "doc-hyde"
+
+
+class TestQueryPlanning:
+    """Test query-plan generation and augmentation gates."""
+
+    async def test_build_search_query_plan_keeps_original_first(self):
+        from modules.retrieval import _build_search_query_plan
+
+        plan = _build_search_query_plan(
+            query="Should we use containers or serverless for our MVP?",
+            expanded_queries=[
+                "MVP deployment architecture containers serverless tradeoff",
+                "startup infra decision containers vs serverless",
+            ],
+            hyde_answer="For MVPs, teams often start with managed containers for predictable debugging.",
+            max_queries=4,
+        )
+
+        assert len(plan) >= 1
+        assert plan[0]["kind"] == "original"
+        assert plan[0]["weight"] >= 1.0
+        assert any(item["kind"] == "expansion" for item in plan)
+
+    async def test_entity_lookup_query_skips_hyde(self):
+        from modules.retrieval import _build_search_query_plan
+
+        plan = _build_search_query_plan(
+            query="Do you know Antler?",
+            expanded_queries=["What is Antler VC firm"],
+            hyde_answer="Antler is a global early-stage VC and startup generator.",
+            max_queries=4,
+        )
+
+        assert all(item["kind"] != "hyde" for item in plan)
+
+    async def test_deterministic_expansions_cover_comparison_queries(self):
+        from modules.retrieval import _deterministic_query_expansions
+
+        expansions = _deterministic_query_expansions(
+            "Should we use containers or serverless for our MVP?"
+        )
+
+        joined = " | ".join(expansions).lower()
+        assert "vs" in joined or "tradeoffs" in joined
+        assert len(expansions) >= 1
+
+    async def test_deterministic_expansions_cover_entity_probe_queries(self):
+        from modules.retrieval import _deterministic_query_expansions
+
+        expansions = _deterministic_query_expansions("Do you know Antler?")
+        joined = " | ".join(expansions).lower()
+        assert "what is antler" in joined or "antler overview" in joined
 
 
 class TestEdgeCases:

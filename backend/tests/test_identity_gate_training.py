@@ -46,6 +46,8 @@ async def test_identity_gate_falls_back_to_intent_profile(monkeypatch):
 @pytest.mark.asyncio
 async def test_identity_gate_public_mode_requests_owner_clarification(monkeypatch):
     monkeypatch.setattr(identity_gate, "find_owner_memory_candidates", lambda *args, **kwargs: [])
+    monkeypatch.setattr(identity_gate, "PUBLIC_CLARIFICATION_QUEUE_ENABLED", True)
+    monkeypatch.setattr(identity_gate, "AUTO_APPROVE_OWNER_MEMORY", False)
     monkeypatch.setattr(
         identity_gate,
         "_load_intent_profile",

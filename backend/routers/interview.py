@@ -27,6 +27,17 @@ from modules.owner_memory_store import (
 router = APIRouter(prefix="/api/interview", tags=["interview"])
 
 
+def _float_env(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+
+AUTO_APPROVE_OWNER_MEMORY = os.getenv("AUTO_APPROVE_OWNER_MEMORY", "true").lower() == "true"
+INTERVIEW_MEMORY_MIN_CONFIDENCE = _float_env("INTERVIEW_MEMORY_MIN_CONFIDENCE", 0.45)
+
+
 # =============================================================================
 # Request/Response Models
 # =============================================================================
@@ -211,7 +222,9 @@ async def _get_user_context(user_id: str, task: str = "interview", twin_id: Opti
     if twin_id:
         try:
             active_memories = list_owner_memories(twin_id, status="active", limit=20)
-            proposed_memories = list_owner_memories(twin_id, status="proposed", limit=20)
+            proposed_memories: List[Dict[str, Any]] = []
+            if not AUTO_APPROVE_OWNER_MEMORY:
+                proposed_memories = list_owner_memories(twin_id, status="proposed", limit=20)
 
             sections: List[str] = []
             if active_memories:
@@ -223,9 +236,12 @@ async def _get_user_context(user_id: str, task: str = "interview", twin_id: Opti
 
             fallback_context = "\n".join([s for s in sections if s]).strip()
             if fallback_context:
+                summary = f"{len(active_memories)} approved"
+                if proposed_memories:
+                    summary += f", {len(proposed_memories)} proposed"
                 print(
                     f"[Interview] Using owner memory fallback context "
-                    f"({len(active_memories)} approved, {len(proposed_memories)} proposed) for twin {twin_id}"
+                    f"({summary}) for twin {twin_id}"
                 )
                 return fallback_context
         except Exception as e:
@@ -459,17 +475,19 @@ async def finalize_interview_session(
         session_id
     )
 
-    # Store extracted memories as proposed owner memories (for approval)
+    # Store extracted memories as owner memories.
+    # In auto-approve mode we persist directly as verified.
     twin_id = session_row.get("twin_id")
     proposed_count = 0
     proposed_failed_count = 0
     low_confidence_skipped = 0
     notes: List[str] = []
+    memory_status = "verified" if AUTO_APPROVE_OWNER_MEMORY else "proposed"
 
     if twin_id and extracted_memories:
         for memory in extracted_memories:
             try:
-                if memory.confidence < 0.6:
+                if memory.confidence < INTERVIEW_MEMORY_MIN_CONFIDENCE:
                     low_confidence_skipped += 1
                     continue
                 mapped_type = _map_interview_memory_type(memory.type)
@@ -487,7 +505,7 @@ async def finalize_interview_session(
                         "owner_id": user_id,
                         "original_type": memory.type
                     },
-                    status="proposed"
+                    status=memory_status
                 )
                 if created:
                     proposed_count += 1
@@ -498,16 +516,22 @@ async def finalize_interview_session(
                 proposed_failed_count += 1
 
         if low_confidence_skipped > 0:
-            notes.append(f"{low_confidence_skipped} low-confidence memories were skipped (<0.6).")
-        if proposed_failed_count > 0:
             notes.append(
-                f"{proposed_failed_count} memories could not be saved as proposals. "
+                f"{low_confidence_skipped} low-confidence memories were skipped "
+                f"(<{INTERVIEW_MEMORY_MIN_CONFIDENCE})."
+            )
+        if proposed_failed_count > 0:
+            target_state = "verified memories" if AUTO_APPROVE_OWNER_MEMORY else "memory proposals"
+            notes.append(
+                f"{proposed_failed_count} memories could not be saved as {target_state}. "
                 "Check owner_beliefs migration/status constraints."
             )
         if proposed_count == 0 and extracted_memories:
-            notes.append("No interview memories reached Inbox. Review extraction quality and owner memory schema.")
+            notes.append("No interview memories were persisted. Review extraction quality and owner memory schema.")
+        elif AUTO_APPROVE_OWNER_MEMORY and proposed_count > 0:
+            notes.append(f"{proposed_count} interview memories were auto-approved and saved as verified.")
     elif not twin_id:
-        notes.append("Interview session has no twin_id; proposals could not be created.")
+        notes.append("Interview session has no twin_id; owner memories could not be created.")
     elif not extracted_memories:
         notes.append("No memories were extracted from transcript.")
     
@@ -534,6 +558,8 @@ async def finalize_interview_session(
         "proposed_count": proposed_count,
         "proposed_failed_count": proposed_failed_count,
         "low_confidence_skipped": low_confidence_skipped,
+        "memory_status_target": memory_status,
+        "auto_approve_owner_memory": AUTO_APPROVE_OWNER_MEMORY,
     })
 
     # Update session record
