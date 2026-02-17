@@ -1124,6 +1124,58 @@ Rules:
             ],
         }
 
+    # Deterministic direct-answer path for comparative "should we use X or Y"
+    # questions when recommendation-style evidence is present.
+    q_lower = (user_query or "").strip().lower()
+    if (
+        context_data
+        and " or " in q_lower
+        and re.search(r"\bshould\s+(?:i|we)\s+use\b", q_lower)
+    ):
+        answer_points: List[str] = []
+        citation_ids: List[str] = []
+        for ctx in context_data:
+            source_id = ctx.get("source_id")
+            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
+                citation_ids.append(source_id)
+
+            text = (ctx.get("text") or "")
+            for raw_line in text.splitlines():
+                line = raw_line.strip().lstrip("-*").strip()
+                if not line:
+                    continue
+                lowered = line.lower()
+                if (
+                    lowered.startswith("recommendation:")
+                    or lowered.startswith("assumptions:")
+                    or lowered.startswith("why:")
+                ):
+                    if line not in answer_points:
+                        answer_points.append(line)
+                if len(answer_points) >= 3:
+                    break
+            if len(answer_points) >= 3:
+                break
+
+        if answer_points:
+            return {
+                "planning_output": {
+                    "answer_points": answer_points[:3],
+                    "citations": citation_ids[:3],
+                    "follow_up_question": "",
+                    "confidence": 0.9,
+                    "teaching_questions": [],
+                    "reasoning_trace": "Deterministic comparison recommendation extracted from evidence.",
+                },
+                "intent_label": persona_trace.get("intent_label"),
+                "persona_module_ids": persona_trace.get("module_ids", []),
+                "persona_spec_version": persona_trace.get("persona_spec_version"),
+                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+                "reasoning_history": (state.get("reasoning_history") or []) + [
+                    "Planner: deterministic comparison plan from recommendation evidence."
+                ],
+            }
+
     # Owner-specific requests without sufficient evidence should be explicit
     # about uncertainty; only owner_training mode should prompt for teaching.
     if not context_data and target_owner_scope and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL", "TEACHING"}:
