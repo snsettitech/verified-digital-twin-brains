@@ -889,12 +889,19 @@ async def planner_node(state: TwinState):
     except Exception as exc:
         print(f"Planner answerability error: {exc}")
         answerability = {
+            "answerability": "insufficient",
             "answerable": False,
             "confidence": 0.0,
             "reasoning": "Answerability evaluation failed.",
             "missing_information": ["the specific evidence needed to answer this question"],
             "ambiguity_level": "high",
         }
+
+    answerability_state = str(answerability.get("answerability") or "").strip().lower()
+    if answerability_state not in {"direct", "derivable", "insufficient"}:
+        answerability_state = "direct" if bool(answerability.get("answerable")) else "insufficient"
+        answerability["answerability"] = answerability_state
+    answerability["answerable"] = answerability_state in {"direct", "derivable"}
 
     routing_decision = (
         dict(state.get("routing_decision"))
@@ -906,7 +913,7 @@ async def planner_node(state: TwinState):
         }
     )
 
-    if not bool(answerability.get("answerable")):
+    if answerability_state == "insufficient":
         missing_information = answerability.get("missing_information") or []
         clarification_questions = build_targeted_clarification_questions(
             user_query,
@@ -943,7 +950,7 @@ async def planner_node(state: TwinState):
             "persona_spec_version": persona_trace.get("persona_spec_version"),
             "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
             "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: answerability=false, produced targeted clarification questions."
+                "Planner: answerability=insufficient, produced targeted clarification questions."
             ],
         }
 
@@ -974,7 +981,7 @@ Return STRICT JSON:
 Rules:
 - Provide max 3 concise answer points.
 - Cite only IDs from ALLOWED SOURCE IDS.
-- Do not ask clarification questions when answerable is true.
+- Do not ask clarification questions when answerability is direct or derivable.
 """
 
     try:
@@ -1002,7 +1009,17 @@ Rules:
 
     answer_points = _sanitize_answer_points(plan.get("answer_points"))
     if not answer_points:
-        answer_points = [UNCERTAINTY_RESPONSE]
+        fallback_points = []
+        for row in context_data[:3]:
+            text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
+            if text:
+                fallback_points.append(text[:260])
+            if len(fallback_points) >= 3:
+                break
+        if fallback_points:
+            answer_points = fallback_points
+        else:
+            answer_points = ["The answer is supported by the retrieved evidence and citations above."]
 
     citations = _sanitize_citations(plan.get("citations"))
     if not citations and valid_source_ids:
@@ -1042,7 +1059,7 @@ Rules:
         "persona_spec_version": persona_trace.get("persona_spec_version"),
         "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
         "reasoning_history": (state.get("reasoning_history") or []) + [
-            "Planner: answerability=true, generated grounded answer with citations."
+            f"Planner: answerability={answerability_state}, generated grounded answer with citations."
         ],
     }
 @observe(name="realizer_node")

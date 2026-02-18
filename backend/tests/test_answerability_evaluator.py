@@ -12,7 +12,7 @@ async def test_evaluate_answerability_normalizes_model_output(monkeypatch):
         AsyncMock(
             return_value=(
                 {
-                    "answerable": False,
+                    "answerability": "INSUFFICIENT",
                     "confidence": 0.34,
                     "reasoning": "Evidence misses deployment constraints.",
                     "missing_information": ["deployment deadline", "budget ceiling", "deployment deadline"],
@@ -27,6 +27,7 @@ async def test_evaluate_answerability_normalizes_model_output(monkeypatch):
         "What rollout should we use?",
         [{"source_id": "src-1", "text": "Use staged rollout for safety."}],
     )
+    assert result["answerability"] == "insufficient"
     assert result["answerable"] is False
     assert result["confidence"] == pytest.approx(0.34)
     assert result["ambiguity_level"] == "high"
@@ -36,6 +37,7 @@ async def test_evaluate_answerability_normalizes_model_output(monkeypatch):
 @pytest.mark.asyncio
 async def test_evaluate_answerability_handles_empty_evidence():
     result = await evaluate_answerability("Who are you?", [])
+    assert result["answerability"] == "insufficient"
     assert result["answerable"] is False
     assert result["confidence"] == 0.0
     assert result["missing_information"]

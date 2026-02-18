@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Sequence, Set
 from modules.inference_router import invoke_json
 
 _AMBIGUITY_LEVELS = {"low", "medium", "high"}
+_ANSWERABILITY_STATES = {"direct", "derivable", "insufficient"}
 
 _STOPWORDS: Set[str] = {
     "a",
@@ -61,6 +62,26 @@ def _clamp_confidence(value: Any, default: float = 0.0) -> float:
     return max(0.0, min(1.0, as_float))
 
 
+def _normalize_answerability(value: Any, legacy_answerable: Any = None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in _ANSWERABILITY_STATES:
+        return normalized
+
+    if isinstance(value, bool):
+        return "direct" if value else "insufficient"
+
+    if isinstance(legacy_answerable, bool):
+        return "direct" if legacy_answerable else "insufficient"
+
+    legacy_str = str(legacy_answerable or "").strip().lower()
+    if legacy_str in {"true", "1", "yes"}:
+        return "direct"
+    if legacy_str in {"false", "0", "no"}:
+        return "insufficient"
+
+    return "insufficient"
+
+
 def _normalize_missing_information(values: Any) -> List[str]:
     if not isinstance(values, list):
         return []
@@ -95,7 +116,9 @@ def _default_missing_information(query: str, evidence_chunks: Sequence[Dict[str,
 def _heuristic_answerability(query: str, evidence_chunks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     chunks = [row for row in evidence_chunks if isinstance(row, dict)]
     if not chunks:
+        answerability = "insufficient"
         return {
+            "answerability": answerability,
             "answerable": False,
             "confidence": 0.0,
             "reasoning": "No evidence chunks were retrieved.",
@@ -105,7 +128,9 @@ def _heuristic_answerability(query: str, evidence_chunks: Sequence[Dict[str, Any
 
     query_tokens = _tokens(query)
     if not query_tokens:
+        answerability = "insufficient"
         return {
+            "answerability": answerability,
             "answerable": False,
             "confidence": 0.2,
             "reasoning": "The question is too vague to evaluate against evidence.",
@@ -114,23 +139,42 @@ def _heuristic_answerability(query: str, evidence_chunks: Sequence[Dict[str, Any
         }
 
     best_overlap = 0.0
+    all_tokens: Set[str] = set()
     for row in chunks[:5]:
         text_tokens = _tokens(str(row.get("text") or ""))
         if not text_tokens:
             continue
+        all_tokens.update(text_tokens)
         overlap = len(query_tokens.intersection(text_tokens)) / float(len(query_tokens))
         best_overlap = max(best_overlap, overlap)
 
+    collective_overlap = len(query_tokens.intersection(all_tokens)) / float(len(query_tokens))
+
     if best_overlap >= 0.55:
+        answerability = "direct"
         return {
+            "answerability": answerability,
             "answerable": True,
             "confidence": min(0.85, 0.45 + best_overlap),
-            "reasoning": "Evidence has strong lexical overlap with the question.",
+            "reasoning": "A single evidence chunk directly supports the answer.",
             "missing_information": [],
             "ambiguity_level": "low",
         }
 
+    if collective_overlap >= 0.7 and best_overlap >= 0.25:
+        answerability = "derivable"
+        return {
+            "answerability": answerability,
+            "answerable": True,
+            "confidence": min(0.8, max(0.45, 0.35 + (collective_overlap * 0.5))),
+            "reasoning": "The answer is derivable by combining multiple evidence chunks.",
+            "missing_information": [],
+            "ambiguity_level": "medium",
+        }
+
+    answerability = "insufficient"
     return {
+        "answerability": answerability,
         "answerable": False,
         "confidence": max(0.15, best_overlap),
         "reasoning": "Evidence does not contain enough direct support for a complete answer.",
@@ -155,7 +199,7 @@ def _render_evidence_for_prompt(evidence_chunks: Sequence[Dict[str, Any]], *, ma
 
 async def evaluate_answerability(query: str, evidence_chunks: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Evaluate if a query can be fully answered from retrieved evidence.
+    Evaluate if a query is direct, derivable, or insufficient from retrieved evidence.
     """
     chunks = [row for row in evidence_chunks if isinstance(row, dict)]
     if not chunks:
@@ -172,7 +216,7 @@ EVIDENCE CHUNKS:
 
 Return STRICT JSON:
 {{
-  "answerable": boolean,
+  "answerability": "direct|derivable|insufficient",
   "confidence": number,
   "reasoning": string,
   "missing_information": ["concrete missing item"],
@@ -181,8 +225,11 @@ Return STRICT JSON:
 
 Rules:
 - Use only evidence from the chunks.
-- If answerable is true, missing_information must be [].
-- If answerable is false, missing_information must list concrete missing facts/constraints (no generic requests).
+- direct: one chunk explicitly answers the question.
+- derivable: multiple chunks must be combined to answer.
+- insufficient: evidence truly lacks required information.
+- If answerability is direct or derivable, missing_information must be [].
+- If answerability is insufficient, missing_information must list concrete missing facts/constraints (no generic requests).
 - Keep missing_information <= 5 items.
 """
 
@@ -196,7 +243,8 @@ Rules:
     except Exception:
         return _heuristic_answerability(query, chunks)
 
-    answerable = bool(raw.get("answerable"))
+    answerability = _normalize_answerability(raw.get("answerability"), raw.get("answerable"))
+    answerable = answerability in {"direct", "derivable"}
     confidence = _clamp_confidence(raw.get("confidence"), default=0.0)
     reasoning = re.sub(r"\s+", " ", str(raw.get("reasoning") or "").strip())
     if not reasoning:
@@ -206,14 +254,18 @@ Rules:
         ambiguity_level = "medium"
 
     missing_information = _normalize_missing_information(raw.get("missing_information"))
-    if answerable:
+    if answerability in {"direct", "derivable"}:
         missing_information = []
-        confidence = max(confidence, 0.5)
+        if answerability == "direct":
+            confidence = max(confidence, 0.5)
+        else:
+            confidence = max(confidence, 0.45)
     else:
         if not missing_information:
             missing_information = _default_missing_information(query, chunks)
 
     return {
+        "answerability": answerability,
         "answerable": answerable,
         "confidence": confidence,
         "reasoning": reasoning,
@@ -254,4 +306,3 @@ def build_targeted_clarification_questions(
                 f'Can you share the specific document detail that answers: "{fallback_query}"?'
             )
     return questions[: max(1, limit)]
-

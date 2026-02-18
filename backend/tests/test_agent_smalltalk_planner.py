@@ -25,7 +25,7 @@ async def test_explicit_recommendation_no_clarifications(monkeypatch):
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": True,
+                "answerability": "direct",
                 "confidence": 0.92,
                 "reasoning": "Recommendation is explicitly stated.",
                 "missing_information": [],
@@ -73,7 +73,7 @@ async def test_missing_constraints_produces_targeted_clarifications(monkeypatch)
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": False,
+                "answerability": "insufficient",
                 "confidence": 0.2,
                 "reasoning": "Constraints are missing.",
                 "missing_information": [
@@ -108,7 +108,7 @@ async def test_identity_question_answered_if_evidence_exists(monkeypatch):
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": True,
+                "answerability": "direct",
                 "confidence": 0.88,
                 "reasoning": "Identity details are explicit in evidence.",
                 "missing_information": [],

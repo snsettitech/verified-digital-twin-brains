@@ -25,7 +25,7 @@ async def test_document_with_explicit_recommendation_has_no_clarifications(monke
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": True,
+                "answerability": "direct",
                 "confidence": 0.93,
                 "reasoning": "Recommendation is explicit and complete.",
                 "missing_information": [],
@@ -76,7 +76,7 @@ async def test_document_lacking_constraints_triggers_clarifications(monkeypatch)
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": False,
+                "answerability": "insufficient",
                 "confidence": 0.18,
                 "reasoning": "Constraints are not present in evidence.",
                 "missing_information": ["the target budget", "the implementation deadline"],
@@ -106,7 +106,7 @@ async def test_identity_question_answered_directly_when_info_exists(monkeypatch)
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": True,
+                "answerability": "direct",
                 "confidence": 0.87,
                 "reasoning": "Identity info exists in evidence.",
                 "missing_information": [],
@@ -153,7 +153,7 @@ async def test_random_manual_pdf_behaves_without_document_specific_config(monkey
         "modules.agent.evaluate_answerability",
         AsyncMock(
             return_value={
-                "answerable": True,
+                "answerability": "direct",
                 "confidence": 0.8,
                 "reasoning": "Manual contains direct installation steps.",
                 "missing_information": [],
