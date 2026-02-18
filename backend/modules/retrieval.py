@@ -18,7 +18,6 @@ from modules.delphi_namespace import (
     get_primary_namespace_for_twin,
     resolve_creator_id_for_twin,
 )
-from modules.doc_sectioning import section_filter_contexts
 
 # Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
@@ -1514,7 +1513,6 @@ async def retrieve_context_vectors(
 
     # Hybrid lexical fusion: blend lexical overlap with semantic/rerank score.
     final_contexts = _apply_lexical_fusion(query, final_contexts)
-    final_contexts = section_filter_contexts(query, final_contexts, max_items=max(top_k * 2, top_k))
     final_contexts = final_contexts[:top_k]
 
     # Drop weak off-topic hits before handing context to the planner.

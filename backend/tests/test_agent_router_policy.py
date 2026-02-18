@@ -5,121 +5,37 @@ from modules.agent import router_node
 
 
 @pytest.mark.asyncio
-async def test_router_owner_generic_query_disables_evidence(monkeypatch):
-    async def fake_invoke_json(*args, **kwargs):
-        return (
-            {
-                "mode": "QA_FACT",
-                "is_person_specific": True,
-                "requires_evidence": True,
-                "reasoning": "mock",
-            },
-            {"provider": "test"},
-        )
-
-    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
-
-    state = {
-        "messages": [HumanMessage(content="What metrics should I track weekly?")],
-        "interaction_context": "owner_chat",
-        "reasoning_history": [],
-    }
-    out = await router_node(state)
-    assert out["dialogue_mode"] == "QA_FACT"
-    assert out["target_owner_scope"] is False
-    assert out["requires_evidence"] is False
-    assert isinstance(out.get("routing_decision"), dict)
-    assert out["routing_decision"]["chosen_workflow"]
-    assert out["routing_decision"]["output_schema"].startswith("workflow.")
-
-
-@pytest.mark.asyncio
-async def test_router_explicit_source_request_keeps_evidence(monkeypatch):
-    async def fake_invoke_json(*args, **kwargs):
-        return (
-            {
-                "mode": "QA_FACT",
-                "is_person_specific": False,
-                "requires_evidence": False,
-                "reasoning": "mock",
-            },
-            {"provider": "test"},
-        )
-
-    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
-
-    state = {
-        "messages": [HumanMessage(content="Answer based on my sources about GTM")],
-        "interaction_context": "owner_chat",
-        "reasoning_history": [],
-    }
-    out = await router_node(state)
-    assert out["requires_evidence"] is True
-    assert isinstance(out.get("routing_decision"), dict)
-
-
-@pytest.mark.asyncio
-async def test_router_respects_model_person_specific_when_not_generic_coaching(monkeypatch):
-    async def fake_invoke_json(*args, **kwargs):
-        return (
-            {
-                "mode": "QA_FACT",
-                "is_person_specific": True,
-                "requires_evidence": True,
-                "reasoning": "mock",
-            },
-            {"provider": "test"},
-        )
-
-    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
-
-    state = {
-        "messages": [HumanMessage(content="What did I say about specialist agents?")],
-        "interaction_context": "owner_chat",
-        "reasoning_history": [],
-    }
-    out = await router_node(state)
-    assert out["target_owner_scope"] is True
-    assert out["requires_evidence"] is True
-    assert out["routing_decision"]["intent"] in {"plan", "answer", "diagnose"}
-
-
-@pytest.mark.asyncio
-async def test_router_week1_guidance_is_treated_as_generic_coaching(monkeypatch):
-    async def fake_invoke_json(*args, **kwargs):
-        return (
-            {
-                "mode": "QA_FACT",
-                "is_person_specific": True,
-                "requires_evidence": True,
-                "reasoning": "mock",
-            },
-            {"provider": "test"},
-        )
-
-    monkeypatch.setattr("modules.agent.invoke_json", fake_invoke_json)
-
-    state = {
-        "messages": [HumanMessage(content="What should I do in week 1 for GTM?")],
-        "interaction_context": "owner_chat",
-        "reasoning_history": [],
-    }
-    out = await router_node(state)
-    assert out["target_owner_scope"] is False
-    assert out["requires_evidence"] is False
-
-
-@pytest.mark.asyncio
-async def test_router_identity_query_uses_identity_fact_mode(monkeypatch):
+async def test_router_always_requires_evidence(monkeypatch):
     monkeypatch.setattr("modules.agent._twin_has_groundable_knowledge", lambda _twin_id: True)
 
     state = {
         "twin_id": "twin-1",
-        "messages": [HumanMessage(content="who are you?")],
+        "messages": [HumanMessage(content="Who are you?")],
         "interaction_context": "owner_chat",
         "reasoning_history": [],
     }
     out = await router_node(state)
-    assert out["dialogue_mode"] == "IDENTITY_FACT"
+
+    assert out["dialogue_mode"] == "QA_FACT"
     assert out["requires_evidence"] is True
-    assert out["sub_queries"] == ["who are you?"]
+    assert out["sub_queries"] == ["Who are you?"]
+
+
+@pytest.mark.asyncio
+async def test_router_returns_generalized_routing_decision(monkeypatch):
+    monkeypatch.setattr("modules.agent._twin_has_groundable_knowledge", lambda _twin_id: False)
+
+    state = {
+        "twin_id": "twin-2",
+        "messages": [HumanMessage(content="Should we use containers or serverless?")],
+        "interaction_context": "public_share",
+        "reasoning_history": [],
+    }
+    out = await router_node(state)
+
+    decision = out["routing_decision"]
+    assert isinstance(decision, dict)
+    assert decision["action"] == "answer"
+    assert decision["clarifying_questions"] == []
+    assert decision["required_inputs_missing"] == []
+    assert out["workflow_intent"] == decision["intent"]

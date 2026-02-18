@@ -27,7 +27,7 @@ def test_build_system_prompt_includes_override(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_evidence_gate_requires_teaching_on_empty_context():
+async def test_evidence_gate_passes_through_on_empty_context():
     from modules.agent import evidence_gate_node
 
     state = {
@@ -40,8 +40,8 @@ async def test_evidence_gate_requires_teaching_on_empty_context():
     }
 
     result = await evidence_gate_node(state)
-    assert result["dialogue_mode"] == "TEACHING"
-    assert result["requires_teaching"] is True
+    assert result["dialogue_mode"] == "QA_FACT"
+    assert result["requires_teaching"] is False
 
 
 @pytest.mark.asyncio

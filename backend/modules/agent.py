@@ -26,7 +26,10 @@ from modules.persona_spec_store import get_active_persona_spec
 from modules.inference_router import invoke_json, invoke_text
 from modules.routing_decision import build_routing_decision
 from modules.response_policy import UNCERTAINTY_RESPONSE
-from modules.doc_sectioning import section_filter_contexts
+from modules.answerability import (
+    build_targeted_clarification_questions,
+    evaluate_answerability,
+)
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -599,533 +602,88 @@ def _log_router_observation(
 
 
 def _build_router_prompt(user_query: str, interaction_context: str) -> str:
-    return f"""You are a Strategic Dialogue Router for a Digital Twin.
-Classify the user's intent to determine retrieval and evidence requirements.
-
+    return f"""You are a generalized RAG router.
 USER QUERY: {user_query}
 INTERACTION CONTEXT: {interaction_context}
-
-MODES:
-- SMALLTALK: Greetings, brief pleasantries, "how are you".
-- IDENTITY_FACT: Identity/background introductions that must be grounded in owner-approved sources.
-- QA_FACT: Questions about objective facts, events, or public knowledge.
-- QA_RELATIONSHIP: Questions about people, entities, or connections (Graph needed).
-- STANCE_GLOBAL: Questions about beliefs, opinions, core philosophy, or "what do I think about".
-- REPAIR: User complaining about being robotic, generic, or incorrect.
-- TEACHING: Only when user explicitly asks to teach/correct OR context is owner_training and evidence is missing.
-
-INTENT ATTRIBUTES:
-- is_person_specific: True if the question asks for MY (the owner's) specific view, decision, preference, or experience.
-
-OUTPUT FORMAT (JSON):
+Always retrieve evidence first, then evaluate answerability.
+Return JSON:
 {{
-    "mode": "SMALLTALK | IDENTITY_FACT | QA_FACT | QA_RELATIONSHIP | STANCE_GLOBAL | REPAIR | TEACHING",
-    "is_person_specific": bool,
-    "requires_evidence": bool,
-    "reasoning": "Brief explanation"
+  "mode": "QA_FACT",
+  "is_person_specific": false,
+  "requires_evidence": true,
+  "reasoning": "evidence-first"
 }}
 """
 
     # Define the nodes
 @observe(name="router_node")
 async def router_node(state: TwinState):
-    """Phase 4 Orchestrator: Intent Classification & Routing"""
+    """
+    Generalized router for document reasoning:
+    - Always retrieve evidence for the query.
+    - Avoid intent-specific dialogue modes and handcrafted branches.
+    """
     messages = state["messages"]
-    last_human_msg = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
+    user_query = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
     interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
     twin_id = state.get("twin_id")
     knowledge_available = _twin_has_groundable_knowledge(twin_id)
-    full_settings = state.get("full_settings") if isinstance(state.get("full_settings"), dict) else {}
-    pinned_context = full_settings.get("pinned_context") if isinstance(full_settings, dict) else None
+    intent_label = classify_query_intent(user_query, dialogue_mode="QA_FACT")
 
-    # Deterministic fast-path keeps obvious greetings and owner-specific prompts stable.
-    if _is_smalltalk_query(last_human_msg):
-        # Identity prompts should always be retrieval-grounded.
-        if _is_identity_intro_query(last_human_msg):
-            router_reason = (
-                "identity prompt rerouted to IDENTITY_FACT with evidence "
-                f"(knowledge_available={knowledge_available})"
-            )
-            intent_label = classify_query_intent(last_human_msg, dialogue_mode="IDENTITY_FACT")
-            routing_decision = build_routing_decision(
-                query=last_human_msg,
-                mode="IDENTITY_FACT",
-                intent_label=intent_label,
-                interaction_context=interaction_context,
-                target_owner_scope=False,
-                requires_evidence=True,
-                knowledge_available=knowledge_available,
-                pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
-            )
-            requires_evidence = True
-            _log_router_observation(
-                mode="IDENTITY_FACT",
-                intent_label=intent_label,
-                requires_evidence=requires_evidence,
-                target_owner_scope=False,
-                interaction_context=interaction_context,
-                knowledge_available=knowledge_available,
-                router_reason=router_reason,
-            )
-            return {
-                "dialogue_mode": "IDENTITY_FACT",
-                "intent_label": intent_label,
-                "target_owner_scope": False,
-                "requires_evidence": requires_evidence,
-                "sub_queries": [last_human_msg],
-                "router_reason": router_reason,
-                "router_knowledge_available": knowledge_available,
-                "workflow_intent": routing_decision.intent,
-                "routing_decision": routing_decision.model_dump(),
-                "reasoning_history": (state.get("reasoning_history") or []) + [
-                    "Router: identity prompt rerouted to retrieval-backed IDENTITY_FACT (knowledge available)"
-                    + f"; action={routing_decision.action}; confidence={routing_decision.confidence:.2f}"
-                ],
-            }
-        router_reason = "deterministic SMALLTALK fast-path"
-        intent_label = classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK")
-        routing_decision = build_routing_decision(
-            query=last_human_msg,
-            mode="SMALLTALK",
-            intent_label=intent_label,
-            interaction_context=interaction_context,
-            target_owner_scope=False,
-            requires_evidence=False,
-            knowledge_available=knowledge_available,
-            pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
-        )
-        _log_router_observation(
-            mode="SMALLTALK",
-            intent_label=intent_label,
-            requires_evidence=False,
-            target_owner_scope=False,
-            interaction_context=interaction_context,
-            knowledge_available=knowledge_available,
-            router_reason=router_reason,
-        )
-        return {
-            "dialogue_mode": "SMALLTALK",
-            "intent_label": intent_label,
-            "target_owner_scope": False,
-            "requires_evidence": False,
-            "sub_queries": [],
-            "router_reason": router_reason,
-            "router_knowledge_available": knowledge_available,
-            "workflow_intent": routing_decision.intent,
-            "routing_decision": routing_decision.model_dump(),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Router: deterministic SMALLTALK fast-path"
-                + f"; action={routing_decision.action}; confidence={routing_decision.confidence:.2f}"
-            ],
-        }
+    routing_decision = build_routing_decision(
+        query=user_query,
+        mode="QA_FACT",
+        intent_label=intent_label,
+        interaction_context=interaction_context,
+        target_owner_scope=False,
+        requires_evidence=True,
+        knowledge_available=knowledge_available,
+        pinned_context=None,
+    )
+    decision_payload = routing_decision.model_dump()
+    decision_payload["action"] = "answer"
+    decision_payload["clarifying_questions"] = []
+    decision_payload["required_inputs_missing"] = []
 
-    owner_specific_heuristic = _is_owner_specific_query(last_human_msg)
-    identity_intro_heuristic = _is_identity_intro_query(last_human_msg)
-    explicit_teaching = _is_explicit_teaching_query(last_human_msg)
-    generic_coaching_heuristic = _is_generic_business_coaching_query(last_human_msg)
-    explicit_source_grounded = _is_explicit_source_grounded_query(last_human_msg)
-    
-    # Try Langfuse-managed prompt, but hard-fallback to strict inline prompt when
-    # the fetched prompt is too generic (e.g., default one-liner).
-    router_prompt = ""
-    try:
-        from modules.langfuse_prompt_manager import compile_prompt
-        candidate = compile_prompt(
-            "router",
-            variables={
-                "user_query": last_human_msg,
-                "interaction_context": interaction_context,
-            }
-        )
-        lowered = (candidate or "").lower()
-        if all(marker in lowered for marker in ["output format", "\"mode\"", "\"requires_evidence\""]):
-            router_prompt = candidate
-    except Exception:
-        router_prompt = ""
+    router_reason = "general_rag_router: retrieval required for answerability evaluation"
+    _log_router_observation(
+        mode="QA_FACT",
+        intent_label=intent_label,
+        requires_evidence=True,
+        target_owner_scope=False,
+        interaction_context=interaction_context,
+        knowledge_available=knowledge_available,
+        router_reason=router_reason,
+    )
 
-    if not router_prompt:
-        router_prompt = _build_router_prompt(last_human_msg, interaction_context)
-    
-    try:
-        plan, _route_meta = await invoke_json(
-            [{"role": "system", "content": router_prompt}],
-            task="router",
-            temperature=0,
-            max_tokens=320,
-        )
-        print(f"[Router] Plan: {plan}")
-        
-        mode = plan.get("mode", "QA_FACT")
-        is_specific = plan.get("is_person_specific", False)
-        req_evidence = plan.get("requires_evidence", True)
-        intent_label = classify_query_intent(last_human_msg, dialogue_mode=mode)
-
-        # Deterministic guardrails over model output.
-        if identity_intro_heuristic:
-            mode = "IDENTITY_FACT"
-            is_specific = False
-            req_evidence = True
-
-        if owner_specific_heuristic:
-            is_specific = True
-            req_evidence = True
-
-        # Generic coaching should not be forced into owner-specific/teaching lanes
-        # unless user explicitly asks about the owner's personal stance or sources.
-        if generic_coaching_heuristic and not owner_specific_heuristic and not explicit_teaching:
-            if mode in {"STANCE_GLOBAL", "TEACHING"}:
-                mode = "QA_FACT"
-            is_specific = False
-            req_evidence = False
-
-        # Entity probe queries ("do you know X", "what is X") should use retrieval.
-        if _is_entity_probe_query(last_human_msg):
-            if mode == "SMALLTALK":
-                mode = "QA_FACT"
-            req_evidence = True
-
-        # Owner conversational mode default:
-        # unless user explicitly asks for owner/source-grounded evidence, keep
-        # generic prompts fluent and avoid noisy retrieval misses.
-        if (
-            interaction_context in {"owner_chat", "owner_training"}
-            and not is_specific
-            and not explicit_source_grounded
-            and not explicit_teaching
-        ):
-            if mode in {"STANCE_GLOBAL", "TEACHING"}:
-                mode = "QA_FACT"
-            is_specific = False
-            req_evidence = False
-
-        # Public-facing conversations should not drift into owner-training lanes
-        # unless the user explicitly asks for owner-specific/source-grounded behavior.
-        if (
-            interaction_context in {"public_share", "public_widget"}
-            and not owner_specific_heuristic
-            and not explicit_source_grounded
-            and not explicit_teaching
-        ):
-            if mode in {"STANCE_GLOBAL", "TEACHING"}:
-                mode = "QA_FACT"
-            is_specific = False
-
-        if mode == "TEACHING" and interaction_context != "owner_training" and not explicit_teaching:
-            mode = "QA_FACT"
-
-        # Person-specific queries MUST have evidence verification.
-        if is_specific:
-            req_evidence = True
-
-        # Knowledge-aware policy:
-        # When the twin has ingested knowledge, force retrieval for non-smalltalk
-        # modes to keep responses source-grounded by default.
-        knowledge_forced_retrieval = False
-        if (
-            _ROUTER_FORCE_RETRIEVAL_WITH_KNOWLEDGE
-            and knowledge_available
-            and mode != "SMALLTALK"
-        ):
-            req_evidence = True
-            knowledge_forced_retrieval = True
-            
-        # Sub-query generation for retrieval. Entity probes benefit from a
-        # normalized factual variant ("what is X") in addition to raw phrasing.
-        sub_queries = [last_human_msg] if mode != "SMALLTALK" else []
-        if mode != "SMALLTALK" and _is_entity_probe_query(last_human_msg):
-            lowered = (last_human_msg or "").strip().lower()
-            m = re.search(
-                r"^\s*(?:do you know(?: about)?|what is|who is|tell me about|can you explain)\s+(.+?)\s*\??$",
-                lowered,
-            )
-            if m:
-                entity = m.group(1).strip()
-                if entity:
-                    normalized = f"what is {entity}"
-                    if normalized not in sub_queries:
-                        sub_queries.insert(0, normalized)
-        
-        router_reason = (
-            f"mode={mode}; intent={intent_label}; specific={is_specific}; "
-            f"requires_evidence={req_evidence}; context={interaction_context}; "
-            f"knowledge_available={knowledge_available}; "
-            f"knowledge_forced_retrieval={knowledge_forced_retrieval}; "
-            f"explicit_source_grounded={explicit_source_grounded}; explicit_teaching={explicit_teaching}"
-        )
-        routing_decision = build_routing_decision(
-            query=last_human_msg,
-            mode=mode,
-            intent_label=intent_label,
-            interaction_context=interaction_context,
-            target_owner_scope=bool(is_specific),
-            requires_evidence=bool(req_evidence),
-            knowledge_available=knowledge_available,
-            pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
-        )
-        _log_router_observation(
-            mode=mode,
-            intent_label=intent_label,
-            requires_evidence=req_evidence,
-            target_owner_scope=is_specific,
-            interaction_context=interaction_context,
-            knowledge_available=knowledge_available,
-            router_reason=router_reason,
-        )
-        return {
-            "dialogue_mode": mode,
-            "intent_label": intent_label,
-            "target_owner_scope": is_specific,
-            "requires_evidence": req_evidence,
-            "sub_queries": sub_queries,
-            "router_reason": router_reason,
-            "router_knowledge_available": knowledge_available,
-            "workflow_intent": routing_decision.intent,
-            "routing_decision": routing_decision.model_dump(),
-            "reasoning_history": (state.get("reasoning_history") or [])
-            + [
-                f"Router: Mode={mode}, Intent={intent_label}, Specific={is_specific}, "
-                f"Action={routing_decision.action}, Confidence={routing_decision.confidence:.2f}"
-            ]
-        }
-    except Exception as e:
-        print(f"Router error: {e}")
-        # Tag error in Langfuse
-        try:
-            langfuse_context.update_current_observation(
-                level="ERROR",
-                status_message=f"Router failed: {str(e)[:255]}",
-                metadata={
-                    "error": True,
-                    "error_type": type(e).__name__,
-                    "error_node": "router_node",
-                    "query": last_human_msg[:200] if last_human_msg else None,
-                }
-            )
-        except Exception:
-            pass
-        if _is_identity_intro_query(last_human_msg):
-            fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="IDENTITY_FACT")
-            fallback_reason = "router exception fallback to IDENTITY_FACT with evidence"
-            routing_decision = build_routing_decision(
-                query=last_human_msg,
-                mode="IDENTITY_FACT",
-                intent_label=fallback_intent,
-                interaction_context=interaction_context,
-                target_owner_scope=False,
-                requires_evidence=True,
-                knowledge_available=knowledge_available,
-                pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
-            )
-            _log_router_observation(
-                mode="IDENTITY_FACT",
-                intent_label=fallback_intent,
-                requires_evidence=True,
-                target_owner_scope=False,
-                interaction_context=interaction_context,
-                knowledge_available=knowledge_available,
-                router_reason=fallback_reason,
-            )
-            return {
-                "dialogue_mode": "IDENTITY_FACT",
-                "intent_label": fallback_intent,
-                "target_owner_scope": False,
-                "requires_evidence": True,
-                "sub_queries": [last_human_msg],
-                "router_reason": fallback_reason,
-                "router_knowledge_available": knowledge_available,
-                "workflow_intent": routing_decision.intent,
-                "routing_decision": routing_decision.model_dump(),
-            }
-        if _is_smalltalk_query(last_human_msg):
-            fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK")
-            fallback_reason = "router exception fallback to SMALLTALK"
-            routing_decision = build_routing_decision(
-                query=last_human_msg,
-                mode="SMALLTALK",
-                intent_label=fallback_intent,
-                interaction_context=interaction_context,
-                target_owner_scope=False,
-                requires_evidence=False,
-                knowledge_available=knowledge_available,
-                pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
-            )
-            _log_router_observation(
-                mode="SMALLTALK",
-                intent_label=fallback_intent,
-                requires_evidence=False,
-                target_owner_scope=False,
-                interaction_context=interaction_context,
-                knowledge_available=knowledge_available,
-                router_reason=fallback_reason,
-            )
-            return {
-                "dialogue_mode": "SMALLTALK",
-                "intent_label": fallback_intent,
-                "target_owner_scope": False,
-                "requires_evidence": False,
-                "sub_queries": [],
-                "router_reason": fallback_reason,
-                "router_knowledge_available": knowledge_available,
-                "workflow_intent": routing_decision.intent,
-                "routing_decision": routing_decision.model_dump(),
-            }
-        fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="QA_FACT")
-        fallback_reason = "router exception fallback to QA_FACT with evidence"
-        routing_decision = build_routing_decision(
-            query=last_human_msg,
-            mode="QA_FACT",
-            intent_label=fallback_intent,
-            interaction_context=interaction_context,
-            target_owner_scope=False,
-            requires_evidence=True,
-            knowledge_available=knowledge_available,
-            pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
-        )
-        fallback_requires_evidence = True
-        _log_router_observation(
-            mode="QA_FACT",
-            intent_label=fallback_intent,
-            requires_evidence=fallback_requires_evidence,
-            target_owner_scope=False,
-            interaction_context=interaction_context,
-            knowledge_available=knowledge_available,
-            router_reason=fallback_reason,
-        )
-        return {
-            "dialogue_mode": "QA_FACT",
-            "intent_label": fallback_intent,
-            "target_owner_scope": False,
-            "requires_evidence": fallback_requires_evidence,
-            "sub_queries": [last_human_msg],
-            "router_reason": fallback_reason,
-            "router_knowledge_available": knowledge_available,
-            "workflow_intent": routing_decision.intent,
-            "routing_decision": routing_decision.model_dump(),
-        }
+    return {
+        "dialogue_mode": "QA_FACT",
+        "intent_label": intent_label,
+        "target_owner_scope": False,
+        "requires_evidence": True,
+        "sub_queries": [user_query] if isinstance(user_query, str) and user_query.strip() else [],
+        "router_reason": router_reason,
+        "router_knowledge_available": knowledge_available,
+        "workflow_intent": decision_payload.get("intent") or "answer",
+        "routing_decision": decision_payload,
+        "reasoning_history": (state.get("reasoning_history") or []) + [
+            "Router: generalized evidence-first routing."
+        ],
+    }
 
 @observe(name="evidence_gate_node")
 async def evidence_gate_node(state: TwinState):
-    """Phase 4: Evidence Gate (Hard Constraint with LLM Verifier)"""
-    mode = state.get("dialogue_mode")
-    is_specific = state.get("target_owner_scope", False)
-    context = state.get("retrieved_context", {}).get("results", [])
-    last_human_msg = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
-    requires_evidence = state.get("requires_evidence", True)
-    interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
-    explicit_teaching = _is_explicit_teaching_query(last_human_msg)
-    inferred_owner_specific = (
-        bool(is_specific)
-        or _is_owner_specific_query(last_human_msg)
-        or _is_explicit_source_grounded_query(last_human_msg)
-    )
-    
-    # Hard Gate Logic
-    requires_teaching = False
-    reason = "Sufficient evidence found."
-    clear_context_for_uncertainty = False
-
-    if mode == "SMALLTALK":
-        return {
-            "dialogue_mode": mode,
-            "requires_teaching": False,
-            "reasoning_history": (state.get("reasoning_history") or []) + ["Gate: SKIP (smalltalk)"]
-        }
-
-    if requires_evidence and not context:
-        if inferred_owner_specific:
-            requires_teaching = True
-            if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
-                reason = "No evidence retrieved for owner-specific query in training mode."
-            else:
-                reason = "No evidence retrieved for owner-specific query."
-        elif interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
-            requires_teaching = True
-            reason = "Training context without evidence; collecting owner guidance."
-        else:
-            # Keep generic/public conversations fluent even when retrieval is empty.
-            requires_teaching = False
-            reason = "No retrieval evidence for generic query; proceeding with general response."
-    
-    if (not requires_teaching) and inferred_owner_specific:
-        if not context:
-            requires_teaching = True
-            reason = "No evidence found for person-specific query."
-        else:
-            # LLM Verifier Pass for person-specific intents
-            context_str = "\n".join([f"- {c.get('text')}" for c in context[:3]])
-            verifier_prompt = f"""You are an Evidence Verifier for a Digital Twin.
-            The user asked a person-specific question, and we retrieved some context.
-            Determine if the context contains SUFFICIENT EVIDENCE to answer the question as the twin.
-            
-            USER QUESTION: {last_human_msg}
-            RETRIEVED CONTEXT:
-            {context_str}
-            
-            RULE: If the context is generic, irrelevant, or doesn't actually contain the owner's stance/recipe/decision, you MUST fail it.
-            
-            OUTPUT FORMAT (JSON):
-            {{
-                "is_sufficient": bool,
-                "reason": "Brief explanation"
-            }}
-            """
-            try:
-                v_res, _route_meta = await invoke_json(
-                    [{"role": "system", "content": verifier_prompt}],
-                    task="verifier",
-                    temperature=0,
-                    max_tokens=220,
-                )
-                
-                if not v_res.get("is_sufficient"):
-                    if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
-                        requires_teaching = True
-                        reason = f"Verifier (training): {v_res.get('reason')}"
-                    else:
-                        requires_teaching = False
-                        clear_context_for_uncertainty = True
-                        reason = f"Verifier failed: {v_res.get('reason')}"
-            except Exception as e:
-                print(f"Verifier error: {e}")
-                # Tag error in Langfuse
-                try:
-                    langfuse_context.update_current_observation(
-                        level="WARNING",
-                        status_message=f"Verifier failed: {str(e)[:255]}",
-                        metadata={
-                            "error": True,
-                            "error_type": type(e).__name__,
-                            "error_node": "evidence_gate_verifier",
-                        }
-                    )
-                except Exception:
-                    pass
-                # Fallback to simple context check
-                if len(context) < 1:
-                    if interaction_context == "owner_training" and (mode == "TEACHING" or explicit_teaching):
-                        requires_teaching = True
-                        reason = "Fallback: Insufficient context length in training mode."
-                    else:
-                        requires_teaching = False
-                        clear_context_for_uncertainty = True
-                        reason = "Fallback: Insufficient context length."
-
-    if requires_teaching:
-        new_mode = "TEACHING"
-    elif mode == "TEACHING":
-        # TEACHING should not leak into normal chat turns without explicit trigger.
-        new_mode = "QA_FACT"
-    else:
-        new_mode = mode
-    
-    result = {
-        "dialogue_mode": new_mode,
-        "requires_teaching": requires_teaching,
-        "reasoning_history": (state.get("reasoning_history") or []) + [f"Gate: {'FAIL -> TEACHING' if requires_teaching else 'PASS'}. {reason}"]
+    """
+    Lightweight gate for generalized RAG flow.
+    Retrieval always proceeds to planner answerability evaluation.
+    """
+    return {
+        "dialogue_mode": "QA_FACT",
+        "requires_teaching": False,
+        "reasoning_history": (state.get("reasoning_history") or []) + [
+            "Gate: pass-through to answerability evaluation."
+        ],
     }
-    if clear_context_for_uncertainty:
-        result["retrieved_context"] = {"results": []}
-    return result
 
 
 _PLANNER_QUERY_STOPWORDS = {
@@ -1280,705 +838,213 @@ def _classify_grounding_policy(
 
 @observe(name="planner_node")
 async def planner_node(state: TwinState):
-    """Pass A: Strategic Planning & Logic (Structured JSON)"""
-    mode = state.get("dialogue_mode", "QA_FACT")
+    """General evidence-driven planner."""
     context_data = state.get("retrieved_context", {}).get("results", [])
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
-    target_owner_scope = bool(state.get("target_owner_scope", False))
-    
-    # Use the dynamic system prompt (Phase 4)
-    system_msg, persona_trace = build_system_prompt_with_trace(state)
-    
-    # Prepare context
-    context_str = ""
-    for i, res in enumerate(context_data):
-        text = res.get("text", "")
-        date_info = res.get("metadata", {}).get("effective_from", "Unknown Date")
-        source = res.get("source_id", "Unknown")
-        context_str += f"[{i}] (Date: {date_info} | ID: {source}): {text}\n"
+    _system_msg, persona_trace = build_system_prompt_with_trace(state)
 
-    routing_decision = state.get("routing_decision") if isinstance(state.get("routing_decision"), dict) else {}
-    routing_action = str(routing_decision.get("action") or "answer").strip().lower()
-    if routing_action in {"clarify", "escalate", "refuse"}:
-        clarifying_questions = [
-            str(q).strip()
-            for q in (routing_decision.get("clarifying_questions") or [])
-            if isinstance(q, str) and str(q).strip()
-        ][:3]
-        if routing_action == "refuse":
-            prefix = "I can't help with that request."
-        elif routing_action == "escalate":
-            prefix = "I don't know based on available sources. This needs owner input."
-        else:
-            prefix = "I want to answer precisely, but I need a bit more information first."
+    valid_source_ids: List[str] = []
+    for row in context_data:
+        source_id = row.get("source_id")
+        if isinstance(source_id, str) and source_id and source_id not in valid_source_ids:
+            valid_source_ids.append(source_id)
 
-        answer_points: List[str] = [prefix]
-        for idx, question in enumerate(clarifying_questions, 1):
+    def _sanitize_answer_points(values: Any) -> List[str]:
+        if not isinstance(values, list):
+            return []
+        points: List[str] = []
+        for raw in values:
+            line = re.sub(r"\s+", " ", str(raw or "").strip())
+            if not line:
+                continue
+            points.append(line)
+            if len(points) >= 3:
+                break
+        return points
+
+    def _sanitize_citations(values: Any) -> List[str]:
+        if not isinstance(values, list):
+            return []
+        out: List[str] = []
+        for raw in values:
+            cid = str(raw or "").strip()
+            if cid and cid in valid_source_ids and cid not in out:
+                out.append(cid)
+            if len(out) >= 3:
+                break
+        return out
+
+    def _build_evidence_blob(max_items: int = 6) -> str:
+        lines: List[str] = []
+        for idx, row in enumerate(context_data[: max(1, max_items)], 1):
+            source_id = str(row.get("source_id") or f"chunk-{idx}")
+            section = str(row.get("section_path") or row.get("section_title") or "unknown")
+            text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())[:1200]
+            if text:
+                lines.append(f"[{idx}] source_id={source_id}; section={section}; text={text}")
+        return "\n".join(lines) if lines else "No evidence retrieved."
+
+    try:
+        answerability = await evaluate_answerability(user_query, context_data)
+    except Exception as exc:
+        print(f"Planner answerability error: {exc}")
+        answerability = {
+            "answerable": False,
+            "confidence": 0.0,
+            "reasoning": "Answerability evaluation failed.",
+            "missing_information": ["the specific evidence needed to answer this question"],
+            "ambiguity_level": "high",
+        }
+
+    routing_decision = (
+        dict(state.get("routing_decision"))
+        if isinstance(state.get("routing_decision"), dict)
+        else {
+            "intent": "answer",
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+        }
+    )
+
+    if not bool(answerability.get("answerable")):
+        missing_information = answerability.get("missing_information") or []
+        clarification_questions = build_targeted_clarification_questions(
+            user_query,
+            missing_information,
+            limit=3,
+        )
+        answer_points = [UNCERTAINTY_RESPONSE]
+        for idx, question in enumerate(clarification_questions, 1):
             answer_points.append(f"{idx}. {question}")
+
+        updated_routing_decision = {
+            **routing_decision,
+            "action": "clarify",
+            "confidence": max(0.05, min(0.95, float(answerability.get("confidence") or 0.0))),
+            "required_inputs_missing": [str(v) for v in missing_information[:3]],
+            "clarifying_questions": clarification_questions[:3],
+        }
 
         return {
             "planning_output": {
                 "answer_points": answer_points,
                 "citations": [],
-                "follow_up_question": clarifying_questions[0] if clarifying_questions else "",
-                "confidence": float(routing_decision.get("confidence") or 0.25),
-                "teaching_questions": clarifying_questions,
-                "render_strategy": "source_faithful",
-                "reasoning_trace": f"Routing decision action={routing_action}.",
-                "output_schema": routing_decision.get("output_schema"),
-                "workflow": routing_decision.get("chosen_workflow"),
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                f"Planner: honored routing decision action={routing_action}."
-            ],
-        }
-
-    if mode == "SMALLTALK":
-        q_lower = (user_query or "").strip().lower()
-        settings = state.get("full_settings") if isinstance(state.get("full_settings"), dict) else {}
-        public_intro = ((settings or {}).get("public_intro") or "").strip() if isinstance(settings, dict) else ""
-        identity_markers = (
-            "who are you",
-            "what are you",
-            "introduce yourself",
-            "tell me about yourself",
-            "what can you do",
-        )
-
-        if any(marker in q_lower for marker in identity_markers):
-            if public_intro:
-                answer = public_intro
-            else:
-                answer = "I am your AI digital twin. I can help with coaching and answers grounded in your knowledge."
-            follow_up = "What would you like to talk about?"
-        else:
-            answer = "Hi there! How can I assist you today?"
-            follow_up = "What would you like to discuss?"
-
-        return {
-            "planning_output": {
-                "answer_points": [answer],
-                "citations": [],
-                "follow_up_question": follow_up,
-                "confidence": 0.8,
-                "teaching_questions": [],
-                "reasoning_trace": "Deterministic smalltalk plan.",
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: deterministic smalltalk plan."
-            ],
-        }
-
-    if mode == "IDENTITY_FACT":
-        identity_contexts = section_filter_contexts(
-            user_query,
-            context_data,
-            max_items=5,
-        )
-        citation_ids: List[str] = []
-        answer_points: List[str] = []
-        seen_points: set = set()
-        identity_cues = (
-            "i am",
-            "i'm",
-            "i have",
-            "i've",
-            "core expertise",
-            "cloud:",
-            "ai:",
-            "business strategy",
-        )
-
-        for ctx in identity_contexts:
-            source_id = ctx.get("source_id")
-            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
-                citation_ids.append(source_id)
-
-            text = str(ctx.get("text") or "")
-            for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
-                line = re.sub(r"\s+", " ", raw.strip().lstrip("-*").strip())
-                if len(line) < 18:
-                    continue
-                lowered = line.lower()
-                if lowered.startswith(("recommendation:", "assumptions:", "why:")):
-                    continue
-                if not any(cue in lowered for cue in identity_cues):
-                    continue
-                sig = lowered[:220]
-                if sig in seen_points:
-                    continue
-                answer_points.append(line)
-                seen_points.add(sig)
-                if len(answer_points) >= 4:
-                    break
-            if len(answer_points) >= 4:
-                break
-
-        if answer_points:
-            return {
-                "planning_output": {
-                    "answer_points": answer_points[:4],
-                    "citations": citation_ids[:3],
-                    "follow_up_question": "",
-                    "confidence": 0.86,
-                    "teaching_questions": [],
-                    "render_strategy": "source_faithful",
-                    "reasoning_trace": "Deterministic identity plan from identity/expertise blocks.",
-                },
-                "intent_label": persona_trace.get("intent_label"),
-                "persona_module_ids": persona_trace.get("module_ids", []),
-                "persona_spec_version": persona_trace.get("persona_spec_version"),
-                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-                "reasoning_history": (state.get("reasoning_history") or []) + [
-                    "Planner: deterministic IDENTITY_FACT plan from section-filtered evidence."
-                ],
-            }
-
-        return {
-            "planning_output": {
-                "answer_points": [UNCERTAINTY_RESPONSE],
-                "citations": [],
-                "follow_up_question": "I don't know yet from approved sources. Can you share a source to verify this?",
-                "confidence": 0.2,
-                "teaching_questions": [],
-                "reasoning_trace": "Identity query without sufficient identity evidence.",
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: IDENTITY_FACT uncertainty fallback (missing grounded identity evidence)."
-            ],
-        }
-
-    # Deterministic direct-answer path for "do you know X" when evidence exists.
-    # This avoids drifting into persona intros for factual probe queries.
-    if context_data and re.search(r"^\s*do you know(?: about)?\s+.+", (user_query or "").strip().lower()):
-        evidence_lines = []
-        for idx, res in enumerate(context_data[:3]):
-            text = (res.get("text") or "").strip()
-            source_id = res.get("source_id", "unknown")
-            if text:
-                evidence_lines.append(f"[{idx}] source={source_id}: {text[:500]}")
-        evidence_blob = "\n".join(evidence_lines)
-
-        direct_prompt = f"""You are answering a factual probe.
-User asked: "{user_query}"
-
-Use only this evidence:
-{evidence_blob}
-
-Rules:
-- Answer directly in 1-2 sentences.
-- Start with "Yes," only if evidence supports it.
-- Do not introduce yourself.
-- Do not add coaching boilerplate.
-- If evidence is weak, say that clearly.
-"""
-        try:
-            direct_answer, _meta = await invoke_text(
-                [{"role": "system", "content": direct_prompt}],
-                task="realizer",
-                temperature=0.2,
-                max_tokens=220,
-            )
-            answer = (direct_answer or "").strip()
-        except Exception:
-            answer = ""
-
-        if not answer:
-            answer = "I have partial context, but I need a bit more detail to answer that precisely."
-
-        citation_ids: List[str] = []
-        for ctx in context_data:
-            source_id = ctx.get("source_id")
-            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
-                citation_ids.append(source_id)
-        citation_ids = citation_ids[:3]
-
-        return {
-            "planning_output": {
-                "answer_points": [answer],
-                "citations": citation_ids,
                 "follow_up_question": "",
-                "confidence": 0.55,
-                "teaching_questions": [],
+                "confidence": max(0.05, min(0.95, float(answerability.get("confidence") or 0.0))),
+                "teaching_questions": clarification_questions[:3],
                 "render_strategy": "source_faithful",
-                "reasoning_trace": "Deterministic direct-answer plan for do-you-know probe.",
+                "reasoning_trace": str(answerability.get("reasoning") or ""),
+                "answerability": answerability,
             },
+            "routing_decision": updated_routing_decision,
+            "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
             "intent_label": persona_trace.get("intent_label"),
             "persona_module_ids": persona_trace.get("module_ids", []),
             "persona_spec_version": persona_trace.get("persona_spec_version"),
             "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
             "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: deterministic direct-answer path for do-you-know query."
-            ],
-        }
-
-    # Deterministic direct-answer path for comparative "should we use X or Y"
-    # questions when recommendation-style evidence is present.
-    q_lower = (user_query or "").strip().lower()
-    if (
-        context_data
-        and " or " in q_lower
-        and re.search(r"\bshould\s+(?:i|we)\s+use\b", q_lower)
-    ):
-        answer_points: List[str] = []
-        citation_ids: List[str] = []
-        sentence_candidates: List[str] = []
-
-        query_text = (user_query or "").strip()
-        option_a = ""
-        option_b = ""
-        option_match = re.search(
-            r"\bshould\s+(?:i|we)\s+use\s+(.+?)\s+or\s+(.+)",
-            query_text,
-            flags=re.IGNORECASE,
-        )
-        if option_match:
-            option_a = re.sub(r"\bfor\b.*$", "", option_match.group(1), flags=re.IGNORECASE).strip(" ,.?")
-            option_b = re.sub(r"\bfor\b.*$", "", option_match.group(2), flags=re.IGNORECASE).strip(" ,.?")
-
-        def _normalize_sentence(raw: str) -> str:
-            return re.sub(r"\s+", " ", raw.strip().lstrip("-*").strip())
-
-        def _collect_sentence(raw: str) -> None:
-            sentence = _normalize_sentence(raw)
-            if sentence and sentence not in sentence_candidates:
-                sentence_candidates.append(sentence)
-
-        def _keywords(text: str) -> List[str]:
-            stopwords = {"and", "the", "for", "our", "your", "with", "from", "into", "that", "this", "use"}
-            tokens = re.findall(r"[a-z0-9][a-z0-9._-]*", text.lower())
-            return [tok for tok in tokens if len(tok) > 2 and tok not in stopwords]
-
-        option_keywords = _keywords(option_a) + _keywords(option_b)
-        if not option_keywords:
-            option_keywords = _keywords(query_text)
-
-        def _pick_sentence(cues: List[str], *, require_option: bool = False, used: Optional[set] = None) -> str:
-            used_set = used or set()
-            for sentence in sentence_candidates:
-                if sentence in used_set:
-                    continue
-                lowered = sentence.lower()
-                if require_option and option_keywords and not any(tok in lowered for tok in option_keywords):
-                    continue
-                if any(cue in lowered for cue in cues):
-                    return sentence
-            return ""
-
-        for ctx in context_data:
-            source_id = ctx.get("source_id")
-            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
-                citation_ids.append(source_id)
-
-            text = (ctx.get("text") or "")
-            for raw_sentence in re.split(r"(?<=[.!?])\s+|\n+", text):
-                _collect_sentence(raw_sentence)
-            for raw_line in text.splitlines():
-                line = _normalize_sentence(raw_line)
-                if not line:
-                    continue
-                lowered = line.lower()
-                if (
-                    lowered.startswith("recommendation:")
-                    or lowered.startswith("assumptions:")
-                    or lowered.startswith("why:")
-                ):
-                    if line not in answer_points:
-                        answer_points.append(line)
-                if len(answer_points) >= 3:
-                    break
-            if len(answer_points) >= 3:
-                break
-
-        if not answer_points and sentence_candidates:
-            recommendation_cues = [
-                "recommend",
-                "start with",
-                "prefer",
-                "choose",
-                "best",
-                "better",
-                "managed platform",
-                "containers",
-                "serverless",
-            ]
-            assumption_primary_cues = [
-                "early-stage",
-                "early stage",
-                "small team",
-                "startup",
-                "founding team",
-                "for an",
-                "for a",
-            ]
-            assumption_secondary_cues = [
-                "mvp",
-                "if ",
-                "when ",
-                "assum",
-            ]
-            why_primary_cues = [
-                "cold start",
-                "timeout",
-                "constraint",
-                "risk",
-                "tradeoff",
-                "latency",
-                "slow",
-                "cost",
-                "overhead",
-            ]
-            why_secondary_cues = [
-                "because",
-                "due",
-                "can",
-                "could",
-                "might",
-                "debug",
-            ]
-
-            recommendation_sentence = _pick_sentence(
-                recommendation_cues,
-                require_option=True,
-                used=set(),
-            )
-            if not recommendation_sentence:
-                recommendation_sentence = sentence_candidates[0]
-
-            why_sentence = _pick_sentence(
-                why_primary_cues,
-                used={recommendation_sentence},
-            )
-            if not why_sentence:
-                why_sentence = _pick_sentence(
-                    why_secondary_cues,
-                    used={recommendation_sentence},
-                )
-            if not why_sentence:
-                why_sentence = next(
-                    (
-                        sentence
-                        for sentence in sentence_candidates
-                        if sentence != recommendation_sentence
-                    ),
-                    recommendation_sentence,
-                )
-
-            assumptions_sentence = _pick_sentence(
-                assumption_primary_cues,
-                used={why_sentence},
-            )
-            if not assumptions_sentence:
-                assumptions_sentence = _pick_sentence(
-                    assumption_secondary_cues,
-                    used={why_sentence},
-                )
-            if not assumptions_sentence:
-                assumptions_sentence = recommendation_sentence
-
-            if why_sentence == recommendation_sentence:
-                why_sentence = next(
-                    (
-                        sentence
-                        for sentence in sentence_candidates
-                        if sentence != recommendation_sentence
-                    ),
-                    recommendation_sentence,
-                )
-            if assumptions_sentence == why_sentence and assumptions_sentence != recommendation_sentence:
-                assumptions_sentence = recommendation_sentence
-
-            synthesized_points = [
-                f"Recommendation: {recommendation_sentence}".strip(),
-                f"Assumptions: {assumptions_sentence}".strip(),
-                f"Why: {why_sentence}".strip(),
-            ]
-            answer_points = [point for point in synthesized_points if point.split(":", 1)[1].strip()]
-
-        if answer_points:
-            return {
-                "planning_output": {
-                    "answer_points": answer_points[:3],
-                    "citations": citation_ids[:3],
-                    "follow_up_question": "",
-                    "confidence": 0.9,
-                    "teaching_questions": [],
-                    "render_strategy": "source_faithful",
-                    "reasoning_trace": "Deterministic comparison recommendation extracted from evidence.",
-                },
-                "intent_label": persona_trace.get("intent_label"),
-                "persona_module_ids": persona_trace.get("module_ids", []),
-                "persona_spec_version": persona_trace.get("persona_spec_version"),
-                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-                "reasoning_history": (state.get("reasoning_history") or []) + [
-                    "Planner: deterministic comparison plan from recommendation evidence."
-                ],
-            }
-
-    # Adaptive grounding policy:
-    # - high confidence retrieval: allow conversational synthesis (default planner path)
-    # - mid confidence retrieval: keep source-faithful extractive rendering
-    # - low confidence retrieval: owner-specific questions should abstain
-    if context_data and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL"}:
-        profile = _classify_grounding_policy(context_data, user_query)
-        profile_level = profile.get("level", "disabled")
-
-        if profile_level == "mid":
-            query_tokens = _planner_query_tokens(user_query)
-            answer_points, citation_ids, max_score = _collect_source_faithful_points(context_data, query_tokens)
-            if answer_points:
-                confidence = 0.78 if max_score >= 1.0 else 0.70
-                return {
-                    "planning_output": {
-                        "answer_points": answer_points,
-                        "citations": citation_ids,
-                        "follow_up_question": "",
-                        "confidence": confidence,
-                        "teaching_questions": [],
-                        "render_strategy": "source_faithful",
-                        "reasoning_trace": (
-                            "Adaptive grounding policy selected extractive rendering "
-                            f"(level=mid, top_score={profile.get('top_score', 0.0):.3f}, "
-                            f"margin={profile.get('margin', 0.0):.3f}, "
-                            f"best_overlap={profile.get('best_overlap', 0.0):.3f})."
-                        ),
-                    },
-                    "intent_label": persona_trace.get("intent_label"),
-                    "persona_module_ids": persona_trace.get("module_ids", []),
-                    "persona_spec_version": persona_trace.get("persona_spec_version"),
-                    "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-                    "reasoning_history": (state.get("reasoning_history") or []) + [
-                        "Planner: adaptive grounding policy chose source-faithful mode (mid confidence)."
-                    ],
-                }
-
-        if profile_level == "low" and target_owner_scope:
-            return {
-                "planning_output": {
-                    "answer_points": [UNCERTAINTY_RESPONSE],
-                    "citations": [],
-                    "follow_up_question": "",
-                    "confidence": 0.2,
-                    "teaching_questions": [],
-                    "reasoning_trace": (
-                        "Adaptive grounding policy blocked owner-specific synthesis "
-                        f"(level=low, top_score={profile.get('top_score', 0.0):.3f}, "
-                        f"margin={profile.get('margin', 0.0):.3f}, "
-                        f"best_overlap={profile.get('best_overlap', 0.0):.3f})."
-                    ),
-                },
-                "intent_label": persona_trace.get("intent_label"),
-                "persona_module_ids": persona_trace.get("module_ids", []),
-                "persona_spec_version": persona_trace.get("persona_spec_version"),
-                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-                "reasoning_history": (state.get("reasoning_history") or []) + [
-                    "Planner: adaptive grounding policy forced uncertainty for low-confidence owner query."
-                ],
-            }
-
-    # Owner-specific requests without sufficient evidence should be explicit
-    # about uncertainty; only owner_training mode should prompt for teaching.
-    if not context_data and target_owner_scope and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL", "TEACHING"}:
-        interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
-        is_training_context = interaction_context == "owner_training"
-        return {
-            "planning_output": {
-                "answer_points": [UNCERTAINTY_RESPONSE],
-                "citations": [],
-                "follow_up_question": (
-                    "Can you share the source or clarify what I should say for this?"
-                    if is_training_context
-                    else ""
-                ),
-                "confidence": 0.2,
-                "teaching_questions": (
-                    [
-                        f"What should I answer when asked: \"{user_query}\"?",
-                        "Do you have a source, quote, or document I should use for this topic?",
-                    ]
-                    if is_training_context
-                    else []
-                ),
-                "reasoning_trace": "Owner-specific query without sufficient evidence.",
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: deterministic owner uncertainty plan (insufficient evidence)."
-            ],
-        }
-
-    # Deterministic generic fallback: if no owner evidence is available for a
-    # non-owner-specific query, keep the conversation useful with general help.
-    if not context_data and not target_owner_scope and mode in {"QA_FACT", "QA_RELATIONSHIP", "STANCE_GLOBAL"}:
-        generic_prompt = f"""You are Shambhavi, a pragmatic VC partner running founder office hours.
-Answer the user's message using general startup/VC knowledge.
-
-Rules:
-- Do NOT claim this came from owner's private sources or documents.
-- Be useful first: give concrete guidance, not generic filler.
-- If the user asks for tactical help (GTM, pricing, pilots, interviews, metrics), provide a compact action plan.
-- Prefer 3-5 bullets for action plans, each with one specific action and one measurable check.
-- If context is missing, ask one clarifying question after giving a reasonable default.
-- Keep tone direct, calm, and coach-like.
-
-User message: {user_query}
-"""
-        try:
-            generic_answer, _meta = await invoke_text(
-                [{"role": "system", "content": generic_prompt}],
-                task="realizer",
-                temperature=0.3,
-                max_tokens=320,
-            )
-            answer = (generic_answer or "").strip()
-        except Exception:
-            answer = ""
-
-        if not answer:
-            answer = "Happy to help. Share a bit more context and I can give you a concrete recommendation."
-
-        return {
-            "planning_output": {
-                "answer_points": [answer],
-                "citations": [],
-                "follow_up_question": "",
-                "confidence": 0.45,
-                "teaching_questions": [],
-                "reasoning_trace": "No owner evidence for non-owner-specific query; general fallback answer.",
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: deterministic general fallback plan (no evidence, non-owner-specific)."
-            ],
-        }
-
-    # Deterministic safety fallback: no evidence means no speculative answer.
-    if mode == "TEACHING" and not context_data:
-        return {
-            "planning_output": {
-                "answer_points": [UNCERTAINTY_RESPONSE],
-                "citations": [],
-                "follow_up_question": "Can you share the source or clarify what I should say for this?",
-                "confidence": 0.2,
-                "teaching_questions": [
-                    f"What should I answer when asked: \"{user_query}\"?",
-                    "Do you have a source, quote, or document I should use for this topic?",
-                ],
-                "reasoning_trace": "No evidence retrieved; deterministic uncertainty response used.",
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Planner: deterministic uncertainty plan (TEACHING + no evidence)."
+                "Planner: answerability=false, produced targeted clarification questions."
             ],
         }
 
     planner_prompt = f"""
-{system_msg}
+You are a grounded answer composer.
+Use only the provided evidence. Do not use outside knowledge.
 
-CURRENT MODE: {mode}
+USER QUESTION:
+{user_query}
+
+ANSWERABILITY JUDGEMENT:
+{json.dumps(answerability, ensure_ascii=True)}
+
+ALLOWED SOURCE IDS:
+{json.dumps(valid_source_ids, ensure_ascii=True)}
+
 EVIDENCE:
-{context_str if context_str else "No evidence retrieved."}
+{_build_evidence_blob()}
 
-    TASK:
-1. Identify the core points for the user's answer (max 3) and answer directly.
-2. If in TEACHING mode, generate 2-3 specific questions for the owner.
-3. Add a follow-up question ONLY when genuinely needed to unblock the user.
-4. If evidence is present, map points to citations.
-5. If query pattern is "do you know X" or "what is X", answer with specific facts about X first.
-
-OUTPUT FORMAT (STRICT JSON):
+Return STRICT JSON:
 {{
-    "answer_points": ["point 1", "point 2"],
-    "citations": ["Source_ID_1", "Source_ID_2"],
-    "follow_up_question": "...",
-    "confidence": 0.0-1.0,
-    "teaching_questions": ["q1", "q2"],
-    "reasoning_trace": "Short internal log"
+  "answer_points": ["point 1", "point 2"],
+  "citations": ["source_id"],
+  "confidence": 0.0,
+  "reasoning_trace": "short trace"
 }}
+
+Rules:
+- Provide max 3 concise answer points.
+- Cite only IDs from ALLOWED SOURCE IDS.
+- Do not ask clarification questions when answerable is true.
 """
+
     try:
         plan, _route_meta = await invoke_json(
             [{"role": "system", "content": planner_prompt}],
             task="planner",
             temperature=0,
-            max_tokens=900,
+            max_tokens=700,
         )
-
-        # Prevent fabricated citation IDs from planner output.
-        valid_source_ids = {
-            str(res.get("source_id"))
-            for res in context_data
-            if isinstance(res.get("source_id"), str) and res.get("source_id")
-        }
-        raw_citations = plan.get("citations", []) if isinstance(plan, dict) else []
-        sanitized_citations: List[str] = []
-        if isinstance(raw_citations, list):
-            for c in raw_citations:
-                c_str = str(c)
-                if c_str in valid_source_ids and c_str not in sanitized_citations:
-                    sanitized_citations.append(c_str)
-        if not sanitized_citations and valid_source_ids:
-            sanitized_citations = list(valid_source_ids)[:3]
-        plan["citations"] = sanitized_citations
-
-        if mode != "TEACHING":
-            plan["teaching_questions"] = []
-        
-        return {
-            "planning_output": plan,
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
-            "reasoning_history": (state.get("reasoning_history") or []) + [f"Planner: Generated {len(plan.get('answer_points', []))} points."]
-        }
-    except Exception as e:
-        print(f"Planner error: {e}")
-        # Tag error in Langfuse
-        try:
-            langfuse_context.update_current_observation(
-                level="ERROR",
-                status_message=f"Planner failed: {str(e)[:255]}",
-                metadata={
-                    "error": True,
-                    "error_type": type(e).__name__,
-                    "error_node": "planner_node",
-                }
-            )
-        except Exception:
-            pass
-        return {
-            "planning_output": {
-                "answer_points": ["I encountered an error planning my response."],
-                "follow_up_question": "Can you try rephrasing?",
-            },
-            "intent_label": persona_trace.get("intent_label"),
-            "persona_module_ids": persona_trace.get("module_ids", []),
-            "persona_spec_version": persona_trace.get("persona_spec_version"),
-            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+    except Exception as exc:
+        print(f"Planner composition error: {exc}")
+        fallback_points = []
+        for row in context_data[:3]:
+            text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
+            if text:
+                fallback_points.append(text[:260])
+            if len(fallback_points) >= 3:
+                break
+        plan = {
+            "answer_points": fallback_points or [UNCERTAINTY_RESPONSE],
+            "citations": valid_source_ids[:3],
+            "confidence": float(answerability.get("confidence") or 0.5),
+            "reasoning_trace": "Planner composition fallback used.",
         }
 
+    answer_points = _sanitize_answer_points(plan.get("answer_points"))
+    if not answer_points:
+        answer_points = [UNCERTAINTY_RESPONSE]
+
+    citations = _sanitize_citations(plan.get("citations"))
+    if not citations and valid_source_ids:
+        citations = valid_source_ids[:3]
+
+    confidence = max(
+        0.0,
+        min(
+            1.0,
+            float(plan.get("confidence", answerability.get("confidence", 0.5)) or 0.5),
+        ),
+    )
+
+    updated_routing_decision = {
+        **routing_decision,
+        "action": "answer",
+        "confidence": confidence,
+        "required_inputs_missing": [],
+        "clarifying_questions": [],
+    }
+
+    return {
+        "planning_output": {
+            "answer_points": answer_points[:3],
+            "citations": citations[:3],
+            "follow_up_question": "",
+            "confidence": confidence,
+            "teaching_questions": [],
+            "render_strategy": "source_faithful",
+            "reasoning_trace": str(plan.get("reasoning_trace") or answerability.get("reasoning") or ""),
+            "answerability": answerability,
+        },
+        "routing_decision": updated_routing_decision,
+        "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
+        "intent_label": persona_trace.get("intent_label"),
+        "persona_module_ids": persona_trace.get("module_ids", []),
+        "persona_spec_version": persona_trace.get("persona_spec_version"),
+        "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+        "reasoning_history": (state.get("reasoning_history") or []) + [
+            "Planner: answerability=true, generated grounded answer with citations."
+        ],
+    }
 @observe(name="realizer_node")
 async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
@@ -2158,8 +1224,6 @@ def create_twin_agent(
     async def retrieve_hybrid_node(state: TwinState):
         """Phase 2: Executing planned retrieval (Audit 1: Parallel & Robust)"""
         sub_queries = state.get("sub_queries", [])
-        messages = state["messages"]
-        last_human_msg = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
         all_results = []
         citations = []
         
@@ -2193,11 +1257,6 @@ def create_twin_agent(
                         citations.append(item["source_id"])
 
         if all_results:
-            all_results = section_filter_contexts(
-                last_human_msg,
-                all_results,
-                max_items=max(len(all_results), 8),
-            )
             citations = []
             for item in all_results:
                 source_id = item.get("source_id")

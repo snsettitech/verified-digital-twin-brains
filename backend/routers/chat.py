@@ -28,7 +28,6 @@ from modules.interaction_context import (
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
-from modules.doc_sectioning import classify_query_intent_profile, section_filter_contexts
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
     persist_response_audit,
@@ -302,14 +301,8 @@ def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, 
     if not contexts:
         return ""
 
-    profile = classify_query_intent_profile(query)
-    intent_aware_contexts = section_filter_contexts(
-        query,
-        contexts,
-        max_items=max(GROUNDING_MAX_CONTEXT_SNIPPETS, ONLINE_EVAL_POLICY_FALLBACK_POINTS * 2),
-    )
-    candidate_contexts = intent_aware_contexts or contexts[:GROUNDING_MAX_CONTEXT_SNIPPETS]
     query_tokens = _grounding_tokens(query)
+    candidate_contexts = contexts[: max(GROUNDING_MAX_CONTEXT_SNIPPETS, ONLINE_EVAL_POLICY_FALLBACK_POINTS * 2)]
 
     def _candidate_lines(text: str, *, min_len: int = 18) -> List[str]:
         rows: List[str] = []
@@ -319,94 +312,14 @@ def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, 
                 rows.append(line)
         return rows
 
-    def _line_score(line: str, *, disable_label_bonus: bool) -> float:
-        lowered = line.lower()
+    def _line_score(line: str, base_score: float = 0.0) -> float:
         line_tokens = _grounding_tokens(line)
         overlap = (
             len(query_tokens.intersection(line_tokens)) / float(len(query_tokens))
             if query_tokens
             else 0.0
         )
-        label_bonus = 0.0
-        if not disable_label_bonus and lowered.startswith(("recommendation:", "assumptions:", "why:")):
-            label_bonus = 0.20
-        return overlap + label_bonus
-
-    if profile.intent == "identity":
-        identity_cues = ("i am", "i'm", "i have", "i've", "core expertise", "cloud:", "ai:", "business strategy")
-        points: List[str] = []
-        seen: Set[str] = set()
-        for row in candidate_contexts:
-            text = str((row or {}).get("text") or "")
-            for line in _candidate_lines(text):
-                lowered = line.lower()
-                if lowered.startswith(("recommendation:", "assumptions:", "why:")):
-                    continue
-                if not any(cue in lowered for cue in identity_cues):
-                    continue
-                sig = lowered[:220]
-                if sig in seen:
-                    continue
-                points.append(line)
-                seen.add(sig)
-                if len(points) >= 3:
-                    break
-            if len(points) >= 3:
-                break
-        if points:
-            return "\n".join(points[:3])
-
-    if profile.intent == "style_template":
-        template_markers = (
-            "default response template",
-            "answer/recommendation",
-            "assumptions",
-            "why",
-            "alternatives",
-            "next steps",
-            "risks + mitigations",
-        )
-        ordered_points: List[str] = []
-        seen_template: Set[str] = set()
-        for row in candidate_contexts:
-            text = str((row or {}).get("text") or "")
-            for line in _candidate_lines(text, min_len=4):
-                lowered = line.lower()
-                if not any(marker in lowered for marker in template_markers):
-                    continue
-                sig = lowered[:220]
-                if sig in seen_template:
-                    continue
-                ordered_points.append(line)
-                seen_template.add(sig)
-                if len(ordered_points) >= 6:
-                    break
-            if len(ordered_points) >= 6:
-                break
-        if ordered_points:
-            return "\n".join(ordered_points)
-
-    if profile.intent == "boundaries":
-        boundary_markers = ("non-goals", "should not", "do not", "must not", "boundaries")
-        boundary_points: List[str] = []
-        seen_boundary: Set[str] = set()
-        for row in candidate_contexts:
-            text = str((row or {}).get("text") or "")
-            for line in _candidate_lines(text, min_len=6):
-                lowered = line.lower()
-                if not any(marker in lowered for marker in boundary_markers):
-                    continue
-                sig = lowered[:220]
-                if sig in seen_boundary:
-                    continue
-                boundary_points.append(line)
-                seen_boundary.add(sig)
-                if len(boundary_points) >= 4:
-                    break
-            if len(boundary_points) >= 4:
-                break
-        if boundary_points:
-            return "\n".join(boundary_points)
+        return overlap + (0.20 * base_score)
 
     scored_blocks: List[Tuple[float, Dict[str, Any]]] = []
     for row in candidate_contexts:
@@ -415,7 +328,6 @@ def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, 
         text = str(row.get("text") or "").strip()
         if not text:
             continue
-        section_path = str(row.get("section_path") or row.get("section_title") or "General")
         block_tokens = _grounding_tokens(text)
         overlap = (
             len(query_tokens.intersection(block_tokens)) / float(len(query_tokens))
@@ -423,41 +335,25 @@ def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, 
             else 0.0
         )
         base_score = float(row.get("score", row.get("vector_score", 0.0)) or 0.0)
-        scored_blocks.append((overlap + (0.25 * base_score), {**row, "_section_path": section_path}))
+        scored_blocks.append((overlap + (0.25 * base_score), {**row}))
 
     if not scored_blocks:
         return ""
 
     scored_blocks.sort(key=lambda item: item[0], reverse=True)
-    primary_section = str(scored_blocks[0][1].get("_section_path") or "General")
-    primary_root = primary_section.split(">", 1)[0].strip().lower()
-    selected_blocks: List[Dict[str, Any]] = []
-    for _score, row in scored_blocks:
-        section_path = str(row.get("_section_path") or "General")
-        section_root = section_path.split(">", 1)[0].strip().lower()
-        if not profile.allow_multi_section and section_root != primary_root:
-            continue
-        selected_blocks.append(row)
-        if len(selected_blocks) >= 2:
-            break
-    if not selected_blocks:
-        selected_blocks = [scored_blocks[0][1]]
+    selected_blocks = [row for _score, row in scored_blocks[:2]]
 
     scored_lines: List[Tuple[float, str]] = []
     seen_lines: Set[str] = set()
     for row in selected_blocks:
         text = str(row.get("text") or "")
+        base_score = float(row.get("score", row.get("vector_score", 0.0)) or 0.0)
         for line in _candidate_lines(text):
-            lowered = line.lower()
-            if profile.intent in {"boundaries", "style_template"} and lowered.startswith(
-                ("recommendation:", "assumptions:", "why:")
-            ):
-                continue
-            sig = lowered[:220]
+            sig = line.lower()[:220]
             if sig in seen_lines:
                 continue
             seen_lines.add(sig)
-            scored_lines.append((_line_score(line, disable_label_bonus=profile.disable_label_bonus), line))
+            scored_lines.append((_line_score(line, base_score=base_score), line))
 
     if not scored_lines:
         return ""
