@@ -34,7 +34,8 @@ async def test_retrieve_context_structure():
         
         assert len(results) == 1
         assert results[0]["text"] == "This is a test chunk"
-        assert results[0]["score"] == 1.0
+        # Retrieval now applies reranker + lexical fusion; score is normalized, not hard-1.0.
+        assert 0.0 < float(results[0]["score"]) <= 1.0
         assert results[0]["source_id"] == "src-123"
         assert results[0]["is_verified"] == True
 

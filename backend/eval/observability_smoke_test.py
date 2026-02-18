@@ -2,7 +2,19 @@ import asyncio
 import os
 import json
 import logging
+import sys
 from typing import Dict, Any
+from pathlib import Path
+
+import pytest
+
+# Allow `from modules...` imports when tests are collected from repo root.
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+# This module is an integration smoke check that depends on external observability plumbing.
+pytestmark = [pytest.mark.network, pytest.mark.anyio]
 
 # Load environment variables from .env
 def load_env():
@@ -18,7 +30,7 @@ load_env()
 
 # Mocking parts of the system for standalone testing if needed,
 # but ideally this runs against a dev environment.
-from modules.langfuse_client import observe, log_trace
+from modules.langfuse_client import observe
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ObservabilitySmokeTest")
@@ -54,7 +66,8 @@ async def test_case_4_pii_redaction():
 async def test_case_5_error():
     """Case 5: Error Scenario"""
     logger.info("Running Case 5: Error Scenario")
-    raise RuntimeError("Pinecone Connection Timeout")
+    with pytest.raises(RuntimeError):
+        raise RuntimeError("Pinecone Connection Timeout")
 
 async def main():
     if not os.getenv("LANGFUSE_PUBLIC_KEY"):

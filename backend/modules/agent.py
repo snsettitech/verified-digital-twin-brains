@@ -24,6 +24,7 @@ from modules.persona_prompt_variant_store import (
 from modules.persona_spec import PersonaSpec
 from modules.persona_spec_store import get_active_persona_spec
 from modules.inference_router import invoke_json, invoke_text
+from modules.routing_decision import build_routing_decision
 from modules.response_policy import UNCERTAINTY_RESPONSE
 
 # Try to import checkpointer (optional - P1-A)
@@ -213,6 +214,8 @@ class TwinState(TypedDict):
     persona_prompt_variant: Optional[str]
     router_reason: Optional[str]
     router_knowledge_available: Optional[bool]
+    workflow_intent: Optional[str]
+    routing_decision: Optional[Dict[str, Any]]
     
     # Path B / Phase 4 Context
     full_settings: Optional[Dict[str, Any]]
@@ -630,6 +633,8 @@ async def router_node(state: TwinState):
     interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
     twin_id = state.get("twin_id")
     knowledge_available = _twin_has_groundable_knowledge(twin_id)
+    full_settings = state.get("full_settings") if isinstance(state.get("full_settings"), dict) else {}
+    pinned_context = full_settings.get("pinned_context") if isinstance(full_settings, dict) else None
 
     # Deterministic fast-path keeps obvious greetings and owner-specific prompts stable.
     if _is_smalltalk_query(last_human_msg):
@@ -637,10 +642,21 @@ async def router_node(state: TwinState):
         if knowledge_available and _is_identity_intro_query(last_human_msg):
             router_reason = "identity prompt rerouted to QA_FACT with evidence because knowledge is available"
             intent_label = classify_query_intent(last_human_msg, dialogue_mode="QA_FACT")
+            routing_decision = build_routing_decision(
+                query=last_human_msg,
+                mode="QA_FACT",
+                intent_label=intent_label,
+                interaction_context=interaction_context,
+                target_owner_scope=False,
+                requires_evidence=True,
+                knowledge_available=knowledge_available,
+                pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
+            )
+            requires_evidence = True
             _log_router_observation(
                 mode="QA_FACT",
                 intent_label=intent_label,
-                requires_evidence=True,
+                requires_evidence=requires_evidence,
                 target_owner_scope=False,
                 interaction_context=interaction_context,
                 knowledge_available=knowledge_available,
@@ -650,16 +666,29 @@ async def router_node(state: TwinState):
                 "dialogue_mode": "QA_FACT",
                 "intent_label": intent_label,
                 "target_owner_scope": False,
-                "requires_evidence": True,
+                "requires_evidence": requires_evidence,
                 "sub_queries": [last_human_msg],
                 "router_reason": router_reason,
                 "router_knowledge_available": knowledge_available,
+                "workflow_intent": routing_decision.intent,
+                "routing_decision": routing_decision.model_dump(),
                 "reasoning_history": (state.get("reasoning_history") or []) + [
                     "Router: identity prompt rerouted to retrieval-backed QA (knowledge available)"
+                    + f"; action={routing_decision.action}; confidence={routing_decision.confidence:.2f}"
                 ],
             }
         router_reason = "deterministic SMALLTALK fast-path"
         intent_label = classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK")
+        routing_decision = build_routing_decision(
+            query=last_human_msg,
+            mode="SMALLTALK",
+            intent_label=intent_label,
+            interaction_context=interaction_context,
+            target_owner_scope=False,
+            requires_evidence=False,
+            knowledge_available=knowledge_available,
+            pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
+        )
         _log_router_observation(
             mode="SMALLTALK",
             intent_label=intent_label,
@@ -677,8 +706,11 @@ async def router_node(state: TwinState):
             "sub_queries": [],
             "router_reason": router_reason,
             "router_knowledge_available": knowledge_available,
+            "workflow_intent": routing_decision.intent,
+            "routing_decision": routing_decision.model_dump(),
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Router: deterministic SMALLTALK fast-path"
+                + f"; action={routing_decision.action}; confidence={routing_decision.confidence:.2f}"
             ],
         }
 
@@ -809,6 +841,16 @@ async def router_node(state: TwinState):
             f"knowledge_forced_retrieval={knowledge_forced_retrieval}; "
             f"explicit_source_grounded={explicit_source_grounded}; explicit_teaching={explicit_teaching}"
         )
+        routing_decision = build_routing_decision(
+            query=last_human_msg,
+            mode=mode,
+            intent_label=intent_label,
+            interaction_context=interaction_context,
+            target_owner_scope=bool(is_specific),
+            requires_evidence=bool(req_evidence),
+            knowledge_available=knowledge_available,
+            pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
+        )
         _log_router_observation(
             mode=mode,
             intent_label=intent_label,
@@ -826,8 +868,13 @@ async def router_node(state: TwinState):
             "sub_queries": sub_queries,
             "router_reason": router_reason,
             "router_knowledge_available": knowledge_available,
+            "workflow_intent": routing_decision.intent,
+            "routing_decision": routing_decision.model_dump(),
             "reasoning_history": (state.get("reasoning_history") or [])
-            + [f"Router: Mode={mode}, Intent={intent_label}, Specific={is_specific}"]
+            + [
+                f"Router: Mode={mode}, Intent={intent_label}, Specific={is_specific}, "
+                f"Action={routing_decision.action}, Confidence={routing_decision.confidence:.2f}"
+            ]
         }
     except Exception as e:
         print(f"Router error: {e}")
@@ -848,6 +895,16 @@ async def router_node(state: TwinState):
         if _is_smalltalk_query(last_human_msg):
             fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK")
             fallback_reason = "router exception fallback to SMALLTALK"
+            routing_decision = build_routing_decision(
+                query=last_human_msg,
+                mode="SMALLTALK",
+                intent_label=fallback_intent,
+                interaction_context=interaction_context,
+                target_owner_scope=False,
+                requires_evidence=False,
+                knowledge_available=knowledge_available,
+                pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
+            )
             _log_router_observation(
                 mode="SMALLTALK",
                 intent_label=fallback_intent,
@@ -865,13 +922,26 @@ async def router_node(state: TwinState):
                 "sub_queries": [],
                 "router_reason": fallback_reason,
                 "router_knowledge_available": knowledge_available,
+                "workflow_intent": routing_decision.intent,
+                "routing_decision": routing_decision.model_dump(),
             }
         fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="QA_FACT")
         fallback_reason = "router exception fallback to QA_FACT with evidence"
+        routing_decision = build_routing_decision(
+            query=last_human_msg,
+            mode="QA_FACT",
+            intent_label=fallback_intent,
+            interaction_context=interaction_context,
+            target_owner_scope=False,
+            requires_evidence=True,
+            knowledge_available=knowledge_available,
+            pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
+        )
+        fallback_requires_evidence = True
         _log_router_observation(
             mode="QA_FACT",
             intent_label=fallback_intent,
-            requires_evidence=True,
+            requires_evidence=fallback_requires_evidence,
             target_owner_scope=False,
             interaction_context=interaction_context,
             knowledge_available=knowledge_available,
@@ -881,10 +951,12 @@ async def router_node(state: TwinState):
             "dialogue_mode": "QA_FACT",
             "intent_label": fallback_intent,
             "target_owner_scope": False,
-            "requires_evidence": True,
+            "requires_evidence": fallback_requires_evidence,
             "sub_queries": [last_human_msg],
             "router_reason": fallback_reason,
             "router_knowledge_available": knowledge_available,
+            "workflow_intent": routing_decision.intent,
+            "routing_decision": routing_decision.model_dump(),
         }
 
 @observe(name="evidence_gate_node")
@@ -1180,6 +1252,46 @@ async def planner_node(state: TwinState):
         date_info = res.get("metadata", {}).get("effective_from", "Unknown Date")
         source = res.get("source_id", "Unknown")
         context_str += f"[{i}] (Date: {date_info} | ID: {source}): {text}\n"
+
+    routing_decision = state.get("routing_decision") if isinstance(state.get("routing_decision"), dict) else {}
+    routing_action = str(routing_decision.get("action") or "answer").strip().lower()
+    if routing_action in {"clarify", "escalate", "refuse"}:
+        clarifying_questions = [
+            str(q).strip()
+            for q in (routing_decision.get("clarifying_questions") or [])
+            if isinstance(q, str) and str(q).strip()
+        ][:3]
+        if routing_action == "refuse":
+            prefix = "I can't help with that request."
+        elif routing_action == "escalate":
+            prefix = "I don't know based on available sources. This needs owner input."
+        else:
+            prefix = "I want to answer precisely, but I need a bit more information first."
+
+        answer_points: List[str] = [prefix]
+        for idx, question in enumerate(clarifying_questions, 1):
+            answer_points.append(f"{idx}. {question}")
+
+        return {
+            "planning_output": {
+                "answer_points": answer_points,
+                "citations": [],
+                "follow_up_question": clarifying_questions[0] if clarifying_questions else "",
+                "confidence": float(routing_decision.get("confidence") or 0.25),
+                "teaching_questions": clarifying_questions,
+                "render_strategy": "source_faithful",
+                "reasoning_trace": f"Routing decision action={routing_action}.",
+                "output_schema": routing_decision.get("output_schema"),
+                "workflow": routing_decision.get("chosen_workflow"),
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                f"Planner: honored routing decision action={routing_action}."
+            ],
+        }
 
     if mode == "SMALLTALK":
         q_lower = (user_query or "").strip().lower()
@@ -1778,6 +1890,9 @@ async def realizer_node(state: TwinState):
         res.additional_kwargs["router_reason"] = state.get("router_reason")
         res.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
         res.additional_kwargs["render_strategy"] = "source_faithful"
+        res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        if isinstance(state.get("routing_decision"), dict):
+            res.additional_kwargs["routing_decision"] = state.get("routing_decision")
         if state.get("persona_spec_version"):
             res.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
         if state.get("persona_prompt_variant"):
@@ -1828,6 +1943,9 @@ async def realizer_node(state: TwinState):
         res.additional_kwargs["target_owner_scope"] = bool(state.get("target_owner_scope", False))
         res.additional_kwargs["router_reason"] = state.get("router_reason")
         res.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
+        res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        if isinstance(state.get("routing_decision"), dict):
+            res.additional_kwargs["routing_decision"] = state.get("routing_decision")
         if state.get("persona_spec_version"):
             res.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
         if state.get("persona_prompt_variant"):
@@ -1878,6 +1996,9 @@ async def realizer_node(state: TwinState):
         fallback_msg.additional_kwargs["target_owner_scope"] = bool(state.get("target_owner_scope", False))
         fallback_msg.additional_kwargs["router_reason"] = state.get("router_reason")
         fallback_msg.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
+        fallback_msg.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        if isinstance(state.get("routing_decision"), dict):
+            fallback_msg.additional_kwargs["routing_decision"] = state.get("routing_decision")
 
         return {
             "messages": [fallback_msg],
@@ -1996,9 +2117,20 @@ async def run_agent_stream(
     refusal_message = apply_guardrails(twin_id, query)
     if refusal_message:
         # Yield a simulated refusal event to match the graph output format
+        refusal_ai = AIMessage(content=refusal_message)
+        refusal_ai.additional_kwargs["routing_decision"] = {
+            "intent": "answer",
+            "confidence": 1.0,
+            "required_inputs_missing": [],
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+            "action": "refuse",
+            "clarifying_questions": [],
+        }
+        refusal_ai.additional_kwargs["workflow_intent"] = "answer"
         yield {
             "agent": {
-                "messages": [AIMessage(content=refusal_message)]
+                "messages": [refusal_ai]
             }
         }
         return
@@ -2085,6 +2217,16 @@ async def run_agent_stream(
         "persona_prompt_variant": None,
         "router_reason": None,
         "router_knowledge_available": None,
+        "workflow_intent": "answer",
+        "routing_decision": {
+            "intent": "answer",
+            "confidence": 1.0,
+            "required_inputs_missing": [],
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+            "action": "answer",
+            "clarifying_questions": [],
+        },
         # Path B / Phase 4 Context
         "full_settings": settings,
         "graph_context": graph_context,

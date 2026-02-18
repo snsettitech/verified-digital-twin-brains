@@ -62,8 +62,6 @@ async def start_monitoring(
     user=Depends(require_admin)
 ):
     """Start continuous synthetic monitoring."""
-    global _monitor_task
-    
     if _monitor_task is not None:
         return {"status": "already_running", "message": "Monitoring is already running"}
     

@@ -111,7 +111,6 @@ _creator_id_cache: Dict[str, tuple] = {}
 
 def clear_creator_namespace_cache() -> None:
     """Clear namespace resolution cache (useful for tests or migrations)."""
-    global _creator_id_cache
     _creator_id_cache.clear()
     # Also clear lru_cache if any functions still use it
     try:

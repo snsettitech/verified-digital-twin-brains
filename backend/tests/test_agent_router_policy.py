@@ -28,6 +28,9 @@ async def test_router_owner_generic_query_disables_evidence(monkeypatch):
     assert out["dialogue_mode"] == "QA_FACT"
     assert out["target_owner_scope"] is False
     assert out["requires_evidence"] is False
+    assert isinstance(out.get("routing_decision"), dict)
+    assert out["routing_decision"]["chosen_workflow"]
+    assert out["routing_decision"]["output_schema"].startswith("workflow.")
 
 
 @pytest.mark.asyncio
@@ -52,6 +55,7 @@ async def test_router_explicit_source_request_keeps_evidence(monkeypatch):
     }
     out = await router_node(state)
     assert out["requires_evidence"] is True
+    assert isinstance(out.get("routing_decision"), dict)
 
 
 @pytest.mark.asyncio
@@ -77,6 +81,7 @@ async def test_router_respects_model_person_specific_when_not_generic_coaching(m
     out = await router_node(state)
     assert out["target_owner_scope"] is True
     assert out["requires_evidence"] is True
+    assert out["routing_decision"]["intent"] in {"plan", "answer", "diagnose"}
 
 
 @pytest.mark.asyncio

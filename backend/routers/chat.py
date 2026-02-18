@@ -28,6 +28,11 @@ from modules.interaction_context import (
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
+from modules.runtime_audit_store import (
+    enqueue_owner_review_item,
+    persist_response_audit,
+    persist_routing_decision,
+)
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
@@ -882,6 +887,140 @@ async def _apply_persona_audit(
             pass
         return draft_response, intent_label, module_ids
 
+
+def _derive_review_reason(
+    *,
+    action: str,
+    confidence_score: float,
+    online_eval_result: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    if action in {"clarify", "escalate", "refuse"}:
+        return action
+    if confidence_score < 0.45:
+        return "low_confidence"
+    if isinstance(online_eval_result, dict) and online_eval_result.get("needs_review"):
+        return "needs_review"
+    return None
+
+
+def _persist_runtime_audit(
+    *,
+    twin_id: str,
+    tenant_id: Optional[str],
+    conversation_id: Optional[str],
+    user_message_id: Optional[str],
+    assistant_message_id: Optional[str],
+    interaction_context: Optional[str],
+    dialogue_mode: Optional[str],
+    intent_label: Optional[str],
+    workflow_intent: Optional[str],
+    routing_decision: Optional[Dict[str, Any]],
+    persona_spec_version: Optional[str],
+    persona_prompt_variant: Optional[str],
+    confidence_score: float,
+    citations: List[str],
+    retrieved_context_snippets: List[Dict[str, Any]],
+    final_response: str,
+    fallback_message: str,
+    online_eval_result: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    decision = routing_decision if isinstance(routing_decision, dict) else {}
+    action = str(decision.get("action") or "answer")
+
+    routing_row = persist_routing_decision(
+        twin_id=twin_id,
+        tenant_id=tenant_id,
+        conversation_id=conversation_id,
+        message_id=user_message_id,
+        interaction_context=interaction_context,
+        router_mode=dialogue_mode,
+        decision=decision or {
+            "intent": workflow_intent or "answer",
+            "confidence": confidence_score,
+            "required_inputs_missing": [],
+            "chosen_workflow": workflow_intent or "answer",
+            "output_schema": f"workflow.{workflow_intent or 'answer'}.v1",
+            "action": action,
+            "clarifying_questions": [],
+        },
+        metadata={
+            "intent_label": intent_label,
+            "persona_spec_version": persona_spec_version,
+            "persona_prompt_variant": persona_prompt_variant,
+        },
+    )
+
+    refusal_reason = None
+    if action == "refuse":
+        refusal_reason = "guardrail_refusal"
+    escalation_reason = None
+    if action == "escalate":
+        escalation_reason = "router_escalation"
+    elif final_response.strip() == fallback_message.strip() and confidence_score < 0.35:
+        escalation_reason = "uncertainty_fallback"
+        if action == "answer":
+            action = "escalate"
+
+    audit_row = persist_response_audit(
+        twin_id=twin_id,
+        tenant_id=tenant_id,
+        conversation_id=conversation_id,
+        assistant_message_id=assistant_message_id,
+        routing_decision_id=(routing_row or {}).get("id"),
+        spec_version=persona_spec_version,
+        prompt_variant=persona_prompt_variant,
+        intent_label=intent_label,
+        workflow_intent=workflow_intent or str(decision.get("intent") or "answer"),
+        response_action=action,
+        confidence_score=confidence_score,
+        citations=citations,
+        sources_used=retrieved_context_snippets,
+        refusal_reason=refusal_reason,
+        escalation_reason=escalation_reason,
+        retrieval_summary={
+            "citation_count": len(citations or []),
+            "context_count": len(retrieved_context_snippets or []),
+            "online_eval_action": (online_eval_result or {}).get("action") if isinstance(online_eval_result, dict) else None,
+            "online_eval_score": (online_eval_result or {}).get("overall_score") if isinstance(online_eval_result, dict) else None,
+        },
+        artifacts_used={
+            "persona_spec_version": persona_spec_version,
+            "persona_prompt_variant": persona_prompt_variant,
+            "intent_label": intent_label,
+            "workflow_intent": workflow_intent or str(decision.get("intent") or "answer"),
+            "routing_decision": decision,
+        },
+    )
+
+    review_reason = _derive_review_reason(
+        action=action,
+        confidence_score=confidence_score,
+        online_eval_result=online_eval_result,
+    )
+    if review_reason:
+        enqueue_owner_review_item(
+            twin_id=twin_id,
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            message_id=assistant_message_id,
+            routing_decision_id=(routing_row or {}).get("id"),
+            reason=review_reason,
+            priority="high" if review_reason in {"escalate", "refuse"} else "medium",
+            payload={
+                "query_action": action,
+                "intent_label": intent_label,
+                "workflow_intent": workflow_intent,
+                "confidence_score": confidence_score,
+                "citations": citations,
+            },
+        )
+
+    return {
+        "routing_decision_id": (routing_row or {}).get("id"),
+        "response_audit_id": (audit_row or {}).get("id"),
+        "response_action": action,
+    }
+
 @router.post("/chat/{twin_id}")
 @observe(name="chat_request")
 async def chat(
@@ -1017,6 +1156,7 @@ async def chat(
             planning_output = {}
             dialogue_mode = "ANSWER"
             intent_label = None
+            workflow_intent = None
             module_ids = []
             render_strategy = None
             retrieved_context_snippets: List[Dict[str, Any]] = []
@@ -1024,6 +1164,7 @@ async def chat(
             target_owner_scope = None
             router_reason = None
             router_knowledge_available = None
+            routing_decision: Optional[Dict[str, Any]] = None
             
             # Fetch graph stats for this twin
             from modules.graph_context import get_graph_stats
@@ -1237,6 +1378,10 @@ async def chat(
                                     dialogue_mode = msg.additional_kwargs["dialogue_mode"]
                                 if "intent_label" in msg.additional_kwargs:
                                     intent_label = msg.additional_kwargs["intent_label"]
+                                if "workflow_intent" in msg.additional_kwargs:
+                                    raw_workflow_intent = msg.additional_kwargs["workflow_intent"]
+                                    if isinstance(raw_workflow_intent, str):
+                                        workflow_intent = raw_workflow_intent
                                 if "module_ids" in msg.additional_kwargs:
                                     module_ids = msg.additional_kwargs["module_ids"] or []
                                 if "render_strategy" in msg.additional_kwargs:
@@ -1259,6 +1404,10 @@ async def chat(
                                     raw_knowledge = msg.additional_kwargs["router_knowledge_available"]
                                     if isinstance(raw_knowledge, bool):
                                         router_knowledge_available = raw_knowledge
+                                if "routing_decision" in msg.additional_kwargs:
+                                    raw_decision = msg.additional_kwargs["routing_decision"]
+                                    if isinstance(raw_decision, dict):
+                                        routing_decision = _normalize_json(raw_decision)
                                 if "persona_spec_version" in msg.additional_kwargs:
                                     context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                                 if "persona_prompt_variant" in msg.additional_kwargs:
@@ -1269,6 +1418,10 @@ async def chat(
                                 full_response = msg.content
 
             # If model fell back despite having citations, try a deterministic extract
+            if not workflow_intent and isinstance(routing_decision, dict):
+                raw_intent = routing_decision.get("intent")
+                if isinstance(raw_intent, str):
+                    workflow_intent = raw_intent
             fallback_message = _uncertainty_message(resolved_context.context.value)
             if full_response.strip() == fallback_message and citations:
                 needs_exact = re.search(r"(exact|verbatim|only the exact).*(phrase|quote|line)", query.lower())
@@ -1417,10 +1570,12 @@ async def chat(
                 "planning_output": planning_output,
                 "dialogue_mode": dialogue_mode,
                 "intent_label": intent_label,
+                "workflow_intent": workflow_intent,
                 "requires_evidence": requires_evidence,
                 "target_owner_scope": target_owner_scope,
                 "router_reason": router_reason,
                 "router_knowledge_available": router_knowledge_available,
+                "routing_decision": routing_decision,
                 "render_strategy": render_strategy,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
@@ -1499,13 +1654,13 @@ async def chat(
                     )
                     conversation_id = conv["id"]
                 
-                log_interaction(
+                user_msg_row = log_interaction(
                     conversation_id,
                     "user",
                     query,
                     interaction_context=resolved_context.context.value,
                 )
-                log_interaction(
+                assistant_msg_row = log_interaction(
                     conversation_id,
                     "assistant",
                     full_response or fallback,
@@ -1513,6 +1668,29 @@ async def chat(
                     confidence_score,
                     interaction_context=resolved_context.context.value,
                 )
+                try:
+                    _persist_runtime_audit(
+                        twin_id=twin_id,
+                        tenant_id=user.get("tenant_id") if user else None,
+                        conversation_id=conversation_id,
+                        user_message_id=(user_msg_row or {}).get("id"),
+                        assistant_message_id=(assistant_msg_row or {}).get("id"),
+                        interaction_context=resolved_context.context.value,
+                        dialogue_mode=dialogue_mode,
+                        intent_label=intent_label,
+                        workflow_intent=workflow_intent,
+                        routing_decision=routing_decision,
+                        persona_spec_version=context_trace.get("persona_spec_version"),
+                        persona_prompt_variant=context_trace.get("persona_prompt_variant"),
+                        confidence_score=float(confidence_score or 0.0),
+                        citations=citations,
+                        retrieved_context_snippets=retrieved_context_snippets,
+                        final_response=full_response or fallback,
+                        fallback_message=fallback_message,
+                        online_eval_result=online_eval_result,
+                    )
+                except Exception as audit_err:
+                    logger.debug(f"Runtime audit persistence failed (non-blocking): {audit_err}")
             
             # 8. Trigger Scribe (Job Queue for reliability)
             try:
@@ -1798,9 +1976,12 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         final_content = ""
         citations = []
         confidence_score = 0.0
+        dialogue_mode = None
         intent_label = None
+        workflow_intent = None
         module_ids = []
         render_strategy = None
+        routing_decision: Optional[Dict[str, Any]] = None
         retrieved_context_snippets: List[Dict[str, Any]] = []
 
         async for event in run_agent_stream(
@@ -1835,8 +2016,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                 msg = messages[-1]
                 if isinstance(msg, AIMessage):
                     if hasattr(msg, "additional_kwargs") and isinstance(msg.additional_kwargs, dict):
+                        dialogue_mode = msg.additional_kwargs.get("dialogue_mode", dialogue_mode)
                         intent_label = msg.additional_kwargs.get("intent_label", intent_label)
+                        workflow_intent = msg.additional_kwargs.get("workflow_intent", workflow_intent)
                         module_ids = msg.additional_kwargs.get("module_ids", module_ids) or []
+                        raw_routing_decision = msg.additional_kwargs.get("routing_decision")
+                        if isinstance(raw_routing_decision, dict):
+                            routing_decision = _normalize_json(raw_routing_decision)
                         raw_render = msg.additional_kwargs.get("render_strategy")
                         if isinstance(raw_render, str) and raw_render.strip():
                             render_strategy = raw_render
@@ -1852,6 +2038,10 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                     if msg.content:
                         final_content += msg.content
 
+        if not workflow_intent and isinstance(routing_decision, dict):
+            raw_intent = routing_decision.get("intent")
+            if isinstance(raw_intent, str):
+                workflow_intent = raw_intent
         fallback_message = _uncertainty_message(resolved_context.context.value)
         draft_for_audit = final_content if final_content else fallback_message
         source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
@@ -1936,8 +2126,11 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "conversation_id": conversation_id,
             "owner_memory_refs": owner_memory_refs,
             "owner_memory_topics": owner_memory_topics,
+            "dialogue_mode": dialogue_mode,
             "intent_label": intent_label,
+            "workflow_intent": workflow_intent,
             "module_ids": module_ids,
+            "routing_decision": routing_decision,
             "render_strategy": render_strategy,
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
@@ -1971,7 +2164,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         record_request(session_id, "session", "requests_per_hour")
         
         # Log interaction
-        log_interaction(
+        user_msg_row = log_interaction(
+            conversation_id,
+            "user",
+            query,
+            interaction_context=resolved_context.context.value,
+        )
+        assistant_msg_row = log_interaction(
             conversation_id,
             "assistant",
             final_content,
@@ -1979,7 +2178,30 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             confidence_score,
             interaction_context=resolved_context.context.value,
         )
-        
+        try:
+            _persist_runtime_audit(
+                twin_id=twin_id,
+                tenant_id=None,
+                conversation_id=conversation_id,
+                user_message_id=(user_msg_row or {}).get("id"),
+                assistant_message_id=(assistant_msg_row or {}).get("id"),
+                interaction_context=resolved_context.context.value,
+                dialogue_mode=dialogue_mode,
+                intent_label=intent_label,
+                workflow_intent=workflow_intent,
+                routing_decision=routing_decision,
+                persona_spec_version=context_trace.get("persona_spec_version"),
+                persona_prompt_variant=context_trace.get("persona_prompt_variant"),
+                confidence_score=float(confidence_score or 0.0),
+                citations=citations,
+                retrieved_context_snippets=retrieved_context_snippets,
+                final_response=final_content,
+                fallback_message=fallback_message,
+                online_eval_result=online_eval_result,
+            )
+        except Exception as audit_err:
+            logger.debug(f"Widget runtime audit persistence failed (non-blocking): {audit_err}")
+
         yield json.dumps({"type": "done", "escalated": confidence_score < 0.7}) + "\n"
 
     with langfuse_prop_widget:
@@ -2030,6 +2252,7 @@ async def public_chat_endpoint(
     
     # Rate limit by IP address for public endpoints
     client_ip = req_raw.client.host if req_raw and req_raw.client else "unknown"
+    group_id = None
     
     # Langfuse trace propagation for public chat endpoint
     release = os.getenv("LANGFUSE_RELEASE", "dev")
@@ -2038,7 +2261,7 @@ async def public_chat_endpoint(
         session_id=None,  # Public chat doesn't have persistent sessions
         metadata={
             "endpoint": "public-chat",
-            "group_id": str(group_id) if 'group_id' in locals() and group_id else None,
+            "group_id": None,
             "query_length": str(len(request.message)) if request.message else "0",
             "share_token": token,
             "client_ip": client_ip,
@@ -2158,9 +2381,12 @@ async def public_chat_endpoint(
             final_response = ""
             citations = []
             confidence_score = 0.0
+            dialogue_mode = None
             intent_label = None
+            workflow_intent = None
             module_ids = []
             render_strategy = None
+            routing_decision: Optional[Dict[str, Any]] = None
             retrieved_context_snippets: List[Dict[str, Any]] = []
             async for event in run_agent_stream(
                 twin_id,
@@ -2191,8 +2417,13 @@ async def public_chat_endpoint(
                     msg = messages[-1]
                     if isinstance(msg, AIMessage) and msg.content:
                         if hasattr(msg, "additional_kwargs") and isinstance(msg.additional_kwargs, dict):
+                            dialogue_mode = msg.additional_kwargs.get("dialogue_mode", dialogue_mode)
                             intent_label = msg.additional_kwargs.get("intent_label", intent_label)
+                            workflow_intent = msg.additional_kwargs.get("workflow_intent", workflow_intent)
                             module_ids = msg.additional_kwargs.get("module_ids", module_ids) or []
+                            raw_routing_decision = msg.additional_kwargs.get("routing_decision")
+                            if isinstance(raw_routing_decision, dict):
+                                routing_decision = _normalize_json(raw_routing_decision)
                             raw_render = msg.additional_kwargs.get("render_strategy")
                             if isinstance(raw_render, str) and raw_render.strip():
                                 render_strategy = raw_render
@@ -2221,6 +2452,10 @@ async def public_chat_endpoint(
                 if acknowledgments:
                     final_response += "\n\n" + " ".join(acknowledgments)
 
+            if not workflow_intent and isinstance(routing_decision, dict):
+                raw_intent = routing_decision.get("intent")
+                if isinstance(raw_intent, str):
+                    workflow_intent = raw_intent
             fallback_message = _uncertainty_message(resolved_context.context.value)
             draft_for_audit = final_response if final_response else fallback_message
             source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
@@ -2321,6 +2556,31 @@ async def public_chat_endpoint(
             citation_details = _normalize_json(_resolve_citation_details(citations, twin_id))
             owner_memory_refs = _normalize_json(owner_memory_refs)
             owner_memory_topics = _normalize_json(owner_memory_topics)
+            routing_decision = _normalize_json(routing_decision)
+
+            try:
+                _persist_runtime_audit(
+                    twin_id=twin_id,
+                    tenant_id=None,
+                    conversation_id=conversation_id,
+                    user_message_id=None,
+                    assistant_message_id=None,
+                    interaction_context=resolved_context.context.value,
+                    dialogue_mode=dialogue_mode,
+                    intent_label=intent_label,
+                    workflow_intent=workflow_intent,
+                    routing_decision=routing_decision if isinstance(routing_decision, dict) else None,
+                    persona_spec_version=context_trace.get("persona_spec_version"),
+                    persona_prompt_variant=context_trace.get("persona_prompt_variant"),
+                    confidence_score=float(confidence_score or 0.0),
+                    citations=citations if isinstance(citations, list) else [],
+                    retrieved_context_snippets=retrieved_context_snippets,
+                    final_response=final_response,
+                    fallback_message=fallback_message,
+                    online_eval_result=online_eval_result,
+                )
+            except Exception as audit_err:
+                logger.debug(f"Public runtime audit persistence failed (non-blocking): {audit_err}")
 
             return {
                 "status": "answer",
@@ -2330,8 +2590,11 @@ async def public_chat_endpoint(
                 "confidence_score": confidence_score,
                 "owner_memory_refs": owner_memory_refs,
                 "owner_memory_topics": owner_memory_topics,
+                "dialogue_mode": dialogue_mode,
                 "intent_label": intent_label,
+                "workflow_intent": workflow_intent,
                 "module_ids": module_ids,
+                "routing_decision": routing_decision,
                 "render_strategy": render_strategy,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,

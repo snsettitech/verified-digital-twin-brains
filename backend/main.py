@@ -53,6 +53,7 @@ from routers import (
     ab_testing,
     cost_tracking,
     synthetic_monitoring,
+    twin_runtime,
 )
 from modules.specializations import get_specialization
 
@@ -108,6 +109,7 @@ app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(training_sessions.router)
 app.include_router(persona_specs.router)
+app.include_router(twin_runtime.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
 # Use feature flags defined at top of file

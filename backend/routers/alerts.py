@@ -212,8 +212,6 @@ async def start_monitoring(
     Args:
         interval_minutes: How often to check rules (default: 5 minutes)
     """
-    global _check_task
-    
     if _check_task is not None:
         return {
             "status": "already_running",
