@@ -26,6 +26,7 @@ from modules.persona_spec_store import get_active_persona_spec
 from modules.inference_router import invoke_json, invoke_text
 from modules.routing_decision import build_routing_decision
 from modules.response_policy import UNCERTAINTY_RESPONSE
+from modules.doc_sectioning import section_filter_contexts
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -606,6 +607,7 @@ INTERACTION CONTEXT: {interaction_context}
 
 MODES:
 - SMALLTALK: Greetings, brief pleasantries, "how are you".
+- IDENTITY_FACT: Identity/background introductions that must be grounded in owner-approved sources.
 - QA_FACT: Questions about objective facts, events, or public knowledge.
 - QA_RELATIONSHIP: Questions about people, entities, or connections (Graph needed).
 - STANCE_GLOBAL: Questions about beliefs, opinions, core philosophy, or "what do I think about".
@@ -617,7 +619,7 @@ INTENT ATTRIBUTES:
 
 OUTPUT FORMAT (JSON):
 {{
-    "mode": "SMALLTALK | QA_FACT | QA_RELATIONSHIP | STANCE_GLOBAL | REPAIR | TEACHING",
+    "mode": "SMALLTALK | IDENTITY_FACT | QA_FACT | QA_RELATIONSHIP | STANCE_GLOBAL | REPAIR | TEACHING",
     "is_person_specific": bool,
     "requires_evidence": bool,
     "reasoning": "Brief explanation"
@@ -638,13 +640,16 @@ async def router_node(state: TwinState):
 
     # Deterministic fast-path keeps obvious greetings and owner-specific prompts stable.
     if _is_smalltalk_query(last_human_msg):
-        # Identity prompts should be grounded in owned knowledge when available.
-        if knowledge_available and _is_identity_intro_query(last_human_msg):
-            router_reason = "identity prompt rerouted to QA_FACT with evidence because knowledge is available"
-            intent_label = classify_query_intent(last_human_msg, dialogue_mode="QA_FACT")
+        # Identity prompts should always be retrieval-grounded.
+        if _is_identity_intro_query(last_human_msg):
+            router_reason = (
+                "identity prompt rerouted to IDENTITY_FACT with evidence "
+                f"(knowledge_available={knowledge_available})"
+            )
+            intent_label = classify_query_intent(last_human_msg, dialogue_mode="IDENTITY_FACT")
             routing_decision = build_routing_decision(
                 query=last_human_msg,
-                mode="QA_FACT",
+                mode="IDENTITY_FACT",
                 intent_label=intent_label,
                 interaction_context=interaction_context,
                 target_owner_scope=False,
@@ -654,7 +659,7 @@ async def router_node(state: TwinState):
             )
             requires_evidence = True
             _log_router_observation(
-                mode="QA_FACT",
+                mode="IDENTITY_FACT",
                 intent_label=intent_label,
                 requires_evidence=requires_evidence,
                 target_owner_scope=False,
@@ -663,7 +668,7 @@ async def router_node(state: TwinState):
                 router_reason=router_reason,
             )
             return {
-                "dialogue_mode": "QA_FACT",
+                "dialogue_mode": "IDENTITY_FACT",
                 "intent_label": intent_label,
                 "target_owner_scope": False,
                 "requires_evidence": requires_evidence,
@@ -673,7 +678,7 @@ async def router_node(state: TwinState):
                 "workflow_intent": routing_decision.intent,
                 "routing_decision": routing_decision.model_dump(),
                 "reasoning_history": (state.get("reasoning_history") or []) + [
-                    "Router: identity prompt rerouted to retrieval-backed QA (knowledge available)"
+                    "Router: identity prompt rerouted to retrieval-backed IDENTITY_FACT (knowledge available)"
                     + f"; action={routing_decision.action}; confidence={routing_decision.confidence:.2f}"
                 ],
             }
@@ -715,6 +720,7 @@ async def router_node(state: TwinState):
         }
 
     owner_specific_heuristic = _is_owner_specific_query(last_human_msg)
+    identity_intro_heuristic = _is_identity_intro_query(last_human_msg)
     explicit_teaching = _is_explicit_teaching_query(last_human_msg)
     generic_coaching_heuristic = _is_generic_business_coaching_query(last_human_msg)
     explicit_source_grounded = _is_explicit_source_grounded_query(last_human_msg)
@@ -755,6 +761,11 @@ async def router_node(state: TwinState):
         intent_label = classify_query_intent(last_human_msg, dialogue_mode=mode)
 
         # Deterministic guardrails over model output.
+        if identity_intro_heuristic:
+            mode = "IDENTITY_FACT"
+            is_specific = False
+            req_evidence = True
+
         if owner_specific_heuristic:
             is_specific = True
             req_evidence = True
@@ -892,6 +903,39 @@ async def router_node(state: TwinState):
             )
         except Exception:
             pass
+        if _is_identity_intro_query(last_human_msg):
+            fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="IDENTITY_FACT")
+            fallback_reason = "router exception fallback to IDENTITY_FACT with evidence"
+            routing_decision = build_routing_decision(
+                query=last_human_msg,
+                mode="IDENTITY_FACT",
+                intent_label=fallback_intent,
+                interaction_context=interaction_context,
+                target_owner_scope=False,
+                requires_evidence=True,
+                knowledge_available=knowledge_available,
+                pinned_context=pinned_context if isinstance(pinned_context, dict) else None,
+            )
+            _log_router_observation(
+                mode="IDENTITY_FACT",
+                intent_label=fallback_intent,
+                requires_evidence=True,
+                target_owner_scope=False,
+                interaction_context=interaction_context,
+                knowledge_available=knowledge_available,
+                router_reason=fallback_reason,
+            )
+            return {
+                "dialogue_mode": "IDENTITY_FACT",
+                "intent_label": fallback_intent,
+                "target_owner_scope": False,
+                "requires_evidence": True,
+                "sub_queries": [last_human_msg],
+                "router_reason": fallback_reason,
+                "router_knowledge_available": knowledge_available,
+                "workflow_intent": routing_decision.intent,
+                "routing_decision": routing_decision.model_dump(),
+            }
         if _is_smalltalk_query(last_human_msg):
             fallback_intent = classify_query_intent(last_human_msg, dialogue_mode="SMALLTALK")
             fallback_reason = "router exception fallback to SMALLTALK"
@@ -1330,6 +1374,89 @@ async def planner_node(state: TwinState):
             "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Planner: deterministic smalltalk plan."
+            ],
+        }
+
+    if mode == "IDENTITY_FACT":
+        identity_contexts = section_filter_contexts(
+            user_query,
+            context_data,
+            max_items=5,
+        )
+        citation_ids: List[str] = []
+        answer_points: List[str] = []
+        seen_points: set = set()
+        identity_cues = (
+            "i am",
+            "i'm",
+            "i have",
+            "i've",
+            "core expertise",
+            "cloud:",
+            "ai:",
+            "business strategy",
+        )
+
+        for ctx in identity_contexts:
+            source_id = ctx.get("source_id")
+            if isinstance(source_id, str) and source_id and source_id not in citation_ids:
+                citation_ids.append(source_id)
+
+            text = str(ctx.get("text") or "")
+            for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
+                line = re.sub(r"\s+", " ", raw.strip().lstrip("-*").strip())
+                if len(line) < 18:
+                    continue
+                lowered = line.lower()
+                if lowered.startswith(("recommendation:", "assumptions:", "why:")):
+                    continue
+                if not any(cue in lowered for cue in identity_cues):
+                    continue
+                sig = lowered[:220]
+                if sig in seen_points:
+                    continue
+                answer_points.append(line)
+                seen_points.add(sig)
+                if len(answer_points) >= 4:
+                    break
+            if len(answer_points) >= 4:
+                break
+
+        if answer_points:
+            return {
+                "planning_output": {
+                    "answer_points": answer_points[:4],
+                    "citations": citation_ids[:3],
+                    "follow_up_question": "",
+                    "confidence": 0.86,
+                    "teaching_questions": [],
+                    "render_strategy": "source_faithful",
+                    "reasoning_trace": "Deterministic identity plan from identity/expertise blocks.",
+                },
+                "intent_label": persona_trace.get("intent_label"),
+                "persona_module_ids": persona_trace.get("module_ids", []),
+                "persona_spec_version": persona_trace.get("persona_spec_version"),
+                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+                "reasoning_history": (state.get("reasoning_history") or []) + [
+                    "Planner: deterministic IDENTITY_FACT plan from section-filtered evidence."
+                ],
+            }
+
+        return {
+            "planning_output": {
+                "answer_points": [UNCERTAINTY_RESPONSE],
+                "citations": [],
+                "follow_up_question": "I don't know yet from approved sources. Can you share a source to verify this?",
+                "confidence": 0.2,
+                "teaching_questions": [],
+                "reasoning_trace": "Identity query without sufficient identity evidence.",
+            },
+            "intent_label": persona_trace.get("intent_label"),
+            "persona_module_ids": persona_trace.get("module_ids", []),
+            "persona_spec_version": persona_trace.get("persona_spec_version"),
+            "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Planner: IDENTITY_FACT uncertainty fallback (missing grounded identity evidence)."
             ],
         }
 
@@ -2032,6 +2159,7 @@ def create_twin_agent(
         """Phase 2: Executing planned retrieval (Audit 1: Parallel & Robust)"""
         sub_queries = state.get("sub_queries", [])
         messages = state["messages"]
+        last_human_msg = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
         all_results = []
         citations = []
         
@@ -2064,9 +2192,21 @@ def create_twin_agent(
                     if "source_id" in item:
                         citations.append(item["source_id"])
 
+        if all_results:
+            all_results = section_filter_contexts(
+                last_human_msg,
+                all_results,
+                max_items=max(len(all_results), 8),
+            )
+            citations = []
+            for item in all_results:
+                source_id = item.get("source_id")
+                if isinstance(source_id, str) and source_id and source_id not in citations:
+                    citations.append(source_id)
+
         return {
             "retrieved_context": {"results": all_results},
-            "citations": list(set(citations)),
+            "citations": citations,
             "reasoning_history": (state.get("reasoning_history") or []) + [f"Retrieval: Executed {len(sub_queries)} queries."]
         }
 

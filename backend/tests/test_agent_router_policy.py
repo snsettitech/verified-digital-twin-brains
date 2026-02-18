@@ -107,3 +107,19 @@ async def test_router_week1_guidance_is_treated_as_generic_coaching(monkeypatch)
     out = await router_node(state)
     assert out["target_owner_scope"] is False
     assert out["requires_evidence"] is False
+
+
+@pytest.mark.asyncio
+async def test_router_identity_query_uses_identity_fact_mode(monkeypatch):
+    monkeypatch.setattr("modules.agent._twin_has_groundable_knowledge", lambda _twin_id: True)
+
+    state = {
+        "twin_id": "twin-1",
+        "messages": [HumanMessage(content="who are you?")],
+        "interaction_context": "owner_chat",
+        "reasoning_history": [],
+    }
+    out = await router_node(state)
+    assert out["dialogue_mode"] == "IDENTITY_FACT"
+    assert out["requires_evidence"] is True
+    assert out["sub_queries"] == ["who are you?"]

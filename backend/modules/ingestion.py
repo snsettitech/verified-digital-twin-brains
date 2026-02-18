@@ -25,6 +25,7 @@ from modules.health_checks import run_all_health_checks, calculate_content_hash
 from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
 from modules.delphi_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
+from modules.doc_sectioning import extract_section_blocks
 
 
 # ============================================================================
@@ -1688,6 +1689,43 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
     return chunks
 
 
+def chunk_text_with_metadata(
+    text: str,
+    chunk_size: int = 1000,
+    overlap: int = 200,
+) -> List[Dict[str, Any]]:
+    """
+    Chunk text while preserving best-effort section metadata.
+    """
+    blocks = extract_section_blocks(text)
+    entries: List[Dict[str, Any]] = []
+
+    if blocks:
+        for block in blocks:
+            block_text = str(block.get("text") or "").strip()
+            if not block_text:
+                continue
+            for chunk in chunk_text(block_text, chunk_size=chunk_size, overlap=overlap):
+                if not chunk or not chunk.strip():
+                    continue
+                entries.append(
+                    {
+                        "text": chunk,
+                        "section_title": block.get("section_title"),
+                        "section_path": block.get("section_path"),
+                        "chunk_type": block.get("chunk_type"),
+                    }
+                )
+
+    if entries:
+        return entries
+
+    for chunk in chunk_text(text, chunk_size=chunk_size, overlap=overlap):
+        if chunk and chunk.strip():
+            entries.append({"text": chunk})
+    return entries
+
+
 
 
 async def analyze_chunk_content(text: str) -> dict:
@@ -1755,7 +1793,8 @@ async def process_and_index_text(
         message="Chunking text",
     )
     try:
-        chunks = chunk_text(text)
+        chunk_entries = chunk_text_with_metadata(text)
+        chunks = [entry.get("text", "") for entry in chunk_entries if isinstance(entry, dict)]
         finish_step(
             event_id=chunk_event_id,
             source_id=source_id,
@@ -1812,7 +1851,10 @@ async def process_and_index_text(
     db_chunks = []
     
     try:
-        for _i, chunk in enumerate(chunks):
+        for entry in chunk_entries:
+            chunk = str(entry.get("text") or "")
+            if not chunk:
+                continue
             vector_id = str(uuid.uuid4())
             chunk_id = str(uuid.uuid4())  # Supabase primary key
 
@@ -1841,6 +1883,11 @@ async def process_and_index_text(
                 metadata["opinion_topic"] = opinion_map.get("topic")
                 metadata["opinion_stance"] = opinion_map.get("stance")
                 metadata["opinion_intensity"] = opinion_map.get("intensity")
+
+            for section_key in ("section_title", "section_path", "chunk_type"):
+                section_value = entry.get(section_key)
+                if isinstance(section_value, str) and section_value.strip():
+                    metadata[section_key] = section_value.strip()
 
             if metadata_override:
                 metadata.update(metadata_override)

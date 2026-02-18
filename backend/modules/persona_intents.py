@@ -28,6 +28,7 @@ _INTENT_SET = set(INTENT_LABELS)
 
 DIALOGUE_MODE_TO_INTENT: Dict[str, str] = {
     "QA_FACT": "factual_with_evidence",
+    "IDENTITY_FACT": "meta_or_system",
     "QA_RELATIONSHIP": "factual_with_evidence",
     "STANCE_GLOBAL": "advice_or_stance",
     "SMALLTALK": "meta_or_system",
@@ -77,4 +78,3 @@ def classify_query_intent(query: str, dialogue_mode: Optional[str] = None) -> st
         return "ambiguity_or_clarify"
 
     return DEFAULT_INTENT_LABEL
-

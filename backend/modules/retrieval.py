@@ -18,6 +18,7 @@ from modules.delphi_namespace import (
     get_primary_namespace_for_twin,
     resolve_creator_id_for_twin,
 )
+from modules.doc_sectioning import section_filter_contexts
 
 # Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
@@ -1027,7 +1028,10 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
                 "tone": match["metadata"].get("tone", "Assertive"),
                 "opinion_topic": match["metadata"].get("opinion_topic"),
                 "opinion_stance": match["metadata"].get("opinion_stance"),
-                "opinion_intensity": match["metadata"].get("opinion_intensity")
+                "opinion_intensity": match["metadata"].get("opinion_intensity"),
+                "section_title": match["metadata"].get("section_title"),
+                "section_path": match["metadata"].get("section_path"),
+                "chunk_type": match["metadata"].get("chunk_type"),
             })
     return contexts
 
@@ -1066,7 +1070,10 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
             "tone": match["metadata"].get("tone", "Neutral"),
             "opinion_topic": match["metadata"].get("opinion_topic"),
             "opinion_stance": match["metadata"].get("opinion_stance"),
-            "opinion_intensity": match["metadata"].get("opinion_intensity")
+            "opinion_intensity": match["metadata"].get("opinion_intensity"),
+            "section_title": match["metadata"].get("section_title"),
+            "section_path": match["metadata"].get("section_path"),
+            "chunk_type": match["metadata"].get("chunk_type"),
         })
     return raw_general_chunks
 
@@ -1507,6 +1514,7 @@ async def retrieve_context_vectors(
 
     # Hybrid lexical fusion: blend lexical overlap with semantic/rerank score.
     final_contexts = _apply_lexical_fusion(query, final_contexts)
+    final_contexts = section_filter_contexts(query, final_contexts, max_items=max(top_k * 2, top_k))
     final_contexts = final_contexts[:top_k]
 
     # Drop weak off-topic hits before handing context to the planner.

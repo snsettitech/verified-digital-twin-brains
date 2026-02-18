@@ -28,6 +28,7 @@ from modules.interaction_context import (
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
+from modules.doc_sectioning import classify_query_intent_profile, section_filter_contexts
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
     persist_response_audit,
@@ -134,7 +135,16 @@ def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[L
         sig = f"{source_id}::{text[:180]}"
         if sig in seen:
             continue
-        merged.append({"source_id": source_id, "text": text})
+        normalized_row: Dict[str, Any] = {"source_id": source_id, "text": text}
+        for key in ("section_title", "section_path", "chunk_type"):
+            value = row.get(key)
+            if isinstance(value, str) and value.strip():
+                normalized_row[key] = value.strip()
+        for key in ("score", "vector_score"):
+            value = row.get(key)
+            if isinstance(value, (int, float)):
+                normalized_row[key] = float(value)
+        merged.append(normalized_row)
         seen.add(sig)
         if len(merged) >= GROUNDING_MAX_CONTEXT_SNIPPETS:
             break
@@ -289,46 +299,174 @@ def _build_eval_citation_payload(citations: List[str], contexts: List[Dict[str, 
 
 
 def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, Any]]) -> str:
-    query_tokens = _grounding_tokens(query)
-    ranked: List[Tuple[float, str]] = []
-    seen: Set[str] = set()
+    if not contexts:
+        return ""
 
-    for row in contexts[:GROUNDING_MAX_CONTEXT_SNIPPETS]:
+    profile = classify_query_intent_profile(query)
+    intent_aware_contexts = section_filter_contexts(
+        query,
+        contexts,
+        max_items=max(GROUNDING_MAX_CONTEXT_SNIPPETS, ONLINE_EVAL_POLICY_FALLBACK_POINTS * 2),
+    )
+    candidate_contexts = intent_aware_contexts or contexts[:GROUNDING_MAX_CONTEXT_SNIPPETS]
+    query_tokens = _grounding_tokens(query)
+
+    def _candidate_lines(text: str, *, min_len: int = 18) -> List[str]:
+        rows: List[str] = []
+        for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
+            line = re.sub(r"\s+", " ", raw.strip().lstrip("-*").strip())
+            if len(line) >= min_len:
+                rows.append(line)
+        return rows
+
+    def _line_score(line: str, *, disable_label_bonus: bool) -> float:
+        lowered = line.lower()
+        line_tokens = _grounding_tokens(line)
+        overlap = (
+            len(query_tokens.intersection(line_tokens)) / float(len(query_tokens))
+            if query_tokens
+            else 0.0
+        )
+        label_bonus = 0.0
+        if not disable_label_bonus and lowered.startswith(("recommendation:", "assumptions:", "why:")):
+            label_bonus = 0.20
+        return overlap + label_bonus
+
+    if profile.intent == "identity":
+        identity_cues = ("i am", "i'm", "i have", "i've", "core expertise", "cloud:", "ai:", "business strategy")
+        points: List[str] = []
+        seen: Set[str] = set()
+        for row in candidate_contexts:
+            text = str((row or {}).get("text") or "")
+            for line in _candidate_lines(text):
+                lowered = line.lower()
+                if lowered.startswith(("recommendation:", "assumptions:", "why:")):
+                    continue
+                if not any(cue in lowered for cue in identity_cues):
+                    continue
+                sig = lowered[:220]
+                if sig in seen:
+                    continue
+                points.append(line)
+                seen.add(sig)
+                if len(points) >= 3:
+                    break
+            if len(points) >= 3:
+                break
+        if points:
+            return "\n".join(points[:3])
+
+    if profile.intent == "style_template":
+        template_markers = (
+            "default response template",
+            "answer/recommendation",
+            "assumptions",
+            "why",
+            "alternatives",
+            "next steps",
+            "risks + mitigations",
+        )
+        ordered_points: List[str] = []
+        seen_template: Set[str] = set()
+        for row in candidate_contexts:
+            text = str((row or {}).get("text") or "")
+            for line in _candidate_lines(text, min_len=4):
+                lowered = line.lower()
+                if not any(marker in lowered for marker in template_markers):
+                    continue
+                sig = lowered[:220]
+                if sig in seen_template:
+                    continue
+                ordered_points.append(line)
+                seen_template.add(sig)
+                if len(ordered_points) >= 6:
+                    break
+            if len(ordered_points) >= 6:
+                break
+        if ordered_points:
+            return "\n".join(ordered_points)
+
+    if profile.intent == "boundaries":
+        boundary_markers = ("non-goals", "should not", "do not", "must not", "boundaries")
+        boundary_points: List[str] = []
+        seen_boundary: Set[str] = set()
+        for row in candidate_contexts:
+            text = str((row or {}).get("text") or "")
+            for line in _candidate_lines(text, min_len=6):
+                lowered = line.lower()
+                if not any(marker in lowered for marker in boundary_markers):
+                    continue
+                sig = lowered[:220]
+                if sig in seen_boundary:
+                    continue
+                boundary_points.append(line)
+                seen_boundary.add(sig)
+                if len(boundary_points) >= 4:
+                    break
+            if len(boundary_points) >= 4:
+                break
+        if boundary_points:
+            return "\n".join(boundary_points)
+
+    scored_blocks: List[Tuple[float, Dict[str, Any]]] = []
+    for row in candidate_contexts:
         if not isinstance(row, dict):
             continue
         text = str(row.get("text") or "").strip()
         if not text:
             continue
+        section_path = str(row.get("section_path") or row.get("section_title") or "General")
+        block_tokens = _grounding_tokens(text)
+        overlap = (
+            len(query_tokens.intersection(block_tokens)) / float(len(query_tokens))
+            if query_tokens
+            else 0.0
+        )
+        base_score = float(row.get("score", row.get("vector_score", 0.0)) or 0.0)
+        scored_blocks.append((overlap + (0.25 * base_score), {**row, "_section_path": section_path}))
 
-        for raw in re.split(r"(?<=[.!?])\s+|\n+", text):
-            line = raw.strip().lstrip("-*").strip()
-            if len(line) < 18:
-                continue
-            key = line.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-
-            line_tokens = _grounding_tokens(line)
-            overlap = (
-                len(query_tokens.intersection(line_tokens)) / float(len(query_tokens))
-                if query_tokens
-                else 0.0
-            )
-            label_bonus = 0.25 if key.startswith(("recommendation:", "assumptions:", "why:")) else 0.0
-            ranked.append((overlap + label_bonus, line))
-
-    if not ranked:
+    if not scored_blocks:
         return ""
 
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    points = [line for _score, line in ranked[:ONLINE_EVAL_POLICY_FALLBACK_POINTS]]
+    scored_blocks.sort(key=lambda item: item[0], reverse=True)
+    primary_section = str(scored_blocks[0][1].get("_section_path") or "General")
+    primary_root = primary_section.split(">", 1)[0].strip().lower()
+    selected_blocks: List[Dict[str, Any]] = []
+    for _score, row in scored_blocks:
+        section_path = str(row.get("_section_path") or "General")
+        section_root = section_path.split(">", 1)[0].strip().lower()
+        if not profile.allow_multi_section and section_root != primary_root:
+            continue
+        selected_blocks.append(row)
+        if len(selected_blocks) >= 2:
+            break
+    if not selected_blocks:
+        selected_blocks = [scored_blocks[0][1]]
+
+    scored_lines: List[Tuple[float, str]] = []
+    seen_lines: Set[str] = set()
+    for row in selected_blocks:
+        text = str(row.get("text") or "")
+        for line in _candidate_lines(text):
+            lowered = line.lower()
+            if profile.intent in {"boundaries", "style_template"} and lowered.startswith(
+                ("recommendation:", "assumptions:", "why:")
+            ):
+                continue
+            sig = lowered[:220]
+            if sig in seen_lines:
+                continue
+            seen_lines.add(sig)
+            scored_lines.append((_line_score(line, disable_label_bonus=profile.disable_label_bonus), line))
+
+    if not scored_lines:
+        return ""
+
+    scored_lines.sort(key=lambda item: item[0], reverse=True)
+    points = [line for _score, line in scored_lines[:ONLINE_EVAL_POLICY_FALLBACK_POINTS]]
     if not points:
         return ""
-
-    if any(p.lower().startswith(("recommendation:", "assumptions:", "why:")) for p in points):
-        return "\n".join(points)
-    return " ".join(points)
+    return "\n".join(points)
 
 
 async def _apply_online_eval_policy(
@@ -698,12 +836,19 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
                             text = str(row.get("text") or "").strip()
                             if not text:
                                 continue
-                            contexts.append(
-                                {
-                                    "source_id": str(row.get("source_id") or "").strip(),
-                                    "text": text,
-                                }
-                            )
+                            normalized_row: Dict[str, Any] = {
+                                "source_id": str(row.get("source_id") or "").strip(),
+                                "text": text,
+                            }
+                            for key in ("section_title", "section_path", "chunk_type"):
+                                value = row.get(key)
+                                if isinstance(value, str) and value.strip():
+                                    normalized_row[key] = value.strip()
+                            for key in ("score", "vector_score"):
+                                value = row.get(key)
+                                if isinstance(value, (int, float)):
+                                    normalized_row[key] = float(value)
+                            contexts.append(normalized_row)
                         if contexts:
                             tools_payload["contexts"] = contexts[:GROUNDING_MAX_CONTEXT_SNIPPETS]
                 if not tools_payload:
