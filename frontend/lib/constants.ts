@@ -5,10 +5,13 @@
  * Do NOT define API_BASE_URL in individual files.
  */
 
-// Default values for Vercel deployments (when env vars not set in dashboard)
-const DEFAULT_SUPABASE_URL = 'https://jvtffdbuwyhmcynauety.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2dGZmZGJ1d3lobWN5bmF1ZXR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMTY1MzksImV4cCI6MjA4MTU5MjUzOX0.tRpBHBhL2GM9s6sSncrVrNnmtwxrzED01SzwjKRb37E';
-const DEFAULT_BACKEND_URL = 'https://verified-digital-twin-brains.onrender.com';
+// Defaults resolve at runtime: localhost for dev, env vars for production.
+const DEFAULT_SUPABASE_URL = '';
+const DEFAULT_SUPABASE_ANON_KEY = '';
+const DEFAULT_BACKEND_URL = typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : '';
 
 function getEnvVar(name: string, defaultValue?: string): string {
   const value = process.env[name] || defaultValue;

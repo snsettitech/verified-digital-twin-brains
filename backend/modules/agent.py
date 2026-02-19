@@ -884,6 +884,39 @@ async def planner_node(state: TwinState):
                 lines.append(f"[{idx}] source_id={source_id}; section={section}; text={text}")
         return "\n".join(lines) if lines else "No evidence retrieved."
 
+    # When no documents are retrieved, allow the system prompt / persona to handle
+    # identity, greeting, and conversational queries instead of forcing "I don't know".
+    if not context_data:
+        intent_label = state.get("intent_label") or ""
+        system_prompt = (state.get("full_settings") or {}).get("system_prompt", "")
+        if system_prompt:
+            # Let the LLM answer from the system prompt — skip evidence-gating
+            return {
+                "planning_output": {
+                    "answer_points": [],
+                    "citations": [],
+                    "follow_up_question": "",
+                    "confidence": 0.8,
+                    "teaching_questions": [],
+                    "render_strategy": "persona_fallback",
+                    "reasoning_trace": "No documents retrieved; deferring to system prompt persona.",
+                    "answerability": {"answerable": True, "confidence": 0.8, "reasoning": "Persona-based response."},
+                },
+                "routing_decision": {
+                    **(dict(state.get("routing_decision")) if isinstance(state.get("routing_decision"), dict) else {}),
+                    "action": "answer",
+                    "confidence": 0.8,
+                },
+                "workflow_intent": "answer",
+                "intent_label": intent_label,
+                "persona_module_ids": persona_trace.get("module_ids", []),
+                "persona_spec_version": persona_trace.get("persona_spec_version"),
+                "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
+                "reasoning_history": (state.get("reasoning_history") or []) + [
+                    "Planner: no documents retrieved, deferring to persona system prompt."
+                ],
+            }
+
     try:
         answerability = await evaluate_answerability(user_query, context_data)
     except Exception as exc:
@@ -1068,6 +1101,44 @@ async def realizer_node(state: TwinState):
     plan = state.get("planning_output", {})
     mode = state.get("dialogue_mode", "QA_FACT")
     render_strategy = str(plan.get("render_strategy", "")).strip().lower() if isinstance(plan, dict) else ""
+
+    # Persona fallback: no documents retrieved, let LLM answer from system prompt
+    if render_strategy == "persona_fallback":
+        system_msg, _ = build_system_prompt_with_trace(state)
+        user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
+        try:
+            persona_response, route_meta = await invoke_text(
+                [
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": user_query},
+                ],
+                task="persona_fallback",
+                temperature=0.7,
+                max_tokens=500,
+            )
+        except Exception as e:
+            print(f"Persona fallback error: {e}")
+            persona_response = "I'm here to help. Could you tell me a bit more about what you're working on?"
+
+        res = AIMessage(content=persona_response)
+        res.additional_kwargs["planning_output"] = plan
+        res.additional_kwargs["dialogue_mode"] = mode
+        res.additional_kwargs["intent_label"] = state.get("intent_label")
+        res.additional_kwargs["render_strategy"] = "persona_fallback"
+        res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        if isinstance(state.get("routing_decision"), dict):
+            res.additional_kwargs["routing_decision"] = state.get("routing_decision")
+        if route_meta:
+            res.additional_kwargs["inference_provider"] = route_meta.get("provider")
+            res.additional_kwargs["inference_model"] = route_meta.get("model")
+
+        return {
+            "messages": [res],
+            "citations": [],
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Realizer: persona fallback — LLM response from system prompt (no documents)."
+            ],
+        }
 
     if render_strategy == "source_faithful":
         points = []

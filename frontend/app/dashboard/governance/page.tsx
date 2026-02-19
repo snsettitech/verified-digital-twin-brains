@@ -99,8 +99,6 @@ export default function GovernancePage() {
         if (!twinId || verifyInProgress) return;
 
         setVerifyInProgress(true);
-        console.log('[GOVERNANCE] Verify request initiated:', { twinId, action: 'request_verification' });
-
         try {
             // TWIN-SCOPED: Verification is per-twin
             // Endpoint: POST /twins/{twinId}/governance/verify
@@ -155,8 +153,6 @@ export default function GovernancePage() {
         }
 
         const source = sources.find(s => s.id === selectedSourceId);
-        console.log('[GOVERNANCE] Deep scrub initiated:', { twinId, sourceId: selectedSourceId, filename: source?.filename });
-
         setDeepScrubInProgress(true);
         try {
             // TWIN-SCOPED: Sources belong to a specific twin

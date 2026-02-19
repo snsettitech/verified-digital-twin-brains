@@ -92,7 +92,7 @@ export default function OnboardingPage() {
           }
         }
       } catch (error) {
-        console.log('[Onboarding] Error checking twins:', error);
+        console.error('[Onboarding] Error checking twins:', error);
       }
     };
     checkExistingTwins();

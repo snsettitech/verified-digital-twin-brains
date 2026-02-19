@@ -199,11 +199,19 @@ body {
   position: relative;
 }
 
-/* Input Fields */
+/* Input Fields — force dark text on light background regardless of OS dark mode */
+input,
+textarea,
+select {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
 .input-field {
   width: 100%;
   padding: 0.75rem 1rem;
   background: white;
+  color: #0f172a;
   border: 2px solid #e5e7eb;
   border-radius: 0.75rem;
   font-size: 0.875rem;

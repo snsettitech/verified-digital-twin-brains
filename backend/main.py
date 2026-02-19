@@ -436,16 +436,16 @@ def is_port_in_use(port: int) -> bool:
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     port = int(os.getenv("PORT", 8000))
-    host = os.getenv("HOST", "0.0.0.0")
-    
+    host = os.getenv("HOST", "0.0.0")
+
     # Get active specialization
     spec = get_specialization()
-    
+
     if is_port_in_use(port):
         print(f"ERROR: Port {port} is already in use.")
-        print(f"Please kill the process using this port or set a different port via the PORT environment variable.")
+        print("Please kill the process using this port or set a different port via the PORT environment variable.")
     else:
         # Startup banner with specialization info
         print("-" * 60)
@@ -455,5 +455,5 @@ if __name__ == "__main__":
         print(f"Port:           {port}")
         print(f"API Docs:       http://localhost:{port}/docs")
         print("-" * 60)
-        
+
         uvicorn.run(app, host=host, port=port)

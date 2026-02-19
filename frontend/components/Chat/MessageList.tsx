@@ -230,50 +230,19 @@ const MessageList = React.memo(({
   messages,
   loading,
   isSearching,
-  enableRemember = false,
   enableFeedback = true,
   twinId,
-  onRemember,
-  onTeachQuestion,
   onSubmitFeedback,
-  onSubmitCorrection
 }: MessageListProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [rememberingId, setRememberingId] = useState<number | null>(null);
-  const [rememberDraft, setRememberDraft] = useState({
-    topic: '',
-    memory_type: 'belief',
-    stance: '',
-    intensity: 5
-  });
-  const [rememberSaving, setRememberSaving] = useState(false);
-  const [rememberError, setRememberError] = useState<string | null>(null);
-  const [correctingId, setCorrectingId] = useState<number | null>(null);
-  const [correctionAnswer, setCorrectionAnswer] = useState('');
-  const [correctionTopic, setCorrectionTopic] = useState('');
-  const [correctionSaving, setCorrectionSaving] = useState(false);
-  const [correctionError, setCorrectionError] = useState<string | null>(null);
-  const [correctionStatus, setCorrectionStatus] = useState<Record<number, 'pending' | 'applied' | 'error'>>({});
 
   // Citations drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeCitations, setActiveCitations] = useState<Citation[]>([]);
 
-  const MEMORY_TYPES = ['belief', 'preference', 'stance', 'lens', 'tone_rule'];
-  const STANCE_OPTIONS = ['', 'positive', 'negative', 'neutral', 'mixed', 'unknown'];
-
   const openCitationsDrawer = (citations: Citation[]) => {
     setActiveCitations(citations);
     setDrawerOpen(true);
-  };
-
-  const findPreviousUserQuestion = (assistantIndex: number): string | null => {
-    for (let i = assistantIndex - 1; i >= 0; i -= 1) {
-      if (messages[i]?.role === 'user' && messages[i]?.content?.trim()) {
-        return messages[i].content.trim();
-      }
-    }
-    return null;
   };
 
   const scrollToBottom = () => {
@@ -328,29 +297,6 @@ const MessageList = React.memo(({
                 )}
               </div>
 
-              {/* Teaching Cards (Phase 4) */}
-              {msg.role === 'assistant' && onTeachQuestion && msg.teaching_questions && msg.teaching_questions.length > 0 && (
-                <div className="mt-3 space-y-2 max-w-sm animate-in slide-in-from-left-2 duration-300">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></div>
-                    <span className="text-[10px] uppercase font-black tracking-widest text-slate-400">Knowledge Gap Detected</span>
-                  </div>
-                  {msg.teaching_questions.map((q, qIdx) => (
-                    <div key={qIdx} className="bg-white border-2 border-yellow-100 p-4 rounded-2xl shadow-sm hover:border-yellow-200 transition-colors group/card">
-                      <p className="text-xs font-semibold text-slate-700 mb-3 leading-relaxed">{q}</p>
-                      <button
-                        onClick={() => {
-                          onTeachQuestion?.(q);
-                        }}
-                        className="w-full py-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-colors border border-yellow-100"
-                      >
-                        Help me learn this
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
               {/* Timestamp and metadata row */}
               <div className="flex items-center gap-2 px-1">
                 {msg.timestamp && (
@@ -366,250 +312,8 @@ const MessageList = React.memo(({
                 {msg.role === 'assistant' && enableFeedback && (
                   <MessageReactions messageId={idx} onSubmitFeedback={onSubmitFeedback} />
                 )}
-                {msg.role === 'assistant' && enableRemember && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setRememberingId(idx);
-                        setRememberDraft({
-                          topic: '',
-                          memory_type: 'belief',
-                          stance: '',
-                          intensity: 5
-                        });
-                        setRememberError(null);
-                      }}
-                      className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800"
-                      title="Remember this response"
-                    >
-                      Remember
-                    </button>
-                    {onSubmitCorrection && (
-                      <button
-                        onClick={() => {
-                          setCorrectingId(idx);
-                          setCorrectionAnswer(msg.content || '');
-                          setCorrectionTopic('');
-                          setCorrectionError(null);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-amber-600 hover:text-amber-800"
-                        title="Correct this response"
-                      >
-                        Correct
-                      </button>
-                    )}
-                    {correctionStatus[idx] === 'pending' ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
-                        Pending
-                      </span>
-                    ) : null}
-                    {correctionStatus[idx] === 'applied' ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
-                        Applied
-                      </span>
-                    ) : null}
-                    {correctionStatus[idx] === 'error' ? (
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
-                        Error
-                      </span>
-                    ) : null}
-                  </>
-                )}
               </div>
 
-              {msg.role === 'assistant' && rememberingId === idx && (
-                <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-2">
-                  <div className="text-[10px] uppercase tracking-wider text-indigo-600 font-bold">Save to Memory</div>
-                  <input
-                    type="text"
-                    value={rememberDraft.topic}
-                    onChange={(e) => setRememberDraft((prev) => ({ ...prev, topic: e.target.value }))}
-                    placeholder="Topic (e.g., pricing, hiring, AI safety)"
-                    className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
-                  />
-                  <select
-                    value={rememberDraft.memory_type}
-                    onChange={(e) => setRememberDraft((prev) => ({ ...prev, memory_type: e.target.value }))}
-                    className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800"
-                  >
-                    {MEMORY_TYPES.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={rememberDraft.stance}
-                      onChange={(e) => setRememberDraft((prev) => ({ ...prev, stance: e.target.value }))}
-                      className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800"
-                    >
-                      {STANCE_OPTIONS.map((s) => (
-                        <option key={s || 'none'} value={s}>{s || 'stance (optional)'}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      min={0}
-                      max={10}
-                      value={rememberDraft.intensity}
-                      onChange={(e) => setRememberDraft((prev) => ({ ...prev, intensity: Number(e.target.value) }))}
-                      className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800"
-                      placeholder="Intensity (0-10)"
-                    />
-                  </div>
-                  {rememberError && (
-                    <div className="text-[10px] text-rose-600">{rememberError}</div>
-                  )}
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setRememberingId(null)}
-                      className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-white rounded-lg border border-slate-200"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!rememberDraft.topic.trim()) {
-                          setRememberError('Topic is required.');
-                          return;
-                        }
-                        setRememberSaving(true);
-                        try {
-                          await onRemember?.({
-                            value: msg.content,
-                            topic: rememberDraft.topic.trim(),
-                            memory_type: rememberDraft.memory_type,
-                            stance: rememberDraft.stance || undefined,
-                            intensity: rememberDraft.intensity
-                          });
-                          setRememberingId(null);
-                        } catch (err) {
-                          console.error(err);
-                          setRememberError('Failed to save memory.');
-                        } finally {
-                          setRememberSaving(false);
-                        }
-                      }}
-                      disabled={rememberSaving}
-                      className="px-3 py-1.5 text-[10px] font-bold text-white bg-indigo-600 rounded-lg disabled:opacity-50"
-                    >
-                      {rememberSaving ? 'Saving...' : 'Save'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {msg.role === 'assistant' && correctingId === idx && onSubmitCorrection && (
-                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 space-y-2">
-                  <div className="text-[10px] uppercase tracking-wider text-amber-700 font-bold">Teach Correction</div>
-                  <textarea
-                    value={correctionAnswer}
-                    onChange={(e) => setCorrectionAnswer(e.target.value)}
-                    rows={4}
-                    className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
-                    placeholder="Enter the corrected answer."
-                  />
-                  <input
-                    type="text"
-                    value={correctionTopic}
-                    onChange={(e) => setCorrectionTopic(e.target.value)}
-                    className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
-                    placeholder="Topic (optional)"
-                  />
-                  {correctionError ? (
-                    <div className="text-[10px] text-rose-600">{correctionError}</div>
-                  ) : null}
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setCorrectingId(null)}
-                      className="px-3 py-1.5 text-[10px] font-bold text-slate-600 bg-white rounded-lg border border-slate-200"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const corrected = correctionAnswer.trim();
-                        const question = findPreviousUserQuestion(idx);
-                        if (!corrected) {
-                          setCorrectionError('Corrected answer is required.');
-                          return;
-                        }
-                        if (!question) {
-                          setCorrectionError('Unable to find the related user question for this message.');
-                          return;
-                        }
-                        setCorrectionSaving(true);
-                        setCorrectionStatus((prev) => ({ ...prev, [idx]: 'pending' }));
-                        try {
-                          await onSubmitCorrection({
-                            messageIndex: idx,
-                            question,
-                            correctedAnswer: corrected,
-                            topicNormalized: correctionTopic.trim() || undefined,
-                            memoryType: 'belief',
-                          });
-                          setCorrectionStatus((prev) => ({ ...prev, [idx]: 'applied' }));
-                          setCorrectingId(null);
-                        } catch (err) {
-                          console.error(err);
-                          setCorrectionStatus((prev) => ({ ...prev, [idx]: 'error' }));
-                          setCorrectionError('Failed to apply correction.');
-                        } finally {
-                          setCorrectionSaving(false);
-                        }
-                      }}
-                      disabled={correctionSaving}
-                      className="px-3 py-1.5 text-[10px] font-bold text-white bg-amber-600 rounded-lg disabled:opacity-50"
-                    >
-                      {correctionSaving ? 'Applying...' : 'Apply'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {msg.role === 'assistant' && (msg.citations || msg.confidence_score !== undefined || msg.graph_used || msg.used_owner_memory) && (
-                <div className="flex flex-wrap gap-2 px-1">
-                  {msg.used_owner_memory && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-100">
-                      Used Owner Memory
-                    </div>
-                  )}
-                  {msg.used_owner_memory && msg.owner_memory_topics && msg.owner_memory_topics.length > 0 && (
-                    <div className="px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-100">
-                      Topics: {msg.owner_memory_topics.join(', ')}
-                    </div>
-                  )}
-                  {msg.graph_used && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-indigo-50 text-indigo-700 border-indigo-100">
-                      From your interview
-                    </div>
-                  )}
-                  {msg.confidence_score !== undefined && (
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider ${msg.confidence_score > 0.8 ? 'bg-green-50 text-green-700 border-green-100' : 'bg-yellow-50 text-yellow-700 border-yellow-100'
-                      }`}>
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                      Verified: {(msg.confidence_score * 100).toFixed(0)}%
-                    </div>
-                  )}
-                  {msg.citations?.map((source, sIdx) => (
-                    <div key={sIdx} className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full text-[10px] font-black border border-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                      <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-                      {msg.citation_details?.[sIdx]?.citation_url ? (
-                        <a
-                          href={msg.citation_details[sIdx].citation_url as string}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="hover:underline"
-                          title={msg.citation_details[sIdx].citation_url as string}
-                        >
-                          {(msg.citation_details[sIdx].filename || msg.citation_details[sIdx].citation_url || source).toString()}
-                        </a>
-                      ) : (
-                        <span title={source}>{(msg.citation_details?.[sIdx]?.filename || source).toString()}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>

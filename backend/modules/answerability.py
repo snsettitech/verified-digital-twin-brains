@@ -127,15 +127,19 @@ def _heuristic_answerability(query: str, evidence_chunks: Sequence[Dict[str, Any
         }
 
     query_tokens = _tokens(query)
+
+    # If we have retrieved chunks, bias toward answering — the retrieval pipeline
+    # already filtered for relevance.  Very short / vague queries should still
+    # attempt an answer when evidence was found.
     if not query_tokens:
         answerability = "insufficient"
         return {
-            "answerability": answerability,
-            "answerable": False,
-            "confidence": 0.2,
-            "reasoning": "The question is too vague to evaluate against evidence.",
-            "missing_information": _default_missing_information(query, chunks),
-            "ambiguity_level": "high",
+            "answerability": "derivable",
+            "answerable": True,
+            "confidence": 0.45,
+            "reasoning": "Evidence chunks retrieved; attempting answer despite vague query.",
+            "missing_information": [],
+            "ambiguity_level": "medium",
         }
 
     best_overlap = 0.0
@@ -148,38 +152,26 @@ def _heuristic_answerability(query: str, evidence_chunks: Sequence[Dict[str, Any
         overlap = len(query_tokens.intersection(text_tokens)) / float(len(query_tokens))
         best_overlap = max(best_overlap, overlap)
 
-    collective_overlap = len(query_tokens.intersection(all_tokens)) / float(len(query_tokens))
-
-    if best_overlap >= 0.55:
+    if best_overlap >= 0.35:
         answerability = "direct"
         return {
             "answerability": answerability,
             "answerable": True,
-            "confidence": min(0.85, 0.45 + best_overlap),
-            "reasoning": "A single evidence chunk directly supports the answer.",
+            "confidence": min(0.85, 0.40 + best_overlap),
+            "reasoning": "Evidence has sufficient overlap with the question.",
             "missing_information": [],
-            "ambiguity_level": "low",
+            "ambiguity_level": "low" if best_overlap >= 0.55 else "medium",
         }
 
-    if collective_overlap >= 0.7 and best_overlap >= 0.25:
-        answerability = "derivable"
-        return {
-            "answerability": answerability,
-            "answerable": True,
-            "confidence": min(0.8, max(0.45, 0.35 + (collective_overlap * 0.5))),
-            "reasoning": "The answer is derivable by combining multiple evidence chunks.",
-            "missing_information": [],
-            "ambiguity_level": "medium",
-        }
-
-    answerability = "insufficient"
+    # Even with low lexical overlap, if chunks were retrieved the vector search
+    # already established semantic relevance.  Give the planner a chance.
     return {
-        "answerability": answerability,
-        "answerable": False,
-        "confidence": max(0.15, best_overlap),
-        "reasoning": "Evidence does not contain enough direct support for a complete answer.",
-        "missing_information": _default_missing_information(query, chunks),
-        "ambiguity_level": "medium" if best_overlap >= 0.3 else "high",
+        "answerability": "derivable",
+        "answerable": True,
+        "confidence": max(0.35, 0.25 + best_overlap),
+        "reasoning": "Evidence retrieved via semantic search; attempting answer.",
+        "missing_information": [],
+        "ambiguity_level": "medium",
     }
 
 
@@ -206,7 +198,7 @@ async def evaluate_answerability(query: str, evidence_chunks: Sequence[Dict[str,
         return _heuristic_answerability(query, chunks)
 
     prompt = f"""You are an evidence sufficiency evaluator for RAG.
-Determine whether the USER QUESTION can be answered fully and accurately using only the EVIDENCE CHUNKS.
+Determine whether the USER QUESTION can be at least partially answered using the EVIDENCE CHUNKS.
 
 USER QUESTION:
 {query}
@@ -224,12 +216,11 @@ Return STRICT JSON:
 }}
 
 Rules:
-- Use only evidence from the chunks.
-- direct: one chunk explicitly answers the question.
-- derivable: multiple chunks must be combined to answer.
-- insufficient: evidence truly lacks required information.
-- If answerability is direct or derivable, missing_information must be [].
-- If answerability is insufficient, missing_information must list concrete missing facts/constraints (no generic requests).
+- Set answerable=true if ANY of the evidence chunks contain information relevant to the question, even partially.
+- A partial answer is better than no answer. Only set answerable=false if the evidence is completely unrelated.
+- For vague or follow-up questions (e.g. "for this module", "how many"), set answerable=true if evidence provides context.
+- If answerable is true, missing_information must be [].
+- If answerable is false, missing_information must list concrete missing facts (no generic requests).
 - Keep missing_information <= 5 items.
 """
 

@@ -8,12 +8,10 @@ import yt_dlp
 import time
 import httpx
 import html
-import html as html_lib
-import asyncio
 from typing import List, Dict, Optional, Any, Tuple
 from bs4 import BeautifulSoup
 from modules.transcription import transcribe_audio_multi
-from modules.embeddings import get_embedding
+from modules.embeddings import get_embedding, get_embeddings_async
 from PyPDF2 import PdfReader
 import docx
 import openpyxl
@@ -998,7 +996,7 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str, correlation_id
                             raw_text = content_match.group(1)
                             # Clean HTML tags and entities
                             text = re.sub(r'<[^>]+>', ' ', raw_text)
-                            text = html_lib.unescape(text)
+                            text = html.unescape(text)
                             text = re.sub(r'\s+', ' ', text).strip()
                             
                             # Extract username
@@ -1682,7 +1680,7 @@ async def transcribe_audio(file_path: str) -> str:
     return transcript.text
 
 
-def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1500, overlap: int = 300) -> List[str]:
     chunks = []
     for i in range(0, len(text), chunk_size - overlap):
         chunks.append(text[i:i + chunk_size])
@@ -1691,8 +1689,8 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
 def chunk_text_with_metadata(
     text: str,
-    chunk_size: int = 1000,
-    overlap: int = 200,
+    chunk_size: int = 1500,
+    overlap: int = 300,
 ) -> List[Dict[str, Any]]:
     """
     Chunk text while preserving best-effort section metadata.
@@ -1851,38 +1849,36 @@ async def process_and_index_text(
     db_chunks = []
     
     try:
+        # 1. Collect chunk texts and generate IDs
+        texts = []
+        entries_with_ids = []
         for entry in chunk_entries:
-            chunk = str(entry.get("text") or "")
+            chunk = str(entry.get("text") or "").strip()
             if not chunk:
                 continue
-            vector_id = str(uuid.uuid4())
-            chunk_id = str(uuid.uuid4())  # Supabase primary key
+            texts.append(chunk)
+            entries_with_ids.append((entry, str(uuid.uuid4()), str(uuid.uuid4())))
 
-            # Analyze chunk for enrichment
-            analysis = await analyze_chunk_content(chunk)
-            synth_questions = analysis.get("questions", [])
+        # 2. Batch embed — single API call per batch of 100
+        EMBED_BATCH_SIZE = 100
+        all_embeddings = []
+        for i in range(0, len(texts), EMBED_BATCH_SIZE):
+            batch = texts[i:i + EMBED_BATCH_SIZE]
+            batch_embeddings = await get_embeddings_async(batch)
+            all_embeddings.extend(batch_embeddings)
 
-            # Enriched embedding: include synthetic questions to improve retrieval
-            enriched_text = f"CONTENT: {chunk}\nQUESTIONS: {', '.join(synth_questions)}"
-            embedding = get_embedding(enriched_text)
+        # 3. Build vectors and DB chunk records
+        for idx, (entry, vector_id, chunk_id) in enumerate(entries_with_ids):
+            chunk = texts[idx]
+            embedding = all_embeddings[idx]
 
             metadata = {
                 "source_id": source_id,
                 "twin_id": twin_id,
-                "chunk_id": chunk_id,  # Link back to DB chunk row
-                "text": chunk,  # Keep original text for grounding
-                "synthetic_questions": synth_questions,
-                "category": analysis.get("category", "FACT"),
-                "tone": analysis.get("tone", "Neutral"),
-                "is_verified": False  # Explicitly mark regular sources as not verified
+                "chunk_id": chunk_id,
+                "text": chunk,
+                "is_verified": False,
             }
-
-            # Add opinion mapping if present
-            opinion_map = analysis.get("opinion_map")
-            if opinion_map and isinstance(opinion_map, dict):
-                metadata["opinion_topic"] = opinion_map.get("topic")
-                metadata["opinion_stance"] = opinion_map.get("stance")
-                metadata["opinion_intensity"] = opinion_map.get("intensity")
 
             for section_key in ("section_title", "section_path", "chunk_type"):
                 section_value = entry.get(section_key)
@@ -1895,15 +1891,15 @@ async def process_and_index_text(
             vectors.append({
                 "id": vector_id,
                 "values": embedding,
-                "metadata": metadata
+                "metadata": metadata,
             })
-            
+
             db_chunks.append({
                 "id": chunk_id,
                 "source_id": source_id,
                 "content": chunk,
                 "vector_id": vector_id,
-                "metadata": metadata
+                "metadata": metadata,
             })
 
         finish_step(

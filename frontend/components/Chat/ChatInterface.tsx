@@ -6,7 +6,6 @@ import MessageList, { Message } from './MessageList';
 import SuggestedQuestions from './SuggestedQuestions';
 import { useTwin } from '@/lib/context/TwinContext';
 import { resolveApiBaseUrl } from '@/lib/api';
-import { API_ENDPOINTS } from '@/lib/constants';
 
 const STREAM_IDLE_TIMEOUT_MS = 60000;
 
@@ -31,7 +30,7 @@ export default function ChatInterface({
   publicShareToken?: string | null;
   onMemoryUpdated?: () => void;
 }) {
-  const { user } = useTwin();
+  const { user, activeTwin } = useTwin();
   const isE2EBypass =
     process.env.NODE_ENV !== 'production' &&
     process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
@@ -51,7 +50,6 @@ export default function ChatInterface({
   const [clarifyAnswer, setClarifyAnswer] = useState('');
   const [clarifyOption, setClarifyOption] = useState<string | null>(null);
   const [effectiveConversationId, setEffectiveConversationId] = useState<string | null>(conversationId || null);
-  const [debugOpen, setDebugOpen] = useState(false);
   const [lastDebug, setLastDebug] = useState<{
     decision?: string;
     used_owner_memory?: boolean;
@@ -114,42 +112,6 @@ export default function ChatInterface({
     }
   }, []);
 
-  const rememberMemory = useCallback(async (payload: {
-    value: string;
-    topic: string;
-    memory_type: string;
-    stance?: string;
-    intensity?: number;
-  }) => {
-    const token = await getAuthToken();
-    if (!token && !isE2EBypass) throw new Error('Not authenticated');
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    const res = await fetch(`${apiBaseUrl}/twins/${twinId}/owner-memory`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        topic_normalized: payload.topic,
-        memory_type: payload.memory_type,
-        value: payload.value,
-        stance: payload.stance,
-        intensity: payload.intensity
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to save memory (${res.status})`);
-    }
-
-    onMemoryUpdated?.();
-    setMessages((prev) => [...prev, { role: 'assistant', content: 'Saved to memory.', timestamp: Date.now() }]);
-  }, [apiBaseUrl, getAuthToken, onMemoryUpdated, twinId, isE2EBypass]);
-
   const submitFeedback = useCallback(async (payload: {
     messageIndex: number;
     score: 1 | -1;
@@ -190,42 +152,6 @@ export default function ChatInterface({
       throw new Error(`Failed to submit feedback (${res.status})`);
     }
   }, [apiBaseUrl, effectiveConversationId, getAuthToken, isE2EBypass, mode, twinId]);
-
-  const submitCorrection = useCallback(async (payload: {
-    messageIndex: number;
-    question: string;
-    correctedAnswer: string;
-    topicNormalized?: string;
-    memoryType?: string;
-  }) => {
-    const token = await getAuthToken();
-    if (!token && !isE2EBypass) throw new Error('Not authenticated');
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const res = await fetch(`${apiBaseUrl}${API_ENDPOINTS.OWNER_CORRECTIONS(twinId)}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        question: payload.question,
-        corrected_answer: payload.correctedAnswer,
-        topic_normalized: payload.topicNormalized,
-        memory_type: payload.memoryType || 'belief',
-        create_verified_qna_entry: true,
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`Failed to apply correction (${res.status})`);
-    }
-
-    onMemoryUpdated?.();
-  }, [apiBaseUrl, getAuthToken, isE2EBypass, onMemoryUpdated, twinId]);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -684,33 +610,28 @@ export default function ChatInterface({
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] w-full bg-gradient-to-b from-white to-slate-50 rounded-3xl shadow-2xl shadow-slate-200/50 border border-slate-100/50 overflow-hidden backdrop-blur-sm">
       {/* Header */}
-      <div className="px-8 py-6 bg-white border-b flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="px-6 py-4 bg-white border-b flex items-center justify-between">
+        <div className="flex items-center gap-3">
           <div className="relative">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-sm font-bold">
+              {(activeTwin?.name || 'AI').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
             </div>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-4 border-white rounded-full"></div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
           </div>
           <div>
-            <div className="font-black text-slate-800 tracking-tight">Verified Digital Twin</div>
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-widest flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-              Live Knowledge Base
+            <div className="font-bold text-slate-800">{activeTwin?.name || 'Digital Twin'}</div>
+            <div className="text-xs text-slate-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+              Online
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={clearHistory}
-            className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all border border-slate-100"
-          >
-            Clear history
-          </button>
-          <button className="p-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-50 rounded-xl transition-all">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
-          </button>
-        </div>
+        <button
+          onClick={clearHistory}
+          className="px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-all border border-slate-200"
+        >
+          Clear
+        </button>
       </div>
 
       {/* Messages */}
@@ -718,15 +639,9 @@ export default function ChatInterface({
         messages={messages}
         loading={loading}
         isSearching={isSearching}
-        enableRemember={mode !== 'public'}
         enableFeedback={mode !== 'public'}
         twinId={twinId}
-        onRemember={rememberMemory}
-        onTeachQuestion={mode !== 'public' ? ((question) => {
-          void sendMessage(question);
-        }) : undefined}
         onSubmitFeedback={submitFeedback}
-        onSubmitCorrection={mode !== 'public' ? submitCorrection : undefined}
       />
 
       {/* Input */}
@@ -807,68 +722,6 @@ export default function ChatInterface({
             </button>
           </div>
         )}
-        {mode !== 'public' && (
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-            <div className="flex items-center justify-between">
-              <div className="font-bold uppercase tracking-wider text-[10px] text-slate-500">Debug</div>
-              <button
-                onClick={() => setDebugOpen((prev) => !prev)}
-                className="text-[10px] font-bold uppercase tracking-wider text-indigo-600"
-              >
-                {debugOpen ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            {debugOpen && (
-              <div className="mt-3 space-y-2">
-                <div className="flex flex-wrap gap-3 text-[10px] text-slate-600">
-                  <span>IdentityGate: <strong>{lastDebug.decision || 'UNKNOWN'}</strong></span>
-                  <span>Used Owner Memory: <strong>{lastDebug.used_owner_memory ? 'Yes' : 'No'}</strong></span>
-                  <span>Requires Evidence: <strong>{typeof lastDebug.requires_evidence === 'boolean' ? (lastDebug.requires_evidence ? 'Yes' : 'No') : 'Unknown'}</strong></span>
-                  <span>Owner Scope: <strong>{typeof lastDebug.target_owner_scope === 'boolean' ? (lastDebug.target_owner_scope ? 'Yes' : 'No') : 'Unknown'}</strong></span>
-                  <span>Knowledge Available: <strong>{typeof lastDebug.router_knowledge_available === 'boolean' ? (lastDebug.router_knowledge_available ? 'Yes' : 'No') : 'Unknown'}</strong></span>
-                  {lastDebug.clarification_id && (
-                    <span>Clarification ID: <strong>{lastDebug.clarification_id}</strong></span>
-                  )}
-                </div>
-                {lastDebug.router_reason && (
-                  <div className="text-[10px] text-slate-600">
-                    Router Reason: <strong>{lastDebug.router_reason}</strong>
-                  </div>
-                )}
-                <div className="text-[10px] text-slate-600">
-                  Owner Memory Topics:{' '}
-                  <strong>
-                    {lastDebug.owner_memory_topics && lastDebug.owner_memory_topics.length > 0
-                      ? lastDebug.owner_memory_topics.join(', ')
-                      : 'None'}
-                  </strong>
-                </div>
-                <div className="text-[10px] text-slate-600">
-                  Owner Memory Refs:{' '}
-                  <strong>
-                    {lastDebug.owner_memory_refs && lastDebug.owner_memory_refs.length > 0
-                      ? lastDebug.owner_memory_refs.join(', ')
-                      : 'None'}
-                  </strong>
-                </div>
-                {lastDebug.planning_output && (
-                  <div className="mt-2 p-2 bg-slate-100 rounded border border-slate-200 text-[9px] font-mono text-slate-500 max-h-32 overflow-y-auto">
-                    <div className="font-bold mb-1 uppercase">Reasoning Trace:</div>
-                    {lastDebug.planning_output.reasoning_trace || 'No trace available'}
-                    {lastDebug.planning_output.answer_points && (
-                      <div className="mt-1">
-                        <div className="font-bold">Plan:</div>
-                        {Array.isArray(lastDebug.planning_output.answer_points)
-                          ? lastDebug.planning_output.answer_points.join(', ')
-                          : lastDebug.planning_output.answer_points}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
         {/* Suggested Questions */}
         {messages.length <= 1 && !loading && mode !== 'public' && (
           <div className="max-w-4xl mx-auto w-full px-6 mb-4">
@@ -924,10 +777,6 @@ export default function ChatInterface({
             <span>Send</span>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
           </button>
-        </div>
-        <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span>Powered by verified knowledge - End-to-end encrypted</span>
         </div>
       </div>
     </div>
