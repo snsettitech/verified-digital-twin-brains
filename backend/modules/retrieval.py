@@ -819,6 +819,7 @@ async def _execute_pinecone_queries(
     if not embeddings:
         return []
 
+    target_twin_id = str(twin_id or "").strip()
     resolved_creator = creator_id or resolve_creator_id_for_twin(twin_id)
     dual_read_enabled = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
     namespace_candidates = get_namespace_candidates_for_twin(
@@ -1018,19 +1019,22 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
     for match in verified_results.get("matches", []):
         if match["score"] > 0.3:
             contexts.append({
-                "text": match["metadata"]["text"],
+                "text": text,
                 "score": 1.0,  # Boost verified
                 "vector_score": 1.0,
-                "source_id": match["metadata"].get("source_id", "verified_memory"),
+                "source_id": metadata.get("source_id", "verified_memory"),
+                "doc_name": str(metadata.get("filename") or metadata.get("doc_name") or "").strip(),
+                "twin_id": str(metadata.get("twin_id") or "").strip(),
                 "is_verified": True,
-                "category": match["metadata"].get("category", "FACT"),
-                "tone": match["metadata"].get("tone", "Assertive"),
-                "opinion_topic": match["metadata"].get("opinion_topic"),
-                "opinion_stance": match["metadata"].get("opinion_stance"),
-                "opinion_intensity": match["metadata"].get("opinion_intensity"),
-                "section_title": match["metadata"].get("section_title"),
-                "section_path": match["metadata"].get("section_path"),
-                "chunk_type": match["metadata"].get("chunk_type"),
+                "category": metadata.get("category", "FACT"),
+                "tone": metadata.get("tone", "Assertive"),
+                "opinion_topic": metadata.get("opinion_topic"),
+                "opinion_stance": metadata.get("opinion_stance"),
+                "opinion_intensity": metadata.get("opinion_intensity"),
+                "section_title": section_meta["section_title"],
+                "section_path": section_meta["section_path"],
+                "page_number": section_meta["page_number"],
+                "chunk_type": metadata.get("chunk_type"),
             })
     return contexts
 
@@ -1058,21 +1062,24 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
         except Exception:
             rrf_score = 0.0
         raw_general_chunks.append({
-            "text": match["metadata"]["text"],
+            "text": text,
             "score": score,
             "vector_score": score,
             "rrf_score": rrf_score,
-            "source_id": match["metadata"].get("source_id", "unknown"),
-            "chunk_id": match["metadata"].get("chunk_id", "unknown"),
+            "source_id": metadata.get("source_id", "unknown"),
+            "doc_name": str(metadata.get("filename") or metadata.get("doc_name") or "").strip(),
+            "twin_id": str(metadata.get("twin_id") or "").strip(),
+            "chunk_id": metadata.get("chunk_id", "unknown"),
             "is_verified": False,
-            "category": match["metadata"].get("category", "FACT"),
-            "tone": match["metadata"].get("tone", "Neutral"),
-            "opinion_topic": match["metadata"].get("opinion_topic"),
-            "opinion_stance": match["metadata"].get("opinion_stance"),
-            "opinion_intensity": match["metadata"].get("opinion_intensity"),
-            "section_title": match["metadata"].get("section_title"),
-            "section_path": match["metadata"].get("section_path"),
-            "chunk_type": match["metadata"].get("chunk_type"),
+            "category": metadata.get("category", "FACT"),
+            "tone": metadata.get("tone", "Neutral"),
+            "opinion_topic": metadata.get("opinion_topic"),
+            "opinion_stance": metadata.get("opinion_stance"),
+            "opinion_intensity": metadata.get("opinion_intensity"),
+            "section_title": section_meta["section_title"],
+            "section_path": section_meta["section_path"],
+            "page_number": section_meta["page_number"],
+            "chunk_type": metadata.get("chunk_type"),
         })
     return raw_general_chunks
 

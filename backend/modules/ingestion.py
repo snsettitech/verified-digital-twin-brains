@@ -153,15 +153,127 @@ class PIIScrubber:
 
 
 def extract_text_from_pdf(file_path: str) -> str:
+    text, _chunk_entries = extract_pdf_text_and_chunk_entries(
+        file_path,
+        doc_name=os.path.basename(file_path) or "document",
+    )
+    return text
+
+
+def _extract_pdf_pages(file_path: str) -> List[Dict[str, Any]]:
+    """
+    Extract per-page text from a PDF while preserving page numbers.
+    """
     reader = PdfReader(file_path)
-    text_parts: List[str] = []
-    for page in reader.pages:
+    pages: List[Dict[str, Any]] = []
+    for page_number, page in enumerate(reader.pages, 1):
         # Some PDFs return None for image-only pages; keep extraction best-effort
         # instead of crashing the whole ingest on a single page.
-        page_text = page.extract_text() or ""
+        page_text = (page.extract_text() or "").strip()
         if page_text:
-            text_parts.append(page_text)
-    return "\n".join(text_parts)
+            pages.append(
+                {
+                    "page_number": page_number,
+                    "text": page_text,
+                }
+            )
+    return pages
+
+
+def _safe_doc_name(value: str) -> str:
+    name = re.sub(r"\s+", " ", str(value or "").strip())
+    if not name:
+        return "document"
+    return name.replace("\\", "/")
+
+
+def _build_pdf_chunk_entries(
+    pages: List[Dict[str, Any]],
+    *,
+    doc_name: str,
+    chunk_size: int = 1000,
+    overlap: int = 200,
+) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    safe_doc_name = _safe_doc_name(doc_name)
+
+    for page in pages:
+        page_number = page.get("page_number")
+        page_text = str(page.get("text") or "").strip()
+        if not page_text:
+            continue
+
+        page_tag = f"page_{page_number}"
+        fallback_section_title = page_tag
+        fallback_section_path = f"{safe_doc_name}/{page_tag}"
+
+        section_blocks = extract_section_blocks(
+            page_text,
+            base_metadata={"page_number": page_number},
+        )
+        if not section_blocks:
+            section_blocks = [
+                {
+                    "text": page_text,
+                    "section_title": fallback_section_title,
+                    "section_path": fallback_section_path,
+                    "chunk_type": "page",
+                    "page_number": page_number,
+                }
+            ]
+
+        for block in section_blocks:
+            block_text = str(block.get("text") or "").strip()
+            if not block_text:
+                continue
+
+            raw_title = str(block.get("section_title") or "").strip()
+            raw_path = str(block.get("section_path") or "").strip()
+
+            # For PDFs, avoid generic section labels and always keep page fallback.
+            section_title = (
+                fallback_section_title
+                if not raw_title or raw_title.lower() in {"general", "unknown"}
+                else raw_title
+            )
+            section_path = raw_path
+            if not section_path or section_path.lower() in {"general", "unknown"}:
+                section_path = fallback_section_path
+            elif not section_path.lower().startswith(f"{safe_doc_name.lower()}/"):
+                section_path = f"{safe_doc_name}/{section_path}"
+
+            for chunk in chunk_text(block_text, chunk_size=chunk_size, overlap=overlap):
+                if not chunk or not chunk.strip():
+                    continue
+                entries.append(
+                    {
+                        "text": chunk,
+                        "section_title": section_title,
+                        "section_path": section_path,
+                        "chunk_type": str(block.get("chunk_type") or "section"),
+                        "page_number": page_number,
+                    }
+                )
+
+    return entries
+
+
+def extract_pdf_text_and_chunk_entries(
+    file_path: str,
+    *,
+    doc_name: str,
+    chunk_size: int = 1000,
+    overlap: int = 200,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    pages = _extract_pdf_pages(file_path)
+    text = "\n".join(str(page.get("text") or "") for page in pages if page.get("text"))
+    chunk_entries = _build_pdf_chunk_entries(
+        pages,
+        doc_name=doc_name,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+    return text, chunk_entries
 
 
 def extract_text_from_docx(file_path: str) -> str:
@@ -1779,7 +1891,8 @@ async def process_and_index_text(
     text: str,
     metadata_override: dict = None,
     provider: str = "unknown",
-    correlation_id: Optional[str] = None
+    correlation_id: Optional[str] = None,
+    chunk_entries_override: Optional[List[Dict[str, Any]]] = None,
 ):
     # Step: chunked
     chunk_event_id = start_step(
@@ -1791,7 +1904,11 @@ async def process_and_index_text(
         message="Chunking text",
     )
     try:
-        chunk_entries = chunk_text_with_metadata(text)
+        chunk_entries = (
+            [entry for entry in (chunk_entries_override or []) if isinstance(entry, dict)]
+            if chunk_entries_override is not None
+            else chunk_text_with_metadata(text)
+        )
         chunks = [entry.get("text", "") for entry in chunk_entries if isinstance(entry, dict)]
         finish_step(
             event_id=chunk_event_id,
@@ -1884,6 +2001,11 @@ async def process_and_index_text(
                 section_value = entry.get(section_key)
                 if isinstance(section_value, str) and section_value.strip():
                     metadata[section_key] = section_value.strip()
+            page_number = entry.get("page_number")
+            if isinstance(page_number, int):
+                metadata["page_number"] = page_number
+            elif isinstance(page_number, str) and page_number.strip().isdigit():
+                metadata["page_number"] = int(page_number.strip())
 
             if metadata_override:
                 metadata.update(metadata_override)
@@ -2067,8 +2189,12 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
         log_ingestion_event(source_id, twin_id, "info", "Duplicate filename detected, removed old sources")
 
     # 1. Extract text (PDF, Docx, Excel, or Audio)
+    pdf_chunk_entries: Optional[List[Dict[str, Any]]] = None
     if file_path.endswith('.pdf'):
-        text = extract_text_from_pdf(file_path)
+        text, pdf_chunk_entries = extract_pdf_text_and_chunk_entries(
+            file_path,
+            doc_name=filename or os.path.basename(file_path) or "document",
+        )
     elif file_path.endswith('.docx'):
         text = extract_text_from_docx(file_path)
     elif file_path.endswith('.xlsx'):
@@ -2142,7 +2268,7 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
     num_chunks = await process_and_index_text(source_id, twin_id, text, metadata_override={
         "filename": filename or "unknown",
         "type": "file"
-    })
+    }, chunk_entries_override=pdf_chunk_entries)
     
     # Set status to live after successful Pinecone upsert
     supabase.table("sources").update({

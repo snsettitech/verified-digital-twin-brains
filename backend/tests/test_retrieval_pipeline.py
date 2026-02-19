@@ -230,6 +230,16 @@ class TestPineconeQueries:
                 assert len(result) > 0
                 # First result is verified query, others are general
                 assert "matches" in result[0]
+                assert mock_index.query.call_count >= 2
+                filters = [call.kwargs.get("filter") for call in mock_index.query.call_args_list]
+                assert any(f == {"twin_id": {"$eq": "test-twin"}} for f in filters)
+                assert any(
+                    isinstance(f, dict)
+                    and "$and" in f
+                    and {"twin_id": {"$eq": "test-twin"}} in f.get("$and", [])
+                    and {"is_verified": {"$eq": True}} in f.get("$and", [])
+                    for f in filters
+                )
 
 
 class TestGroupFiltering:
@@ -342,6 +352,108 @@ class TestGroupFiltering:
 
         result = retrieval._filter_by_group_permissions(contexts, "group-123")
         assert result == []
+
+
+class TestTwinScopedGuardrails:
+    """Test strict per-twin source scoping."""
+
+    async def test_sham_twin_chat_excludes_sai_doc_chunks(self, monkeypatch):
+        from modules import retrieval
+
+        sham_source = "11111111-1111-1111-1111-111111111111"
+        sai_source = "22222222-2222-2222-2222-222222222222"
+        contexts = [
+            {
+                "text": "Sham profile and usage guidance.",
+                "source_id": sham_source,
+                "doc_name": "Sham's Knowledge Base.pdf",
+                "twin_id": "sham-twin",
+                "is_verified": False,
+            },
+            {
+                "text": "Sai recommendation and architecture note.",
+                "source_id": sai_source,
+                "doc_name": "Sai_twin.docx",
+                "twin_id": "sai-twin",
+                "is_verified": False,
+            },
+        ]
+
+        monkeypatch.setattr(
+            retrieval,
+            "_fetch_source_ownership",
+            lambda _ids: {
+                sham_source: {"twin_id": "sham-twin", "filename": "Sham's Knowledge Base.pdf"},
+                sai_source: {"twin_id": "sai-twin", "filename": "Sai_twin.docx"},
+            },
+        )
+        audit_calls = []
+        monkeypatch.setattr(
+            retrieval,
+            "_log_cross_twin_guardrail_audit",
+            lambda twin_id, rows: audit_calls.append((twin_id, rows)),
+        )
+
+        filtered = retrieval._enforce_twin_source_scope(contexts, "sham-twin")
+
+        assert len(filtered) == 1
+        assert filtered[0]["source_id"] == sham_source
+        assert "Sai_twin.docx" not in (filtered[0].get("doc_name") or "")
+        assert audit_calls
+        assert audit_calls[0][0] == "sham-twin"
+        assert any(
+            (row.get("doc_name") or "").lower().startswith("sai_twin.docx")
+            for row in audit_calls[0][1]
+        )
+
+    async def test_sai_twin_chat_excludes_sham_pdf_chunks(self, monkeypatch):
+        from modules import retrieval
+
+        sham_source = "33333333-3333-3333-3333-333333333333"
+        sai_source = "44444444-4444-4444-4444-444444444444"
+        contexts = [
+            {
+                "text": "Sham onboarding workflow notes.",
+                "source_id": sham_source,
+                "doc_name": "Sham's Knowledge Base.pdf",
+                "twin_id": "sham-twin",
+                "is_verified": False,
+            },
+            {
+                "text": "Sai identity and credibility details.",
+                "source_id": sai_source,
+                "doc_name": "Sai_twin.docx",
+                "twin_id": "sai-twin",
+                "is_verified": False,
+            },
+        ]
+
+        monkeypatch.setattr(
+            retrieval,
+            "_fetch_source_ownership",
+            lambda _ids: {
+                sham_source: {"twin_id": "sham-twin", "filename": "Sham's Knowledge Base.pdf"},
+                sai_source: {"twin_id": "sai-twin", "filename": "Sai_twin.docx"},
+            },
+        )
+        audit_calls = []
+        monkeypatch.setattr(
+            retrieval,
+            "_log_cross_twin_guardrail_audit",
+            lambda twin_id, rows: audit_calls.append((twin_id, rows)),
+        )
+
+        filtered = retrieval._enforce_twin_source_scope(contexts, "sai-twin")
+
+        assert len(filtered) == 1
+        assert filtered[0]["source_id"] == sai_source
+        assert "knowledge base.pdf" not in (filtered[0].get("doc_name") or "").lower()
+        assert audit_calls
+        assert audit_calls[0][0] == "sai-twin"
+        assert any(
+            "knowledge base.pdf" in (row.get("doc_name") or "").lower()
+            for row in audit_calls[0][1]
+        )
 
 
 class TestAnchorRelevanceFiltering:

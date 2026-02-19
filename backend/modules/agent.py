@@ -59,6 +59,7 @@ ADAPTIVE_GROUNDING_HIGH_SCORE = float(os.getenv("ADAPTIVE_GROUNDING_HIGH_SCORE",
 ADAPTIVE_GROUNDING_HIGH_MARGIN = float(os.getenv("ADAPTIVE_GROUNDING_HIGH_MARGIN", "0.12"))
 ADAPTIVE_GROUNDING_MID_SCORE = float(os.getenv("ADAPTIVE_GROUNDING_MID_SCORE", "0.65"))
 ADAPTIVE_GROUNDING_MID_OVERLAP = float(os.getenv("ADAPTIVE_GROUNDING_MID_OVERLAP", "0.12"))
+PLANNER_SECOND_PASS_RETRIEVAL_TOP_K = max(8, int(os.getenv("PLANNER_SECOND_PASS_RETRIEVAL_TOP_K", "12")))
 
 def get_checkpointer():
     """
@@ -220,6 +221,8 @@ class TwinState(TypedDict):
     router_knowledge_available: Optional[bool]
     workflow_intent: Optional[str]
     routing_decision: Optional[Dict[str, Any]]
+    retrieval_group_id: Optional[str]
+    resolve_default_group_filtering: Optional[bool]
     
     # Path B / Phase 4 Context
     full_settings: Optional[Dict[str, Any]]
@@ -443,24 +446,72 @@ def _is_smalltalk_query(query: str) -> bool:
         "hi",
         "hello",
         "hey",
+        "yo",
         "good morning",
         "good afternoon",
         "good evening",
+        "thanks",
+        "thank you",
+        "ok",
+        "okay",
+        "cool",
+        "sounds good",
+        "got it",
+        "understood",
         "how are you",
         "what's up",
         "whats up",
-        "who are you",
-        "what are you",
-        "introduce yourself",
-        "tell me about yourself",
-        "what can you do",
-        "can you help me",
     }
     return (
         q in smalltalk_markers
         or q_plain in smalltalk_markers
         or any(marker in q for marker in {"how's your day", "hows your day"})
     )
+
+
+def _resolve_twin_pronoun_query(query: str) -> str:
+    """
+    In twin chats, default second-person pronouns to the twin persona.
+    This helps retrieval pull owner/twin identity and behavior evidence.
+    """
+    original = re.sub(r"\s+", " ", str(query or "").strip())
+    if not original:
+        return ""
+
+    lowered = original.lower()
+    if _is_identity_intro_query(original):
+        return (
+            f"{original} (about the twin persona identity, biography, background, "
+            "and core expertise)"
+        )
+
+    padded = f" {re.sub(r'\\s+', ' ', lowered)} "
+    pronoun_markers = (
+        " you ",
+        " your ",
+        " yourself ",
+        " you're ",
+        " youve ",
+        " you've ",
+        " you'd ",
+        " you'll ",
+    )
+    if any(marker in padded for marker in pronoun_markers):
+        return f"{original} (interpret you/your as the twin persona in this conversation)"
+    return original
+
+
+def _smalltalk_response(query: str) -> str:
+    q = re.sub(r"\s+", " ", str(query or "").strip()).lower()
+    if not q:
+        return "Hi. How can I help?"
+    if any(marker in q for marker in ("thank you", "thanks")):
+        return "You're welcome."
+    if q in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
+        return "Sounds good."
+    if any(marker in q for marker in ("how are you", "how's your day", "hows your day")):
+        return "Doing well. How can I help?"
+    return "Hi. How can I help?"
 
 
 def _is_owner_specific_query(query: str) -> bool:
@@ -620,23 +671,28 @@ Return JSON:
 async def router_node(state: TwinState):
     """
     Generalized router for document reasoning:
-    - Always retrieve evidence for the query.
-    - Avoid intent-specific dialogue modes and handcrafted branches.
+    - Gate 0: bypass greetings/acknowledgements as smalltalk.
+    - Gate 1: resolve second-person pronouns to twin persona semantics.
+    - Non-smalltalk turns use retrieval + answerability evaluation.
     """
     messages = state["messages"]
     user_query = next((m.content for m in reversed(messages) if isinstance(m, HumanMessage)), "")
     interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
     twin_id = state.get("twin_id")
     knowledge_available = _twin_has_groundable_knowledge(twin_id)
-    intent_label = classify_query_intent(user_query, dialogue_mode="QA_FACT")
+    is_smalltalk = _is_smalltalk_query(user_query)
+    dialogue_mode = "SMALLTALK" if is_smalltalk else "QA_FACT"
+    requires_evidence = not is_smalltalk
+    resolved_query = _resolve_twin_pronoun_query(user_query) if requires_evidence else ""
+    intent_label = classify_query_intent(user_query, dialogue_mode=dialogue_mode)
 
     routing_decision = build_routing_decision(
         query=user_query,
-        mode="QA_FACT",
+        mode=dialogue_mode,
         intent_label=intent_label,
         interaction_context=interaction_context,
         target_owner_scope=False,
-        requires_evidence=True,
+        requires_evidence=requires_evidence,
         knowledge_available=knowledge_available,
         pinned_context=None,
     )
@@ -645,11 +701,14 @@ async def router_node(state: TwinState):
     decision_payload["clarifying_questions"] = []
     decision_payload["required_inputs_missing"] = []
 
-    router_reason = "general_rag_router: retrieval required for answerability evaluation"
+    if is_smalltalk:
+        router_reason = "smalltalk_bypass: conversational turn handled without retrieval."
+    else:
+        router_reason = "general_rag_router: retrieval required for answerability evaluation."
     _log_router_observation(
-        mode="QA_FACT",
+        mode=dialogue_mode,
         intent_label=intent_label,
-        requires_evidence=True,
+        requires_evidence=requires_evidence,
         target_owner_scope=False,
         interaction_context=interaction_context,
         knowledge_available=knowledge_available,
@@ -657,17 +716,17 @@ async def router_node(state: TwinState):
     )
 
     return {
-        "dialogue_mode": "QA_FACT",
+        "dialogue_mode": dialogue_mode,
         "intent_label": intent_label,
         "target_owner_scope": False,
-        "requires_evidence": True,
-        "sub_queries": [user_query] if isinstance(user_query, str) and user_query.strip() else [],
+        "requires_evidence": requires_evidence,
+        "sub_queries": [resolved_query] if requires_evidence and isinstance(resolved_query, str) and resolved_query.strip() else [],
         "router_reason": router_reason,
         "router_knowledge_available": knowledge_available,
         "workflow_intent": decision_payload.get("intent") or "answer",
         "routing_decision": decision_payload,
         "reasoning_history": (state.get("reasoning_history") or []) + [
-            "Router: generalized evidence-first routing."
+            "Router: smalltalk bypass." if is_smalltalk else "Router: evidence-first routing."
         ],
     }
 
@@ -714,10 +773,7 @@ _PLANNER_QUERY_STOPWORDS = {
     "to",
     "was",
     "we",
-    "what",
     "with",
-    "you",
-    "your",
 }
 
 
@@ -739,6 +795,107 @@ def _planner_overlap_ratio(query_tokens: List[str], text: str) -> float:
     if not tset:
         return 0.0
     return len(qset.intersection(tset)) / float(len(qset))
+
+
+def _collect_valid_source_ids(context_data: List[Dict[str, Any]]) -> List[str]:
+    out: List[str] = []
+    for row in context_data:
+        if not isinstance(row, dict):
+            continue
+        source_id = row.get("source_id")
+        if isinstance(source_id, str) and source_id and source_id not in out:
+            out.append(source_id)
+    return out
+
+
+def _is_evaluative_query(query: str) -> bool:
+    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
+    if not q:
+        return False
+    markers = (
+        "would this twin",
+        "like a",
+        "optimize for",
+        "optimise for",
+        "red flags",
+        "pass on",
+        "evaluate",
+        "assessment",
+        "feedback the way",
+        "care about most",
+    )
+    return any(marker in q for marker in markers)
+
+
+def _merge_context_rows(
+    base_rows: List[Dict[str, Any]],
+    extra_rows: List[Dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> List[Dict[str, Any]]:
+    merged: List[Dict[str, Any]] = []
+    seen: set[Tuple[str, str]] = set()
+    for row in [*(base_rows or []), *(extra_rows or [])]:
+        if not isinstance(row, dict):
+            continue
+        text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
+        source_id = str(row.get("source_id") or "")
+        if not text:
+            continue
+        key = (source_id, text)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(dict(row))
+        if len(merged) >= max(1, limit):
+            break
+    return merged
+
+
+async def _run_second_pass_retrieval(
+    query: str,
+    twin_id: str,
+    *,
+    group_id: Optional[str] = None,
+    resolve_default_group: bool = True,
+) -> List[Dict[str, Any]]:
+    """
+    Planner-level retrieval retry for low-context insufficient cases.
+    Retrieval module still applies query expansion and HyDE.
+    """
+    from modules.retrieval import retrieve_context
+
+    q = re.sub(r"\s+", " ", str(query or "").strip())
+    if not q:
+        return []
+
+    second_pass_queries = [q]
+    if _is_evaluative_query(q):
+        second_pass_queries.append(
+            f"{q} decision rubric thesis criteria assumptions risks tradeoffs"
+        )
+
+    expanded_rows: List[Dict[str, Any]] = []
+    for candidate in second_pass_queries:
+        try:
+            rows = await retrieve_context(
+                candidate,
+                twin_id,
+                group_id=group_id,
+                top_k=PLANNER_SECOND_PASS_RETRIEVAL_TOP_K,
+                resolve_default_group=resolve_default_group,
+            )
+        except Exception as e:
+            print(f"[Planner] Second-pass retrieval failed for query '{candidate[:80]}': {e}")
+            continue
+        if isinstance(rows, list):
+            expanded_rows.extend([row for row in rows if isinstance(row, dict)])
+
+    return _merge_context_rows(
+        [],
+        expanded_rows,
+        limit=PLANNER_SECOND_PASS_RETRIEVAL_TOP_K,
+    )
 
 
 def _collect_source_faithful_points(
@@ -839,15 +996,11 @@ def _classify_grounding_policy(
 @observe(name="planner_node")
 async def planner_node(state: TwinState):
     """General evidence-driven planner."""
-    context_data = state.get("retrieved_context", {}).get("results", [])
+    raw_context = state.get("retrieved_context", {}).get("results", [])
+    context_data = [row for row in raw_context if isinstance(row, dict)] if isinstance(raw_context, list) else []
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
     _system_msg, persona_trace = build_system_prompt_with_trace(state)
-
-    valid_source_ids: List[str] = []
-    for row in context_data:
-        source_id = row.get("source_id")
-        if isinstance(source_id, str) and source_id and source_id not in valid_source_ids:
-            valid_source_ids.append(source_id)
+    valid_source_ids: List[str] = _collect_valid_source_ids(context_data)
 
     def _sanitize_answer_points(values: Any) -> List[str]:
         if not isinstance(values, list):
@@ -878,7 +1031,12 @@ async def planner_node(state: TwinState):
         lines: List[str] = []
         for idx, row in enumerate(context_data[: max(1, max_items)], 1):
             source_id = str(row.get("source_id") or f"chunk-{idx}")
-            section = str(row.get("section_path") or row.get("section_title") or "unknown")
+            section = str(row.get("section_path") or row.get("section_title") or "").strip()
+            page_number = row.get("page_number")
+            if not section and page_number is not None:
+                section = f"page_{page_number}"
+            if not section:
+                section = "unknown"
             text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())[:1200]
             if text:
                 lines.append(f"[{idx}] source_id={source_id}; section={section}; text={text}")
@@ -936,21 +1094,41 @@ async def planner_node(state: TwinState):
         answerability["answerability"] = answerability_state
     answerability["answerable"] = answerability_state in {"direct", "derivable"}
 
-    routing_decision = (
-        dict(state.get("routing_decision"))
-        if isinstance(state.get("routing_decision"), dict)
-        else {
-            "intent": "answer",
-            "chosen_workflow": "answer",
-            "output_schema": "workflow.answer.v1",
-        }
-    )
+    second_pass_used = False
+    if answerability_state == "insufficient" and 0 < len(context_data) < 3:
+        twin_id = str(state.get("twin_id") or "").strip()
+        if twin_id:
+            second_pass_rows = await _run_second_pass_retrieval(
+                user_query,
+                twin_id,
+                group_id=state.get("retrieval_group_id"),
+                resolve_default_group=bool(state.get("resolve_default_group_filtering", True)),
+            )
+            merged_context = _merge_context_rows(
+                context_data,
+                second_pass_rows,
+                limit=PLANNER_SECOND_PASS_RETRIEVAL_TOP_K,
+            )
+            if len(merged_context) > len(context_data):
+                context_data = merged_context
+                valid_source_ids = _collect_valid_source_ids(context_data)
+                second_pass_used = True
+                try:
+                    answerability = await evaluate_answerability(user_query, context_data)
+                except Exception as exc:
+                    print(f"Planner second-pass answerability error: {exc}")
+                answerability_state = str(answerability.get("answerability") or "").strip().lower()
+                if answerability_state not in {"direct", "derivable", "insufficient"}:
+                    answerability_state = "direct" if bool(answerability.get("answerable")) else "insufficient"
+                    answerability["answerability"] = answerability_state
+                answerability["answerable"] = answerability_state in {"direct", "derivable"}
 
     if answerability_state == "insufficient":
         missing_information = answerability.get("missing_information") or []
         clarification_questions = build_targeted_clarification_questions(
             user_query,
             missing_information,
+            evidence_chunks=context_data,
             limit=3,
         )
         answer_points = [UNCERTAINTY_RESPONSE]
@@ -984,6 +1162,7 @@ async def planner_node(state: TwinState):
             "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Planner: answerability=insufficient, produced targeted clarification questions."
+                + (" (after second-pass retrieval)." if second_pass_used else "")
             ],
         }
 
@@ -1093,6 +1272,7 @@ Rules:
         "persona_prompt_variant": persona_trace.get("persona_prompt_variant"),
         "reasoning_history": (state.get("reasoning_history") or []) + [
             f"Planner: answerability={answerability_state}, generated grounded answer with citations."
+            + (" (after second-pass retrieval)." if second_pass_used else "")
         ],
     }
 @observe(name="realizer_node")
@@ -1505,6 +1685,8 @@ async def run_agent_stream(
         "router_reason": None,
         "router_knowledge_available": None,
         "workflow_intent": "answer",
+        "retrieval_group_id": effective_group_id,
+        "resolve_default_group_filtering": enforce_group_filtering,
         "routing_decision": {
             "intent": "answer",
             "confidence": 1.0,

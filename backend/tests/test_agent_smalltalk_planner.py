@@ -19,6 +19,29 @@ def _trace():
 
 
 @pytest.mark.asyncio
+async def test_greeting_bypasses_answerability_and_clarifications(monkeypatch):
+    monkeypatch.setattr("modules.agent.build_system_prompt_with_trace", lambda _state: _trace())
+    monkeypatch.setattr(
+        "modules.agent.evaluate_answerability",
+        AsyncMock(side_effect=AssertionError("answerability should not run for smalltalk")),
+    )
+
+    state = {
+        "dialogue_mode": "SMALLTALK",
+        "messages": [HumanMessage(content="hi")],
+        "retrieved_context": {"results": []},
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+    }
+
+    result = await planner_node(state)
+    plan = result["planning_output"]
+    assert result["routing_decision"]["action"] == "answer"
+    assert plan["teaching_questions"] == []
+    assert "don't know" not in " ".join(plan["answer_points"]).lower()
+    assert any(greet in plan["answer_points"][0].lower() for greet in ("hi", "hello", "help"))
+
+
+@pytest.mark.asyncio
 async def test_explicit_recommendation_no_clarifications(monkeypatch):
     monkeypatch.setattr("modules.agent.build_system_prompt_with_trace", lambda _state: _trace())
     monkeypatch.setattr(

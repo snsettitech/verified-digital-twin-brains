@@ -41,11 +41,25 @@ def test_strict_grounding_is_on_for_owner_specific_or_source_queries(query: str)
     "query",
     [
         "hi",
-        "who are you?",
-        "introduce yourself",
-        "what can you do",
+        "hello",
+        "thanks",
+        "ok",
+        "cool",
         "how's your day",
     ],
 )
-def test_smalltalk_detector_covers_identity_and_greetings(query: str):
+def test_smalltalk_detector_covers_greetings_and_acks(query: str):
     assert _is_smalltalk_query(query) is True
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "who are you?",
+        "introduce yourself",
+        "tell me about yourself",
+        "what do you do",
+    ],
+)
+def test_identity_queries_are_not_smalltalk(query: str):
+    assert _is_smalltalk_query(query) is False
