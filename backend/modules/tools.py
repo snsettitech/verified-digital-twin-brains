@@ -57,46 +57,54 @@ def get_retrieval_tool(
         # Auto-expand ambiguous queries using conversation history
         expanded_query = query
         if history and len(history) > 0:
-            # Extract keywords from recent conversation (last 10 messages for better context)
-            recent_context = []
-            for msg in history[-10:]:
-                if hasattr(msg, 'content') and msg.content:
-                    content = str(msg.content)
-                    # Skip system messages and very short messages
-                    if len(content) > 10:
-                        recent_context.append(content)
-            
-            if recent_context:
-                # If query is too generic (single word, common terms), try to expand it
-                generic_terms = ['reflection', 'document', 'summary', 'that', 'this', 'it', 'above', 'below', 'deal']
-                query_lower = query.lower().strip()
-                
-                if query_lower in generic_terms or len(query.split()) <= 2:
-                    # Look for specific keywords in conversation history
-                    context_text = " ".join(recent_context).lower()
-                    
-                    # Common patterns to extract - build expanded query progressively
-                    expanded_parts = [query]
-                    
-                    # Check for M&A related terms
-                    if any(term in context_text for term in ['m&a', 'mergers', 'acquisitions', 'merger', 'acquisition']):
-                        if 'm&a' not in query_lower and 'merger' not in query_lower and 'acquisition' not in query_lower:
-                            expanded_parts.insert(0, "M&A")
-                    
-                    # Check for SGMT 6050
-                    if any(term in context_text for term in ['sGMT', '6050', 'sGMT 6050']):
-                        if '6050' not in query_lower and 'sGMT' not in query_lower:
-                            expanded_parts.append("SGMT 6050")
-                    
-                    # Check for reflection specifically
-                    if 'reflection' in context_text and query_lower == 'reflection':
-                        # Make sure we include M&A if it was mentioned
-                        if any(term in context_text for term in ['m&a', 'mergers', 'acquisitions']):
-                            expanded_query = "M&A reflection SGMT 6050"
-                        else:
-                            expanded_query = " ".join(expanded_parts)
-                    else:
-                        expanded_query = " ".join(expanded_parts)
+            query_words = query.strip().split()
+            if len(query_words) <= 4:
+                # Short / vague query — enrich with keywords from recent conversation
+                _expand_stopwords = {
+                    "a", "an", "and", "are", "as", "at", "be", "by", "can", "do",
+                    "for", "from", "has", "have", "how", "i", "in", "is", "it",
+                    "its", "me", "my", "no", "not", "of", "on", "or", "so", "that",
+                    "the", "this", "to", "u", "up", "us", "was", "we", "what",
+                    "when", "who", "will", "with", "you", "your", "yes", "yeah",
+                    "ok", "sure", "tell", "about", "whats", "does", "did", "many",
+                    "much", "there", "here", "also", "just", "like", "them", "they",
+                    "some", "any", "all", "but", "if", "than", "then", "very",
+                }
+                recent_text = ""
+                for msg in history[-6:]:
+                    if hasattr(msg, 'content') and msg.content:
+                        recent_text += " " + str(msg.content)
+
+                if recent_text.strip():
+                    # Extract significant keywords from conversation history
+                    history_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9._-]{2,}", recent_text)
+                    keyword_freq: dict = {}
+                    for tok in history_tokens:
+                        low = tok.lower()
+                        if low in _expand_stopwords or len(low) < 3:
+                            continue
+                        # Preserve original casing for first occurrence
+                        if low not in keyword_freq:
+                            keyword_freq[low] = {"form": tok, "count": 0}
+                        keyword_freq[low]["count"] += 1
+
+                    # Pick top keywords not already in the query
+                    query_lower = query.lower()
+                    top_keywords = sorted(
+                        keyword_freq.values(),
+                        key=lambda x: x["count"],
+                        reverse=True,
+                    )
+                    additions = []
+                    for kw in top_keywords:
+                        if kw["form"].lower() not in query_lower:
+                            additions.append(kw["form"])
+                        if len(additions) >= 4:
+                            break
+
+                    if additions:
+                        expanded_query = query + " " + " ".join(additions)
+                        print(f"[Tools] Expanded vague query: '{query}' → '{expanded_query}'")
         
         # Vector search (Pinecone)
         retrieval_kwargs = {"group_id": group_id}
@@ -170,18 +178,7 @@ def get_cloud_tools(allowed_tools: Optional[List[str]] = None):
     """
     tools = []
     
-    # 1. Try to load Composio tools if API key is present
-    if os.getenv("COMPOSIO_API_KEY"):
-        try:
-            from composio_langchain import ComposioToolSet, App
-            toolset = ComposioToolSet()
-            # Default to some useful apps if configured
-            # tools.extend(toolset.get_tools(apps=[App.GMAIL, App.SLACK]))
-            pass
-        except ImportError:
-            print("Composio not installed, skipping cloud tools.")
-
-    # 2. Add fallback/utility tools if allowed
+    # Add utility tools if allowed
     # Note: In a production "Verified" brain, we might want to restrict external search
     # unless explicitly allowed in twin settings.
     try:

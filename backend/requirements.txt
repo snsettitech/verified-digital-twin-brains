@@ -27,7 +27,6 @@ asyncpg
 PyPDF2
 python-jose[cryptography]
 passlib[bcrypt]
-composio-langchain
 httpx
 yt-dlp
 feedparser

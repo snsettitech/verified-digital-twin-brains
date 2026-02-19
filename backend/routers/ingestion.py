@@ -321,15 +321,48 @@ async def ingest_file_endpoint(
         
         finish_step(event_id=ev_p, source_id=source_id, twin_id=twin_id, provider=provider, step="parsed", status="completed", correlation_id=corr, metadata={"text_len": len(text)})
         
-        # Queue for indexing
-        job_id = _queue_ingestion_job(source_id=source_id, twin_id=twin_id, provider=provider, url=None, correlation_id=corr)
-        
-        return {
-            "source_id": source_id,
-            "job_id": job_id,
-            "status": "processing",
-            "duplicate": False
-        }
+        # Process inline: chunk, embed, and index immediately (no worker needed)
+        from modules.ingestion import process_and_index_text
+        try:
+            num_vectors = await process_and_index_text(
+                source_id=source_id,
+                twin_id=twin_id,
+                text=text,
+                provider=provider,
+                correlation_id=corr,
+            )
+            # Mark source as live
+            supabase.table("sources").update({
+                "status": "live",
+                "staging_status": "live",
+                "chunk_count": num_vectors,
+                "last_step": "live",
+            }).eq("id", source_id).execute()
+
+            ev_live = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="live", correlation_id=corr, message="Source is live")
+            finish_step(event_id=ev_live, source_id=source_id, twin_id=twin_id, provider=provider, step="live", status="completed", correlation_id=corr)
+
+            print(f"[Ingestion] Inline processing complete: {num_vectors} vectors for source {source_id}")
+
+            return {
+                "source_id": source_id,
+                "job_id": None,
+                "status": "live",
+                "duplicate": False,
+                "chunks": num_vectors,
+            }
+        except Exception as proc_err:
+            # Mark source as failed but don't lose it — text is still in the DB
+            print(f"[Ingestion] Inline processing failed for {source_id}: {proc_err}")
+            supabase.table("sources").update({
+                "status": "error",
+                "last_step": "indexed",
+                "last_error": str(proc_err)[:500],
+            }).eq("id", source_id).execute()
+            raise HTTPException(
+                status_code=500,
+                detail=f"File uploaded but indexing failed: {str(proc_err)[:200]}. The text was saved and can be retried."
+            )
         
     except HTTPException:
         raise

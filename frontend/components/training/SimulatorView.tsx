@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import ChatInterface from '@/components/Chat/ChatInterface';
-import GraphContext from '@/components/Chat/GraphContext';
 import { useTwin } from '@/lib/context/TwinContext';
 
 interface SimulatorViewProps {
@@ -25,13 +24,6 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
     const [conversationIdsByContext, setConversationIdsByContext] = useState<Record<string, string | null>>({});
     const [resetCounter, setResetCounter] = useState(0);
     const currentConversationId = conversationIdsByContext[contextKey] || null;
-
-    const settings = (activeTwin?.id === effectiveTwinId && activeTwin?.settings && typeof activeTwin.settings === 'object')
-        ? (activeTwin.settings as Record<string, any>)
-        : null;
-    const intentProfile = settings?.intent_profile || {};
-    const publicIntro = (settings?.public_intro || '').toString().trim();
-    const hasIntentSummary = !!(intentProfile?.use_case || intentProfile?.audience || intentProfile?.boundaries || publicIntro);
 
     const startNewSession = () => {
         setConversationIdsByContext((prev) => ({ ...prev, [contextKey]: null }));
@@ -65,16 +57,8 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
     }
 
     return (
-        <div className="flex flex-col h-[600px] bg-[#f8fafc] text-slate-900 font-sans p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-                <div>
-                    <h2 className="text-xl font-extrabold tracking-tight text-slate-800">Simulator</h2>
-                    <p className="text-sm text-slate-500 font-medium">
-                        {mode === 'training'
-                            ? 'Test responses in owner training context.'
-                            : "Test your Digital Twin's responses as a guest."}
-                    </p>
-                </div>
+        <div className="flex flex-col h-[calc(100vh-200px)] bg-[#f8fafc] text-slate-900 font-sans rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-white">
                 <div className="flex items-center gap-2">
                     {onBack && (
                         <button
@@ -93,52 +77,10 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
                 </div>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-xl p-4 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-semibold text-slate-800">Intent Summary</h3>
-                    <span className="text-[10px] uppercase tracking-wider text-slate-400">Owner-provided</span>
-                </div>
-                {hasIntentSummary ? (
-                    <div className="grid gap-2 text-xs text-slate-700">
-                        {intentProfile?.use_case && (
-                            <div>
-                                <div className="text-[10px] uppercase tracking-wider text-slate-400">Primary use case</div>
-                                <div>{intentProfile.use_case}</div>
-                            </div>
-                        )}
-                        {intentProfile?.audience && (
-                            <div>
-                                <div className="text-[10px] uppercase tracking-wider text-slate-400">Audience & outcomes</div>
-                                <div>{intentProfile.audience}</div>
-                            </div>
-                        )}
-                        {intentProfile?.boundaries && (
-                            <div>
-                                <div className="text-[10px] uppercase tracking-wider text-slate-400">Boundaries</div>
-                                <div>{intentProfile.boundaries}</div>
-                            </div>
-                        )}
-                        {publicIntro && (
-                            <div>
-                                <div className="text-[10px] uppercase tracking-wider text-slate-400">Public intro</div>
-                                <div>{publicIntro}</div>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="text-xs text-slate-500">
-                        No intent profile saved yet. Set this in Training → Intent to steer responses.
-                    </div>
-                )}
-            </div>
-
-            {/* Graph Context Panel - Shows what the twin knows */}
-            <GraphContext twinId={effectiveTwinId} />
-
-            <div className="flex-1 shadow-inner rounded-xl overflow-hidden bg-white border border-slate-200 mt-4 relative">
+            <div className="flex-1 overflow-hidden">
                 <ChatInterface
                     twinId={effectiveTwinId}
-                    tenantId={activeTwin?.tenant_id} // Fallback to context if needed, though strictly ChatInterface might need it
+                    tenantId={activeTwin?.tenant_id}
                     conversationId={currentConversationId}
                     onConversationStarted={(id) =>
                         setConversationIdsByContext((prev) => ({ ...prev, [contextKey]: id }))

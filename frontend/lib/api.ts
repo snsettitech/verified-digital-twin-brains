@@ -15,7 +15,7 @@ export const resolveApiBaseUrl = () => {
     }
   }
 
-  return 'https://verified-digital-twin-brains.onrender.com';
+  return 'http://localhost:8000';
 };
 
 export const resolveApiHostLabel = () => {

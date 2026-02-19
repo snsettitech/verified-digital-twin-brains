@@ -56,7 +56,9 @@ npm run lint
 
 ---
 
-## 📞 Support & Documentation
-- **Architecture**: [architecture/system-overview.md](file:///c/Users/saina/verified-digital-twin-brain/docs/architecture/system-overview.md)
-- **API Contracts**: [architecture/api-contracts.md](file:///c/Users/saina/verified-digital-twin-brain/docs/architecture/api-contracts.md)
-- **AI Operating Manual**: [ai/agent-manual.md](file:///c/Users/saina/verified-digital-twin-brain/docs/ai/agent-manual.md)
+## Support & Documentation
+- **Architecture**: [architecture/system-overview.md](architecture/system-overview.md)
+- **API Contracts**: [architecture/api_contracts.md](architecture/api_contracts.md)
+- **AI Operating Manual**: [ai/agent-manual.md](ai/agent-manual.md)
+- **Known Failures**: [KNOWN_FAILURES.md](KNOWN_FAILURES.md)
+- **Known Limitations**: [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md)

@@ -247,7 +247,6 @@ export default function SettingsPage() {
         systemPrompt: (settings.system_prompt as string) || ''
       });
       setSettingsLoaded(true);
-      console.log('[Settings] Loaded from activeTwin:', activeTwin.id);
     }
   }, [activeTwin?.id]); // Re-run when twin switches
 
@@ -303,7 +302,6 @@ export default function SettingsPage() {
       });
 
       if (response.ok) {
-        console.log('[Settings] Saved successfully, refreshing twins...');
         // Refresh TwinContext so header + other pages reflect changes
         await refreshTwins();
         setSaved(true);
@@ -351,7 +349,6 @@ export default function SettingsPage() {
         throw new Error(errorData.detail || 'Failed to delete twin');
       }
 
-      console.log('[Settings] Twin deleted successfully, refreshing...');
       await refreshTwins({ allowEmpty: true });
       clearActiveTwin();
       showToast(permanent ? 'Twin permanently deleted' : 'Twin archived', 'success');
@@ -400,7 +397,6 @@ export default function SettingsPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      console.log('[Settings] Twin exported successfully');
       showToast('Twin export downloaded', 'success');
     } catch (error) {
       console.error('[Settings] Export error:', error);
@@ -547,7 +543,7 @@ export default function SettingsPage() {
                 type="text"
                 value={profile.name}
                 onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
               />
             </div>
             <div>
@@ -556,7 +552,7 @@ export default function SettingsPage() {
                 type="email"
                 value={profile.email}
                 onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
               />
             </div>
           </div>
@@ -572,7 +568,7 @@ export default function SettingsPage() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
                 />
               </div>
               <div>
@@ -582,7 +578,7 @@ export default function SettingsPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
                 />
               </div>
             </div>
@@ -610,7 +606,7 @@ export default function SettingsPage() {
                 type="text"
                 value={twinSettings.name}
                 onChange={(e) => setTwinSettings({ ...twinSettings, name: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
               />
             </div>
             <div>
@@ -631,7 +627,7 @@ export default function SettingsPage() {
                 type="text"
                 value={twinSettings.tagline}
                 onChange={(e) => setTwinSettings({ ...twinSettings, tagline: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
               />
             </div>
           </div>
@@ -645,7 +641,7 @@ export default function SettingsPage() {
                 <select
                   value={twinSettings.tone}
                   onChange={(e) => setTwinSettings({ ...twinSettings, tone: e.target.value })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
                 >
                   <option value="professional">Professional</option>
                   <option value="friendly">Friendly</option>
@@ -658,7 +654,7 @@ export default function SettingsPage() {
                 <select
                   value={twinSettings.responseLength}
                   onChange={(e) => setTwinSettings({ ...twinSettings, responseLength: e.target.value })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-slate-900 bg-white"
                 >
                   <option value="concise">Concise</option>
                   <option value="balanced">Balanced</option>
@@ -691,7 +687,7 @@ export default function SettingsPage() {
               value={twinSettings.systemPrompt}
               onChange={(e) => setTwinSettings({ ...twinSettings, systemPrompt: e.target.value })}
               rows={4}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none text-slate-900 bg-white"
             />
             <p className="text-xs text-slate-400 mt-2">This prompt guides how your twin responds</p>
           </div>

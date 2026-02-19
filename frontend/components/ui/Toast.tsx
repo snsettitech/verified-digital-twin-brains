@@ -48,10 +48,10 @@ const iconMap: Record<ToastType, React.ReactNode> = {
 };
 
 const bgMap: Record<ToastType, string> = {
-    success: 'bg-emerald-500/10 border-emerald-500/30',
-    error: 'bg-red-500/10 border-red-500/30',
-    warning: 'bg-amber-500/10 border-amber-500/30',
-    info: 'bg-indigo-500/10 border-indigo-500/30',
+    success: 'bg-emerald-600 border-emerald-700',
+    error: 'bg-red-600 border-red-700',
+    warning: 'bg-amber-600 border-amber-700',
+    info: 'bg-indigo-600 border-indigo-700',
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {

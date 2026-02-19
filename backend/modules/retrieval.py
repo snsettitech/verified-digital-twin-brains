@@ -57,7 +57,7 @@ RETRIEVAL_HYDE_MIN_ANCHORS = max(2, _int_env("RETRIEVAL_HYDE_MIN_ANCHORS", 3))
 RETRIEVAL_TOP_K_VERIFIED = max(1, _int_env("RETRIEVAL_TOP_K_VERIFIED", 3))
 RETRIEVAL_TOP_K_GENERAL = max(4, _int_env("RETRIEVAL_TOP_K_GENERAL", 8))
 RETRIEVAL_PRIMARY_RETRY_ENABLED = os.getenv("RETRIEVAL_PRIMARY_RETRY_ENABLED", "false").lower() == "true"
-RETRIEVAL_STRONG_VECTOR_FLOOR = _float_env("RETRIEVAL_STRONG_VECTOR_FLOOR", 0.70)
+RETRIEVAL_STRONG_VECTOR_FLOOR = _float_env("RETRIEVAL_STRONG_VECTOR_FLOOR", 0.35)
 RETRIEVAL_ANCHOR_MIN_TOKEN_LEN = max(3, _int_env("RETRIEVAL_ANCHOR_MIN_TOKEN_LEN", 4))
 RETRIEVAL_ANCHOR_FALLBACK_MAX = max(2, _int_env("RETRIEVAL_ANCHOR_FALLBACK_MAX", 4))
 RETRIEVAL_MIN_ACCEPTED_SCORE = _float_env("RETRIEVAL_MIN_ACCEPTED_SCORE", 0.0)
@@ -73,16 +73,6 @@ RETRIEVAL_LEXICAL_FUSION_ENABLED = (
 RETRIEVAL_LEXICAL_FUSION_ALPHA = min(
     max(_float_env("RETRIEVAL_LEXICAL_FUSION_ALPHA", 0.22), 0.0),
     1.0,
-)
-
-_UUID_PATTERN = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-    re.IGNORECASE,
-)
-_VIRTUAL_SOURCE_PREFIXES = (
-    "verified_qna_",
-    "owner_memory_",
-    "graph-",
 )
 
 _QUERY_STOPWORDS: Set[str] = {
@@ -373,174 +363,6 @@ def log_retrieval_event(event_type: str, data: Dict[str, Any]):
         **data
     }
     logger.info(json.dumps(log_entry))
-
-
-def _is_uuid(value: str) -> bool:
-    return bool(_UUID_PATTERN.match(str(value or "").strip()))
-
-
-def _is_virtual_source_id(source_id: str) -> bool:
-    normalized = str(source_id or "").strip().lower()
-    if not normalized:
-        return False
-    return any(normalized.startswith(prefix) for prefix in _VIRTUAL_SOURCE_PREFIXES)
-
-
-def _fetch_source_ownership(source_ids: List[str]) -> Dict[str, Dict[str, Any]]:
-    """
-    Resolve source ownership for strict twin scoping.
-    Returns map: source_id -> {twin_id, filename}.
-    """
-    canonical_ids = list(
-        {
-            sid.strip()
-            for sid in source_ids
-            if isinstance(sid, str) and _is_uuid(sid)
-        }
-    )
-    if not canonical_ids:
-        return {}
-
-    ownership: Dict[str, Dict[str, Any]] = {}
-    batch_size = 100
-    for idx in range(0, len(canonical_ids), batch_size):
-        batch = canonical_ids[idx : idx + batch_size]
-        try:
-            response = (
-                supabase.table("sources")
-                .select("id,twin_id,filename")
-                .in_("id", batch)
-                .execute()
-            )
-        except Exception as e:
-            print(f"[Retrieval] Source ownership lookup failed for batch: {e}")
-            continue
-
-        for row in (response.data or []):
-            source_id = str((row or {}).get("id") or "").strip()
-            if not source_id:
-                continue
-            ownership[source_id] = {
-                "twin_id": str((row or {}).get("twin_id") or "").strip(),
-                "filename": str((row or {}).get("filename") or "").strip(),
-            }
-
-    return ownership
-
-
-def _log_cross_twin_guardrail_audit(twin_id: str, discarded_rows: List[Dict[str, Any]]) -> None:
-    if not discarded_rows:
-        return
-
-    payload = {
-        "twin_id": twin_id,
-        "discarded_count": len(discarded_rows),
-        "discarded_samples": [
-            {
-                "source_id": row.get("source_id"),
-                "doc_name": row.get("doc_name"),
-                "reason": row.get("reason"),
-            }
-            for row in discarded_rows[:5]
-        ],
-    }
-    log_retrieval_event("cross_twin_retrieval_blocked", payload)
-
-    try:
-        twin_res = (
-            supabase.table("twins")
-            .select("tenant_id")
-            .eq("id", twin_id)
-            .limit(1)
-            .execute()
-        )
-        tenant_id = ""
-        if twin_res.data:
-            tenant_id = str((twin_res.data[0] or {}).get("tenant_id") or "").strip()
-        if not tenant_id:
-            return
-
-        from modules.governance import AuditLogger
-
-        AuditLogger.log(
-            tenant_id=tenant_id,
-            twin_id=twin_id,
-            event_type="SECURITY_EVENT",
-            action="CROSS_TWIN_RETRIEVAL_BLOCKED",
-            metadata=payload,
-        )
-    except Exception as e:
-        print(f"[Retrieval] Failed to persist cross-twin guardrail audit: {e}")
-
-
-def _enforce_twin_source_scope(
-    contexts: List[Dict[str, Any]],
-    twin_id: str,
-) -> List[Dict[str, Any]]:
-    """
-    Enforce strict per-twin retrieval boundaries.
-    Chunks that cannot be proven to belong to the active twin are discarded.
-    """
-    target_twin = str(twin_id or "").strip()
-    if not contexts or not target_twin:
-        return contexts
-
-    source_ids = [
-        str(ctx.get("source_id") or "").strip()
-        for ctx in contexts
-        if isinstance(ctx, dict)
-    ]
-    source_ownership = _fetch_source_ownership(source_ids)
-
-    kept: List[Dict[str, Any]] = []
-    discarded: List[Dict[str, Any]] = []
-
-    for row in contexts:
-        if not isinstance(row, dict):
-            continue
-        item = dict(row)
-        source_id = str(item.get("source_id") or "").strip()
-        metadata_twin_id = str(item.get("twin_id") or "").strip()
-        ownership = source_ownership.get(source_id)
-
-        reason = ""
-        if not source_id:
-            reason = "missing_source_identity"
-        elif metadata_twin_id and metadata_twin_id != target_twin:
-            reason = "metadata_twin_mismatch"
-        elif _is_virtual_source_id(source_id):
-            if metadata_twin_id != target_twin:
-                reason = "virtual_source_twin_mismatch"
-        elif ownership:
-            owner_twin_id = str((ownership or {}).get("twin_id") or "").strip()
-            if owner_twin_id != target_twin:
-                reason = "source_owner_mismatch"
-            else:
-                if not item.get("doc_name"):
-                    item["doc_name"] = str((ownership or {}).get("filename") or "").strip()
-        elif metadata_twin_id != target_twin:
-            reason = "source_not_owned_by_active_twin"
-
-        if reason:
-            discarded.append(
-                {
-                    "source_id": source_id or "unknown",
-                    "doc_name": item.get("doc_name") or item.get("section_path") or item.get("section_title") or "unknown",
-                    "reason": reason,
-                }
-            )
-            continue
-
-        kept.append(item)
-
-    if discarded:
-        print(
-            f"[Retrieval] Dropped {len(discarded)} chunks outside active twin scope "
-            f"(twin_id={target_twin})."
-        )
-        _log_cross_twin_guardrail_audit(target_twin, discarded)
-
-    return kept
 
 
 @contextmanager
@@ -1060,15 +882,8 @@ async def _execute_pinecone_queries(
                     "include_metadata": True,
                     "namespace": namespace,
                 }
-                filters: List[Dict[str, Any]] = []
-                if target_twin_id:
-                    filters.append({"twin_id": {"$eq": target_twin_id}})
                 if is_verified:
-                    filters.append({"is_verified": {"$eq": True}})
-                if len(filters) == 1:
-                    query_params["filter"] = filters[0]
-                elif len(filters) > 1:
-                    query_params["filter"] = {"$and": filters}
+                    query_params["filter"] = {"is_verified": {"$eq": True}}
                 return index.query(**query_params)
 
             attempts: List[float] = [RETRIEVAL_PER_NAMESPACE_TIMEOUT]
@@ -1146,15 +961,8 @@ async def _execute_pinecone_queries(
                         "include_metadata": True,
                         "namespace": primary_ns,
                     }
-                    filters: List[Dict[str, Any]] = []
-                    if target_twin_id:
-                        filters.append({"twin_id": {"$eq": target_twin_id}})
                     if is_verified:
-                        filters.append({"is_verified": {"$eq": True}})
-                    if len(filters) == 1:
-                        query_params["filter"] = filters[0]
-                    elif len(filters) > 1:
-                        query_params["filter"] = {"$and": filters}
+                        query_params["filter"] = {"is_verified": {"$eq": True}}
                     return index.query(**query_params)
 
                 retry_result = await asyncio.wait_for(
@@ -1197,52 +1005,6 @@ async def _execute_pinecone_queries(
         return []
 
 
-def _safe_page_number(value: Any) -> Optional[int]:
-    if value is None:
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        if value.is_integer():
-            return int(value)
-        return None
-    if isinstance(value, str):
-        raw = value.strip()
-        if raw.isdigit():
-            return int(raw)
-    return None
-
-
-def _resolve_section_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
-    md = metadata or {}
-    filename = str(md.get("filename") or "").strip()
-    page_number = _safe_page_number(md.get("page_number"))
-    section_title = str(md.get("section_title") or "").strip()
-    section_path = str(md.get("section_path") or "").strip()
-
-    if not section_title:
-        if page_number is not None:
-            section_title = f"page_{page_number}"
-        elif filename:
-            section_title = filename
-
-    if not section_path:
-        if page_number is not None:
-            doc_name = filename or "document"
-            section_path = f"{doc_name}/page_{page_number}"
-        elif section_title:
-            if filename and section_title != filename:
-                section_path = f"{filename}/{section_title}"
-            else:
-                section_path = section_title
-
-    return {
-        "section_title": section_title or "unknown",
-        "section_path": section_path or "unknown",
-        "page_number": page_number,
-    }
-
-
 def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Process verified vector matches into context entries.
@@ -1255,11 +1017,6 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
     """
     contexts = []
     for match in verified_results.get("matches", []):
-        metadata = match.get("metadata") or {}
-        text = str(metadata.get("text") or "").strip()
-        if not text:
-            continue
-        section_meta = _resolve_section_metadata(metadata)
         if match["score"] > 0.3:
             contexts.append({
                 "text": text,
@@ -1294,11 +1051,6 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
     """
     raw_general_chunks = []
     for match in merged_general_hits:
-        metadata = match.get("metadata") or {}
-        text = str(metadata.get("text") or "").strip()
-        if not text:
-            continue
-        section_meta = _resolve_section_metadata(metadata)
         raw_score = match.get("score", 0.0)
         raw_rrf_score = match.get("rrf_score", 0.0)
         try:
@@ -1733,9 +1485,6 @@ async def retrieve_context_vectors(
     contexts = _process_verified_matches(verified_results)
     raw_general_chunks = _process_general_matches(merged_general_hits)
     contexts.extend(raw_general_chunks)
-
-    # 5b. Hard guardrail: never allow cross-twin chunks to pass through.
-    contexts = _enforce_twin_source_scope(contexts, twin_id)
     
     # 6. Filter by group permissions if group_id is provided
     contexts = _filter_by_group_permissions(contexts, group_id)
