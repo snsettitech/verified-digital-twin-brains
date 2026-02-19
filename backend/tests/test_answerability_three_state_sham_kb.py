@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules.answerability import evaluate_answerability
+from modules.answerability import _render_evidence_for_prompt, evaluate_answerability
 
 
 SHAM_KNOWLEDGE_BASE = [
@@ -52,3 +52,8 @@ async def test_sham_kb_api_endpoint_is_insufficient(monkeypatch):
 
     assert result["answerability"] == "insufficient"
     assert result["missing_information"]
+
+
+def test_sham_kb_rendered_evidence_preserves_non_unknown_sections():
+    rendered = _render_evidence_for_prompt(SHAM_KNOWLEDGE_BASE)
+    assert "section=unknown" not in rendered.lower()
