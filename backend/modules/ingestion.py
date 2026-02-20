@@ -220,6 +220,8 @@ def _build_pdf_chunk_entries(
                     "section_title": fallback_section_title,
                     "section_path": fallback_section_path,
                     "chunk_type": "page",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
                     "page_number": page_number,
                 }
             ]
@@ -253,6 +255,8 @@ def _build_pdf_chunk_entries(
                         "section_title": section_title,
                         "section_path": section_path,
                         "chunk_type": str(block.get("chunk_type") or "section"),
+                        "block_type": str(block.get("block_type") or "answer_text"),
+                        "is_answer_text": _to_bool(block.get("is_answer_text"), default=True),
                         "page_number": page_number,
                     }
                 )
@@ -1801,6 +1805,36 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
     return chunks
 
 
+def _to_bool(value: Any, default: bool = True) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    return default
+
+
+def _build_embedding_text(entry: Dict[str, Any], chunk_text_value: str) -> str:
+    """
+    Keep embedding inputs answer-centric.
+    Prompt-question chunks use section descriptors to avoid polluting vector space
+    with questionnaire lines.
+    """
+    block_type = str(entry.get("block_type") or "").strip().lower()
+    if block_type == "prompt_question":
+        section_title = str(entry.get("section_title") or "").strip()
+        section_path = str(entry.get("section_path") or "").strip()
+        descriptor = section_title or section_path
+        if descriptor:
+            return descriptor
+    return chunk_text_value
+
+
 def chunk_text_with_metadata(
     text: str,
     chunk_size: int = 1000,
@@ -1826,6 +1860,8 @@ def chunk_text_with_metadata(
                         "section_title": block.get("section_title"),
                         "section_path": block.get("section_path"),
                         "chunk_type": block.get("chunk_type"),
+                        "block_type": block.get("block_type"),
+                        "is_answer_text": _to_bool(block.get("is_answer_text"), default=True),
                     }
                 )
 
@@ -1834,7 +1870,7 @@ def chunk_text_with_metadata(
 
     for chunk in chunk_text(text, chunk_size=chunk_size, overlap=overlap):
         if chunk and chunk.strip():
-            entries.append({"text": chunk})
+            entries.append({"text": chunk, "block_type": "answer_text", "is_answer_text": True})
     return entries
 
 
@@ -1979,9 +2015,8 @@ async def process_and_index_text(
             analysis = await analyze_chunk_content(chunk)
             synth_questions = analysis.get("questions", [])
 
-            # Enriched embedding: include synthetic questions to improve retrieval
-            enriched_text = f"CONTENT: {chunk}\nQUESTIONS: {', '.join(synth_questions)}"
-            embedding = get_embedding(enriched_text)
+            embedding_text = _build_embedding_text(entry, chunk)
+            embedding = get_embedding(embedding_text)
 
             metadata = {
                 "source_id": source_id,
@@ -2001,10 +2036,11 @@ async def process_and_index_text(
                 metadata["opinion_stance"] = opinion_map.get("stance")
                 metadata["opinion_intensity"] = opinion_map.get("intensity")
 
-            for section_key in ("section_title", "section_path", "chunk_type"):
+            for section_key in ("section_title", "section_path", "chunk_type", "block_type"):
                 section_value = entry.get(section_key)
                 if isinstance(section_value, str) and section_value.strip():
                     metadata[section_key] = section_value.strip()
+            metadata["is_answer_text"] = _to_bool(entry.get("is_answer_text"), default=True)
             page_number = entry.get("page_number")
             if isinstance(page_number, int):
                 metadata["page_number"] = page_number

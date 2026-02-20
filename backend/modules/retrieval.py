@@ -18,6 +18,7 @@ from modules.delphi_namespace import (
     get_primary_namespace_for_twin,
     resolve_creator_id_for_twin,
 )
+from modules.grounding_policy import get_grounding_policy
 
 # Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
@@ -336,6 +337,89 @@ def _lexical_overlap_score(query: str, text: str) -> float:
         return 0.0
     overlap = len(anchors.intersection(normalized_tokens))
     return overlap / float(max(len(anchors), 1))
+
+
+def _to_bool(value: Any, default: bool = True) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    return default
+
+
+def _query_is_basic_summary(query: str) -> bool:
+    q = (query or "").strip().lower()
+    return any(token in q for token in ("summarize", "summarise", "summary"))
+
+
+def _normalized_block_type(ctx: Dict[str, Any]) -> str:
+    return str(ctx.get("block_type") or ctx.get("chunk_type") or "").strip().lower()
+
+
+def _is_prompt_question_context(ctx: Dict[str, Any]) -> bool:
+    return _normalized_block_type(ctx) == "prompt_question"
+
+
+def _is_answer_text_context(ctx: Dict[str, Any]) -> bool:
+    if "is_answer_text" in ctx:
+        return _to_bool(ctx.get("is_answer_text"), default=True)
+    block_type = _normalized_block_type(ctx)
+    if not block_type:
+        return True
+    return block_type not in {"prompt_question", "heading"}
+
+
+def _apply_prompt_question_policy(query: str, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Reduce prompt-question contamination.
+    - Always penalize prompt_question chunks.
+    - For identity/basic summary queries, exclude prompt_question when any answer_text exists.
+    """
+    if not contexts:
+        return contexts
+
+    policy = get_grounding_policy(query)
+    query_class = str(policy.get("query_class") or "").strip().lower()
+    prioritize_answer_blocks = query_class == "identity" or _query_is_basic_summary(query)
+
+    adjusted: List[Dict[str, Any]] = []
+    for ctx in contexts:
+        row = dict(ctx)
+        if _is_prompt_question_context(row):
+            current = float(row.get("score", row.get("vector_score", 0.0)) or 0.0)
+            row["score"] = current * 0.72
+            row["prompt_question_penalized"] = True
+        adjusted.append(row)
+
+    if not prioritize_answer_blocks:
+        adjusted.sort(key=lambda c: float(c.get("score", 0.0) or 0.0), reverse=True)
+        return adjusted
+
+    has_answer_text = any(_is_answer_text_context(row) and not _is_prompt_question_context(row) for row in adjusted)
+    if has_answer_text:
+        filtered = [row for row in adjusted if not _is_prompt_question_context(row)]
+        dropped = len(adjusted) - len(filtered)
+        if dropped > 0:
+            print(
+                "[Retrieval] Prompt-question filter dropped "
+                f"{dropped} chunk(s) for query_class={query_class}."
+            )
+        filtered.sort(key=lambda c: float(c.get("score", 0.0) or 0.0), reverse=True)
+        return filtered
+
+    for row in adjusted:
+        if _is_prompt_question_context(row):
+            current = float(row.get("score", row.get("vector_score", 0.0)) or 0.0)
+            row["score"] = current * 0.65
+            row["prompt_question_fallback"] = True
+    adjusted.sort(key=lambda c: float(c.get("score", 0.0) or 0.0), reverse=True)
+    return adjusted
 
 
 def _apply_lexical_fusion(query: str, contexts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -1278,6 +1362,8 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
                 "section_path": section_meta["section_path"],
                 "page_number": section_meta["page_number"],
                 "chunk_type": metadata.get("chunk_type"),
+                "block_type": metadata.get("block_type"),
+                "is_answer_text": _to_bool(metadata.get("is_answer_text"), default=True),
             })
     return contexts
 
@@ -1328,6 +1414,8 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
             "section_path": section_meta["section_path"],
             "page_number": section_meta["page_number"],
             "chunk_type": metadata.get("chunk_type"),
+            "block_type": metadata.get("block_type"),
+            "is_answer_text": _to_bool(metadata.get("is_answer_text"), default=True),
         })
     return raw_general_chunks
 
@@ -1771,10 +1859,11 @@ async def retrieve_context_vectors(
 
     # Hybrid lexical fusion: blend lexical overlap with semantic/rerank score.
     final_contexts = _apply_lexical_fusion(query, final_contexts)
-    final_contexts = final_contexts[:top_k]
+    final_contexts = _apply_prompt_question_policy(query, final_contexts)
 
     # Drop weak off-topic hits before handing context to the planner.
     final_contexts = _apply_anchor_relevance_filter(final_contexts, query)
+    final_contexts = final_contexts[:top_k]
     
     
     namespace = get_namespace(creator_id, twin_id)

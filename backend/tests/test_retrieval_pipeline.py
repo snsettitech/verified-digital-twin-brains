@@ -456,6 +456,59 @@ class TestTwinScopedGuardrails:
         )
 
 
+class TestPromptQuestionFiltering:
+    """Test prompt-question contamination guards."""
+
+    async def test_identity_query_excludes_prompt_question_when_answer_text_exists(self):
+        from modules.retrieval import _apply_prompt_question_policy
+
+        contexts = [
+            {
+                "text": "1) Who are you (short bio used in the twin)",
+                "score": 0.92,
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            },
+            {
+                "text": "I am a pragmatic operator focused on fast decisions and founder support.",
+                "score": 0.66,
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            },
+        ]
+
+        filtered = _apply_prompt_question_policy("Tell me about yourself", contexts)
+
+        assert len(filtered) == 1
+        assert filtered[0]["block_type"] == "answer_text"
+        assert "Who are you" not in filtered[0]["text"]
+
+    async def test_prompt_question_penalty_applies_when_no_answer_text_exists(self):
+        from modules.retrieval import _apply_prompt_question_policy
+
+        contexts = [
+            {
+                "text": "1) Who are you (short bio used in the twin)",
+                "score": 0.80,
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            },
+            {
+                "text": "2) What are your core expertise areas?",
+                "score": 0.70,
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            },
+        ]
+
+        filtered = _apply_prompt_question_policy("Tell me about yourself", contexts)
+
+        assert len(filtered) == 2
+        assert all(row.get("block_type") == "prompt_question" for row in filtered)
+        assert all(bool(row.get("prompt_question_fallback")) for row in filtered)
+        assert float(filtered[0]["score"]) < 0.80
+
+
 class TestAnchorRelevanceFiltering:
     """Test off-topic filtering for weak retrieval matches."""
 

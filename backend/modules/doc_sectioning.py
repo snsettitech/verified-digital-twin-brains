@@ -11,6 +11,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 _WHITESPACE_RE = re.compile(r"\s+")
 _NUMBERED_HEADING_RE = re.compile(r"^\s*(\d{1,3})[\)\.]?\s+(.+?)\s*$")
 _MARKDOWN_HEADING_RE = re.compile(r"^\s*#{1,6}\s+(.+?)\s*$")
+_BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d{1,3}[\)\.])\s+.+")
+_PROMPT_LEAD_RE = re.compile(
+    r"^\s*(?:who|what|when|where|why|how|can|do|does|did|should|would|is|are|could)\b",
+    re.IGNORECASE,
+)
 
 
 def _normalize_text(value: str) -> str:
@@ -45,7 +50,10 @@ def _looks_like_short_title(line: str) -> bool:
 def _detect_heading(line: str) -> Optional[Dict[str, Any]]:
     numbered = _NUMBERED_HEADING_RE.match(line)
     if numbered:
-        return {"level": 1, "title": f"{numbered.group(1)}) {numbered.group(2).strip()}"}
+        tail = numbered.group(2).strip()
+        if _looks_like_prompt_question_line(tail):
+            return None
+        return {"level": 1, "title": f"{numbered.group(1)}) {tail}"}
 
     markdown = _MARKDOWN_HEADING_RE.match(line)
     if markdown:
@@ -58,6 +66,52 @@ def _detect_heading(line: str) -> Optional[Dict[str, Any]]:
         return {"level": 2, "title": line.strip(": ").strip()}
 
     return None
+
+
+def _looks_like_prompt_question_line(line: str) -> bool:
+    normalized = _normalize_text(line).rstrip(".")
+    if not normalized:
+        return False
+    if normalized.endswith("?"):
+        return True
+    if _PROMPT_LEAD_RE.match(normalized):
+        return True
+    return False
+
+
+def _infer_block_type(text: str) -> str:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return "paragraph"
+
+    lines = [_normalize_text(row) for row in str(text or "").split("\n") if _normalize_text(row)]
+    if not lines:
+        return "paragraph"
+
+    if len(lines) == 1:
+        line = lines[0]
+        if _looks_like_short_title(line):
+            return "heading"
+        if _looks_like_prompt_question_line(line):
+            return "prompt_question"
+
+    question_like = 0
+    bullet_like = 0
+    for line in lines:
+        if _looks_like_prompt_question_line(line):
+            question_like += 1
+        if _BULLET_RE.match(line):
+            bullet_like += 1
+
+    line_count = len(lines)
+    if line_count > 0 and question_like >= 2 and (question_like / float(line_count)) >= 0.5:
+        return "prompt_question"
+    if line_count > 0 and bullet_like >= 2 and (bullet_like / float(line_count)) >= 0.5:
+        return "bullet_list"
+    if "|" in normalized and line_count >= 2:
+        return "table"
+
+    return "answer_text"
 
 
 def extract_section_blocks(
@@ -93,6 +147,9 @@ def extract_section_blocks(
         row["section_title"] = active_title
         row["section_path"] = active_path
         row["chunk_type"] = "section"
+        block_type = _infer_block_type(joined)
+        row["block_type"] = block_type
+        row["is_answer_text"] = block_type in {"answer_text", "bullet_list", "table", "paragraph"}
         blocks.append(row)
         buffer = []
 
@@ -143,4 +200,3 @@ def section_filter_contexts(
     if max_items is None:
         return [dict(c) for c in contexts if isinstance(c, dict)]
     return [dict(c) for c in contexts if isinstance(c, dict)][: max(0, max_items)]
-
