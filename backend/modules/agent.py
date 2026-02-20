@@ -31,6 +31,7 @@ from modules.answerability import (
     build_targeted_clarification_questions,
     evaluate_answerability,
 )
+from modules.response_composer import compose_answer_points
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -969,6 +970,8 @@ async def planner_node(state: TwinState):
     raw_context = state.get("retrieved_context", {}).get("results", [])
     context_data = [row for row in raw_context if isinstance(row, dict)] if isinstance(raw_context, list) else []
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
+    query_class = str(state.get("query_class") or "factual").strip().lower() or "factual"
+    quote_intent = bool(state.get("quote_intent"))
     _system_msg, persona_trace = build_system_prompt_with_trace(state)
     valid_source_ids: List[str] = _collect_valid_source_ids(context_data)
 
@@ -1192,35 +1195,40 @@ Rules:
         )
     except Exception as exc:
         print(f"Planner composition error: {exc}")
-        fallback_points = []
-        for row in context_data[:3]:
-            text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
-            if text:
-                fallback_points.append(text[:260])
-            if len(fallback_points) >= 3:
-                break
+        composed = compose_answer_points(
+            query=user_query,
+            query_class=query_class,
+            quote_intent=quote_intent,
+            planner_points=[],
+            context_data=context_data,
+            max_points=3,
+        )
+        fallback_points = [p for p in composed.get("points", []) if isinstance(p, str) and p.strip()]
+        fallback_citations = _sanitize_citations(composed.get("source_ids"))
         plan = {
-            "answer_points": fallback_points or [UNCERTAINTY_RESPONSE],
-            "citations": valid_source_ids[:3],
+            "answer_points": fallback_points or ["Answer: The retrieved evidence supports a concise response."],
+            "citations": fallback_citations or valid_source_ids[:3],
             "confidence": float(answerability.get("confidence") or 0.5),
             "reasoning_trace": "Planner composition fallback used.",
         }
 
-    answer_points = _sanitize_answer_points(plan.get("answer_points"))
+    planner_points = _sanitize_answer_points(plan.get("answer_points"))
+    composed = compose_answer_points(
+        query=user_query,
+        query_class=query_class,
+        quote_intent=quote_intent,
+        planner_points=planner_points,
+        context_data=context_data,
+        max_points=3,
+    )
+    answer_points = [p for p in composed.get("points", []) if isinstance(p, str) and p.strip()]
     if not answer_points:
-        fallback_points = []
-        for row in context_data[:3]:
-            text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
-            if text:
-                fallback_points.append(text[:260])
-            if len(fallback_points) >= 3:
-                break
-        if fallback_points:
-            answer_points = fallback_points
-        else:
-            answer_points = ["The answer is supported by the retrieved evidence and citations above."]
+        answer_points = ["Answer: The retrieved evidence supports a concise response."]
 
     citations = _sanitize_citations(plan.get("citations"))
+    composed_citations = _sanitize_citations(composed.get("source_ids"))
+    if not citations and composed_citations:
+        citations = composed_citations
     if not citations and valid_source_ids:
         citations = valid_source_ids[:3]
 
