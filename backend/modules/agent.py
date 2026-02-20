@@ -777,6 +777,7 @@ async def deepagents_node(state: TwinState):
             actor_user_id=state.get("actor_user_id"),
             tenant_id=state.get("tenant_id"),
             conversation_id=None,
+            interaction_context=str(state.get("interaction_context") or ""),
         )
     except Exception as exc:
         result = {
@@ -798,17 +799,26 @@ async def deepagents_node(state: TwinState):
     }
     action = "answer"
 
-    if status == "disabled":
+    if status in {"disabled", "forbidden"}:
         action = "refuse"
         confidence = 0.0
         error = result.get("error") if isinstance(result.get("error"), dict) else {}
-        message = str(error.get("message") or "Action execution is disabled for this deployment.").strip()
+        default_message = (
+            "Action execution is unavailable in this context."
+            if status == "forbidden"
+            else "Action execution is disabled for this deployment."
+        )
+        message = str(error.get("message") or default_message).strip()
         answer_points = [message]
         answerability = {
             "answerability": "insufficient",
             "answerable": False,
             "confidence": 0.0,
-            "reasoning": "Execution lane is disabled via feature flag.",
+            "reasoning": (
+                "Execution lane is forbidden for public/anonymous contexts."
+                if status == "forbidden"
+                else "Execution lane is disabled via feature flag."
+            ),
             "missing_information": [],
             "ambiguity_level": "low",
         }
@@ -881,6 +891,19 @@ async def deepagents_node(state: TwinState):
         "clarifying_questions": teaching_questions[:1],
     }
 
+    execution_lane_meta = {
+        "status": status or "unknown",
+        "action_type": str(plan.get("action_type") or result.get("action_type") or "").strip() or None,
+        "needs_approval": status == "needs_approval",
+        "action_id": str(result.get("action_id") or "").strip() or None,
+        "execution_id": str(result.get("execution_id") or "").strip() or None,
+        "error_code": (
+            str((result.get("error") or {}).get("code") or "").strip()
+            if isinstance(result.get("error"), dict)
+            else None
+        ),
+    }
+
     return {
         "planning_output": {
             "answer_points": answer_points[:3],
@@ -891,10 +914,7 @@ async def deepagents_node(state: TwinState):
             "render_strategy": "source_faithful",
             "reasoning_trace": str(answerability.get("reasoning") or ""),
             "answerability": answerability,
-            "execution_lane": {
-                "plan": plan,
-                "result": result,
-            },
+            "execution_lane": execution_lane_meta,
         },
         "confidence_score": confidence,
         "routing_decision": updated_routing_decision,

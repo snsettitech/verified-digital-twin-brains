@@ -79,10 +79,23 @@ async def execute_deepagents_plan(
     actor_user_id: Optional[str],
     tenant_id: Optional[str],
     conversation_id: Optional[str],
+    interaction_context: Optional[str] = None,
 ) -> Dict[str, Any]:
     config = deepagents_config()
     if not config["enabled"]:
         return _disabled_result(config)
+
+    normalized_context = str(interaction_context or "").strip().lower()
+    if not actor_user_id or normalized_context in {"public_share", "public_widget"}:
+        return {
+            "status": "forbidden",
+            "http_status": 403,
+            "error": {
+                "code": "DEEPAGENTS_FORBIDDEN_CONTEXT",
+                "message": "Action execution is unavailable in public or anonymous contexts.",
+            },
+            "config": config,
+        }
 
     control_action = str(plan.get("control_action") or "").strip().lower()
     target_action_id = str(plan.get("target_action_id") or "").strip() or None

@@ -35,7 +35,7 @@ async def test_action_request_routes_to_execution_lane_without_doc_clarifier(mon
     }
     planned = await deepagents_node(lane_state)
     assert planned["routing_decision"]["action"] == "answer"
-    assert planned["planning_output"]["execution_lane"]["result"]["status"] == "needs_approval"
+    assert planned["planning_output"]["execution_lane"]["status"] == "needs_approval"
     assert planned["planning_output"]["teaching_questions"] == []
 
 
