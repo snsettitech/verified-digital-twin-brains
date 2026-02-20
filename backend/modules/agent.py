@@ -786,6 +786,11 @@ async def deepagents_node(state: TwinState):
         }
 
     status = str(result.get("status") or "").strip().lower()
+    error_code = (
+        str((result.get("error") or {}).get("code") or "").strip()
+        if isinstance(result.get("error"), dict)
+        else ""
+    )
     confidence = 0.0
     answer_points: List[str] = []
     teaching_questions: List[str] = []
@@ -897,12 +902,17 @@ async def deepagents_node(state: TwinState):
         "needs_approval": status == "needs_approval",
         "action_id": str(result.get("action_id") or "").strip() or None,
         "execution_id": str(result.get("execution_id") or "").strip() or None,
-        "error_code": (
-            str((result.get("error") or {}).get("code") or "").strip()
-            if isinstance(result.get("error"), dict)
-            else None
-        ),
+        "error_code": error_code or None,
     }
+    telemetry = _build_planner_telemetry(
+        deepagents_route_rate=1,
+        deepagents_forbidden_context_rate=1
+        if status == "forbidden" and error_code == "DEEPAGENTS_FORBIDDEN_CONTEXT"
+        else 0,
+        deepagents_missing_params_rate=1 if status == "missing_params" else 0,
+        deepagents_needs_approval_rate=1 if status == "needs_approval" else 0,
+        deepagents_executed_rate=1 if status == "executed" else 0,
+    )
 
     return {
         "planning_output": {
@@ -915,6 +925,7 @@ async def deepagents_node(state: TwinState):
             "reasoning_trace": str(answerability.get("reasoning") or ""),
             "answerability": answerability,
             "execution_lane": execution_lane_meta,
+            "telemetry": telemetry,
         },
         "confidence_score": confidence,
         "routing_decision": updated_routing_decision,
@@ -1239,6 +1250,47 @@ def _should_break_clarification_loop(
     return False
 
 
+def _build_planner_telemetry(
+    *,
+    retry_reason: str = "none",
+    prompt_question_dominance: bool = False,
+    answer_text_ratio: float = 0.0,
+    intent_recovered: bool = False,
+    noisy_section_filtered_count: int = 0,
+    clarify_option_count: int = 0,
+    deepagents_route_rate: int = 0,
+    deepagents_forbidden_context_rate: int = 0,
+    deepagents_missing_params_rate: int = 0,
+    deepagents_needs_approval_rate: int = 0,
+    deepagents_executed_rate: int = 0,
+    public_action_query_guarded_rate: int = 0,
+    selection_recovery_failure_rate: int = 0,
+) -> Dict[str, Any]:
+    return {
+        "retrieval.retry_reason": str(retry_reason or "none"),
+        "retrieval.prompt_question_dominance": bool(prompt_question_dominance),
+        "retrieval.answer_text_ratio": max(0.0, min(1.0, float(answer_text_ratio or 0.0))),
+        "planner.intent_recovered": bool(intent_recovered),
+        "clarify.noisy_section_filtered_count": max(0, int(noisy_section_filtered_count or 0)),
+        "clarify.option_count": max(0, int(clarify_option_count or 0)),
+        "deepagents_route_rate": 1 if int(deepagents_route_rate or 0) > 0 else 0,
+        "deepagents_forbidden_context_rate": (
+            1 if int(deepagents_forbidden_context_rate or 0) > 0 else 0
+        ),
+        "deepagents_missing_params_rate": 1 if int(deepagents_missing_params_rate or 0) > 0 else 0,
+        "deepagents_needs_approval_rate": (
+            1 if int(deepagents_needs_approval_rate or 0) > 0 else 0
+        ),
+        "deepagents_executed_rate": 1 if int(deepagents_executed_rate or 0) > 0 else 0,
+        "public_action_query_guarded_rate": (
+            1 if int(public_action_query_guarded_rate or 0) > 0 else 0
+        ),
+        "selection_recovery_failure_rate": (
+            1 if int(selection_recovery_failure_rate or 0) > 0 else 0
+        ),
+    }
+
+
 def _merge_context_rows(
     base_rows: List[Dict[str, Any]],
     extra_rows: List[Dict[str, Any]],
@@ -1417,10 +1469,13 @@ async def planner_node(state: TwinState):
     state_messages = [m for m in (state.get("messages") or []) if isinstance(m, BaseMessage)]
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
     effective_query = user_query
-    if _is_selection_reply(user_query):
+    selection_reply = _is_selection_reply(user_query)
+    if selection_reply:
         recovered_query = _extract_last_substantive_user_query(state_messages)
         if recovered_query:
             effective_query = recovered_query
+    intent_recovered = bool(effective_query != user_query)
+    selection_recovery_failed = bool(selection_reply and not intent_recovered)
     query_class = str(state.get("query_class") or "factual").strip().lower() or "factual"
     quote_intent = bool(state.get("quote_intent"))
     _system_msg, persona_trace = build_system_prompt_with_trace(state)
@@ -1505,6 +1560,7 @@ async def planner_node(state: TwinState):
                 "render_strategy": "source_faithful",
                 "reasoning_trace": "Smalltalk planner bypass.",
                 "answerability": smalltalk_answerability,
+                "telemetry": _build_planner_telemetry(),
             },
             "confidence_score": smalltalk_confidence,
             "routing_decision": updated_routing_decision,
@@ -1536,6 +1592,10 @@ async def planner_node(state: TwinState):
         answerability_state = "direct" if bool(answerability.get("answerable")) else "insufficient"
         answerability["answerability"] = answerability_state
     answerability["answerable"] = answerability_state in {"direct", "derivable"}
+    evidence_quality = _answer_text_quality(context_data)
+    prompt_question_dominance = float(evidence_quality.get("prompt_question_ratio") or 0.0) >= 0.5
+    answer_text_ratio = float(evidence_quality.get("answer_text_ratio") or 0.0)
+    retry_reasons: List[str] = []
 
     second_pass_used = False
     loop_break_candidate = _should_break_clarification_loop(
@@ -1550,6 +1610,15 @@ async def planner_node(state: TwinState):
         or loop_break_candidate
         or low_quality_retry_candidate
     )
+    if answerability_state == "insufficient":
+        if 0 < len(context_data) < 3:
+            retry_reasons.append("low_chunk_count")
+        if query_class == "identity" and 0 < len(context_data) < PLANNER_SECOND_PASS_RETRIEVAL_TOP_K:
+            retry_reasons.append("identity_sparse")
+        if loop_break_candidate:
+            retry_reasons.append("clarification_loop_break")
+        if low_quality_retry_candidate:
+            retry_reasons.append("low_quality_evidence")
     if should_second_pass:
         twin_id = str(state.get("twin_id") or "").strip()
         if twin_id:
@@ -1577,6 +1646,11 @@ async def planner_node(state: TwinState):
                     answerability_state = "direct" if bool(answerability.get("answerable")) else "insufficient"
                     answerability["answerability"] = answerability_state
                 answerability["answerable"] = answerability_state in {"direct", "derivable"}
+                evidence_quality = _answer_text_quality(context_data)
+                prompt_question_dominance = (
+                    float(evidence_quality.get("prompt_question_ratio") or 0.0) >= 0.5
+                )
+                answer_text_ratio = float(evidence_quality.get("answer_text_ratio") or 0.0)
 
     if (
         answerability_state == "insufficient"
@@ -1623,6 +1697,15 @@ async def planner_node(state: TwinState):
             "required_inputs_missing": [str(v) for v in missing_information[:3]],
             "clarifying_questions": clarification_questions[:3],
         }
+        planner_telemetry = _build_planner_telemetry(
+            retry_reason="+".join(retry_reasons) if retry_reasons else "none",
+            prompt_question_dominance=prompt_question_dominance,
+            answer_text_ratio=answer_text_ratio,
+            intent_recovered=intent_recovered,
+            noisy_section_filtered_count=0,
+            clarify_option_count=len(clarification_questions[:3]),
+            selection_recovery_failure_rate=1 if selection_recovery_failed else 0,
+        )
 
         return {
             "planning_output": {
@@ -1634,6 +1717,7 @@ async def planner_node(state: TwinState):
                 "render_strategy": "source_faithful",
                 "reasoning_trace": str(answerability.get("reasoning") or ""),
                 "answerability": answerability,
+                "telemetry": planner_telemetry,
             },
             "confidence_score": insufficient_confidence,
             "routing_decision": updated_routing_decision,
@@ -1744,6 +1828,15 @@ Rules:
         "required_inputs_missing": [],
         "clarifying_questions": [],
     }
+    planner_telemetry = _build_planner_telemetry(
+        retry_reason="+".join(retry_reasons) if (second_pass_used and retry_reasons) else "none",
+        prompt_question_dominance=prompt_question_dominance,
+        answer_text_ratio=answer_text_ratio,
+        intent_recovered=intent_recovered,
+        noisy_section_filtered_count=0,
+        clarify_option_count=0,
+        selection_recovery_failure_rate=1 if selection_recovery_failed else 0,
+    )
 
     return {
         "planning_output": {
@@ -1755,6 +1848,7 @@ Rules:
             "render_strategy": "source_faithful",
             "reasoning_trace": str(plan.get("reasoning_trace") or answerability.get("reasoning") or ""),
             "answerability": answerability,
+            "telemetry": planner_telemetry,
         },
         "confidence_score": confidence,
         "routing_decision": updated_routing_decision,
