@@ -216,7 +216,14 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
             headers['Authorization'] = `Bearer ${token}`;
         }
 
-        await ingestUrlWithFallback({ backendUrl, twinId, url, headers });
+        await ingestUrlWithFallback({
+          backendUrl,
+          twinId,
+          url,
+          headers,
+          label: 'knowledge',
+          identityConfirmed: false,
+        });
     }, [isE2EBypass, supabase, twinId]);
 
     const handleKnowledgeUpload = useCallback(async (files: File[]) => {
@@ -231,7 +238,14 @@ function TwinConsoleContent({ twinId }: { twinId: string }) {
         }
 
         for (const file of files) {
-            await uploadFileWithFallback({ backendUrl, twinId, file, headers });
+            await uploadFileWithFallback({
+              backendUrl,
+              twinId,
+              file,
+              headers,
+              label: 'knowledge',
+              identityConfirmed: false,
+            });
         }
     }, [isE2EBypass, supabase, twinId]);
 

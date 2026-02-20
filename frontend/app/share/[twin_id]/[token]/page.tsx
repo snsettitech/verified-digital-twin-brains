@@ -442,6 +442,9 @@ export default function PublicSharePage() {
             {/* Chat Area */}
             <div className="flex-1 overflow-y-auto px-4 py-6">
                 <div className="max-w-4xl mx-auto space-y-4">
+                    <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+                        Public share mode: responses use published knowledge only. Private owner memory, settings, and logs are hidden.
+                    </div>
                     {messages.length === 0 && (
                         <div className="text-center py-20">
                             <div className="w-20 h-20 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-indigo-500/30">
@@ -492,19 +495,6 @@ export default function PublicSharePage() {
                                     <div className="mt-3 pt-2 border-t border-white/10">
                                         <div className="flex items-center justify-between gap-4">
                                             <div className="flex flex-wrap gap-2">
-                                                {message.used_owner_memory && (
-                                                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] uppercase tracking-wider">
-                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                                        </svg>
-                                                        Owner Memory
-                                                    </span>
-                                                )}
-                                                {message.used_owner_memory && message.owner_memory_topics && message.owner_memory_topics.length > 0 && (
-                                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 text-[10px] uppercase tracking-wider">
-                                                        {message.owner_memory_topics.join(', ')}
-                                                    </span>
-                                                )}
                                                 {message.confidence_score !== undefined && (
                                                     <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wider ${message.confidence_score > 0.8
                                                         ? 'bg-green-500/20 text-green-300 border-green-500/30'

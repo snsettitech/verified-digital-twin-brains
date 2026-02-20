@@ -13,6 +13,8 @@ from enum import Enum
 from modules.auth_guard import get_current_user, verify_conversation_ownership, verify_twin_ownership
 from modules.langfuse_sdk import flush_client, get_client as get_langfuse_client, log_score
 from modules.observability import supabase
+from modules.owner_memory_store import get_owner_memory
+from modules.memory_events import create_memory_event
 from modules.persona_feedback_learning import record_feedback_training_event
 from modules.persona_feedback_learning_jobs import enqueue_feedback_learning_job
 
@@ -45,6 +47,12 @@ class FeedbackResponse(BaseModel):
     success: bool
     message: str
     trace_id: str
+
+
+class MemoryFeedbackRequest(BaseModel):
+    memory_id: str = Field(..., description="Owner memory UUID")
+    action: Literal["approve", "reject", "correct", "lock", "unlock"] = Field(...)
+    correction: Optional[str] = Field(None, max_length=2000)
 
 
 @router.post("/feedback/{trace_id}", response_model=FeedbackResponse)
@@ -189,3 +197,44 @@ async def get_feedback_reasons():
             {"value": "other", "label": "Other"},
         ]
     }
+
+
+@router.post("/memory/feedback")
+async def submit_memory_feedback(request: MemoryFeedbackRequest, user=Depends(get_current_user)):
+    """
+    Normalized memory feedback endpoint for UI controls.
+    """
+    if not user or not user.get("user_id"):
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    memory = get_owner_memory(request.memory_id)
+    if not memory:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    twin_id = memory.get("twin_id")
+    if not twin_id:
+        raise HTTPException(status_code=400, detail="Memory missing twin scope")
+
+    verify_twin_ownership(twin_id, user)
+
+    event_payload = {
+        "memory_id": request.memory_id,
+        "action": request.action,
+        "correction": request.correction,
+        "submitted_by": user.get("user_id"),
+    }
+
+    try:
+        await create_memory_event(
+            twin_id=twin_id,
+            tenant_id=user.get("tenant_id"),
+            event_type="owner_memory_feedback",
+            payload=event_payload,
+            status="applied",
+            source_type="manual",
+            source_id=request.memory_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record memory feedback: {e}")
+
+    return {"success": True, "status": "recorded", "memory_id": request.memory_id, "action": request.action}

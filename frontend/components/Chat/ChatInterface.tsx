@@ -10,6 +10,13 @@ import { API_ENDPOINTS } from '@/lib/constants';
 
 const STREAM_IDLE_TIMEOUT_MS = 60000;
 
+export type ChatStreamEventType = 'metadata' | 'clarify' | 'content' | 'done' | 'error';
+
+export interface ChatStreamEvent {
+  type: ChatStreamEventType;
+  payload?: any;
+}
+
 export default function ChatInterface({
   twinId,
   conversationId,
@@ -19,7 +26,8 @@ export default function ChatInterface({
   mode = 'owner',
   trainingSessionId,
   publicShareToken,
-  onMemoryUpdated
+  onMemoryUpdated,
+  onStreamEvent,
 }: {
   twinId: string;
   conversationId?: string | null;
@@ -30,6 +38,7 @@ export default function ChatInterface({
   trainingSessionId?: string | null;
   publicShareToken?: string | null;
   onMemoryUpdated?: () => void;
+  onStreamEvent?: (event: ChatStreamEvent) => void;
 }) {
   const { user } = useTwin();
   const isE2EBypass =
@@ -78,6 +87,15 @@ export default function ChatInterface({
     return `simulator_chat_${resolvedTenantId}_${twinId}_${contextStorageKey}`;
   }, [tenantId, user?.tenant_id, twinId, contextStorageKey]);
   const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
+
+  const emitStreamEvent = useCallback((type: ChatStreamEventType, payload?: any) => {
+    if (!onStreamEvent) return;
+    try {
+      onStreamEvent({ type, payload });
+    } catch (err) {
+      console.error('[ChatInterface] onStreamEvent callback failed', err);
+    }
+  }, [onStreamEvent]);
 
   useEffect(() => {
     setEffectiveConversationId(conversationId || null);
@@ -360,20 +378,45 @@ export default function ChatInterface({
           const next = [...prev];
           const lastMsg = { ...next[next.length - 1] };
 
-          if (data.status === 'queued') {
-            lastMsg.content = data.message || 'Queued for owner confirmation.';
-            lastMsg.confidence_score = 0;
-            lastMsg.citations = [];
-          } else {
-            lastMsg.content = data.response || 'No response generated.';
-            lastMsg.confidence_score = data.confidence_score;
-            lastMsg.citations = data.citations;
-            lastMsg.citation_details = data.citation_details;
+        if (data.status === 'queued') {
+          lastMsg.content = data.message || 'Queued for owner confirmation.';
+          lastMsg.confidence_score = 0;
+          lastMsg.citations = [];
+          emitStreamEvent('clarify', data);
+        } else {
+          lastMsg.content = data.response || 'No response generated.';
+          lastMsg.confidence_score = data.confidence_score;
+          lastMsg.citations = data.citations;
+          lastMsg.citation_details = data.citation_details;
             lastMsg.owner_memory_refs = data.owner_memory_refs || [];
             lastMsg.owner_memory_topics = data.owner_memory_topics || [];
             lastMsg.used_owner_memory = Boolean(data.used_owner_memory);
-            lastMsg.teaching_questions = [];
-          }
+          lastMsg.teaching_questions = [];
+          emitStreamEvent('metadata', {
+            confidence_score: data.confidence_score,
+            citations: data.citations,
+            citation_details: data.citation_details,
+            owner_memory_refs: data.owner_memory_refs || [],
+            owner_memory_topics: data.owner_memory_topics || [],
+            used_owner_memory: Boolean(data.used_owner_memory),
+            dialogue_mode: data.dialogue_mode,
+            intent_label: data.intent_label,
+            workflow_intent: data.workflow_intent,
+            module_ids: data.module_ids,
+            routing_decision: data.routing_decision,
+            render_strategy: data.render_strategy,
+            query_class: data.query_class,
+            quote_intent: data.quote_intent,
+            answerability_state: data.answerability_state,
+            planner_action: data.planner_action,
+            retrieval_stats: data.retrieval_stats,
+            selected_evidence_block_types: data.selected_evidence_block_types,
+            debug_snapshot: data.debug_snapshot,
+            grounding_verifier: data.grounding_verifier,
+            online_eval: data.online_eval,
+          });
+          emitStreamEvent('done', data);
+        }
 
           next[next.length - 1] = lastMsg;
           return next;
@@ -449,6 +492,7 @@ export default function ChatInterface({
                 setIsSearching(false);
                 setLoading(false);
                 setClarification(data);
+                emitStreamEvent('clarify', data);
                 const proposedTopic = data?.memory_write_proposal?.topic;
                 setLastDebug({
                   decision: 'CLARIFY',
@@ -470,6 +514,7 @@ export default function ChatInterface({
                 });
               } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
                 setIsSearching(false); // Found context, now generating
+                emitStreamEvent('metadata', data);
                 if (
                   data.conversation_id &&
                   onConversationStarted &&
@@ -527,6 +572,7 @@ export default function ChatInterface({
                   return last;
                 });
               } else if (data.type === 'answer_token' || data.type === 'content') {
+                emitStreamEvent('content', data);
                 setMessages((prev) => {
                   const last = [...prev];
                   const lastMsg = { ...last[last.length - 1] };
@@ -535,7 +581,7 @@ export default function ChatInterface({
                   return last;
                 });
               } else if (data.type === 'done') {
-                // no-op
+                emitStreamEvent('done', data);
               }
             } catch (e) {
               console.error('Error parsing stream line:', e);
@@ -551,6 +597,7 @@ export default function ChatInterface({
             setIsSearching(false);
             setLoading(false);
             setClarification(data);
+            emitStreamEvent('clarify', data);
             const proposedTopic = data?.memory_write_proposal?.topic;
             setLastDebug({
               decision: 'CLARIFY',
@@ -572,6 +619,7 @@ export default function ChatInterface({
             });
           } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
             setIsSearching(false);
+            emitStreamEvent('metadata', data);
             if (
               data.conversation_id &&
               onConversationStarted &&
@@ -625,6 +673,7 @@ export default function ChatInterface({
               return last;
             });
           } else if (data.type === 'answer_token' || data.type === 'content') {
+            emitStreamEvent('content', data);
             setMessages((prev) => {
               const last = [...prev];
               const lastMsg = { ...last[last.length - 1] };
@@ -639,6 +688,10 @@ export default function ChatInterface({
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
+      emitStreamEvent('error', {
+        name: error?.name,
+        message: error?.message,
+      });
       const message = error?.name === 'AbortError'
         ? 'Connection stalled. Please retry.'
         : (error?.message || "Sorry, I'm having trouble connecting to my brain right now.");
@@ -927,7 +980,7 @@ export default function ChatInterface({
         </div>
         <div className="mt-4 flex items-center justify-center gap-2 text-[10px] text-slate-400 font-medium">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span>Powered by verified knowledge - End-to-end encrypted</span>
+          <span>Private by default. You control storage, export, and deletion.</span>
         </div>
       </div>
     </div>

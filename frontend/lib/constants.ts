@@ -54,6 +54,8 @@ export const API_ENDPOINTS = {
   TWIN_KNOWLEDGE_PROFILE: (twinId: string) => `/twins/${twinId}/knowledge-profile`,
   TWIN_GRAPH: (twinId: string) => `/twins/${twinId}/graph`,
   TWIN_GRAPH_STATS: (twinId: string) => `/twins/${twinId}/graph-stats`,
+  TWIN_LOGS: (twinId: string) => `/twins/${twinId}/logs`,
+  TWIN_EXPORT: (twinId: string) => `/twins/${twinId}/export`,
   
   // Chat
   CHAT: (twinId: string) => `/chat/${twinId}`,
@@ -86,6 +88,13 @@ export const API_ENDPOINTS = {
   CLARIFICATION_RESOLVE: (twinId: string, clarificationId: string) => 
     `/twins/${twinId}/clarifications/${clarificationId}/resolve`,
   OWNER_CORRECTIONS: (twinId: string) => `/twins/${twinId}/owner-corrections`,
+  MEMORY_FEEDBACK: '/memory/feedback',
+
+  // Actions (normalized twin-scoped contracts)
+  ACTIONS: (twinId: string) => `/twins/${twinId}/actions`,
+  ACTIONS_EXECUTE: (twinId: string) => `/twins/${twinId}/actions/execute`,
+  ACTIONS_APPROVE: (twinId: string, actionId: string) => `/twins/${twinId}/actions/${actionId}/approve`,
+  ACTIONS_CANCEL: (twinId: string, actionId: string) => `/twins/${twinId}/actions/${actionId}/cancel`,
   // ISSUE-001: Added ingestion-jobs endpoints (clearer terminology)
   // Training sessions remain for interview functionality (that IS training)
   INGESTION_JOBS: '/ingestion-jobs',

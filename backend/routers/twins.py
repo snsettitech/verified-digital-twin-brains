@@ -1124,6 +1124,33 @@ async def export_twin(twin_id: str, user=Depends(verify_owner)):
         print(f"[TWINS] Error exporting twin: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/twins/{twin_id}/logs")
+async def get_twin_access_logs(
+    twin_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    user=Depends(verify_owner),
+):
+    """
+    Return recent audit/access logs for a twin.
+    """
+    verify_twin_ownership(twin_id, user)
+    try:
+        res = (
+            supabase.table("audit_logs")
+            .select("id, event_type, action, actor_id, metadata, created_at")
+            .eq("twin_id", twin_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        return {"logs": res.data or []}
+    except Exception as e:
+        message = str(e).lower()
+        if "audit_logs" in message and ("not found" in message or "schema cache" in message):
+            raise HTTPException(status_code=501, detail="Audit logs are not available in this environment")
+        raise HTTPException(status_code=500, detail=str(e))
+
 def is_twin_deleted(twin_id: str) -> bool:
     """
     Check if a twin is archived/deleted.

@@ -33,6 +33,8 @@ ALLOWED_EXTENSIONS = {
     '.json': 'JSON file',
 }
 
+ALLOWED_SOURCE_LABELS = {"identity", "knowledge", "policies"}
+
 
 def _validate_file_size(content_length: int) -> None:
     """
@@ -80,15 +82,96 @@ class XThreadIngestRequest(BaseModel):
 
 class URLIngestRequest(BaseModel):
     url: str
+    source_label: Optional[str] = None
+    identity_confirmed: Optional[bool] = False
 
 class URLIngestWithTwinRequest(BaseModel):
     url: str
     twin_id: str
+    source_label: Optional[str] = None
+    identity_confirmed: Optional[bool] = False
 
 def _get_correlation_id(request: Request) -> Optional[str]:
     return request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
 
-def _insert_source_row(*, source_id: str, twin_id: str, provider: str, filename: str, citation_url: Optional[str] = None):
+def _normalize_source_label(label: Optional[str]) -> Optional[str]:
+    if not isinstance(label, str):
+        return None
+    normalized = label.strip().lower()
+    if normalized in ALLOWED_SOURCE_LABELS:
+        return normalized
+    return None
+
+
+def _validate_source_label(
+    source_label: Optional[str],
+    identity_confirmed: Optional[bool],
+) -> Optional[str]:
+    normalized = _normalize_source_label(source_label)
+    if not normalized:
+        if not source_label:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"source_label is required. Allowed values: {', '.join(sorted(ALLOWED_SOURCE_LABELS))}",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid source_label. Allowed values: {', '.join(sorted(ALLOWED_SOURCE_LABELS))}",
+        )
+    if normalized == "identity" and not bool(identity_confirmed):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Identity sources require identity_confirmed=true",
+        )
+    return normalized
+
+
+def _persist_source_label_metadata(
+    *,
+    source_id: str,
+    source_label: Optional[str],
+    identity_confirmed: Optional[bool],
+) -> None:
+    """
+    Best-effort persistence across evolving schemas.
+    """
+    if not source_label:
+        return
+
+    try:
+        supabase.table("sources").update(
+            {
+                "source_label": source_label,
+                "identity_label_confirmed": bool(identity_confirmed),
+            }
+        ).eq("id", source_id).execute()
+        return
+    except Exception:
+        pass
+
+    try:
+        existing = supabase.table("sources").select("metadata").eq("id", source_id).single().execute()
+        metadata = {}
+        if existing.data and isinstance(existing.data.get("metadata"), dict):
+            metadata = dict(existing.data["metadata"])
+        metadata["source_label"] = source_label
+        metadata["identity_label_confirmed"] = bool(identity_confirmed)
+        supabase.table("sources").update({"metadata": metadata}).eq("id", source_id).execute()
+    except Exception:
+        # Schema may not support either column; leave as best-effort.
+        pass
+
+
+def _insert_source_row(
+    *,
+    source_id: str,
+    twin_id: str,
+    provider: str,
+    filename: str,
+    citation_url: Optional[str] = None,
+    source_label: Optional[str] = None,
+    identity_confirmed: Optional[bool] = False,
+):
     # Keep insert minimal and safe; later steps will update content_text, hashes, etc.
     supabase.table("sources").insert({
         "id": source_id,
@@ -101,6 +184,11 @@ def _insert_source_row(*, source_id: str, twin_id: str, provider: str, filename:
         "health_status": "healthy",
         "citation_url": citation_url,
     }).execute()
+    _persist_source_label_metadata(
+        source_id=source_id,
+        source_label=source_label,
+        identity_confirmed=identity_confirmed,
+    )
 
 def _queue_ingestion_job(*, source_id: str, twin_id: str, provider: str, url: Optional[str], correlation_id: Optional[str]) -> str:
     return create_training_job(
@@ -186,6 +274,8 @@ async def ingest_x(twin_id: str, request: XThreadIngestRequest, http_req: Reques
 async def ingest_file_endpoint(
     twin_id: str,
     file: UploadFile = File(...),
+    source_label: Optional[str] = Form(None),
+    identity_confirmed: Optional[bool] = Form(False),
     http_req: Request = None,
     user=Depends(verify_owner)
 ):
@@ -209,6 +299,7 @@ async def ingest_file_endpoint(
     """
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
+    normalized_label = _validate_source_label(source_label, identity_confirmed)
     
     temp_file_path = None
     try:
@@ -302,6 +393,12 @@ async def ingest_file_endpoint(
             "health_status": "healthy",
             "extracted_text_length": len(text),
         }).execute()
+
+        _persist_source_label_metadata(
+            source_id=source_id,
+            source_label=normalized_label,
+            identity_confirmed=identity_confirmed,
+        )
         
         # Log creation event
         ev_q = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
@@ -348,6 +445,7 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, http_req:
     """Ingest content from URL - auto-detects type (YouTube, X, Podcast, or generic page)."""
     # SECURITY: Verify user owns this twin before ingesting content
     verify_twin_ownership(twin_id, user)
+    normalized_label = _validate_source_label(request.source_label, request.identity_confirmed)
     try:
         url = request.url.strip()
         provider = detect_url_provider(url)
@@ -358,6 +456,8 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, http_req:
             provider=provider,
             filename=f"{provider.upper()}: queued",
             citation_url=url,
+            source_label=normalized_label,
+            identity_confirmed=request.identity_confirmed,
         )
         corr = _get_correlation_id(http_req)
         ev = start_step(source_id=source_id, twin_id=twin_id, provider=provider, step="queued", correlation_id=corr)
@@ -375,6 +475,8 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, http_req:
 async def ingest_document_compat(
     file: UploadFile = File(...),
     twin_id: str = Form(...),
+    source_label: Optional[str] = Form(None),
+    identity_confirmed: Optional[bool] = Form(False),
     http_req: Request = None,
     user=Depends(verify_owner)
 ):
@@ -385,7 +487,14 @@ async def ingest_document_compat(
     print("[DEPRECATED] /ingest/document called. Use /ingest/file/{twin_id}.")
     verify_twin_ownership(twin_id, user)
     try:
-        return await ingest_file_endpoint(twin_id=twin_id, file=file, http_req=http_req, user=user)
+        return await ingest_file_endpoint(
+            twin_id=twin_id,
+            file=file,
+            source_label=source_label,
+            identity_confirmed=identity_confirmed,
+            http_req=http_req,
+            user=user,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -399,7 +508,16 @@ async def ingest_url_compat(request: URLIngestWithTwinRequest, http_req: Request
     print("[DEPRECATED] /ingest/url called without twin_id in path. Use /ingest/url/{twin_id}.")
     verify_twin_ownership(request.twin_id, user)
     try:
-        return await ingest_url_endpoint(twin_id=request.twin_id, request=URLIngestRequest(url=request.url), http_req=http_req, user=user)
+        return await ingest_url_endpoint(
+            twin_id=request.twin_id,
+            request=URLIngestRequest(
+                url=request.url,
+                source_label=request.source_label,
+                identity_confirmed=request.identity_confirmed,
+            ),
+            http_req=http_req,
+            user=user,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

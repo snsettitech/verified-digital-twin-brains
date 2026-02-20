@@ -15,6 +15,10 @@ interface Step1IdentityProps {
     firstPerson: boolean;
     customInstructions: string;
   };
+  goals90Days: string[];
+  boundaries: string;
+  privacyConstraints: string;
+  uncertaintyPreference: 'ask' | 'infer';
   onTwinNameChange: (value: string) => void;
   onHandleChange: (value: string) => void;
   onTaglineChange: (value: string) => void;
@@ -22,6 +26,10 @@ interface Step1IdentityProps {
   onDomainsChange: (domains: string[]) => void;
   onCustomExpertiseChange: (expertise: string[]) => void;
   onPersonalityChange: (personality: any) => void;
+  onGoalsChange: (goals: string[]) => void;
+  onBoundariesChange: (value: string) => void;
+  onPrivacyConstraintsChange: (value: string) => void;
+  onUncertaintyPreferenceChange: (value: 'ask' | 'infer') => void;
 }
 
 const SPECIALIZATIONS = [
@@ -57,6 +65,10 @@ export default function Step1Identity({
   selectedDomains,
   customExpertise,
   personality,
+  goals90Days,
+  boundaries,
+  privacyConstraints,
+  uncertaintyPreference,
   onTwinNameChange,
   onHandleChange,
   onTaglineChange,
@@ -64,9 +76,13 @@ export default function Step1Identity({
   onDomainsChange,
   onCustomExpertiseChange,
   onPersonalityChange,
+  onGoalsChange,
+  onBoundariesChange,
+  onPrivacyConstraintsChange,
+  onUncertaintyPreferenceChange,
 }: Step1IdentityProps) {
   const [customTag, setCustomTag] = useState('');
-  const [activeTab, setActiveTab] = useState<'basic' | 'expertise' | 'personality'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'expertise' | 'anchors' | 'personality'>('basic');
 
   const toggleDomain = (domain: string) => {
     if (selectedDomains.includes(domain)) {
@@ -97,7 +113,7 @@ export default function Step1Identity({
 
       {/* Tab Navigation */}
       <div className="flex gap-2 p-1 bg-white/5 rounded-xl mb-6">
-        {(['basic', 'expertise', 'personality'] as const).map((tab) => (
+        {(['basic', 'expertise', 'anchors', 'personality'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -109,6 +125,7 @@ export default function Step1Identity({
           >
             {tab === 'basic' && 'Basic Info'}
             {tab === 'expertise' && 'Expertise'}
+            {tab === 'anchors' && 'Goals & Boundaries'}
             {tab === 'personality' && 'Personality'}
           </button>
         ))}
@@ -175,6 +192,89 @@ export default function Step1Identity({
                 placeholder="e.g., Startup founder sharing lessons learned"
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goals & Boundaries Tab */}
+      {activeTab === 'anchors' && (
+        <div className="space-y-6 animate-fadeIn">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Top 3 Goals (next 90 days)
+            </label>
+            <div className="space-y-2">
+              {[0, 1, 2].map((idx) => (
+                <input
+                  key={idx}
+                  type="text"
+                  value={goals90Days[idx] || ''}
+                  onChange={(e) => {
+                    const next = [...goals90Days];
+                    next[idx] = e.target.value;
+                    onGoalsChange(next);
+                  }}
+                  placeholder={`Goal ${idx + 1}`}
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Boundaries (do / do not)
+            </label>
+            <textarea
+              value={boundaries}
+              onChange={(e) => onBoundariesChange(e.target.value)}
+              rows={4}
+              placeholder="What should this twin avoid? What is out of scope?"
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Privacy constraints
+            </label>
+            <textarea
+              value={privacyConstraints}
+              onChange={(e) => onPrivacyConstraintsChange(e.target.value)}
+              rows={3}
+              placeholder="List confidential topics or data that should never be exposed."
+              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Uncertainty preference
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => onUncertaintyPreferenceChange('ask')}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                  uncertaintyPreference === 'ask'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-white'
+                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                }`}
+              >
+                <div className="font-semibold">Ask when uncertain</div>
+                <div className="text-xs text-slate-400">Prefer targeted clarification over guessing.</div>
+              </button>
+              <button
+                onClick={() => onUncertaintyPreferenceChange('infer')}
+                className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
+                  uncertaintyPreference === 'infer'
+                    ? 'border-indigo-500 bg-indigo-500/10 text-white'
+                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                }`}
+              >
+                <div className="font-semibold">Infer then confirm</div>
+                <div className="text-xs text-slate-400">Infer best effort and verify in follow-up.</div>
+              </button>
             </div>
           </div>
         </div>
@@ -328,6 +428,11 @@ export default function Step1Identity({
             <p className="text-white font-medium">
               {twinName || 'Your Twin'} • {specialization ? SPECIALIZATIONS.find(s => s.id === specialization)?.label : 'General'} • {selectedDomains.length + customExpertise.length} expertise areas
             </p>
+            {goals90Days.filter((goal) => goal.trim().length > 0).length > 0 && (
+              <p className="text-xs text-slate-400 mt-1">
+                {goals90Days.filter((goal) => goal.trim().length > 0).length} goals captured
+              </p>
+            )}
           </div>
         </div>
       </div>

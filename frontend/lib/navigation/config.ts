@@ -22,9 +22,18 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         items: [
             { name: 'Dashboard', href: '/dashboard', icon: 'home' },
             { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book' },
+            { name: 'Memory Center', href: '/dashboard/memory', icon: 'memory', featureFlag: 'memoryCenter' },
             { name: 'Studio', href: '/dashboard/studio', icon: 'studio' },
             { name: 'Ingestion Jobs', href: '/dashboard/training-jobs', icon: 'history' },
             { name: 'Brain Graph', href: '/dashboard/brain', icon: 'activity' },
+        ]
+    },
+    {
+        title: 'Interact',
+        items: [
+            { name: 'Chat', href: '/dashboard/chat', icon: 'chat', featureFlag: 'dashboardChat' },
+            { name: 'Actions', href: '/dashboard/actions', icon: 'actions' },
+            { name: 'Share', href: '/dashboard/share', icon: 'share' },
         ]
     },
     {
@@ -50,7 +59,6 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
     {
         title: 'Share & Access',
         items: [
-            { name: 'Share', href: '/dashboard/share', icon: 'share' },
             { name: 'Access Groups', href: '/dashboard/access-groups', icon: 'group' },
             { name: 'Widget', href: '/dashboard/widget', icon: 'code' },
             { name: 'API Keys', href: '/dashboard/api-keys', icon: 'key' },
@@ -67,6 +75,8 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         title: 'Settings',
         items: [
             { name: 'Settings', href: '/dashboard/settings', icon: 'settings' },
+            { name: 'Privacy & Data', href: '/dashboard/privacy', icon: 'privacy', featureFlag: 'privacyControls' },
+            { name: 'Publish Controls', href: '/dashboard/publish-controls', icon: 'publish', featureFlag: 'publishControls' },
             { name: 'Users', href: '/dashboard/users', icon: 'users' },
             { name: 'Governance', href: '/dashboard/governance', icon: 'governance' },
         ]

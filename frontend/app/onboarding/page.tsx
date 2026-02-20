@@ -23,6 +23,20 @@ interface FAQPair {
   answer: string;
 }
 
+type OnboardingLabel = 'identity' | 'knowledge' | 'policies';
+
+interface OnboardingFileEntry {
+  file: File;
+  label: OnboardingLabel;
+  identityConfirmed?: boolean;
+}
+
+interface OnboardingUrlEntry {
+  url: string;
+  label: OnboardingLabel;
+  identityConfirmed?: boolean;
+}
+
 const getOnboardingTwinStorageKey = (userId: string) => `onboardingTwinId:${userId}`;
 
 export default function OnboardingPage() {
@@ -50,10 +64,15 @@ export default function OnboardingPage() {
     firstPerson: true,
     customInstructions: '',
   });
+  const [goals90Days, setGoals90Days] = useState<string[]>(['', '', '']);
+  const [boundaries, setBoundaries] = useState('');
+  const [privacyConstraints, setPrivacyConstraints] = useState('');
+  const [uncertaintyPreference, setUncertaintyPreference] = useState<'ask' | 'infer'>('ask');
+  const [stepError, setStepError] = useState<string | null>(null);
 
   // Step 2: Knowledge State
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
-  const [pendingUrls, setPendingUrls] = useState<string[]>([]);
+  const [uploadedFiles, setUploadedFiles] = useState<OnboardingFileEntry[]>([]);
+  const [pendingUrls, setPendingUrls] = useState<OnboardingUrlEntry[]>([]);
   const [faqs, setFaqs] = useState<FAQPair[]>([]);
 
   useEffect(() => {
@@ -99,8 +118,19 @@ export default function OnboardingPage() {
   }, [router, forceNewTwin, forceNewReady]);
 
   const handleStepChange = async (newStep: number) => {
+    setStepError(null);
+
     // Moving from Step 1 to Step 2: Create twin
     if (currentStep === 0 && newStep === 1 && twinName && !twinId) {
+      const nonEmptyGoals = goals90Days.filter((goal) => goal.trim().length > 0);
+      if (!twinName.trim()) {
+        setStepError('Twin name is required.');
+        return;
+      }
+      if (nonEmptyGoals.length === 0) {
+        setStepError('Add at least one 90-day goal before continuing.');
+        return;
+      }
       await createTwin();
     }
     
@@ -143,6 +173,10 @@ export default function OnboardingPage() {
 Your areas of expertise include: ${expertiseText || 'general topics'}.
 Communication style: ${personality.tone}, ${personality.responseLength} responses.
 ${personality.firstPerson ? 'Speak in first person ("I believe...")' : `Refer to yourself as ${twinName}`}
+Top goals for next 90 days: ${goals90Days.filter((goal) => goal.trim().length > 0).join('; ') || 'Not set'}
+Boundaries: ${boundaries || 'Not set'}
+Privacy constraints: ${privacyConstraints || 'Not set'}
+Uncertainty preference: ${uncertaintyPreference === 'ask' ? 'Ask clarifying questions when uncertain.' : 'Infer best effort and confirm quickly.'}
 ${personality.customInstructions ? `Additional instructions: ${personality.customInstructions}` : ''}`;
 
       const response = await authFetchStandalone('/twins', {
@@ -156,7 +190,13 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             handle,
             tagline,
             expertise: [...selectedDomains, ...customExpertise],
-            personality
+            personality,
+            intent_profile: {
+              goals_90_days: goals90Days.filter((goal) => goal.trim().length > 0),
+              boundaries: boundaries.trim(),
+              privacy_constraints: privacyConstraints.trim(),
+              uncertainty_preference: uncertaintyPreference,
+            },
           }
         })
       });
@@ -186,18 +226,32 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
     }
 
     // Upload files
-    for (const file of uploadedFiles) {
+    for (const entry of uploadedFiles) {
       try {
-        await uploadFileWithFallback({ backendUrl, twinId, file, headers });
+        await uploadFileWithFallback({
+          backendUrl,
+          twinId,
+          file: entry.file,
+          headers,
+          label: entry.label,
+          identityConfirmed: Boolean(entry.identityConfirmed),
+        });
       } catch (error) {
         console.error('Error uploading file:', error);
       }
     }
 
     // Submit URLs
-    for (const url of pendingUrls) {
+    for (const entry of pendingUrls) {
       try {
-        await ingestUrlWithFallback({ backendUrl, twinId, url, headers });
+        await ingestUrlWithFallback({
+          backendUrl,
+          twinId,
+          url: entry.url,
+          headers,
+          label: entry.label,
+          identityConfirmed: Boolean(entry.identityConfirmed),
+        });
       } catch (error) {
         console.error('Error submitting URL:', error);
       }
@@ -234,6 +288,10 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
 Your areas of expertise include: ${expertiseText || 'general topics'}.
 Communication style: ${personality.tone}, ${personality.responseLength} responses.
 ${personality.firstPerson ? 'Speak in first person ("I believe...")' : `Refer to yourself as ${twinName}`}
+Top goals for next 90 days: ${goals90Days.filter((goal) => goal.trim().length > 0).join('; ') || 'Not set'}
+Boundaries: ${boundaries || 'Not set'}
+Privacy constraints: ${privacyConstraints || 'Not set'}
+Uncertainty preference: ${uncertaintyPreference === 'ask' ? 'Ask clarifying questions when uncertain.' : 'Infer best effort and confirm quickly.'}
 ${personality.customInstructions ? `Additional instructions: ${personality.customInstructions}` : ''}`;
 
       await authFetchStandalone(`/twins/${twinId}`, {
@@ -246,6 +304,12 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             tagline,
             expertise: [...selectedDomains, ...customExpertise],
             personality,
+            intent_profile: {
+              goals_90_days: goals90Days.filter((goal) => goal.trim().length > 0),
+              boundaries: boundaries.trim(),
+              privacy_constraints: privacyConstraints.trim(),
+              uncertainty_preference: uncertaintyPreference,
+            },
             widget_settings: {
               public_share_enabled: true,
               share_token: Math.random().toString(36).substring(2, 15),
@@ -291,6 +355,14 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
             onDomainsChange={setSelectedDomains}
             onCustomExpertiseChange={setCustomExpertise}
             onPersonalityChange={setPersonality}
+            goals90Days={goals90Days}
+            boundaries={boundaries}
+            privacyConstraints={privacyConstraints}
+            uncertaintyPreference={uncertaintyPreference}
+            onGoalsChange={setGoals90Days}
+            onBoundariesChange={setBoundaries}
+            onPrivacyConstraintsChange={setPrivacyConstraints}
+            onUncertaintyPreferenceChange={setUncertaintyPreference}
           />
         );
       case 1:
@@ -324,14 +396,21 @@ ${personality.customInstructions ? `Additional instructions: ${personality.custo
   };
 
   return (
-    <Wizard
-      steps={WIZARD_STEPS}
-      currentStep={currentStep}
-      onStepChange={handleStepChange}
-      onComplete={handleLaunch}
-      allowSkip={currentStep === 1} // Allow skip on knowledge step
-    >
-      {renderStep()}
-    </Wizard>
+    <div className="space-y-4">
+      {stepError ? (
+        <div className="mx-auto max-w-4xl rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {stepError}
+        </div>
+      ) : null}
+      <Wizard
+        steps={WIZARD_STEPS}
+        currentStep={currentStep}
+        onStepChange={handleStepChange}
+        onComplete={handleLaunch}
+        allowSkip={currentStep === 1} // Allow skip on knowledge step
+      >
+        {renderStep()}
+      </Wizard>
+    </div>
   );
 }

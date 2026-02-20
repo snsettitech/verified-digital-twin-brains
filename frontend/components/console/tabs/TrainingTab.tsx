@@ -696,7 +696,14 @@ export function TrainingTab({ twinId }: { twinId: string }) {
                                         if (!token) return;
                                         headers['Authorization'] = `Bearer ${token}`;
                                     }
-                                    await ingestUrlWithFallback({ backendUrl, twinId, url, headers });
+                                    await ingestUrlWithFallback({
+                                        backendUrl,
+                                        twinId,
+                                        url,
+                                        headers,
+                                        label: 'knowledge',
+                                        identityConfirmed: false,
+                                    });
                                     showToast('URL added to knowledge base', 'success');
                                 } catch (e) {
                                     console.error(e);
@@ -720,7 +727,14 @@ export function TrainingTab({ twinId }: { twinId: string }) {
 
                                     let successCount = 0;
                                     for (const file of files) {
-                                        await uploadFileWithFallback({ backendUrl, twinId, file, headers });
+                                        await uploadFileWithFallback({
+                                            backendUrl,
+                                            twinId,
+                                            file,
+                                            headers,
+                                            label: 'knowledge',
+                                            identityConfirmed: false,
+                                        });
                                         successCount++;
                                     }
                                     showToast(`Started processing ${successCount} files`, 'success');

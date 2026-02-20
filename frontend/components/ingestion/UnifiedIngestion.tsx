@@ -24,6 +24,7 @@ interface IngestionResult {
 
 type SourceType = 'youtube' | 'podcast' | 'twitter' | 'url' | 'file' | 'unknown';
 type IngestionStage = 'idle' | 'detecting' | 'ingesting' | 'polling' | 'extracting' | 'complete' | 'error';
+type SourceLabel = 'identity' | 'knowledge' | 'policies';
 
 interface UnifiedIngestionProps {
     twinId: string;
@@ -82,6 +83,9 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
     const [dragActive, setDragActive] = useState(false);
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
     const [currentSourceId, setCurrentSourceId] = useState<string | null>(null);
+    const [sourceLabel, setSourceLabel] = useState<SourceLabel>('knowledge');
+    const [identityConfirmed, setIdentityConfirmed] = useState(false);
+    const [labelError, setLabelError] = useState<string | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     // Get auth token
@@ -161,8 +165,22 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
         setCurrentJobId(null);
         setCurrentSourceId(null);
         setError(null);
+        setLabelError(null);
+        setSourceLabel('knowledge');
+        setIdentityConfirmed(false);
         stopPolling();
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const canUseIdentityLabel = sourceLabel !== 'identity' || identityConfirmed;
+
+    const ensureLabelReady = (): boolean => {
+        if (!canUseIdentityLabel) {
+            setLabelError('Identity label requires explicit confirmation.');
+            return false;
+        }
+        setLabelError(null);
+        return true;
     };
 
     // Extract nodes from processed source
@@ -232,6 +250,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
     // Main URL ingestion flow with polling
     const handleIngest = async () => {
         if (!input.trim() || detectedType === 'unknown') return;
+        if (!ensureLabelReady()) return;
 
         const currentToken = await getAuthToken();
         if (!currentToken) {
@@ -253,6 +272,8 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                           backendUrl,
                           twinId,
                           url: input.trim(),
+                          label: sourceLabel,
+                          identityConfirmed,
                           headers: { 'Authorization': `Bearer ${currentToken}` },
                       })
                     : await (async () => {
@@ -298,6 +319,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (!ensureLabelReady()) return;
 
         const currentToken = await getAuthToken();
         if (!currentToken) {
@@ -319,6 +341,8 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 backendUrl,
                 twinId,
                 file,
+                label: sourceLabel,
+                identityConfirmed,
                 headers: { 'Authorization': `Bearer ${currentToken}` },
                 signal: controller.signal,
             });
@@ -372,6 +396,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
         const file = e.dataTransfer.files[0];
         if (!file) return;
+        if (!ensureLabelReady()) return;
 
         const currentToken = await getAuthToken();
         if (!currentToken) {
@@ -392,6 +417,8 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 backendUrl,
                 twinId,
                 file,
+                label: sourceLabel,
+                identityConfirmed,
                 headers: { 'Authorization': `Bearer ${currentToken}` },
                 signal: controller.signal,
             });
@@ -472,6 +499,47 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                 onDragLeave={() => setDragActive(false)}
                 onDrop={handleDrop}
             >
+                <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Required Label</div>
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                        {([
+                            { value: 'identity', label: 'Identity' },
+                            { value: 'knowledge', label: 'Knowledge' },
+                            { value: 'policies', label: 'Policies' },
+                        ] as const).map((opt) => (
+                            <button
+                                key={opt.value}
+                                onClick={() => {
+                                    setSourceLabel(opt.value);
+                                    if (opt.value !== 'identity') setIdentityConfirmed(false);
+                                    setLabelError(null);
+                                }}
+                                className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
+                                    sourceLabel === opt.value
+                                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                }`}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
+                    {sourceLabel === 'identity' && (
+                        <label className="mt-2 flex items-start gap-2 text-xs text-slate-600">
+                            <input
+                                type="checkbox"
+                                checked={identityConfirmed}
+                                onChange={(e) => setIdentityConfirmed(e.target.checked)}
+                                className="mt-0.5"
+                            />
+                            <span>
+                                I confirm this source is safe for identity answers and does not include confidential data.
+                            </span>
+                        </label>
+                    )}
+                    {labelError ? <div className="mt-2 text-xs text-rose-600">{labelError}</div> : null}
+                </div>
+
                 <div className="flex gap-3">
                     {/* Hidden file input */}
                     <input

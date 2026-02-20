@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
+from pydantic import BaseModel, Field
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership
 from modules.schemas import (
     EventSchema, ActionTriggerSchema, TriggerCreateRequest, TriggerUpdateRequest,
@@ -13,6 +14,108 @@ from modules.actions_engine import (
 from modules.observability import supabase
 
 router = APIRouter(tags=["actions"])
+
+
+class ActionExecuteRequest(BaseModel):
+    action_type: str = Field(..., description="draft_email|draft_calendar_event|notify_owner|escalate|webhook")
+    inputs: dict = Field(default_factory=dict)
+    connector_id: Optional[str] = None
+    requires_approval: bool = True
+
+
+class ActionApproveRequest(BaseModel):
+    approval_note: Optional[str] = None
+
+
+class ActionCancelRequest(BaseModel):
+    rejection_note: Optional[str] = None
+
+
+@router.get("/twins/{twin_id}/actions")
+async def list_actions_summary(
+    twin_id: str,
+    limit: int = 50,
+    user=Depends(verify_owner),
+):
+    """
+    Twin-scoped summary endpoint for action inbox/history screens.
+    """
+    verify_twin_ownership(twin_id, user)
+    pending = ActionDraftManager.get_pending_drafts(twin_id)
+    history = ActionExecutor.get_executions(twin_id=twin_id, limit=max(1, min(limit, 200)))
+    return {"active": pending, "history": history}
+
+
+@router.post("/twins/{twin_id}/actions/execute")
+async def execute_twin_action(
+    twin_id: str,
+    request: ActionExecuteRequest,
+    user=Depends(verify_owner),
+):
+    """
+    Create a pending action draft by default. Immediate execution is explicit-only.
+    """
+    verify_twin_ownership(twin_id, user)
+
+    if request.requires_approval:
+        draft_id = ActionDraftManager.create_draft(
+            twin_id=twin_id,
+            trigger_id=None,
+            event_id=None,
+            proposed_action={
+                "action_type": request.action_type,
+                "connector_id": request.connector_id,
+                "config": request.inputs or {},
+            },
+            context={
+                "trigger_name": "manual_execute",
+                "event_type": "manual",
+                "user_message": "manual action execution request",
+                "match_conditions": {},
+            },
+        )
+        if not draft_id:
+            raise HTTPException(status_code=500, detail="Failed to create action draft")
+        return {"status": "pending_approval", "action_id": draft_id}
+
+    execution_id = ActionExecutor.execute_action(
+        twin_id=twin_id,
+        action_type=request.action_type,
+        inputs=request.inputs or {},
+        connector_id=request.connector_id,
+        executed_by=user.get("user_id"),
+    )
+    if not execution_id:
+        raise HTTPException(status_code=500, detail="Action execution failed")
+    return {"status": "executed", "execution_id": execution_id}
+
+
+@router.post("/twins/{twin_id}/actions/{action_id}/approve")
+async def approve_twin_action(
+    twin_id: str,
+    action_id: str,
+    request: ActionApproveRequest,
+    user=Depends(verify_owner),
+):
+    verify_twin_ownership(twin_id, user)
+    ok = ActionDraftManager.approve_draft(action_id, user.get("user_id"), request.approval_note)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to approve action")
+    return {"status": "approved", "action_id": action_id}
+
+
+@router.post("/twins/{twin_id}/actions/{action_id}/cancel")
+async def cancel_twin_action(
+    twin_id: str,
+    action_id: str,
+    request: ActionCancelRequest,
+    user=Depends(verify_owner),
+):
+    verify_twin_ownership(twin_id, user)
+    ok = ActionDraftManager.reject_draft(action_id, user.get("user_id"), request.rejection_note)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to cancel action")
+    return {"status": "canceled", "action_id": action_id}
 
 # Events
 @router.get("/twins/{twin_id}/events", response_model=List[EventSchema])

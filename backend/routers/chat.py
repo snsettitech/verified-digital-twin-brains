@@ -24,6 +24,7 @@ from modules.interaction_context import (
 )
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
+from modules.owner_memory_store import format_owner_memory_context
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from modules.grounding_policy import get_grounding_policy
 from modules.runtime_audit_store import (
@@ -223,6 +224,7 @@ def _build_debug_snapshot(
     query_class = str(policy.get("query_class") or "factual")
     quote_intent = bool(policy.get("quote_intent"))
     answerability_state = _extract_answerability_state(planning_output)
+    planner_telemetry = _extract_planner_telemetry(planning_output)
     planner_action = "unknown"
     if isinstance(routing_decision, dict):
         planner_action = str(routing_decision.get("action") or planner_action)
@@ -236,7 +238,73 @@ def _build_debug_snapshot(
         "planner_action": planner_action,
         "retrieval_stats": retrieval_stats,
         "selected_evidence_block_types": selected_block_types,
+        "retrieval.retry_reason": planner_telemetry["retrieval.retry_reason"],
+        "retrieval.prompt_question_dominance": planner_telemetry["retrieval.prompt_question_dominance"],
+        "retrieval.answer_text_ratio": planner_telemetry["retrieval.answer_text_ratio"],
+        "planner.intent_recovered": planner_telemetry["planner.intent_recovered"],
+        "clarify.noisy_section_filtered_count": planner_telemetry["clarify.noisy_section_filtered_count"],
+        "clarify.option_count": planner_telemetry["clarify.option_count"],
     }
+
+
+def _extract_planner_telemetry(planning_output: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    defaults = {
+        "retrieval.retry_reason": "none",
+        "retrieval.prompt_question_dominance": False,
+        "retrieval.answer_text_ratio": 0.0,
+        "planner.intent_recovered": False,
+        "clarify.noisy_section_filtered_count": 0,
+        "clarify.option_count": 0,
+    }
+    if not isinstance(planning_output, dict):
+        return defaults
+    raw = planning_output.get("telemetry")
+    if not isinstance(raw, dict):
+        return defaults
+
+    out = dict(defaults)
+    for key in out.keys():
+        if key in raw:
+            out[key] = raw.get(key)
+
+    try:
+        out["retrieval.answer_text_ratio"] = float(out.get("retrieval.answer_text_ratio") or 0.0)
+    except Exception:
+        out["retrieval.answer_text_ratio"] = 0.0
+    out["retrieval.prompt_question_dominance"] = bool(
+        out.get("retrieval.prompt_question_dominance")
+    )
+    out["planner.intent_recovered"] = bool(out.get("planner.intent_recovered"))
+    out["clarify.noisy_section_filtered_count"] = int(
+        out.get("clarify.noisy_section_filtered_count") or 0
+    )
+    out["clarify.option_count"] = int(out.get("clarify.option_count") or 0)
+    out["retrieval.retry_reason"] = str(out.get("retrieval.retry_reason") or "none")
+    return out
+
+
+def _emit_langfuse_turn_telemetry(debug_snapshot: Dict[str, Any]) -> None:
+    if not isinstance(debug_snapshot, dict):
+        return
+    payload = {
+        "retrieval.retry_reason": debug_snapshot.get("retrieval.retry_reason", "none"),
+        "retrieval.prompt_question_dominance": bool(
+            debug_snapshot.get("retrieval.prompt_question_dominance", False)
+        ),
+        "retrieval.answer_text_ratio": float(
+            debug_snapshot.get("retrieval.answer_text_ratio", 0.0) or 0.0
+        ),
+        "planner.intent_recovered": bool(debug_snapshot.get("planner.intent_recovered", False)),
+        "clarify.noisy_section_filtered_count": int(
+            debug_snapshot.get("clarify.noisy_section_filtered_count", 0) or 0
+        ),
+        "clarify.option_count": int(debug_snapshot.get("clarify.option_count", 0) or 0),
+    }
+    try:
+        langfuse_context.update_current_observation(metadata=payload)
+        langfuse_context.update_current_trace(metadata=payload)
+    except Exception:
+        pass
 
 
 async def _run_identity_gate_passthrough(
@@ -328,6 +396,87 @@ def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[L
             break
 
     return merged
+
+
+def _load_public_publish_controls(twin_id: str) -> Dict[str, Set[str]]:
+    controls = {
+        "published_identity_topics": set(),
+        "published_policy_topics": set(),
+        "published_source_ids": set(),
+    }
+    try:
+        twin_res = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+        settings = twin_res.data.get("settings") if twin_res.data else {}
+        publish_controls = settings.get("publish_controls") if isinstance(settings, dict) else {}
+        if not isinstance(publish_controls, dict):
+            return controls
+        for key in ("published_identity_topics", "published_policy_topics", "published_source_ids"):
+            raw = publish_controls.get(key)
+            if isinstance(raw, list):
+                controls[key] = {
+                    str(value).strip()
+                    for value in raw
+                    if isinstance(value, (str, int, float)) and str(value).strip()
+                }
+    except Exception:
+        return controls
+    return controls
+
+
+def _filter_public_owner_memory_candidates(
+    owner_memory_candidates: List[Dict[str, Any]],
+    *,
+    published_identity_topics: Set[str],
+    published_policy_topics: Set[str],
+) -> List[Dict[str, Any]]:
+    if not owner_memory_candidates:
+        return []
+    out: List[Dict[str, Any]] = []
+    policy_types = {"stance", "lens", "tone_rule"}
+    for row in owner_memory_candidates:
+        if not isinstance(row, dict):
+            continue
+        topic = str(row.get("topic_normalized") or row.get("topic") or "").strip()
+        if not topic:
+            continue
+        memory_type = str(row.get("memory_type") or "").strip().lower()
+        if memory_type in policy_types:
+            if topic in published_policy_topics:
+                out.append(row)
+        else:
+            if topic in published_identity_topics:
+                out.append(row)
+    return out
+
+
+def _filter_contexts_to_allowed_sources(
+    contexts: List[Dict[str, Any]],
+    allowed_source_ids: Set[str],
+) -> Tuple[List[Dict[str, Any]], int]:
+    if not isinstance(contexts, list):
+        return [], 0
+    if not allowed_source_ids:
+        return [], len([row for row in contexts if isinstance(row, dict)])
+
+    filtered: List[Dict[str, Any]] = []
+    removed = 0
+    for row in contexts:
+        if not isinstance(row, dict):
+            continue
+        source_id = str(row.get("source_id") or "").strip()
+        if source_id and source_id in allowed_source_ids:
+            filtered.append(row)
+        else:
+            removed += 1
+    return filtered, removed
+
+
+def _filter_citations_to_allowed_sources(citations: List[str], allowed_source_ids: Set[str]) -> List[str]:
+    if not isinstance(citations, list):
+        return []
+    if not allowed_source_ids:
+        return []
+    return [c for c in citations if isinstance(c, str) and c.strip() in allowed_source_ids]
 
 
 def _extract_answer_claims(answer: str) -> List[str]:
@@ -1704,6 +1853,7 @@ async def chat(
                 routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
                 contexts=retrieved_context_snippets,
             )
+            _emit_langfuse_turn_telemetry(debug_snapshot)
 
             # 3. Send metadata first
             metadata = _normalize_json({
@@ -2256,6 +2406,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
             contexts=retrieved_context_snippets,
         )
+        _emit_langfuse_turn_telemetry(debug_snapshot)
 
         output = {
             "type": "metadata",
@@ -2395,6 +2546,14 @@ async def public_chat_endpoint(
         context_trace["persona_spec_version"] = active_spec.get("version")
     
     ensure_twin_active(twin_id)
+
+    publish_controls = _load_public_publish_controls(twin_id)
+    published_identity_topics = publish_controls.get("published_identity_topics", set())
+    published_policy_topics = publish_controls.get("published_policy_topics", set())
+    published_source_ids = publish_controls.get("published_source_ids", set())
+    context_trace["published_identity_topics_count"] = len(published_identity_topics)
+    context_trace["published_policy_topics_count"] = len(published_policy_topics)
+    context_trace["published_source_ids_count"] = len(published_source_ids)
     
     # Rate limit by IP address for public endpoints
     client_ip = req_raw.client.host if req_raw and req_raw.client else "unknown"
@@ -2491,14 +2650,18 @@ async def public_chat_endpoint(
         allow_clarify=False,
     )
 
-    owner_memory_context = gate.get("owner_memory_context", "")
-    owner_memory_refs = gate.get("owner_memory_refs", [])
-    owner_memory_candidates = gate.get("owner_memory") or []
+    owner_memory_candidates = _filter_public_owner_memory_candidates(
+        gate.get("owner_memory") or [],
+        published_identity_topics=published_identity_topics,
+        published_policy_topics=published_policy_topics,
+    )
+    owner_memory_refs = [m.get("id") for m in owner_memory_candidates if isinstance(m, dict) and m.get("id")]
     owner_memory_topics = [
         (m.get("topic_normalized") or m.get("topic"))
         for m in owner_memory_candidates
         if (m.get("topic_normalized") or m.get("topic"))
     ]
+    owner_memory_context = format_owner_memory_context(owner_memory_candidates) if owner_memory_candidates else ""
 
     with langfuse_prop_public:
         try:
@@ -2562,7 +2725,16 @@ async def public_chat_endpoint(
                             if msg.additional_kwargs.get("persona_prompt_variant"):
                                 context_trace["persona_prompt_variant"] = msg.additional_kwargs["persona_prompt_variant"]
                         final_response = msg.content
-            
+
+            retrieved_context_snippets, removed_context_count = _filter_contexts_to_allowed_sources(
+                retrieved_context_snippets,
+                published_source_ids,
+            )
+            citations = _filter_citations_to_allowed_sources(citations, published_source_ids)
+            if removed_context_count > 0:
+                context_trace["public_scope_removed_context_count"] = removed_context_count
+                context_trace["public_scope_violation"] = True
+
             # If actions were triggered, append acknowledgment
             if triggered_actions:
                 acknowledgments = []
@@ -2583,6 +2755,18 @@ async def public_chat_endpoint(
                     workflow_intent = raw_intent
             fallback_message = _uncertainty_message(resolved_context.context.value)
             draft_for_audit = final_response if final_response else fallback_message
+
+            if context_trace.get("public_scope_violation"):
+                draft_for_audit = fallback_message
+                final_response = fallback_message
+                confidence_score = min(confidence_score, 0.2)
+                citations = []
+                retrieved_context_snippets = []
+                owner_memory_refs = []
+                owner_memory_topics = []
+                owner_memory_candidates = []
+                owner_memory_context = ""
+
             source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
             if source_faithful:
                 final_response = draft_for_audit
@@ -2619,6 +2803,10 @@ async def public_chat_endpoint(
                 "action": "none",
             }
             strict_grounding = _query_requires_strict_grounding(request.message)
+            if strict_grounding and not retrieved_context_snippets and not owner_memory_candidates:
+                final_response = fallback_message
+                confidence_score = min(confidence_score, 0.2)
+                citations = []
             if (
                 GROUNDING_VERIFIER_ENABLED
                 and isinstance(final_response, str)
@@ -2683,8 +2871,8 @@ async def public_chat_endpoint(
             
             citations = _normalize_json(citations)
             citation_details = _normalize_json(_resolve_citation_details(citations, twin_id))
-            owner_memory_refs = _normalize_json(owner_memory_refs)
-            owner_memory_topics = _normalize_json(owner_memory_topics)
+            owner_memory_refs = _normalize_json([])
+            owner_memory_topics = _normalize_json([])
             routing_decision = _normalize_json(routing_decision)
             debug_snapshot = _build_debug_snapshot(
                 query=request.message,
@@ -2693,6 +2881,7 @@ async def public_chat_endpoint(
                 routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
                 contexts=retrieved_context_snippets,
             )
+            _emit_langfuse_turn_telemetry(debug_snapshot)
 
             try:
                 _persist_runtime_audit(
@@ -2741,7 +2930,7 @@ async def public_chat_endpoint(
                 "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
-                "used_owner_memory": bool(owner_memory_refs),
+                "used_owner_memory": False,
                 "identity_gate_mode": gate.get("gate_mode"),
                 **context_trace,
             }

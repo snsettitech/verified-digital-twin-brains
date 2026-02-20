@@ -11,6 +11,8 @@ export interface NavItem {
     badge?: string;
     /** Optional: require a capability to show this item */
     requiresCapability?: string;
+    /** Optional runtime feature flag gate */
+    featureFlag?: string;
 }
 
 export interface NavSection {

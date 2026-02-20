@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 
 from modules.auth_guard import verify_owner, verify_twin_ownership
+from modules.observability import supabase
 from modules.schemas import ClarificationResolveRequest
 from modules.owner_memory_store import (
     list_owner_memories,
@@ -26,6 +28,12 @@ class OwnerMemoryCreateRequest(BaseModel):
     value: str = Field(..., description="Owner-approved memory value")
     stance: Optional[str] = None
     intensity: Optional[int] = None
+    identity_safe: bool = Field(False, description="Whether this memory is safe for identity responses")
+    source_label: Optional[str] = Field(None, description="UI source label for provenance")
+
+
+class OwnerMemoryLockRequest(BaseModel):
+    locked: bool = Field(True, description="Lock or unlock this memory")
 
 
 class OwnerMemoryUpdateRequest(BaseModel):
@@ -252,7 +260,9 @@ async def create_owner_memory_endpoint(
         confidence=1.0,
         provenance={
             "source_type": "manual",
-            "owner_id": user.get("user_id")
+            "owner_id": user.get("user_id"),
+            "identity_safe": bool(request.identity_safe),
+            "source_label": request.source_label or "explicit_ui",
         },
         supersede_id=None
     )
@@ -432,6 +442,48 @@ async def update_owner_memory_endpoint(
         "status": "updated",
         "owner_memory_id": new_memory.get("id"),
         "superseded_id": memory_id
+    }
+
+
+@router.post("/twins/{twin_id}/owner-memory/{memory_id}/lock")
+async def lock_owner_memory_endpoint(
+    twin_id: str,
+    memory_id: str,
+    request: OwnerMemoryLockRequest,
+    user=Depends(verify_owner),
+):
+    verify_twin_ownership(twin_id, user)
+
+    existing = get_owner_memory(memory_id)
+    if not existing or existing.get("twin_id") != twin_id:
+        raise HTTPException(status_code=404, detail="Owner memory not found")
+
+    provenance = existing.get("provenance") or {}
+    if not isinstance(provenance, dict):
+        provenance = {}
+    provenance["locked"] = bool(request.locked)
+    provenance["locked_by"] = user.get("user_id")
+    provenance["locked_at"] = datetime.utcnow().isoformat()
+
+    updated = (
+        supabase.table("owner_beliefs")
+        .update(
+            {
+                "provenance": provenance,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+        )
+        .eq("id", memory_id)
+        .eq("twin_id", twin_id)
+        .execute()
+    )
+    if not updated.data:
+        raise HTTPException(status_code=500, detail="Failed to update lock state")
+
+    return {
+        "status": "updated",
+        "owner_memory_id": memory_id,
+        "locked": bool(request.locked),
     }
 
 

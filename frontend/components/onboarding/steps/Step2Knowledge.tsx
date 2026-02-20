@@ -3,11 +3,11 @@
 import React, { useState, useRef } from 'react';
 
 interface Step2KnowledgeProps {
-  uploadedFiles: File[];
-  pendingUrls: string[];
+  uploadedFiles: Array<{ file: File; label: 'identity' | 'knowledge' | 'policies'; identityConfirmed?: boolean }>;
+  pendingUrls: Array<{ url: string; label: 'identity' | 'knowledge' | 'policies'; identityConfirmed?: boolean }>;
   faqs: { question: string; answer: string }[];
-  onFileUpload: (files: File[]) => void;
-  onUrlSubmit: (url: string) => void;
+  onFileUpload: (files: Array<{ file: File; label: 'identity' | 'knowledge' | 'policies'; identityConfirmed?: boolean }>) => void;
+  onUrlSubmit: (url: { url: string; label: 'identity' | 'knowledge' | 'policies'; identityConfirmed?: boolean }) => void;
   onFaqsChange: (faqs: { question: string; answer: string }[]) => void;
   onRemoveFile: (index: number) => void;
   onRemoveUrl: (index: number) => void;
@@ -35,7 +35,21 @@ export default function Step2Knowledge({
   const [newQuestion, setNewQuestion] = useState('');
   const [newAnswer, setNewAnswer] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [sourceLabel, setSourceLabel] = useState<'identity' | 'knowledge' | 'policies'>('knowledge');
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const [labelError, setLabelError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const canUseIdentityLabel = sourceLabel !== 'identity' || identityConfirmed;
+
+  const ensureLabelReady = (): boolean => {
+    if (!canUseIdentityLabel) {
+      setLabelError('Identity label requires confirmation before upload.');
+      return false;
+    }
+    setLabelError(null);
+    return true;
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -49,22 +63,25 @@ export default function Step2Knowledge({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
+    if (!ensureLabelReady()) return;
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      onFileUpload(files);
+      onFileUpload(files.map((file) => ({ file, label: sourceLabel, identityConfirmed })));
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!ensureLabelReady()) return;
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
-      onFileUpload(files);
+      onFileUpload(files.map((file) => ({ file, label: sourceLabel, identityConfirmed })));
     }
   };
 
   const handleUrlAdd = () => {
-    if (urlInput && !pendingUrls.includes(urlInput)) {
-      onUrlSubmit(urlInput);
+    if (!ensureLabelReady()) return;
+    if (urlInput && !pendingUrls.some((entry) => entry.url === urlInput)) {
+      onUrlSubmit({ url: urlInput, label: sourceLabel, identityConfirmed });
       setUrlInput('');
     }
   };
@@ -122,6 +139,47 @@ export default function Step2Knowledge({
       {/* Upload Tab */}
       {activeTab === 'upload' && (
         <div className="space-y-6 animate-fadeIn">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <label className="block text-sm font-medium text-slate-300 mb-2">Required label</label>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { value: 'identity', label: 'Identity' },
+                { value: 'knowledge', label: 'Knowledge' },
+                { value: 'policies', label: 'Policies' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setSourceLabel(opt.value as 'identity' | 'knowledge' | 'policies');
+                    if (opt.value !== 'identity') setIdentityConfirmed(false);
+                    setLabelError(null);
+                  }}
+                  className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
+                    sourceLabel === opt.value
+                      ? 'border-indigo-500 bg-indigo-500/10 text-white'
+                      : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {sourceLabel === 'identity' && (
+              <label className="mt-3 flex items-start gap-2 text-xs text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={identityConfirmed}
+                  onChange={(e) => setIdentityConfirmed(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  I confirm this source can define identity answers and has no confidential or private-only data.
+                </span>
+              </label>
+            )}
+            {labelError ? <p className="mt-2 text-xs text-rose-400">{labelError}</p> : null}
+          </div>
+
           {/* File Drop Zone */}
           <div
             onDragOver={handleDragOver}
@@ -156,11 +214,14 @@ export default function Step2Knowledge({
             <div className="space-y-2">
               <p className="text-sm font-medium text-slate-300">Files to upload ({uploadedFiles.length})</p>
               <div className="space-y-2 max-h-32 overflow-y-auto">
-                {uploadedFiles.map((file, index) => (
+                {uploadedFiles.map((entry, index) => (
                   <div key={index} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
                     <span className="text-xl">📄</span>
-                    <span className="flex-1 text-sm text-white truncate">{file.name}</span>
-                    <span className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                    <span className="flex-1 text-sm text-white truncate">{entry.file.name}</span>
+                    <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-200">
+                      {entry.label}
+                    </span>
+                    <span className="text-xs text-slate-500">{(entry.file.size / 1024 / 1024).toFixed(1)} MB</span>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -205,10 +266,13 @@ export default function Step2Knowledge({
             <div className="space-y-2">
               <p className="text-sm font-medium text-slate-300">URLs to ingest ({pendingUrls.length})</p>
               <div className="space-y-2">
-                {pendingUrls.map((url, index) => (
+                {pendingUrls.map((entry, index) => (
                   <div key={index} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
                     <span className="text-xl">🔗</span>
-                    <span className="flex-1 text-sm text-white truncate">{url}</span>
+                    <span className="flex-1 text-sm text-white truncate">{entry.url}</span>
+                    <span className="rounded-full bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-200">
+                      {entry.label}
+                    </span>
                     <button
                       onClick={() => onRemoveUrl(index)}
                       className="p-1 text-slate-500 hover:text-red-400 transition-colors"

@@ -2,6 +2,8 @@ export interface UploadFileWithFallbackParams {
   backendUrl: string;
   twinId: string;
   file: File;
+  label?: "identity" | "knowledge" | "policies";
+  identityConfirmed?: boolean;
   headers?: Record<string, string>;
   signal?: AbortSignal;
 }
@@ -10,6 +12,8 @@ export interface IngestUrlWithFallbackParams {
   backendUrl: string;
   twinId: string;
   url: string;
+  label?: "identity" | "knowledge" | "policies";
+  identityConfirmed?: boolean;
   headers?: Record<string, string>;
   signal?: AbortSignal;
 }
@@ -70,6 +74,8 @@ export const uploadFileWithFallback = async ({
   backendUrl,
   twinId,
   file,
+  label,
+  identityConfirmed,
   headers,
   signal,
 }: UploadFileWithFallbackParams): Promise<IngestionResponse> => {
@@ -78,6 +84,12 @@ export const uploadFileWithFallback = async ({
 
   const canonicalFormData = new FormData();
   canonicalFormData.append('file', file);
+  if (label) {
+    canonicalFormData.append('source_label', label);
+  }
+  if (typeof identityConfirmed === 'boolean') {
+    canonicalFormData.append('identity_confirmed', String(identityConfirmed));
+  }
   response = await fetch(`${backendUrl}/ingest/file/${twinId}`, {
     method: 'POST',
     headers: uploadHeaders,
@@ -89,6 +101,12 @@ export const uploadFileWithFallback = async ({
     const legacyFormData = new FormData();
     legacyFormData.append('file', file);
     legacyFormData.append('twin_id', twinId);
+    if (label) {
+      legacyFormData.append('source_label', label);
+    }
+    if (typeof identityConfirmed === 'boolean') {
+      legacyFormData.append('identity_confirmed', String(identityConfirmed));
+    }
     response = await fetch(`${backendUrl}/ingest/document`, {
       method: 'POST',
       headers: uploadHeaders,
@@ -109,13 +127,19 @@ export const ingestUrlWithFallback = async ({
   backendUrl,
   twinId,
   url,
+  label,
+  identityConfirmed,
   headers,
   signal,
 }: IngestUrlWithFallbackParams): Promise<IngestionResponse> => {
   let response = await fetch(`${backendUrl}/ingest/url/${twinId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(headers || {}) },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({
+      url,
+      source_label: label,
+      identity_confirmed: identityConfirmed,
+    }),
     signal,
   });
 
@@ -123,7 +147,12 @@ export const ingestUrlWithFallback = async ({
     response = await fetch(`${backendUrl}/ingest/url`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(headers || {}) },
-      body: JSON.stringify({ url, twin_id: twinId }),
+      body: JSON.stringify({
+        url,
+        twin_id: twinId,
+        source_label: label,
+        identity_confirmed: identityConfirmed,
+      }),
       signal,
     });
   }
