@@ -267,6 +267,13 @@ def _build_debug_snapshot(
         "planner.intent_recovered": planner_telemetry["planner.intent_recovered"],
         "clarify.noisy_section_filtered_count": planner_telemetry["clarify.noisy_section_filtered_count"],
         "clarify.option_count": planner_telemetry["clarify.option_count"],
+        "deepagents_route_rate": planner_telemetry["deepagents_route_rate"],
+        "deepagents_forbidden_context_rate": planner_telemetry["deepagents_forbidden_context_rate"],
+        "deepagents_missing_params_rate": planner_telemetry["deepagents_missing_params_rate"],
+        "deepagents_needs_approval_rate": planner_telemetry["deepagents_needs_approval_rate"],
+        "deepagents_executed_rate": planner_telemetry["deepagents_executed_rate"],
+        "public_action_query_guarded_rate": planner_telemetry["public_action_query_guarded_rate"],
+        "selection_recovery_failure_rate": planner_telemetry["selection_recovery_failure_rate"],
     }
 
 
@@ -278,6 +285,13 @@ def _extract_planner_telemetry(planning_output: Optional[Dict[str, Any]]) -> Dic
         "planner.intent_recovered": False,
         "clarify.noisy_section_filtered_count": 0,
         "clarify.option_count": 0,
+        "deepagents_route_rate": 0,
+        "deepagents_forbidden_context_rate": 0,
+        "deepagents_missing_params_rate": 0,
+        "deepagents_needs_approval_rate": 0,
+        "deepagents_executed_rate": 0,
+        "public_action_query_guarded_rate": 0,
+        "selection_recovery_failure_rate": 0,
     }
     if not isinstance(planning_output, dict):
         return defaults
@@ -302,6 +316,19 @@ def _extract_planner_telemetry(planning_output: Optional[Dict[str, Any]]) -> Dic
         out.get("clarify.noisy_section_filtered_count") or 0
     )
     out["clarify.option_count"] = int(out.get("clarify.option_count") or 0)
+    out["deepagents_route_rate"] = int(out.get("deepagents_route_rate") or 0)
+    out["deepagents_forbidden_context_rate"] = int(
+        out.get("deepagents_forbidden_context_rate") or 0
+    )
+    out["deepagents_missing_params_rate"] = int(out.get("deepagents_missing_params_rate") or 0)
+    out["deepagents_needs_approval_rate"] = int(out.get("deepagents_needs_approval_rate") or 0)
+    out["deepagents_executed_rate"] = int(out.get("deepagents_executed_rate") or 0)
+    out["public_action_query_guarded_rate"] = int(
+        out.get("public_action_query_guarded_rate") or 0
+    )
+    out["selection_recovery_failure_rate"] = int(
+        out.get("selection_recovery_failure_rate") or 0
+    )
     out["retrieval.retry_reason"] = str(out.get("retrieval.retry_reason") or "none")
     return out
 
@@ -309,6 +336,25 @@ def _extract_planner_telemetry(planning_output: Optional[Dict[str, Any]]) -> Dic
 def _emit_langfuse_turn_telemetry(debug_snapshot: Dict[str, Any]) -> None:
     if not isinstance(debug_snapshot, dict):
         return
+    counter_payload = {
+        "deepagents_route_rate": int(debug_snapshot.get("deepagents_route_rate", 0) or 0),
+        "deepagents_forbidden_context_rate": int(
+            debug_snapshot.get("deepagents_forbidden_context_rate", 0) or 0
+        ),
+        "deepagents_missing_params_rate": int(
+            debug_snapshot.get("deepagents_missing_params_rate", 0) or 0
+        ),
+        "deepagents_needs_approval_rate": int(
+            debug_snapshot.get("deepagents_needs_approval_rate", 0) or 0
+        ),
+        "deepagents_executed_rate": int(debug_snapshot.get("deepagents_executed_rate", 0) or 0),
+        "public_action_query_guarded_rate": int(
+            debug_snapshot.get("public_action_query_guarded_rate", 0) or 0
+        ),
+        "selection_recovery_failure_rate": int(
+            debug_snapshot.get("selection_recovery_failure_rate", 0) or 0
+        ),
+    }
     payload = {
         "retrieval.retry_reason": debug_snapshot.get("retrieval.retry_reason", "none"),
         "retrieval.prompt_question_dominance": bool(
@@ -322,12 +368,49 @@ def _emit_langfuse_turn_telemetry(debug_snapshot: Dict[str, Any]) -> None:
             debug_snapshot.get("clarify.noisy_section_filtered_count", 0) or 0
         ),
         "clarify.option_count": int(debug_snapshot.get("clarify.option_count", 0) or 0),
+        **counter_payload,
     }
+    try:
+        logger.info(json.dumps({"component": "chat_telemetry", "event": "turn_counters", **counter_payload}))
+    except Exception:
+        pass
     try:
         langfuse_context.update_current_observation(metadata=payload)
         langfuse_context.update_current_trace(metadata=payload)
     except Exception:
         pass
+
+
+def _extract_turn_counter_payload(debug_snapshot: Dict[str, Any]) -> Dict[str, int]:
+    if not isinstance(debug_snapshot, dict):
+        return {
+            "deepagents_route_rate": 0,
+            "deepagents_forbidden_context_rate": 0,
+            "deepagents_missing_params_rate": 0,
+            "deepagents_needs_approval_rate": 0,
+            "deepagents_executed_rate": 0,
+            "public_action_query_guarded_rate": 0,
+            "selection_recovery_failure_rate": 0,
+        }
+    return {
+        "deepagents_route_rate": int(debug_snapshot.get("deepagents_route_rate", 0) or 0),
+        "deepagents_forbidden_context_rate": int(
+            debug_snapshot.get("deepagents_forbidden_context_rate", 0) or 0
+        ),
+        "deepagents_missing_params_rate": int(
+            debug_snapshot.get("deepagents_missing_params_rate", 0) or 0
+        ),
+        "deepagents_needs_approval_rate": int(
+            debug_snapshot.get("deepagents_needs_approval_rate", 0) or 0
+        ),
+        "deepagents_executed_rate": int(debug_snapshot.get("deepagents_executed_rate", 0) or 0),
+        "public_action_query_guarded_rate": int(
+            debug_snapshot.get("public_action_query_guarded_rate", 0) or 0
+        ),
+        "selection_recovery_failure_rate": int(
+            debug_snapshot.get("selection_recovery_failure_rate", 0) or 0
+        ),
+    }
 
 
 async def _run_identity_gate_passthrough(
@@ -1914,6 +1997,7 @@ async def chat(
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
                 "deepagents": deepagents_meta,
+                "turn_counters": _extract_turn_counter_payload(debug_snapshot),
                 "router_policy": {
                     "requires_evidence": requires_evidence,
                     "target_owner_scope": target_owner_scope,
@@ -2466,6 +2550,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
             "deepagents": deepagents_meta,
+            "turn_counters": _extract_turn_counter_payload(debug_snapshot),
             "session_id": session_id,
             "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
@@ -2940,6 +3025,7 @@ async def public_chat_endpoint(
                 routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
                 contexts=retrieved_context_snippets,
             )
+            debug_snapshot["public_action_query_guarded_rate"] = 1 if public_action_like_query else 0
             _emit_langfuse_turn_telemetry(debug_snapshot)
 
             if public_action_like_query:

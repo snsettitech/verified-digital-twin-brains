@@ -23,13 +23,39 @@ def _env_int(name: str, default: int, *, minimum: int = 1, maximum: int = 100) -
     return max(minimum, min(maximum, value))
 
 
+def _env_csv(name: str) -> list[str]:
+    raw = os.getenv(name, "")
+    if not raw:
+        return []
+    values = []
+    for item in raw.split(","):
+        parsed = item.strip()
+        if parsed:
+            values.append(parsed)
+    return values
+
+
 def deepagents_config() -> Dict[str, Any]:
     return {
         "enabled": _env_bool("DEEPAGENTS_ENABLED", False),
         "require_approval": _env_bool("DEEPAGENTS_REQUIRE_APPROVAL", True),
         "max_steps": _env_int("DEEPAGENTS_MAX_STEPS", 6, minimum=1, maximum=25),
         "timeout_seconds": _env_int("DEEPAGENTS_TIMEOUT_SECONDS", 20, minimum=1, maximum=180),
+        "allowlist_twin_ids": _env_csv("DEEPAGENTS_ALLOWLIST_TWIN_IDS"),
+        "allowlist_tenant_ids": _env_csv("DEEPAGENTS_ALLOWLIST_TENANT_IDS"),
     }
+
+
+def _is_allowlisted(config: Dict[str, Any], *, twin_id: str, tenant_id: Optional[str]) -> bool:
+    allowed_twins = {str(v).strip() for v in (config.get("allowlist_twin_ids") or []) if str(v).strip()}
+    allowed_tenants = {str(v).strip() for v in (config.get("allowlist_tenant_ids") or []) if str(v).strip()}
+    if not allowed_twins and not allowed_tenants:
+        return True
+    if twin_id and twin_id in allowed_twins:
+        return True
+    if tenant_id and tenant_id in allowed_tenants:
+        return True
+    return False
 
 
 def _clean_preview(value: Any, *, max_len: int = 300) -> str:
@@ -93,6 +119,27 @@ async def execute_deepagents_plan(
             "error": {
                 "code": "DEEPAGENTS_FORBIDDEN_CONTEXT",
                 "message": "Action execution is unavailable in public or anonymous contexts.",
+            },
+            "config": config,
+        }
+
+    if not _is_allowlisted(config, twin_id=twin_id, tenant_id=tenant_id):
+        _audit(
+            tenant_id=tenant_id,
+            twin_id=twin_id,
+            actor_id=actor_user_id,
+            action="DEEPAGENTS_FORBIDDEN_ALLOWLIST",
+            metadata={
+                "conversation_id": conversation_id,
+                "interaction_context": normalized_context or "owner_chat",
+            },
+        )
+        return {
+            "status": "forbidden",
+            "http_status": 403,
+            "error": {
+                "code": "DEEPAGENTS_NOT_ALLOWLISTED",
+                "message": "Action execution is not enabled for this twin or tenant.",
             },
             "config": config,
         }
