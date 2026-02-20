@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
+import os
 from modules.auth_guard import verify_owner, get_current_user, resolve_tenant_id, ensure_twin_active
 from modules.schemas import (
     ApiKeyCreateRequest, ApiKeyUpdateRequest, UserInvitationCreateRequest,
@@ -9,8 +10,15 @@ from modules.schemas import (
 )
 from modules.api_keys import create_api_key, list_api_keys, revoke_api_key, update_api_key
 from modules.share_links import get_share_link_info, regenerate_share_token, toggle_public_sharing
-from modules.user_management import list_users, invite_user, delete_user
+from modules.user_management import (
+    list_users,
+    invite_user,
+    delete_user,
+    accept_invitation,
+)
 from modules.observability import supabase
+from supabase import create_client as create_supabase_client
+from supabase_auth.errors import AuthApiError
 
 router = APIRouter(tags=["auth"])
 
@@ -19,6 +27,28 @@ def _require_auth_user(user: Any) -> Dict[str, Any]:
     if not isinstance(user, dict) or not user.get("user_id"):
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
+
+
+def _model_to_dict(value: Any) -> Dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    if hasattr(value, "__dict__"):
+        return dict(value.__dict__)
+    return {}
+
+
+def _get_anon_supabase_client():
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_anon_key = os.getenv("SUPABASE_KEY")
+    if not supabase_url or not supabase_anon_key:
+        raise HTTPException(status_code=503, detail="Supabase auth client not configured")
+    return create_supabase_client(supabase_url, supabase_anon_key)
 
 # ============================================================================
 # User Registration & Profile
@@ -37,6 +67,84 @@ class SyncUserResponse(BaseModel):
     status: str  # 'created' or 'exists'
     user: UserProfile
     needs_onboarding: bool = False
+
+
+class InvitationValidationResponse(BaseModel):
+    email: str
+    role: str
+    expires_at: Optional[str] = None
+    status: str = "pending"
+    invited_by: Optional[str] = None
+    tenant_id: Optional[str] = None
+
+
+class AcceptInvitationRequest(BaseModel):
+    token: str
+    password: str
+    name: Optional[str] = None
+
+
+class AcceptInvitationResponse(BaseModel):
+    status: str
+    user: Dict[str, Any]
+    token: Optional[str] = None
+    session: Optional[Dict[str, Any]] = None
+
+
+def _fetch_invitation_record(token: str) -> Optional[Dict[str, Any]]:
+    token = str(token or "").strip()
+    if not token:
+        return None
+    try:
+        response = (
+            supabase.table("user_invitations")
+            .select("id, tenant_id, email, role, invited_by, status, expires_at")
+            .eq("invitation_token", token)
+            .limit(1)
+            .execute()
+        )
+        if not response.data:
+            return None
+        return response.data[0]
+    except Exception:
+        return None
+
+
+def _parse_iso_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except Exception:
+        return None
+
+
+def _require_pending_invitation_or_raise(token: str) -> Dict[str, Any]:
+    record = _fetch_invitation_record(token)
+    if not record:
+        raise HTTPException(status_code=404, detail="Invalid invitation token")
+
+    status_value = str(record.get("status") or "").strip().lower()
+    if status_value == "accepted":
+        raise HTTPException(status_code=409, detail="Invitation already accepted")
+    if status_value == "expired":
+        raise HTTPException(status_code=410, detail="Invitation has expired")
+    if status_value and status_value != "pending":
+        raise HTTPException(status_code=400, detail=f"Invitation status '{status_value}' is not valid for this action")
+
+    expires_at_raw = record.get("expires_at")
+    expires_at = _parse_iso_datetime(expires_at_raw)
+    if expires_at and datetime.now(timezone.utc) > expires_at:
+        try:
+            supabase.table("user_invitations").update({"status": "expired"}).eq("id", record["id"]).execute()
+        except Exception:
+            pass
+        raise HTTPException(status_code=410, detail="Invitation has expired")
+
+    return record
 
 @router.post("/auth/sync-user", response_model=SyncUserResponse)
 async def sync_user(request: Request, response: Response, user=Depends(get_current_user)):
@@ -377,6 +485,100 @@ async def delete_user_endpoint(user_id: str, user=Depends(verify_owner)):
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     success = delete_user(user_id, deleted_by)
     return {"status": "success"}
+
+
+@router.get("/auth/invitation/{token}", response_model=InvitationValidationResponse)
+async def validate_invitation_endpoint(token: str):
+    """Validate a pending invitation token."""
+    invitation = _require_pending_invitation_or_raise(token)
+    return InvitationValidationResponse(
+        email=invitation["email"],
+        role=invitation["role"],
+        expires_at=invitation.get("expires_at"),
+        status="pending",
+        invited_by=invitation.get("invited_by"),
+        tenant_id=invitation.get("tenant_id"),
+    )
+
+
+@router.post("/auth/accept-invitation", response_model=AcceptInvitationResponse)
+async def accept_invitation_endpoint(request: AcceptInvitationRequest):
+    """Accept invitation token and create user in tenant."""
+    if not request.token or not request.token.strip():
+        raise HTTPException(status_code=400, detail="Invitation token is required")
+    if not request.password or not request.password.strip():
+        raise HTTPException(status_code=400, detail="Password is required")
+
+    invitation = _require_pending_invitation_or_raise(request.token)
+    invited_email = invitation.get("email")
+    if not invited_email:
+        raise HTTPException(status_code=400, detail="Invitation is missing email")
+    full_name = (request.name or invited_email.split("@")[0]).strip()
+
+    auth_user_id: Optional[str] = None
+    try:
+        # Create auth identity for invited user when not present yet.
+        try:
+            created_auth_user = supabase.auth.admin.create_user({
+                "email": invited_email,
+                "password": request.password,
+                "email_confirm": True,
+                "user_metadata": {"full_name": full_name},
+            })
+            created_user_payload = _model_to_dict(getattr(created_auth_user, "user", None))
+            auth_user_id = created_user_payload.get("id")
+        except AuthApiError as create_err:
+            err_text = str(create_err).lower()
+            if "already" not in err_text and "registered" not in err_text and "exists" not in err_text:
+                raise HTTPException(status_code=400, detail=str(create_err))
+
+        # Sign in with anon client to mint a real browser session.
+        anon_supabase = _get_anon_supabase_client()
+        auth_response = anon_supabase.auth.sign_in_with_password({
+            "email": invited_email,
+            "password": request.password,
+        })
+        auth_response_payload = _model_to_dict(auth_response)
+        session_payload = _model_to_dict(getattr(auth_response, "session", None)) or auth_response_payload.get("session", {})
+        signed_in_user_payload = _model_to_dict(getattr(auth_response, "user", None)) or auth_response_payload.get("user", {})
+
+        access_token = session_payload.get("access_token")
+        refresh_token = session_payload.get("refresh_token")
+        if not access_token or not refresh_token:
+            raise HTTPException(status_code=500, detail="Failed to create authenticated session")
+
+        auth_user_id = auth_user_id or signed_in_user_payload.get("id")
+        created_user = accept_invitation(
+            request.token,
+            {"password": request.password, "name": full_name},
+            auth_user_id=auth_user_id,
+        )
+        return AcceptInvitationResponse(
+            status="success",
+            user=created_user,
+            token=access_token,
+            session={
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "expires_in": session_payload.get("expires_in"),
+                "expires_at": session_payload.get("expires_at"),
+                "token_type": session_payload.get("token_type", "bearer"),
+            },
+        )
+    except AuthApiError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        detail = str(e)
+        lowered = detail.lower()
+        if "already exists" in lowered:
+            raise HTTPException(status_code=409, detail=detail)
+        if "expired" in lowered:
+            raise HTTPException(status_code=410, detail=detail)
+        if "invalid" in lowered:
+            raise HTTPException(status_code=404, detail=detail)
+        raise HTTPException(status_code=400, detail=detail)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Public Validation
 @router.get("/public/validate-share/{twin_id}/{token}")

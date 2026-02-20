@@ -138,7 +138,11 @@ def validate_invitation_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def accept_invitation(token: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
+def accept_invitation(
+    token: str,
+    user_data: Dict[str, Any],
+    auth_user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Create user account from invitation and mark invitation as accepted.
     user_data should contain: email, password_hash (if using password auth), name (optional)
@@ -149,21 +153,68 @@ def accept_invitation(token: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
     if not invitation:
         raise ValueError("Invalid or expired invitation token")
     
-    # Create user
-    user_create_data = {
-        "tenant_id": invitation["tenant_id"],
-        "email": invitation["email"],
-        "role": invitation["role"],
-        "invited_at": datetime.utcnow().isoformat(),
-        "invitation_id": invitation["id"]
-    }
-    
-    user_response = supabase.table("users").insert(user_create_data).execute()
-    
-    if not user_response.data:
-        raise ValueError("Failed to create user")
-    
-    user = user_response.data[0]
+    invited_email = invitation["email"]
+    now_iso = datetime.utcnow().isoformat()
+    full_name = (user_data or {}).get("name")
+
+    existing_response = (
+        supabase.table("users")
+        .select("id, tenant_id, email, role, created_at")
+        .eq("email", invited_email)
+        .limit(1)
+        .execute()
+    )
+    existing_user = (existing_response.data or [None])[0]
+
+    user_row: Dict[str, Any]
+    if existing_user:
+        existing_id = existing_user.get("id")
+        target_id = auth_user_id or existing_id
+
+        update_payload: Dict[str, Any] = {
+            "tenant_id": invitation["tenant_id"],
+            "role": invitation["role"],
+            "invited_at": now_iso,
+            "invitation_id": invitation["id"],
+        }
+        if full_name:
+            update_payload["full_name"] = full_name
+
+        if target_id and existing_id and target_id != existing_id:
+            try:
+                supabase.table("users").update({"id": target_id}).eq("id", existing_id).execute()
+            except Exception:
+                # Non-fatal: keep existing primary key if PK migration is blocked by constraints.
+                target_id = existing_id
+
+        if target_id:
+            supabase.table("users").update(update_payload).eq("id", target_id).execute()
+            user_lookup = supabase.table("users").select("*").eq("id", target_id).limit(1).execute()
+            user_row = (user_lookup.data or [None])[0]
+        else:
+            supabase.table("users").update(update_payload).eq("email", invited_email).execute()
+            user_lookup = supabase.table("users").select("*").eq("email", invited_email).limit(1).execute()
+            user_row = (user_lookup.data or [None])[0]
+    else:
+        user_create_data: Dict[str, Any] = {
+            "tenant_id": invitation["tenant_id"],
+            "email": invited_email,
+            "role": invitation["role"],
+            "invited_at": now_iso,
+            "invitation_id": invitation["id"],
+        }
+        if auth_user_id:
+            user_create_data["id"] = auth_user_id
+        if full_name:
+            user_create_data["full_name"] = full_name
+
+        user_response = supabase.table("users").insert(user_create_data).execute()
+        if not user_response.data:
+            raise ValueError("Failed to create user")
+        user_row = user_response.data[0]
+
+    if not user_row:
+        raise ValueError("Failed to create or update invited user")
     
     # Mark invitation as accepted
     supabase.table("user_invitations").update({
@@ -172,11 +223,11 @@ def accept_invitation(token: str, user_data: Dict[str, Any]) -> Dict[str, Any]:
     }).eq("id", invitation["id"]).execute()
     
     return {
-        "id": user["id"],
-        "tenant_id": user["tenant_id"],
-        "email": user["email"],
-        "role": user["role"],
-        "created_at": user.get("created_at")
+        "id": user_row["id"],
+        "tenant_id": user_row.get("tenant_id"),
+        "email": user_row.get("email"),
+        "role": user_row.get("role"),
+        "created_at": user_row.get("created_at")
     }
 
 

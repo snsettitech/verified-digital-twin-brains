@@ -43,7 +43,6 @@ export default function BrainGraphPage() {
     // Version state
     const [currentVersion, setCurrentVersion] = useState<number>(0);
     const [versions, setVersions] = useState<any[]>([]);
-    const [approving, setApproving] = useState(false);
     const [showVersions, setShowVersions] = useState(false);
 
     // Use active twin from context
@@ -97,42 +96,6 @@ export default function BrainGraphPage() {
             }
         } catch (e) {
             console.error('Failed to fetch versions:', e);
-        }
-    };
-
-    const handleApprove = async () => {
-        if (approving) return;
-        if (!twinId) return;
-        setApproving(true);
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            const token = session?.access_token;
-            if (!token) {
-                alert('Not authenticated');
-                return;
-            }
-
-            const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.COGNITIVE_PROFILES(twinId)}/approve`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ notes: 'Approved via Brain Explorer' })
-            });
-            if (res.ok) {
-                const result = await res.json();
-                alert(`✓ Profile approved! Version ${result.version} created with ${result.node_count} nodes.`);
-                fetchVersions();
-            } else {
-                const err = await res.json();
-                alert(`Failed: ${err.detail || 'Unknown error'}`);
-            }
-        } catch (e) {
-            console.error('Approval failed:', e);
-            alert('Approval failed. See console for details.');
-        } finally {
-            setApproving(false);
         }
     };
 
@@ -412,3 +375,4 @@ export default function BrainGraphPage() {
         </div>
     );
 }
+

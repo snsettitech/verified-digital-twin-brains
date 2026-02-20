@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { API_BASE_URL, API_ENDPOINTS } from '@/lib/constants';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 interface InvitationInfo {
   email: string;
@@ -10,10 +11,22 @@ interface InvitationInfo {
   expires_at?: string;
 }
 
+interface AcceptInvitationSession {
+  access_token: string;
+  refresh_token: string;
+}
+
+interface AcceptInvitationApiResponse {
+  status: string;
+  token?: string;
+  session?: AcceptInvitationSession;
+}
+
 export default function AcceptInvitationPage() {
   const params = useParams();
   const router = useRouter();
   const token = params?.token as string;
+  const supabase = getSupabaseClient();
 
   const [invitation, setInvitation] = useState<InvitationInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,13 +83,24 @@ export default function AcceptInvitationPage() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        // Store token for immediate login (in production, you'd use proper auth)
-        if (data.token) {
-          localStorage.setItem('auth_token', data.token);
+        const data: AcceptInvitationApiResponse = await response.json();
+        const accessToken = data.session?.access_token || data.token;
+        const refreshToken = data.session?.refresh_token;
+
+        if (accessToken && refreshToken) {
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (sessionError) {
+            setError(sessionError.message || 'Failed to initialize session');
+            return;
+          }
         }
+
         // Redirect to dashboard
         router.push('/dashboard');
+        router.refresh();
       } else {
         const errorData = await response.json();
         setError(errorData.detail || 'Failed to accept invitation');

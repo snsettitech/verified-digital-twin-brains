@@ -1,73 +1,73 @@
-# backend/tests/test_media_ingestion.py
+import importlib
 import sys
-import os
-import unittest
-from unittest.mock import MagicMock, patch, AsyncMock
-import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
-# Add backend to path
-sys.path.insert(0, os.path.join(os.getcwd(), "backend"))
+import pytest
 
-class TestMediaIngestion(unittest.TestCase):
-    
-    def setUp(self):
-        # Patch sys.modules to mock dependencies
-        self.modules_patcher = patch.dict(sys.modules, {
-            "modules.observability": MagicMock(),
-            "modules.ingestion": MagicMock(),
-            "modules.auth_guard": MagicMock(),  # Mock auth guard here safely
-        })
-        self.modules_patcher.start()
-        
-        # Mock specific attributes
-        sys.modules["modules.observability"].supabase = MagicMock()
-        sys.modules["modules.ingestion"].process_and_index_text = AsyncMock(return_value=5)
-        
-        # Import module under test (inside setup to use mocked modules)
-        if "modules.media_ingestion" in sys.modules:
-            del sys.modules["modules.media_ingestion"]
-        from modules.media_ingestion import MediaIngester
-        self.MediaIngester = MediaIngester
 
-    def tearDown(self):
-        self.modules_patcher.stop()
+@pytest.fixture
+def media_ingestion_module():
+    """Load media_ingestion with mocked dependencies to keep tests deterministic."""
+    mock_observability = MagicMock()
+    mock_observability.supabase = MagicMock()
+    mock_observability.log_ingestion_event = MagicMock()
 
-    @patch('modules.media_ingestion.yt_dlp.YoutubeDL')
-    async def test_ingest_youtube_success(self, mock_ytdl):
-        """Test full youtube ingestion flow with mocks."""
-        # Setup mocks
-        mock_ytdl.return_value.__enter__.return_value.extract_info.return_value = {}
-        mock_ytdl.return_value.__enter__.return_value.prepare_filename.return_value = "video.webm"
-        
-        # We need to rely on the class imported in setUp
-        MediaIngester = self.MediaIngester
-        
-        # Patch methods on the class
-        with patch.object(MediaIngester, '_download_audio', return_value="fake.mp3"), \
-             patch.object(MediaIngester, '_transcribe_audio', return_value="Raw transcript"), \
-             patch.object(MediaIngester, '_diarize_and_process', return_value="Diarized content"):
-            
-            ingester = MediaIngester("twin-123")
-            result = await ingester.ingest_youtube_video("http://youtube.com/watch?v=123")
-            
-            self.assertTrue(result["success"])
-            self.assertEqual(result["chunks"], 5)
+    mock_ingestion = MagicMock()
+    mock_ingestion.process_and_index_text = AsyncMock(return_value=5)
 
-    @patch('modules.media_ingestion.get_openai_client')
-    async def test_diarization_logic(self, mock_client):
-        """Test that diarization calls the LLM correctly."""
-        MediaIngester = self.MediaIngester
+    mock_clients = MagicMock()
+    mock_clients.get_openai_client = MagicMock(return_value=MagicMock())
+
+    with patch.dict(
+        sys.modules,
+        {
+            "modules.observability": mock_observability,
+            "modules.ingestion": mock_ingestion,
+            "modules.auth_guard": MagicMock(),
+            "modules.clients": mock_clients,
+            "modules.governance": MagicMock(),
+        },
+        clear=False,
+    ):
+        sys.modules.pop("modules.media_ingestion", None)
+        module = importlib.import_module("modules.media_ingestion")
+        yield module, mock_ingestion, mock_clients
+        sys.modules.pop("modules.media_ingestion", None)
+
+
+@pytest.mark.asyncio
+async def test_ingest_youtube_success(media_ingestion_module):
+    """YouTube ingestion returns success and awaits indexing pipeline."""
+    module, mock_ingestion, _ = media_ingestion_module
+    MediaIngester = module.MediaIngester
+
+    with (
+        patch.object(MediaIngester, "_download_audio", return_value="fake.mp3"),
+        patch.object(MediaIngester, "_transcribe_audio", new=AsyncMock(return_value="Raw transcript")),
+        patch.object(MediaIngester, "_diarize_and_process", new=AsyncMock(return_value="Diarized content")),
+    ):
         ingester = MediaIngester("twin-123")
-        
-        # Mock LLM response
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = "Diarized text"
-        mock_client.return_value.chat.completions.create.return_value = mock_response
-        
-        result = await ingester._diarize_and_process("Full raw text")
-        
-        self.assertEqual(result, "Diarized text")
+        result = await ingester.ingest_youtube_video("http://youtube.com/watch?v=123")
+
+    assert result["success"] is True
+    assert result["chunks"] == 5
+    assert mock_ingestion.process_and_index_text.await_count == 1
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+@pytest.mark.asyncio
+async def test_diarization_logic(media_ingestion_module):
+    """Diarization awaits LLM completion and returns extracted content."""
+    module, _, mock_clients = media_ingestion_module
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content="Diarized text"))]
+
+    mock_openai_client = MagicMock()
+    mock_openai_client.chat.completions.create = AsyncMock(return_value=mock_response)
+    mock_clients.get_openai_client.return_value = mock_openai_client
+
+    ingester = module.MediaIngester("twin-123")
+    result = await ingester._diarize_and_process("Full raw text")
+
+    assert result == "Diarized text"
+    assert mock_openai_client.chat.completions.create.await_count == 1

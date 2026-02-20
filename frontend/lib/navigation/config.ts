@@ -21,6 +21,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         title: 'Build',
         items: [
             { name: 'Dashboard', href: '/dashboard', icon: 'home' },
+            { name: 'Profile', href: '/dashboard/profile', icon: 'profile' },
             { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book' },
             { name: 'Memory Center', href: '/dashboard/memory', icon: 'memory', featureFlag: 'memoryCenter' },
             { name: 'Studio', href: '/dashboard/studio', icon: 'studio' },
