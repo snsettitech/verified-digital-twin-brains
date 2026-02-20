@@ -687,6 +687,11 @@ def _log_cross_twin_guardrail_audit(twin_id: str, discarded_rows: List[Dict[str,
     }
     log_retrieval_event("cross_twin_retrieval_blocked", payload)
 
+    # Tests and some local flows may use non-UUID synthetic twin IDs.
+    # Skip DB-backed audit persistence in that case.
+    if not _is_uuid(twin_id):
+        return
+
     try:
         twin_res = (
             supabase.table("twins")
@@ -759,8 +764,12 @@ def _enforce_twin_source_scope(
             else:
                 if not item.get("doc_name"):
                     item["doc_name"] = str((ownership or {}).get("filename") or "").strip()
-        elif metadata_twin_id != target_twin:
-            reason = "source_not_owned_by_active_twin"
+        elif metadata_twin_id:
+            if metadata_twin_id != target_twin:
+                reason = "source_not_owned_by_active_twin"
+        elif _is_uuid(source_id):
+            # UUID source IDs without ownership or metadata proof are blocked.
+            reason = "unverified_uuid_source_owner"
 
         if reason:
             discarded.append(

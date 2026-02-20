@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from datetime import datetime, timezone
 import json
 
 from modules.auth_guard import get_current_user, require_twin_access, require_tenant, verify_twin_ownership
@@ -57,6 +58,11 @@ class InterviewResponse(BaseModel):
     contradictions: List[Dict[str, Any]] = []
     missing_slots: List[Dict[str, Any]] = []
     progress: Dict[str, Any] = {}  # { "intent_complete": bool, "slots_filled": 5, "total_slots": 12 }
+
+
+class ApproveProfileRequest(BaseModel):
+    """Optional approval metadata for compatibility endpoint."""
+    notes: Optional[str] = None
 
 
 def _load_host_policy(spec_name: str) -> Dict[str, Any]:
@@ -606,6 +612,118 @@ async def get_cognitive_graph(twin_id: str, user=Depends(require_tenant)):
 
 # NOTE: Approval workflow removed - all content auto-indexes now.
 # Versioning endpoints below are kept for read-only history.
+
+
+@router.post("/cognitive/profiles/{twin_id}/approve")
+async def approve_profile(twin_id: str, request: Optional[ApproveProfileRequest] = None, user=Depends(get_current_user)):
+    """
+    Compatibility endpoint for clients that still perform explicit profile approval.
+
+    Persists an immutable profile version snapshot and returns approval metadata.
+    """
+    verify_twin_ownership(twin_id, user)
+    notes = (request.notes or "").strip() if request else ""
+    approval_notes = notes or None
+
+    from modules._core.versioning import create_snapshot, compute_diff
+
+    try:
+        nodes_res = supabase.table("nodes").select("*").eq("twin_id", twin_id).execute()
+        edges_res = supabase.table("edges").select("*").eq("twin_id", twin_id).execute()
+        nodes = nodes_res.data or []
+        edges = edges_res.data or []
+
+        snapshot = create_snapshot(nodes, edges)
+
+        latest_version = 0
+        previous_snapshot: Dict[str, Any] = {}
+        latest_res = supabase.rpc("get_profile_versions_system", {"t_id": twin_id, "limit_val": 1}).execute()
+        if latest_res.data:
+            latest = latest_res.data[0]
+            latest_version = int(latest.get("version") or 0)
+            previous_snapshot = latest.get("snapshot_json") or {}
+
+        next_version = latest_version + 1
+        diff = compute_diff(previous_snapshot, snapshot)
+        approver_id = user.get("user_id") if isinstance(user, dict) else None
+
+        version_id = None
+        used_fallback_insert = False
+        try:
+            insert_res = supabase.rpc(
+                "insert_profile_version_system",
+                {
+                    "t_id": twin_id,
+                    "ver": next_version,
+                    "snapshot": snapshot,
+                    "diff": diff,
+                    "n_count": len(nodes),
+                    "e_count": len(edges),
+                    "approver": approver_id,
+                    "approval_notes": approval_notes,
+                },
+            ).execute()
+            version_id = insert_res.data
+        except Exception:
+            # Older deployments may not have the RPC. Fall back to direct insert.
+            used_fallback_insert = True
+            direct_res = (
+                supabase.table("profile_versions")
+                .insert(
+                    {
+                        "twin_id": twin_id,
+                        "version": next_version,
+                        "snapshot_json": snapshot,
+                        "diff_json": diff,
+                        "node_count": len(nodes),
+                        "edge_count": len(edges),
+                        "approved_by": approver_id,
+                        "notes": approval_notes,
+                    }
+                )
+                .execute()
+            )
+            if direct_res.data:
+                version_id = (direct_res.data[0] or {}).get("id")
+
+        approved_at = datetime.now(timezone.utc).isoformat()
+
+        try:
+            tenant_id = user.get("tenant_id") if isinstance(user, dict) else None
+            if tenant_id:
+                AuditLogger.log(
+                    tenant_id=tenant_id,
+                    twin_id=twin_id,
+                    event_type="COGNITIVE_PROFILE",
+                    action="PROFILE_APPROVED",
+                    actor_id=approver_id,
+                    metadata={
+                        "version": next_version,
+                        "node_count": len(nodes),
+                        "edge_count": len(edges),
+                    },
+                )
+        except Exception as audit_err:
+            print(f"Cognitive approval audit log failed: {audit_err}")
+
+        return {
+            "status": "approved",
+            "approved": True,
+            "twin_id": twin_id,
+            "version": next_version,
+            "version_id": version_id,
+            "approved_by": approver_id,
+            "approved_at": approved_at,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "notes": approval_notes,
+            "fallback_insert": used_fallback_insert,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error approving cognitive profile: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve profile: {str(e)}")
 
 
 @router.get("/cognitive/profiles/{twin_id}/versions")

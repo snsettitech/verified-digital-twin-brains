@@ -562,7 +562,8 @@ def _filter_contexts_to_allowed_sources(
     if not isinstance(contexts, list):
         return [], 0
     if not allowed_source_ids:
-        return [], len([row for row in contexts if isinstance(row, dict)])
+        # Empty allowlist means "no source restriction configured".
+        return [row for row in contexts if isinstance(row, dict)], 0
 
     filtered: List[Dict[str, Any]] = []
     removed = 0
@@ -581,7 +582,8 @@ def _filter_citations_to_allowed_sources(citations: List[str], allowed_source_id
     if not isinstance(citations, list):
         return []
     if not allowed_source_ids:
-        return []
+        # Empty allowlist means "no source restriction configured".
+        return [c for c in citations if isinstance(c, str) and c.strip()]
     return [c for c in citations if isinstance(c, str) and c.strip() in allowed_source_ids]
 
 

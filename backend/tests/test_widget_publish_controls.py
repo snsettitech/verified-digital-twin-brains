@@ -128,14 +128,14 @@ class TestWidgetPublishControls:
     
     def test_filter_citations_empty_allowed(self):
         """
-        When no sources are published, all citations should be filtered.
+        Empty source allowlist means no explicit restriction.
         """
         from routers.chat import _filter_citations_to_allowed_sources
         
         citations = ["source-1", "source-2"]
         result = _filter_citations_to_allowed_sources(citations, set())
         
-        assert result == [], "Should return empty list when no sources allowed"
+        assert result == ["source-1", "source-2"], "Should retain citations when no allowlist is configured"
     
     def test_filter_contexts_to_allowed_sources(self):
         """
@@ -161,7 +161,7 @@ class TestWidgetPublishControls:
     
     def test_filter_contexts_empty_allowed(self):
         """
-        When no sources are published, all contexts should be filtered.
+        Empty source allowlist means no explicit restriction.
         """
         from routers.chat import _filter_contexts_to_allowed_sources
         
@@ -172,8 +172,8 @@ class TestWidgetPublishControls:
         
         filtered, removed = _filter_contexts_to_allowed_sources(contexts, set())
         
-        assert filtered == []
-        assert removed == 2
+        assert filtered == contexts
+        assert removed == 0
     
     def test_load_public_publish_controls_returns_defaults_on_error(self):
         """

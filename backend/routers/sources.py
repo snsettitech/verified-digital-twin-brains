@@ -44,6 +44,16 @@ async def list_sources(twin_id: str, status: Optional[str] = None, user=Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/twins/{twin_id}/sources")
+async def list_sources_twin_alias(twin_id: str, status: Optional[str] = None, user=Depends(get_current_user)):
+    """
+    Compatibility alias for twin-scoped frontend clients.
+
+    Canonical route remains GET /sources/{twin_id}.
+    """
+    return await list_sources(twin_id=twin_id, status=status, user=user)
+
+
 @router.get("/sources/{source_id}/health")
 async def get_source_health(source_id: str, user=Depends(get_current_user)):
     """Get health check results for a source."""

@@ -38,6 +38,7 @@ from modules.deepagents_router import (
     summarize_deepagents_plan,
 )
 from modules.deepagents_executor import execute_deepagents_plan
+from modules.mem0_client import get_memory_provider
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -242,6 +243,9 @@ class TwinState(TypedDict):
     full_settings: Optional[Dict[str, Any]]
     graph_context: Optional[str]
     owner_memory_context: Optional[str]
+    mem0_preferences: Optional[List[Dict[str, Any]]]
+    mem0_preferences_context: Optional[str]
+    mem0_preferences_source: Optional[str]
     system_prompt_override: Optional[str]
     interaction_context: Optional[str]
 
@@ -1461,6 +1465,150 @@ def _classify_grounding_policy(
         "best_overlap": best_overlap,
     }
 
+
+def _normalize_mem0_rows(
+    raw_items: Any,
+    *,
+    limit: int = 3,
+    prefs_only: bool = True,
+) -> List[Dict[str, Any]]:
+    """Normalize provider payload to stable dict rows for planner/runtime usage."""
+    if not isinstance(raw_items, list):
+        return []
+
+    normalized: List[Dict[str, Any]] = []
+    seen: set[Tuple[str, str]] = set()
+    max_items = max(1, int(limit or 3))
+
+    for item in raw_items:
+        if isinstance(item, dict):
+            raw_type = item.get("memory_type") or item.get("type") or "preference"
+            raw_value = item.get("value") or item.get("text") or ""
+            raw_source = item.get("source_label") or "mem0"
+            raw_metadata = item.get("metadata") or {}
+        else:
+            raw_type = getattr(item, "memory_type", None) or getattr(item, "type", None) or "preference"
+            raw_value = getattr(item, "value", None) or getattr(item, "text", None) or ""
+            raw_source = getattr(item, "source_label", None) or "mem0"
+            raw_metadata = getattr(item, "metadata", None) or {}
+
+        memory_type = str(raw_type or "preference").strip().lower()
+        value = str(raw_value or "").strip()
+        source_label = str(raw_source or "mem0").strip().lower() or "mem0"
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+
+        if not value:
+            continue
+        if prefs_only and memory_type != "preference":
+            continue
+
+        dedupe_key = (value.lower(), source_label)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+
+        normalized.append(
+            {
+                "memory_type": memory_type or "preference",
+                "value": value,
+                "source_label": source_label,
+                "metadata": metadata,
+            }
+        )
+        if len(normalized) >= max_items:
+            break
+
+    return normalized
+
+
+def _build_mem0_preferences_context(rows: List[Dict[str, Any]]) -> str:
+    if not isinstance(rows, list):
+        return ""
+    lines: List[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        value = str(row.get("value") or "").strip()
+        if not value:
+            continue
+        source_label = str(row.get("source_label") or "mem0").strip().lower() or "mem0"
+        lines.append(f"- {value} (source={source_label})")
+    return "\n".join(lines)
+
+
+async def _load_mem0_preferences_for_turn(
+    *,
+    twin_id: str,
+    query: str,
+    limit: int = 3,
+) -> Tuple[List[Dict[str, Any]], str, str]:
+    """
+    Compatibility shim for planner/runtime Mem0 preference loading.
+
+    Returns:
+      (rows, context_text, source_name)
+    """
+    provider_name = "mem0"
+    try:
+        provider = get_memory_provider()
+        provider_name = str(getattr(provider, "provider_name", provider_name) or provider_name).strip()
+    except Exception as e:
+        print(f"[Mem0] Failed to initialize provider: {e}")
+        return [], "", f"{provider_name}:fallback"
+
+    try:
+        raw_items = await provider.recall_preferences(
+            twin_id=str(twin_id or "").strip(),
+            query=str(query or "").strip(),
+            limit=max(1, int(limit or 3)),
+        )
+    except Exception as e:
+        print(f"[Mem0] Preference recall failed: {e}")
+        return [], "", f"{provider_name}:fallback"
+
+    try:
+        import modules.mem0_client as mem0_client
+
+        prefs_only = bool(getattr(mem0_client, "MEM0_PREFS_ONLY_ENABLED", True))
+    except Exception:
+        prefs_only = True
+
+    rows = _normalize_mem0_rows(raw_items, limit=limit, prefs_only=prefs_only)
+    context_text = _build_mem0_preferences_context(rows)
+    return rows, context_text, provider_name
+
+
+def _prepare_mem0_preferences_for_prompt(
+    *,
+    state: TwinState,
+    query_class: str,
+) -> str:
+    """
+    Build a safe, read-only preferences context block for planner prompts.
+    """
+    inferred_labels = {"inferred", "implicit", "derived", "model_inferred"}
+    raw_rows = state.get("mem0_preferences")
+    has_explicit_rows = isinstance(raw_rows, list)
+
+    if has_explicit_rows:
+        rows = _normalize_mem0_rows(raw_rows, limit=6, prefs_only=False)
+        if query_class == "identity":
+            rows = [
+                row
+                for row in rows
+                if str(row.get("source_label") or "").strip().lower() not in inferred_labels
+            ]
+        return _build_mem0_preferences_context(rows)
+
+    raw_context = str(state.get("mem0_preferences_context") or "").strip()
+    if not raw_context:
+        return ""
+
+    lines = [line.strip() for line in raw_context.splitlines() if line.strip()]
+    if query_class == "identity":
+        lines = [line for line in lines if "source=inferred" not in line.lower()]
+    return "\n".join(lines).strip()
+
 @observe(name="planner_node")
 async def planner_node(state: TwinState):
     """General evidence-driven planner."""
@@ -1478,6 +1626,7 @@ async def planner_node(state: TwinState):
     selection_recovery_failed = bool(selection_reply and not intent_recovered)
     query_class = str(state.get("query_class") or "factual").strip().lower() or "factual"
     quote_intent = bool(state.get("quote_intent"))
+    mem0_preferences_context = _prepare_mem0_preferences_for_prompt(state=state, query_class=query_class)
     _system_msg, persona_trace = build_system_prompt_with_trace(state)
     valid_source_ids: List[str] = _collect_valid_source_ids(context_data)
 
@@ -1744,6 +1893,9 @@ ANSWERABILITY JUDGEMENT:
 
 ALLOWED SOURCE IDS:
 {json.dumps(valid_source_ids, ensure_ascii=True)}
+
+MEMORY PREFERENCES (read-only):
+{mem0_preferences_context or "- None available."}
 
 EVIDENCE:
 {_build_evidence_blob()}
@@ -2222,6 +2374,22 @@ async def run_agent_stream(
 
     effective_group_id = group_id if enforce_group_filtering else None
 
+    mem0_preferences: List[Dict[str, Any]] = []
+    mem0_preferences_context = ""
+    mem0_preferences_source = "mem0"
+    try:
+        (
+            mem0_preferences,
+            mem0_preferences_context,
+            mem0_preferences_source,
+        ) = await _load_mem0_preferences_for_turn(
+            twin_id=twin_id,
+            query=query,
+            limit=3,
+        )
+    except Exception as e:
+        print(f"[Mem0] Non-fatal load error: {e}")
+
     agent = create_twin_agent(
         twin_id,
         group_id=effective_group_id,
@@ -2278,6 +2446,9 @@ async def run_agent_stream(
         "full_settings": settings,
         "graph_context": graph_context,
         "owner_memory_context": owner_memory_context,
+        "mem0_preferences": mem0_preferences,
+        "mem0_preferences_context": mem0_preferences_context,
+        "mem0_preferences_source": mem0_preferences_source,
         "system_prompt_override": system_prompt,
         "interaction_context": interaction_context,
     }
