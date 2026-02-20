@@ -469,3 +469,79 @@ async def test_planner_confidence_prefers_rerank_signal_when_present(monkeypatch
     confidence = float(out["planning_output"]["confidence"])
 
     assert 0.70 <= confidence <= 0.97
+
+
+@pytest.mark.asyncio
+async def test_planner_identity_insufficient_triggers_second_pass_with_rich_context(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    evaluate_mock = AsyncMock(
+        side_effect=[
+            {
+                "answerability": "insufficient",
+                "confidence": 0.2,
+                "reasoning": "Need clearer identity evidence.",
+                "missing_information": ["the twin's identity bio and core expertise"],
+                "ambiguity_level": "medium",
+            },
+            {
+                "answerability": "direct",
+                "confidence": 0.76,
+                "reasoning": "Identity evidence found in second pass.",
+                "missing_information": [],
+                "ambiguity_level": "low",
+            },
+        ]
+    )
+    monkeypatch.setattr("modules.agent.evaluate_answerability", evaluate_mock)
+
+    second_pass_mock = AsyncMock(
+        return_value=[
+            {
+                "source_id": "src-id-1",
+                "text": "I am a twin focused on pragmatic founder support and decision clarity.",
+                "section_title": "Owner identity and credibility",
+                "doc_name": "Identity.docx",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            }
+        ]
+    )
+    monkeypatch.setattr("modules.agent._run_second_pass_retrieval", second_pass_mock)
+    monkeypatch.setattr("modules.agent.invoke_json", AsyncMock(side_effect=RuntimeError("planner unavailable")))
+
+    state = {
+        "twin_id": "twin-identity",
+        "messages": [HumanMessage(content="Tell me about yourself")],
+        "dialogue_mode": "QA_FACT",
+        "query_class": "identity",
+        "quote_intent": False,
+        "retrieved_context": {
+            "results": [
+                {"source_id": "s1", "text": "Questionnaire item one", "section_title": "mean", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "s2", "text": "Questionnaire item two", "section_title": "E) > mean", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "s3", "text": "Questionnaire item three", "section_title": "H) constraints", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "s4", "text": "Questionnaire item four", "section_title": "I) style", "block_type": "prompt_question", "is_answer_text": False},
+            ]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+        "retrieval_group_id": None,
+        "resolve_default_group_filtering": True,
+    }
+
+    out = await planner_node(state)
+    assert second_pass_mock.await_count == 1
+    assert evaluate_mock.await_count == 2
+    assert out["routing_decision"]["action"] == "answer"
+    assert out["planning_output"]["answerability"]["answerability"] == "direct"

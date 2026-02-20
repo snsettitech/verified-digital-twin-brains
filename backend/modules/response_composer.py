@@ -41,6 +41,28 @@ _LEADING_Q_RE = re.compile(
     re.IGNORECASE,
 )
 
+_IDENTITY_CUE_MARKERS = (
+    "i am ",
+    "my name is",
+    "background",
+    "experience",
+    "expertise",
+    "focus",
+    "work on",
+    "operator",
+    "builder",
+)
+
+_IDENTITY_META_MARKERS = (
+    "identity",
+    "bio",
+    "about",
+    "profile",
+    "credibility",
+    "expertise",
+    "background",
+)
+
 _QUERY_CLASS_LABELS: Dict[str, Tuple[str, ...]] = {
     "identity": ("Who I am", "Core expertise", "How I help"),
     "procedural": ("How to use this twin", "Recommended flow", "Expected outcome"),
@@ -87,10 +109,32 @@ def _is_answer_text_row(row: Dict[str, Any]) -> bool:
     return block_type not in {"prompt_question", "heading"}
 
 
+def _identity_meta_text(row: Dict[str, Any]) -> str:
+    parts = [
+        str(row.get("section_title") or ""),
+        str(row.get("section_path") or ""),
+        str(row.get("doc_name") or ""),
+        str(row.get("filename") or ""),
+    ]
+    return _normalize_line(" ".join(part for part in parts if part)).lower()
+
+
+def _row_matches_identity_cues(row: Dict[str, Any], line: str) -> bool:
+    text = _normalize_line(str(row.get("text") or "")).lower()
+    line_l = _normalize_line(line).lower()
+    meta = _identity_meta_text(row)
+    return (
+        any(marker in text for marker in _IDENTITY_CUE_MARKERS)
+        or any(marker in line_l for marker in _IDENTITY_CUE_MARKERS)
+        or any(marker in meta for marker in _IDENTITY_META_MARKERS)
+    )
+
+
 def _candidate_sentences(
     query: str,
     context_data: Sequence[Dict[str, Any]],
     *,
+    query_class: str,
     quote_intent: bool,
     max_items: int = 24,
 ) -> List[Tuple[str, str]]:
@@ -113,6 +157,12 @@ def _candidate_sentences(
             if len(line) < 18:
                 continue
             if not quote_intent and _is_prompt_like_line(line):
+                continue
+            if (
+                not quote_intent
+                and str(query_class or "").strip().lower() == "identity"
+                and not _row_matches_identity_cues(row, line)
+            ):
                 continue
             sig = line.lower()[:240]
             if sig in seen:
@@ -175,6 +225,7 @@ def compose_answer_points(
         for line, source_id in _candidate_sentences(
             query,
             context_data or [],
+            query_class=query_class,
             quote_intent=quote_intent,
             max_items=max(8, max_points * 6),
         ):

@@ -78,6 +78,16 @@ _IDENTITY_EVIDENCE_MARKERS = (
     "bio",
 )
 
+_IDENTITY_METADATA_MARKERS = (
+    "identity",
+    "bio",
+    "about",
+    "profile",
+    "credibility",
+    "expertise",
+    "background",
+)
+
 _PROCEDURAL_QUERY_MARKERS = (
     "how to",
     "how do",
@@ -215,12 +225,41 @@ def _chunk_text(row: Dict[str, Any]) -> str:
     return re.sub(r"\s+", " ", str((row or {}).get("text") or "").strip().lower())
 
 
+def _chunk_meta_text(row: Dict[str, Any]) -> str:
+    if not isinstance(row, dict):
+        return ""
+    parts = [
+        str(row.get("section_title") or ""),
+        str(row.get("section_path") or ""),
+        str(row.get("doc_name") or ""),
+        str(row.get("filename") or ""),
+        str(row.get("source_name") or ""),
+    ]
+    merged = " ".join(part for part in parts if part)
+    return re.sub(r"\s+", " ", merged.strip().lower())
+
+
+def _is_answer_text_chunk(row: Dict[str, Any]) -> bool:
+    if not isinstance(row, dict):
+        return False
+    raw = row.get("is_answer_text")
+    if isinstance(raw, bool):
+        return raw
+    block_type = str(row.get("block_type") or row.get("chunk_type") or "").strip().lower()
+    if not block_type:
+        return True
+    return block_type not in {"prompt_question", "heading"}
+
+
 def _has_identity_evidence(chunks: Sequence[Dict[str, Any]]) -> bool:
     for row in chunks[:8]:
         text = _chunk_text(row)
-        if not text:
+        meta = _chunk_meta_text(row)
+        if not _is_answer_text_chunk(row):
             continue
-        if any(marker in text for marker in _IDENTITY_EVIDENCE_MARKERS):
+        text_match = bool(text) and any(marker in text for marker in _IDENTITY_EVIDENCE_MARKERS)
+        meta_match = bool(meta) and any(marker in meta for marker in _IDENTITY_METADATA_MARKERS)
+        if text_match or meta_match:
             return True
     return False
 
@@ -310,6 +349,27 @@ def _clean_section_label(value: str) -> str:
     return cleaned
 
 
+def _is_useful_section_candidate(value: str) -> bool:
+    item = _clean_section_label(value)
+    if not item:
+        return False
+    lowered = item.lower()
+    if lowered in {"unknown", "none", "n/a"}:
+        return False
+    if len(item) < 6:
+        return False
+    if any(ch in item for ch in {">", "|", "="}):
+        return False
+    words = re.findall(r"[A-Za-z]{2,}", item)
+    if len(words) < 2:
+        return False
+    alpha_chars = sum(1 for ch in item if ch.isalpha())
+    ratio = alpha_chars / float(max(len(item), 1))
+    if ratio < 0.55:
+        return False
+    return True
+
+
 def _derive_section_candidates(
     evidence_chunks: Sequence[Dict[str, Any]],
     *,
@@ -319,11 +379,9 @@ def _derive_section_candidates(
 
     def _add(value: str) -> None:
         item = _clean_section_label(value)
-        if not item:
+        if not _is_useful_section_candidate(item):
             return
         low = item.lower()
-        if low in {"unknown", "none", "n/a"}:
-            return
         if any(existing.lower() == low for existing in candidates):
             return
         candidates.append(item)
@@ -332,31 +390,10 @@ def _derive_section_candidates(
         if not isinstance(row, dict):
             continue
         _add(str(row.get("section_title") or ""))
-        _add(str(row.get("section_path") or ""))
-
-        text = str(row.get("text") or "")
-        if not text:
-            continue
-        for raw_line in text.splitlines():
-            line = _clean_section_label(raw_line)
-            if not line:
-                continue
-            if re.match(r"^[A-Za-z][A-Za-z0-9 '&/()-]{2,70}$", line):
-                if (
-                    "example" in line.lower()
-                    or "rules" in line.lower()
-                    or "rubric" in line.lower()
-                    or "purpose" in line.lower()
-                    or "non-goals" in line.lower()
-                    or "boundaries" in line.lower()
-                    or "communication" in line.lower()
-                    or "audience" in line.lower()
-                    or "opening questions" in line.lower()
-                    or "core expertise" in line.lower()
-                ):
-                    _add(line)
-            if len(candidates) >= max(1, limit):
-                return candidates[: max(1, limit)]
+        section_path = str(row.get("section_path") or "")
+        if section_path:
+            _add(section_path.split("/")[-1])
+        _add(str(row.get("doc_name") or ""))
 
     return candidates[: max(1, limit)]
 
@@ -691,6 +728,14 @@ def build_targeted_clarification_questions(
     evidence_rows = [row for row in (evidence_chunks or []) if isinstance(row, dict)]
     section_candidates = _derive_section_candidates(evidence_rows, limit=4) if evidence_rows else []
     has_evidence = bool(evidence_rows)
+
+    if _is_identity_intro_query(query):
+        identity_defaults = [
+            "Do you want a short bio, core expertise, or both?",
+            "Should I focus on background, current focus areas, or communication style?",
+            "Should I keep this strictly grounded to the twin identity/profile sections?",
+        ]
+        return identity_defaults[: max(1, limit)]
 
     questions: List[str] = []
     for raw in missing_information:

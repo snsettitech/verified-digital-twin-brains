@@ -880,6 +880,20 @@ def _is_evaluative_query(query: str) -> bool:
     return any(marker in q for marker in markers)
 
 
+def _is_identity_query(query: str) -> bool:
+    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
+    if not q:
+        return False
+    markers = (
+        "who are you",
+        "tell me about yourself",
+        "introduce yourself",
+        "what do you do",
+        "your background",
+    )
+    return any(marker in q for marker in markers)
+
+
 def _merge_context_rows(
     base_rows: List[Dict[str, Any]],
     extra_rows: List[Dict[str, Any]],
@@ -926,6 +940,10 @@ async def _run_second_pass_retrieval(
     if _is_evaluative_query(q):
         second_pass_queries.append(
             f"{q} decision rubric thesis criteria assumptions risks tradeoffs"
+        )
+    if _is_identity_query(q):
+        second_pass_queries.append(
+            f"{q} twin identity biography background profile core expertise credibility"
         )
 
     expanded_rows: List[Dict[str, Any]] = []
@@ -1169,7 +1187,11 @@ async def planner_node(state: TwinState):
     answerability["answerable"] = answerability_state in {"direct", "derivable"}
 
     second_pass_used = False
-    if answerability_state == "insufficient" and 0 < len(context_data) < 3:
+    should_second_pass = answerability_state == "insufficient" and (
+        (0 < len(context_data) < 3)
+        or (query_class == "identity" and 0 < len(context_data) < PLANNER_SECOND_PASS_RETRIEVAL_TOP_K)
+    )
+    if should_second_pass:
         twin_id = str(state.get("twin_id") or "").strip()
         if twin_id:
             second_pass_rows = await _run_second_pass_retrieval(

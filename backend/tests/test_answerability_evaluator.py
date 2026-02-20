@@ -2,7 +2,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from modules.answerability import evaluate_answerability
+from modules.answerability import (
+    build_targeted_clarification_questions,
+    evaluate_answerability,
+)
 
 
 @pytest.mark.asyncio
@@ -126,3 +129,61 @@ async def test_contract_overrides_can_upgrade_insufficient_to_derivable(monkeypa
     assert result["answerability"] == "derivable"
     assert result["answerable"] is True
     assert result["missing_information"] == []
+
+
+@pytest.mark.asyncio
+async def test_identity_query_uses_identity_metadata_when_text_is_sparse(monkeypatch):
+    monkeypatch.setattr(
+        "modules.answerability.invoke_json",
+        AsyncMock(
+            return_value=(
+                {
+                    "answerability": "insufficient",
+                    "confidence": 0.25,
+                    "reasoning": "Model was conservative.",
+                    "missing_information": ["identity of you"],
+                    "ambiguity_level": "medium",
+                },
+                {"provider": "test"},
+            )
+        ),
+    )
+
+    result = await evaluate_answerability(
+        "Tell me about yourself",
+        [
+            {
+                "source_id": "id-2",
+                "text": "Operators who need fast decisions, not theory.",
+                "section_title": "Owner identity and credibility",
+                "doc_name": "Identity.docx",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            }
+        ],
+    )
+    assert result["answerability"] == "direct"
+    assert result["answerable"] is True
+    assert result["missing_information"] == []
+
+
+def test_clarification_filters_noisy_section_candidates():
+    questions = build_targeted_clarification_questions(
+        "Tell me about yourself",
+        ["the twin's identity bio and core expertise"],
+        evidence_chunks=[
+            {
+                "source_id": "s1",
+                "section_title": "mean",
+                "section_path": "E) > mean",
+                "text": "Who are you (short bio used in the twin)?",
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            }
+        ],
+        limit=3,
+    )
+    assert questions
+    joined = " ".join(questions).lower()
+    assert "mean" not in joined
+    assert "e) > mean" not in joined
