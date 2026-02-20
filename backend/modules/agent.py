@@ -32,6 +32,12 @@ from modules.answerability import (
     evaluate_answerability,
 )
 from modules.response_composer import compose_answer_points
+from modules.deepagents_router import (
+    build_deepagents_plan,
+    build_single_missing_param_question,
+    summarize_deepagents_plan,
+)
+from modules.deepagents_executor import execute_deepagents_plan
 
 # Try to import checkpointer (optional - P1-A)
 try:
@@ -227,6 +233,10 @@ class TwinState(TypedDict):
     resolve_default_group_filtering: Optional[bool]
     query_class: Optional[str]
     quote_intent: Optional[bool]
+    execution_lane: Optional[bool]
+    deepagents_plan: Optional[Dict[str, Any]]
+    actor_user_id: Optional[str]
+    tenant_id: Optional[str]
     
     # Path B / Phase 4 Context
     full_settings: Optional[Dict[str, Any]]
@@ -650,10 +660,20 @@ async def router_node(state: TwinState):
     knowledge_available = _twin_has_groundable_knowledge(twin_id)
     query_policy = get_grounding_policy(user_query, interaction_context=interaction_context)
     is_smalltalk = bool(query_policy.get("is_smalltalk"))
+    deepagents_plan = (
+        build_deepagents_plan(user_query, interaction_context=interaction_context)
+        if not is_smalltalk
+        else {"is_action_or_control": False}
+    )
+    execution_lane = bool(deepagents_plan.get("is_action_or_control"))
     dialogue_mode = "SMALLTALK" if is_smalltalk else "QA_FACT"
-    requires_evidence = bool(query_policy.get("requires_evidence"))
+    requires_evidence = bool(query_policy.get("requires_evidence")) and not execution_lane
     resolved_query = _resolve_twin_pronoun_query(user_query) if requires_evidence else ""
-    intent_label = classify_query_intent(user_query, dialogue_mode=dialogue_mode)
+    intent_label = (
+        "action_or_tool_execution"
+        if execution_lane
+        else classify_query_intent(user_query, dialogue_mode=dialogue_mode)
+    )
 
     routing_decision = build_routing_decision(
         query=user_query,
@@ -672,6 +692,8 @@ async def router_node(state: TwinState):
 
     if is_smalltalk:
         router_reason = "smalltalk_bypass: conversational turn handled without retrieval."
+    elif execution_lane:
+        router_reason = "deepagents_execution_lane: action/tool request bypasses evidence clarify loop."
     else:
         router_reason = "general_rag_router: retrieval required for answerability evaluation."
     _log_router_observation(
@@ -696,8 +718,16 @@ async def router_node(state: TwinState):
         "routing_decision": decision_payload,
         "query_class": query_policy.get("query_class"),
         "quote_intent": bool(query_policy.get("quote_intent")),
+        "execution_lane": execution_lane,
+        "deepagents_plan": deepagents_plan if execution_lane else None,
         "reasoning_history": (state.get("reasoning_history") or []) + [
-            "Router: smalltalk bypass." if is_smalltalk else "Router: evidence-first routing."
+            "Router: smalltalk bypass."
+            if is_smalltalk
+            else (
+                "Router: deepagents execution lane selected."
+                if execution_lane
+                else "Router: evidence-first routing."
+            )
         ],
     }
 
@@ -712,6 +742,189 @@ async def evidence_gate_node(state: TwinState):
         "requires_teaching": False,
         "reasoning_history": (state.get("reasoning_history") or []) + [
             "Gate: pass-through to answerability evaluation."
+        ],
+    }
+
+
+@observe(name="deepagents_node")
+async def deepagents_node(state: TwinState):
+    """
+    Dedicated execution lane for action/tool requests.
+    This bypasses document answerability/clarification flow.
+    """
+    state_messages = [m for m in (state.get("messages") or []) if isinstance(m, BaseMessage)]
+    user_query = next((m.content for m in reversed(state_messages) if isinstance(m, HumanMessage)), "")
+    routing_decision = (
+        dict(state.get("routing_decision"))
+        if isinstance(state.get("routing_decision"), dict)
+        else {
+            "intent": "write",
+            "chosen_workflow": "write",
+            "output_schema": "workflow.write.v1",
+        }
+    )
+    plan = dict(state.get("deepagents_plan") or {})
+    if not plan:
+        plan = build_deepagents_plan(
+            user_query,
+            interaction_context=str(state.get("interaction_context") or "owner_chat"),
+        )
+
+    try:
+        result = await execute_deepagents_plan(
+            twin_id=str(state.get("twin_id") or ""),
+            plan=plan,
+            actor_user_id=state.get("actor_user_id"),
+            tenant_id=state.get("tenant_id"),
+            conversation_id=None,
+            interaction_context=str(state.get("interaction_context") or ""),
+        )
+    except Exception as exc:
+        result = {
+            "status": "failed",
+            "message": f"Action lane failed: {exc}",
+        }
+
+    status = str(result.get("status") or "").strip().lower()
+    confidence = 0.0
+    answer_points: List[str] = []
+    teaching_questions: List[str] = []
+    answerability: Dict[str, Any] = {
+        "answerability": "direct",
+        "answerable": True,
+        "confidence": 0.72,
+        "reasoning": "Execution lane handled action/tool request without document planner.",
+        "missing_information": [],
+        "ambiguity_level": "low",
+    }
+    action = "answer"
+
+    if status in {"disabled", "forbidden"}:
+        action = "refuse"
+        confidence = 0.0
+        error = result.get("error") if isinstance(result.get("error"), dict) else {}
+        default_message = (
+            "Action execution is unavailable in this context."
+            if status == "forbidden"
+            else "Action execution is disabled for this deployment."
+        )
+        message = str(error.get("message") or default_message).strip()
+        answer_points = [message]
+        answerability = {
+            "answerability": "insufficient",
+            "answerable": False,
+            "confidence": 0.0,
+            "reasoning": (
+                "Execution lane is forbidden for public/anonymous contexts."
+                if status == "forbidden"
+                else "Execution lane is disabled via feature flag."
+            ),
+            "missing_information": [],
+            "ambiguity_level": "low",
+        }
+    elif status == "missing_params":
+        action = "clarify"
+        confidence = 0.35
+        question = build_single_missing_param_question(plan)
+        teaching_questions = [question]
+        answer_points = [question]
+        missing_params = [str(v) for v in (result.get("missing_params") or []) if str(v).strip()]
+        answerability = {
+            "answerability": "insufficient",
+            "answerable": False,
+            "confidence": confidence,
+            "reasoning": "Execution lane requires concrete action parameters before planning can run.",
+            "missing_information": missing_params[:3],
+            "ambiguity_level": "medium",
+        }
+    elif status == "needs_approval":
+        confidence = 0.76
+        action_id = str(result.get("action_id") or "").strip()
+        summary = summarize_deepagents_plan(plan)
+        answer_points = [
+            "Action plan is ready and waiting for approval.",
+            f"Plan: {summary}",
+            f"Action ID: {action_id}" if action_id else "Action ID: unavailable",
+        ]
+    elif status == "approved":
+        confidence = 0.8
+        action_id = str(result.get("action_id") or "").strip()
+        answer_points = [
+            str(result.get("message") or "Action approved.").strip(),
+            f"Action ID: {action_id}" if action_id else "Action ID: unavailable",
+        ]
+    elif status == "canceled":
+        confidence = 0.78
+        action_id = str(result.get("action_id") or "").strip()
+        answer_points = [
+            str(result.get("message") or "Action canceled.").strip(),
+            f"Action ID: {action_id}" if action_id else "Action ID: unavailable",
+        ]
+    elif status == "executed":
+        confidence = 0.84
+        execution_id = str(result.get("execution_id") or "").strip()
+        action_type = str(result.get("action_type") or plan.get("action_type") or "action").strip()
+        answer_points = [
+            f"Executed `{action_type}` successfully.",
+            f"Execution ID: {execution_id}" if execution_id else "Execution ID: unavailable",
+        ]
+    else:
+        action = "escalate"
+        confidence = 0.2
+        answer_points = [
+            str(result.get("message") or "I could not execute that action safely.").strip(),
+        ]
+        answerability = {
+            "answerability": "insufficient",
+            "answerable": False,
+            "confidence": confidence,
+            "reasoning": "Execution lane returned a failure state.",
+            "missing_information": [],
+            "ambiguity_level": "medium",
+        }
+
+    updated_routing_decision = {
+        **routing_decision,
+        "action": action,
+        "confidence": confidence,
+        "required_inputs_missing": answerability.get("missing_information") or [],
+        "clarifying_questions": teaching_questions[:1],
+    }
+
+    execution_lane_meta = {
+        "status": status or "unknown",
+        "action_type": str(plan.get("action_type") or result.get("action_type") or "").strip() or None,
+        "needs_approval": status == "needs_approval",
+        "action_id": str(result.get("action_id") or "").strip() or None,
+        "execution_id": str(result.get("execution_id") or "").strip() or None,
+        "error_code": (
+            str((result.get("error") or {}).get("code") or "").strip()
+            if isinstance(result.get("error"), dict)
+            else None
+        ),
+    }
+
+    return {
+        "planning_output": {
+            "answer_points": answer_points[:3],
+            "citations": [],
+            "follow_up_question": "",
+            "confidence": confidence,
+            "teaching_questions": teaching_questions[:1],
+            "render_strategy": "source_faithful",
+            "reasoning_trace": str(answerability.get("reasoning") or ""),
+            "answerability": answerability,
+            "execution_lane": execution_lane_meta,
+        },
+        "confidence_score": confidence,
+        "routing_decision": updated_routing_decision,
+        "workflow_intent": str(updated_routing_decision.get("intent") or "write"),
+        "intent_label": "action_or_tool_execution",
+        "persona_module_ids": [],
+        "persona_spec_version": state.get("persona_spec_version"),
+        "persona_prompt_variant": state.get("persona_prompt_variant"),
+        "reasoning_history": (state.get("reasoning_history") or []) + [
+            f"DeepAgents: execution lane status={status or 'unknown'}.",
         ],
     }
 
@@ -1796,6 +2009,7 @@ def create_twin_agent(
     workflow = StateGraph(TwinState)
     
     workflow.add_node("router", router_node)
+    workflow.add_node("deepagents", deepagents_node)
     workflow.add_node("retrieve", retrieve_hybrid_node)
     workflow.add_node("gate", evidence_gate_node)
     workflow.add_node("planner", planner_node)
@@ -1804,11 +2018,18 @@ def create_twin_agent(
     workflow.set_entry_point("router")
     
     def route_after_router(state: TwinState):
+        if state.get("execution_lane"):
+            return "deepagents"
         if state.get("requires_evidence"):
             return "retrieve"
         return "planner"
 
-    workflow.add_conditional_edges("router", route_after_router, {"retrieve": "retrieve", "planner": "planner"})
+    workflow.add_conditional_edges(
+        "router",
+        route_after_router,
+        {"deepagents": "deepagents", "retrieve": "retrieve", "planner": "planner"},
+    )
+    workflow.add_edge("deepagents", "realizer")
     workflow.add_edge("retrieve", "gate")
     workflow.add_edge("gate", "planner")
     workflow.add_edge("planner", "realizer")
@@ -1828,6 +2049,8 @@ async def run_agent_stream(
     owner_memory_context: str = "",
     interaction_context: str = "owner_chat",
     enforce_group_filtering: bool = True,
+    actor_user_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
 ):
     """
     Runs the agent and yields events from the graph.
@@ -1944,6 +2167,10 @@ async def run_agent_stream(
         "resolve_default_group_filtering": enforce_group_filtering,
         "query_class": None,
         "quote_intent": False,
+        "execution_lane": False,
+        "deepagents_plan": None,
+        "actor_user_id": actor_user_id,
+        "tenant_id": tenant_id,
         "routing_decision": {
             "intent": "answer",
             "confidence": 1.0,

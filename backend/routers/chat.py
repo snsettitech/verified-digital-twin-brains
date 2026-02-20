@@ -27,6 +27,7 @@ from modules.persona_spec_store import get_active_persona_spec
 from modules.owner_memory_store import format_owner_memory_context
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from modules.grounding_policy import get_grounding_policy
+from modules.deepagents_policy import classify_deepagents_intent
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
     persist_response_audit,
@@ -199,6 +200,28 @@ def _extract_answerability_state(planning_output: Optional[Dict[str, Any]]) -> s
         if normalized:
             return normalized
     return "unknown"
+
+
+def _extract_deepagents_metadata(planning_output: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(planning_output, dict):
+        return {}
+
+    lane = planning_output.get("execution_lane")
+    if not isinstance(lane, dict):
+        return {}
+
+    status = str(lane.get("status") or "").strip().lower()
+    if not status:
+        return {}
+
+    return {
+        "status": status,
+        "needs_approval": bool(lane.get("needs_approval", False)),
+        "action_type": str(lane.get("action_type") or "").strip() or None,
+        "action_id": str(lane.get("action_id") or "").strip() or None,
+        "execution_id": str(lane.get("execution_id") or "").strip() or None,
+        "error_code": str(lane.get("error_code") or "").strip() or None,
+    }
 
 
 def _selected_evidence_block_types(contexts: List[Dict[str, Any]]) -> List[str]:
@@ -1606,6 +1629,8 @@ async def chat(
                     owner_memory_context=owner_memory_context,
                     interaction_context=resolved_context.context.value,
                     enforce_group_filtering=(resolved_context.is_public or bool(requested_group_id)),
+                    actor_user_id=user.get("user_id") if user else None,
+                    tenant_id=user.get("tenant_id") if user else None,
                 ).__aiter__()
 
                 pending_task = None
@@ -1854,6 +1879,9 @@ async def chat(
                 contexts=retrieved_context_snippets,
             )
             _emit_langfuse_turn_telemetry(debug_snapshot)
+            deepagents_meta = _extract_deepagents_metadata(
+                planning_output if isinstance(planning_output, dict) else {}
+            )
 
             # 3. Send metadata first
             metadata = _normalize_json({
@@ -1885,6 +1913,7 @@ async def chat(
                 "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
+                "deepagents": deepagents_meta,
                 "router_policy": {
                     "requires_evidence": requires_evidence,
                     "target_owner_scope": target_owner_scope,
@@ -2271,6 +2300,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             conversation_id=conversation_id,
             owner_memory_context=owner_memory_context,
             interaction_context=resolved_context.context.value,
+            actor_user_id=None,
+            tenant_id=None,
         ):
             tools_payload, agent_payload = _extract_stream_payload(event)
 
@@ -2408,6 +2439,9 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         )
         _emit_langfuse_turn_telemetry(debug_snapshot)
 
+        deepagents_meta = _extract_deepagents_metadata(
+            planning_output if isinstance(planning_output, dict) else {}
+        )
         output = {
             "type": "metadata",
             "confidence_score": confidence_score,
@@ -2431,6 +2465,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "debug_snapshot": debug_snapshot,
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
+            "deepagents": deepagents_meta,
             "session_id": session_id,
             "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
@@ -2601,29 +2636,36 @@ async def public_chat_endpoint(
         except Exception as e:
             print(f"[PublicChat] Warning: Could not get default group: {e}")
             group_id = None
+
+    public_action_like_query = bool(
+        classify_deepagents_intent(request.message).get("is_action_or_control")
+    )
+    if public_action_like_query:
+        context_trace["public_action_query_guarded"] = True
     
     # Emit message_received event for trigger matching
     triggered_actions = []
-    try:
-        event_id = EventEmitter.emit(
-            twin_id=twin_id,
-            event_type='message_received',
-            payload={
-                'user_message': request.message,
-                'user_id': 'anonymous'
-            },
-            source_context={
-                'group_id': group_id,
-                'channel': 'public_share'
-            }
-        )
-        if event_id:
-            pending_drafts = ActionDraftManager.get_pending_drafts(twin_id)
-            for draft in pending_drafts:
-                if draft.get('event_id') == event_id:
-                    triggered_actions.append(draft.get('proposed_action', {}).get('action_type'))
-    except Exception as e:
-        print(f"Warning: Could not emit event or check triggers: {e}")
+    if not public_action_like_query:
+        try:
+            event_id = EventEmitter.emit(
+                twin_id=twin_id,
+                event_type='message_received',
+                payload={
+                    'user_message': request.message,
+                    'user_id': 'anonymous'
+                },
+                source_context={
+                    'group_id': group_id,
+                    'channel': 'public_share'
+                }
+            )
+            if event_id:
+                pending_drafts = ActionDraftManager.get_pending_drafts(twin_id)
+                for draft in pending_drafts:
+                    if draft.get('event_id') == event_id:
+                        triggered_actions.append(draft.get('proposed_action', {}).get('action_type'))
+        except Exception as e:
+            print(f"Warning: Could not emit event or check triggers: {e}")
     
     conversation_id = None
     # Build conversation history (tolerate extra fields)
@@ -2684,6 +2726,8 @@ async def public_chat_endpoint(
                 conversation_id=conversation_id,
                 owner_memory_context=owner_memory_context,
                 interaction_context=resolved_context.context.value,
+                actor_user_id=None,
+                tenant_id=None,
             ):
                 tools_payload, agent_payload = _extract_stream_payload(event)
                 if tools_payload:
@@ -2766,6 +2810,21 @@ async def public_chat_endpoint(
                 owner_memory_topics = []
                 owner_memory_candidates = []
                 owner_memory_context = ""
+
+            if public_action_like_query:
+                routing_decision = {}
+                module_ids = []
+                workflow_intent = None
+                render_strategy = "source_faithful"
+                debug_snapshot = {}
+                online_eval_result = {
+                    "enabled": False,
+                    "ran": False,
+                    "skipped_reason": "public_action_query_guarded",
+                    "overall_score": None,
+                    "flags": [],
+                    "action": "none",
+                }
 
             source_faithful = isinstance(render_strategy, str) and render_strategy.strip().lower() == "source_faithful"
             if source_faithful:
@@ -2882,6 +2941,20 @@ async def public_chat_endpoint(
                 contexts=retrieved_context_snippets,
             )
             _emit_langfuse_turn_telemetry(debug_snapshot)
+
+            if public_action_like_query:
+                routing_decision = {}
+                debug_snapshot = {}
+                online_eval_result = {
+                    "enabled": False,
+                    "ran": False,
+                    "skipped_reason": "public_action_query_guarded",
+                    "context_chars": 0,
+                    "overall_score": None,
+                    "needs_review": None,
+                    "flags": [],
+                    "action": "none",
+                }
 
             try:
                 _persist_runtime_audit(
