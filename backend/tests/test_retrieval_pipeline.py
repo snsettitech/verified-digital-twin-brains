@@ -509,6 +509,104 @@ class TestPromptQuestionFiltering:
         assert float(filtered[0]["score"]) < 0.80
 
 
+class TestHybridRetrievalControls:
+    """Test sparse fusion, diversity capping, and confidence-floor retry behavior."""
+
+    async def test_sparse_hits_prioritize_lexical_overlap(self):
+        from modules.retrieval import _build_sparse_hits_from_dense
+
+        dense_hits = [
+            {
+                "id": "a",
+                "score": 0.20,
+                "metadata": {"text": "Founder evaluation rubric and startup fit", "source_id": "s1"},
+            },
+            {
+                "id": "b",
+                "score": 0.95,
+                "metadata": {"text": "Completely unrelated notes", "source_id": "s2"},
+            },
+        ]
+
+        sparse_hits = _build_sparse_hits_from_dense("startup rubric", dense_hits, limit=5)
+
+        assert sparse_hits
+        assert sparse_hits[0]["id"] == "a"
+        assert float(sparse_hits[0]["sparse_score"]) > 0.0
+
+    async def test_diversity_caps_limit_per_doc_and_section(self):
+        from modules import retrieval
+
+        contexts = [
+            {"source_id": "doc-1", "section_path": "doc-1/A", "score": 0.9},
+            {"source_id": "doc-1", "section_path": "doc-1/A", "score": 0.8},
+            {"source_id": "doc-1", "section_path": "doc-1/B", "score": 0.7},
+            {"source_id": "doc-2", "section_path": "doc-2/A", "score": 0.6},
+        ]
+
+        with patch.object(retrieval, "RETRIEVAL_DIVERSITY_PER_DOC_CAP", 2), patch.object(
+            retrieval, "RETRIEVAL_DIVERSITY_PER_SECTION_CAP", 1
+        ):
+            capped = retrieval._apply_diversity_caps(contexts, limit=4)
+
+        assert len(capped) == 3
+        assert sum(1 for row in capped if row["source_id"] == "doc-1") == 2
+        assert sum(1 for row in capped if row["section_path"] == "doc-1/A") == 1
+
+    async def test_low_confidence_triggers_retry_pass(self, monkeypatch):
+        from modules import retrieval
+
+        async def _fake_embeddings(_queries):
+            return [[0.1, 0.2, 0.3]]
+
+        call_state = {"count": 0}
+
+        async def _fake_execute(_embs, _twin_id, creator_id=None, timeout=5.0, general_top_k=None):
+            call_state["count"] += 1
+            if call_state["count"] == 1:
+                score = 0.01
+                source = "first-source"
+            else:
+                score = 0.93
+                source = "retry-source"
+            return [
+                {"matches": []},
+                {
+                    "matches": [
+                        {
+                            "id": f"{source}-1",
+                            "score": score,
+                            "metadata": {
+                                "text": "startup rubric founder evaluation",
+                                "source_id": source,
+                                "twin_id": "twin-1",
+                                "section_path": "Doc/Section",
+                                "block_type": "answer_text",
+                                "is_answer_text": True,
+                            },
+                        }
+                    ]
+                },
+            ]
+
+        monkeypatch.setattr(retrieval, "get_embeddings_async", _fake_embeddings)
+        monkeypatch.setattr(retrieval, "_execute_pinecone_queries", _fake_execute)
+        monkeypatch.setattr(retrieval, "_rerank_with_cohere", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(retrieval, "_rerank_with_flashrank", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(retrieval, "_filter_by_group_permissions", lambda rows, _group_id: rows)
+        monkeypatch.setattr(retrieval, "_enforce_twin_source_scope", lambda rows, _twin_id: rows)
+        monkeypatch.setattr(retrieval, "RETRIEVAL_CONFIDENCE_RETRY_ENABLED", True)
+        monkeypatch.setattr(retrieval, "RETRIEVAL_CONFIDENCE_FLOOR", 0.2)
+        monkeypatch.setattr(retrieval, "RETRIEVAL_RETRY_TOP_K", 8)
+
+        rows = await retrieval.retrieve_context_vectors("startup rubric", "twin-1", top_k=2)
+
+        assert call_state["count"] >= 2
+        assert rows
+        assert any(row.get("source_id") == "retry-source" for row in rows)
+        assert isinstance(rows[0].get("retrieval_stats"), dict)
+
+
 class TestAnchorRelevanceFiltering:
     """Test off-topic filtering for weak retrieval matches."""
 

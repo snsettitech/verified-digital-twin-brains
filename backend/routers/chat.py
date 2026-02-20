@@ -134,6 +134,12 @@ def _classify_query_class(query: str) -> str:
 
 def _summarize_retrieval_stats(contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
     rows = [row for row in (contexts or []) if isinstance(row, dict)]
+    retrieval_stats_payload: Dict[str, Any] = {}
+    for row in rows:
+        raw_stats = row.get("retrieval_stats")
+        if isinstance(raw_stats, dict):
+            retrieval_stats_payload = dict(raw_stats)
+            break
 
     def _extract_scores(keys: Tuple[str, ...]) -> List[float]:
         values: List[float] = []
@@ -162,7 +168,7 @@ def _summarize_retrieval_stats(contexts: List[Dict[str, Any]]) -> Dict[str, Any]
         block_type = str(row.get("block_type") or row.get("chunk_type") or "unknown").strip().lower() or "unknown"
         block_counts[block_type] = block_counts.get(block_type, 0) + 1
 
-    return {
+    fallback_stats = {
         "chunk_count": len(rows),
         "dense_top1": dense_top1,
         "dense_top5_avg": _avg(dense_scores[:5]),
@@ -172,6 +178,14 @@ def _summarize_retrieval_stats(contexts: List[Dict[str, Any]]) -> Dict[str, Any]
         "rerank_top5_avg": _avg(rerank_scores[:5]),
         "evidence_block_counts": block_counts,
     }
+    if retrieval_stats_payload:
+        merged = dict(fallback_stats)
+        merged.update(retrieval_stats_payload)
+        merged["chunk_count"] = len(rows)
+        if "evidence_block_counts" not in merged or not isinstance(merged.get("evidence_block_counts"), dict):
+            merged["evidence_block_counts"] = block_counts
+        return merged
+    return fallback_stats
 
 
 def _extract_answerability_state(planning_output: Optional[Dict[str, Any]]) -> str:

@@ -75,6 +75,19 @@ RETRIEVAL_LEXICAL_FUSION_ALPHA = min(
     max(_float_env("RETRIEVAL_LEXICAL_FUSION_ALPHA", 0.22), 0.0),
     1.0,
 )
+RETRIEVAL_SPARSE_FUSION_ENABLED = (
+    os.getenv("RETRIEVAL_SPARSE_FUSION_ENABLED", "true").lower() == "true"
+)
+RETRIEVAL_SPARSE_RRF_WEIGHT = max(_float_env("RETRIEVAL_SPARSE_RRF_WEIGHT", 0.75), 0.05)
+RETRIEVAL_MMR_ENABLED = os.getenv("RETRIEVAL_MMR_ENABLED", "true").lower() == "true"
+RETRIEVAL_MMR_LAMBDA = min(max(_float_env("RETRIEVAL_MMR_LAMBDA", 0.72), 0.0), 1.0)
+RETRIEVAL_DIVERSITY_PER_DOC_CAP = max(1, _int_env("RETRIEVAL_DIVERSITY_PER_DOC_CAP", 3))
+RETRIEVAL_DIVERSITY_PER_SECTION_CAP = max(1, _int_env("RETRIEVAL_DIVERSITY_PER_SECTION_CAP", 2))
+RETRIEVAL_CONFIDENCE_RETRY_ENABLED = (
+    os.getenv("RETRIEVAL_CONFIDENCE_RETRY_ENABLED", "true").lower() == "true"
+)
+RETRIEVAL_CONFIDENCE_FLOOR = min(max(_float_env("RETRIEVAL_CONFIDENCE_FLOOR", 0.18), 0.0), 1.0)
+RETRIEVAL_RETRY_TOP_K = max(8, _int_env("RETRIEVAL_RETRY_TOP_K", 12))
 
 _UUID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -447,6 +460,150 @@ def _apply_lexical_fusion(query: str, contexts: List[Dict[str, Any]]) -> List[Di
     fused.sort(key=lambda c: float(c.get("score", 0.0) or 0.0), reverse=True)
     return fused
 
+
+def _text_tokens(text: str) -> Set[str]:
+    return set(re.findall(r"[a-z0-9][a-z0-9_-]*", (text or "").lower()))
+
+
+def _jaccard_similarity(a: Set[str], b: Set[str]) -> float:
+    if not a or not b:
+        return 0.0
+    inter = len(a.intersection(b))
+    union = len(a.union(b))
+    if union <= 0:
+        return 0.0
+    return inter / float(union)
+
+
+def _apply_mmr(query: str, contexts: List[Dict[str, Any]], *, limit: int) -> List[Dict[str, Any]]:
+    """
+    Lightweight MMR diversification over already-retrieved contexts.
+    """
+    if not RETRIEVAL_MMR_ENABLED or len(contexts) <= max(1, limit):
+        return contexts[: max(1, limit)]
+
+    candidates = [dict(row) for row in contexts]
+    candidate_tokens = [_text_tokens(str(row.get("text") or "")) for row in candidates]
+    selected: List[Dict[str, Any]] = []
+    selected_token_sets: List[Set[str]] = []
+
+    while candidates and len(selected) < max(1, limit):
+        best_idx = 0
+        best_score = float("-inf")
+
+        for idx, row in enumerate(candidates):
+            relevance = float(row.get("score", row.get("vector_score", 0.0)) or 0.0)
+            diversity_penalty = 0.0
+            if selected_token_sets:
+                diversity_penalty = max(
+                    _jaccard_similarity(candidate_tokens[idx], sel_tokens)
+                    for sel_tokens in selected_token_sets
+                )
+            mmr_score = (RETRIEVAL_MMR_LAMBDA * relevance) - ((1.0 - RETRIEVAL_MMR_LAMBDA) * diversity_penalty)
+            if mmr_score > best_score:
+                best_score = mmr_score
+                best_idx = idx
+
+        selected.append(candidates.pop(best_idx))
+        selected_token_sets.append(candidate_tokens.pop(best_idx))
+
+    return selected
+
+
+def _apply_diversity_caps(
+    contexts: List[Dict[str, Any]],
+    *,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """
+    Enforce per-document and per-section caps.
+    """
+    if not contexts:
+        return []
+
+    selected: List[Dict[str, Any]] = []
+    by_doc: Dict[str, int] = {}
+    by_section: Dict[str, int] = {}
+
+    for row in contexts:
+        doc_key = str(row.get("source_id") or row.get("doc_name") or "unknown").strip().lower() or "unknown"
+        section_key = str(row.get("section_path") or row.get("section_title") or "unknown").strip().lower() or "unknown"
+        section_doc_key = f"{doc_key}::{section_key}"
+
+        if by_doc.get(doc_key, 0) >= RETRIEVAL_DIVERSITY_PER_DOC_CAP:
+            continue
+        if by_section.get(section_doc_key, 0) >= RETRIEVAL_DIVERSITY_PER_SECTION_CAP:
+            continue
+
+        selected.append(row)
+        by_doc[doc_key] = by_doc.get(doc_key, 0) + 1
+        by_section[section_doc_key] = by_section.get(section_doc_key, 0) + 1
+        if len(selected) >= max(1, limit):
+            break
+
+    if selected:
+        return selected
+    return contexts[: max(1, limit)]
+
+
+def _score_stats(values: List[float]) -> Dict[str, float]:
+    if not values:
+        return {"top1": 0.0, "top5_avg": 0.0}
+    ordered = sorted([float(v or 0.0) for v in values], reverse=True)
+    top1 = float(ordered[0]) if ordered else 0.0
+    top5 = ordered[:5]
+    top5_avg = sum(top5) / float(len(top5)) if top5 else 0.0
+    return {"top1": top1, "top5_avg": top5_avg}
+
+
+def _count_block_types(contexts: List[Dict[str, Any]]) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for row in contexts:
+        block_type = str(row.get("block_type") or row.get("chunk_type") or "unknown").strip().lower() or "unknown"
+        counts[block_type] = counts.get(block_type, 0) + 1
+    return counts
+
+
+def _pick_confidence_signal(stats: Dict[str, Any]) -> Tuple[str, float]:
+    rerank_top1 = float(stats.get("rerank_top1", 0.0) or 0.0)
+    dense_top1 = float(stats.get("dense_top1", 0.0) or 0.0)
+    sparse_top1 = float(stats.get("sparse_top1", 0.0) or 0.0)
+
+    if rerank_top1 > 0.0:
+        return "rerank", rerank_top1
+    if dense_top1 > 0.0:
+        return "dense", dense_top1
+    return "sparse", sparse_top1
+
+
+def _build_retrieval_stats_payload(
+    *,
+    dense_scores: List[float],
+    sparse_scores: List[float],
+    rerank_scores: List[float],
+    final_contexts: List[Dict[str, Any]],
+    retry_applied: bool,
+) -> Dict[str, Any]:
+    dense_stats = _score_stats(dense_scores)
+    sparse_stats = _score_stats(sparse_scores)
+    rerank_stats = _score_stats(rerank_scores)
+
+    payload: Dict[str, Any] = {
+        "dense_top1": dense_stats["top1"],
+        "dense_top5_avg": dense_stats["top5_avg"],
+        "sparse_top1": sparse_stats["top1"],
+        "sparse_top5_avg": sparse_stats["top5_avg"],
+        "rerank_top1": rerank_stats["top1"],
+        "rerank_top5_avg": rerank_stats["top5_avg"],
+        "evidence_block_counts": _count_block_types(final_contexts),
+        "retry_applied": bool(retry_applied),
+    }
+    signal_name, signal_value = _pick_confidence_signal(payload)
+    payload["confidence_signal"] = signal_name
+    payload["confidence_floor_value"] = signal_value
+    payload["confidence_floor_threshold"] = RETRIEVAL_CONFIDENCE_FLOOR
+    payload["meets_confidence_floor"] = signal_value >= RETRIEVAL_CONFIDENCE_FLOOR
+    return payload
 
 def log_retrieval_event(event_type: str, data: Dict[str, Any]):
     """Log structured retrieval events for monitoring."""
@@ -948,6 +1105,30 @@ def rrf_merge(
     return final_results
 
 
+def _build_sparse_hits_from_dense(query: str, dense_hits: List[Dict[str, Any]], *, limit: int) -> List[Dict[str, Any]]:
+    """
+    Build lexical (sparse) ranking over dense candidates, then fuse via RRF.
+    """
+    sparse_hits: List[Dict[str, Any]] = []
+    for hit in dense_hits:
+        if not isinstance(hit, dict):
+            continue
+        metadata = hit.get("metadata") or {}
+        text = str(metadata.get("text") or "").strip()
+        if not text:
+            continue
+        sparse_score = _lexical_overlap_score(query, text)
+        if sparse_score <= 0.0:
+            continue
+        row = dict(hit)
+        row["sparse_score"] = float(sparse_score)
+        row["score"] = float(sparse_score)
+        sparse_hits.append(row)
+
+    sparse_hits.sort(key=lambda r: float(r.get("sparse_score", r.get("score", 0.0)) or 0.0), reverse=True)
+    return sparse_hits[: max(1, limit)]
+
+
 def _format_verified_match_context(verified_match: Dict[str, Any]) -> Dict[str, Any]:
     """
     Format a verified QnA match as a context entry.
@@ -1064,7 +1245,8 @@ async def _execute_pinecone_queries(
     embeddings: List[List[float]],
     twin_id: str,
     creator_id: Optional[str] = None,
-    timeout: float = 5.0
+    timeout: float = 5.0,
+    general_top_k: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Execute Pinecone queries for all embeddings.
@@ -1133,7 +1315,11 @@ async def _execute_pinecone_queries(
 
     async def pinecone_query(embedding: List[float], is_verified: bool = False) -> Dict[str, Any]:
         """Execute one query across namespace candidates and merge."""
-        top_k = RETRIEVAL_TOP_K_VERIFIED if is_verified else RETRIEVAL_TOP_K_GENERAL
+        top_k = (
+            RETRIEVAL_TOP_K_VERIFIED
+            if is_verified
+            else max(1, int(general_top_k or RETRIEVAL_TOP_K_GENERAL))
+        )
         primary_ns = namespace_candidates[0]
 
         async def query_namespace(namespace: str):
@@ -1660,7 +1846,8 @@ async def retrieve_context_vectors(
     twin_id: str,
     creator_id: Optional[str] = None,
     group_id: Optional[str] = None,
-    top_k: int = 5
+    top_k: int = 5,
+    _retry_attempted: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Optimized retrieval pipeline using HyDE, Query Expansion, and RRF (vector-only).
@@ -1783,6 +1970,7 @@ async def retrieve_context_vectors(
         twin_id,
         creator_id=creator_id,
         timeout=RETRIEVAL_VECTOR_TIMEOUT,
+        general_top_k=max(RETRIEVAL_TOP_K_GENERAL, top_k * 2),
     )
 
     # Fallback pass: if the full pipeline failed, retry a single direct query embedding.
@@ -1801,6 +1989,7 @@ async def retrieve_context_vectors(
                 twin_id,
                 creator_id=creator_id,
                 timeout=max(RETRIEVAL_VECTOR_TIMEOUT, RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5),
+                general_top_k=max(RETRIEVAL_RETRY_TOP_K, top_k * 2),
             )
         except Exception as e:
             print(f"[Retrieval] Minimal fallback retrieval failed: {e}")
@@ -1811,11 +2000,32 @@ async def retrieve_context_vectors(
     verified_results = all_results[0]
     general_results_list = [res["matches"] for res in all_results[1:]]
     
-    # 4. RRF Merge general results
-    merged_general_hits = rrf_merge(
+    # 4. Dense merge across query variants.
+    dense_merged_hits = rrf_merge(
         general_results_list,
         weights=search_weights[: len(general_results_list)],
     )
+    dense_scores = [float(hit.get("score", 0.0) or 0.0) for hit in dense_merged_hits if isinstance(hit, dict)]
+
+    # 4b. Sparse lexical ranking over dense candidates + weighted RRF fusion.
+    sparse_hits: List[Dict[str, Any]] = []
+    merged_general_hits = dense_merged_hits
+    if RETRIEVAL_SPARSE_FUSION_ENABLED and dense_merged_hits:
+        sparse_hits = _build_sparse_hits_from_dense(
+            query,
+            dense_merged_hits,
+            limit=max(RETRIEVAL_RETRY_TOP_K, top_k * 4),
+        )
+        if sparse_hits:
+            merged_general_hits = rrf_merge(
+                [dense_merged_hits, sparse_hits],
+                weights=[1.0, RETRIEVAL_SPARSE_RRF_WEIGHT],
+            )
+    sparse_scores = [
+        float(hit.get("sparse_score", hit.get("score", 0.0)) or 0.0)
+        for hit in sparse_hits
+        if isinstance(hit, dict)
+    ]
     
     # 5. Process matches into contexts
     contexts = _process_verified_matches(verified_results)
@@ -1829,8 +2039,13 @@ async def retrieve_context_vectors(
     contexts = _filter_by_group_permissions(contexts, group_id)
     print(f"DEBUG: After permissions: {len(contexts)} (Group: {group_id})")
     
-    # 7. Deduplicate (keep all candidates first)
-    unique_contexts = _deduplicate_and_limit(contexts, top_k=top_k * 3)
+    # 7. Deduplicate and apply diversity controls before reranking.
+    unique_contexts = _deduplicate_and_limit(contexts, top_k=max(top_k * 6, RETRIEVAL_RETRY_TOP_K))
+    unique_contexts = _apply_mmr(query, unique_contexts, limit=max(top_k * 4, RETRIEVAL_RETRY_TOP_K))
+    unique_contexts = _apply_diversity_caps(
+        unique_contexts,
+        limit=max(top_k * 3, RETRIEVAL_RETRY_TOP_K),
+    )
     print(f"DEBUG: Unique contexts before rerank: {len(unique_contexts)}")
     
     # 8. Rerank
@@ -1838,19 +2053,20 @@ async def retrieve_context_vectors(
     final_contexts: List[Dict[str, Any]] = []
     rerank_provider_used = "vector"
 
+    rerank_target_k = max(top_k * 2, RETRIEVAL_RETRY_TOP_K)
     if unique_contexts:
-        cohere_reranked = _rerank_with_cohere(query, unique_contexts, top_k)
+        cohere_reranked = _rerank_with_cohere(query, unique_contexts, rerank_target_k)
         if cohere_reranked:
             final_contexts = cohere_reranked
             rerank_provider_used = "cohere"
         else:
-            flashrank_reranked = _rerank_with_flashrank(query, unique_contexts, top_k)
+            flashrank_reranked = _rerank_with_flashrank(query, unique_contexts, rerank_target_k)
             if flashrank_reranked:
                 final_contexts = flashrank_reranked
                 rerank_provider_used = "flashrank"
 
     if not final_contexts:
-        final_contexts = [dict(c) for c in unique_contexts[:top_k]]
+        final_contexts = [dict(c) for c in unique_contexts[:rerank_target_k]]
 
     # Keep raw vector score available after reranking updates score.
     for ctx in final_contexts:
@@ -1864,6 +2080,44 @@ async def retrieve_context_vectors(
     # Drop weak off-topic hits before handing context to the planner.
     final_contexts = _apply_anchor_relevance_filter(final_contexts, query)
     final_contexts = final_contexts[:top_k]
+
+    rerank_scores: List[float] = []
+    if rerank_provider_used != "vector":
+        rerank_scores = [float(c.get("score", 0.0) or 0.0) for c in final_contexts]
+    retrieval_stats = _build_retrieval_stats_payload(
+        dense_scores=dense_scores,
+        sparse_scores=sparse_scores,
+        rerank_scores=rerank_scores,
+        final_contexts=final_contexts,
+        retry_applied=_retry_attempted,
+    )
+
+    query_policy = get_grounding_policy(query)
+    should_retry = (
+        RETRIEVAL_CONFIDENCE_RETRY_ENABLED
+        and not _retry_attempted
+        and bool(query_policy.get("requires_evidence"))
+        and bool(final_contexts)
+        and not bool(retrieval_stats.get("meets_confidence_floor"))
+        and top_k < RETRIEVAL_RETRY_TOP_K
+    )
+    if should_retry:
+        retry_k = max(RETRIEVAL_RETRY_TOP_K, top_k * 2)
+        print(
+            "[Retrieval] Low confidence floor "
+            f"({retrieval_stats.get('confidence_floor_value'):.3f} < {RETRIEVAL_CONFIDENCE_FLOOR:.3f}); "
+            f"retrying with top_k={retry_k}."
+        )
+        retry_contexts = await retrieve_context_vectors(
+            query,
+            twin_id,
+            creator_id=creator_id,
+            group_id=group_id,
+            top_k=retry_k,
+            _retry_attempted=True,
+        )
+        if retry_contexts:
+            return retry_contexts[:top_k]
     
     
     namespace = get_namespace(creator_id, twin_id)
@@ -1887,6 +2141,7 @@ async def retrieve_context_vectors(
     # Add verified_qna_match flag (False since we didn't find verified match)
     for c in final_contexts:
         c["verified_qna_match"] = False
+        c["retrieval_stats"] = retrieval_stats
     
     # Log RAG metrics to Langfuse
     if _langfuse_available and final_contexts:
@@ -1908,6 +2163,7 @@ async def retrieve_context_vectors(
                     "search_queries": [q[:120] for q in search_queries],
                     "search_query_kinds": search_kinds,
                     "search_query_weights": [round(float(w), 3) for w in search_weights],
+                    "retrieval_stats": retrieval_stats,
                 }
             )
         except Exception as e:
