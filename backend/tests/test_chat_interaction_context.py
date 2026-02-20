@@ -106,7 +106,7 @@ def test_owner_chat_ignores_client_mode_spoof():
             assert "draft_persona_score" in metadata
             assert "final_persona_score" in metadata
             assert "rewrite_applied" in metadata
-            assert gate_mock.await_args.kwargs["mode"] == "owner"
+            assert gate_mock.await_count == 0
     finally:
         app.dependency_overrides = {}
 
@@ -233,7 +233,7 @@ def test_visitor_cannot_spoof_owner_training():
         app.dependency_overrides = {}
 
 
-def test_public_share_clarify_uses_public_context_and_mode():
+def test_public_share_clarify_is_suppressed_and_routes_to_agent():
     gate_mock = AsyncMock(
         return_value={
             "decision": "CLARIFY",
@@ -242,6 +242,18 @@ def test_public_share_clarify_uses_public_context_and_mode():
             "memory_write_proposal": {"topic": "x", "memory_type": "stance"},
         }
     )
+
+    async def fake_public_agent_stream(*_args, **_kwargs):
+        msg = AIMessage(content="Grounded response")
+        msg.additional_kwargs = {
+            "dialogue_mode": "QA_FACT",
+            "intent_label": "factual_with_evidence",
+            "module_ids": [],
+            "routing_decision": {"action": "answer", "intent": "answer"},
+            "planning_output": {"answerability": {"answerability": "direct"}},
+        }
+        yield {"agent": {"messages": [msg]}}
+
     with patch("routers.chat.ensure_twin_active"), patch(
         "modules.share_links.validate_share_token", return_value=True
     ), patch(
@@ -253,19 +265,18 @@ def test_public_share_clarify_uses_public_context_and_mode():
     ), patch(
         "routers.chat.run_identity_gate", gate_mock
     ), patch(
-        "routers.chat.create_clarification_thread", return_value={"id": "clar-1"}
-    ) as clarif_mock:
+        "routers.chat.run_agent_stream", fake_public_agent_stream
+    ):
         resp = client.post(
             "/public/chat/twin-1/token-abcdef12",
             json={"message": "what do you think?"},
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "queued"
+        assert body["status"] == "answer"
         assert body["interaction_context"] == "public_share"
         assert body["share_link_id"] == "token-ab"
-        assert clarif_mock.call_args.kwargs["mode"] == "public"
-        assert clarif_mock.call_args.kwargs["requested_by"] == "public"
+        assert gate_mock.await_args.kwargs["mode"] == "public"
 
 
 def test_public_share_answer_includes_persona_audit_fields():

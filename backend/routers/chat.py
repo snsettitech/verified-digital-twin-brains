@@ -13,8 +13,6 @@ from modules.observability import (
 )
 from modules.agent import run_agent_stream
 from modules.identity_gate import run_identity_gate
-from modules.owner_memory_store import create_clarification_thread
-from modules.memory_events import create_memory_event
 from modules.interaction_context import (
     InteractionContext,
     ResolvedInteractionContext,
@@ -22,7 +20,6 @@ from modules.interaction_context import (
     resolve_widget_context,
     resolve_public_share_context,
     identity_gate_mode_for_context,
-    clarification_mode_for_context,
     trace_fields,
 )
 from modules.persona_auditor import audit_persona_response
@@ -225,6 +222,56 @@ def _build_debug_snapshot(
         "retrieval_stats": retrieval_stats,
         "selected_evidence_block_types": selected_block_types,
     }
+
+
+async def _run_identity_gate_passthrough(
+    *,
+    query: str,
+    history: List[Dict[str, Any]],
+    twin_id: str,
+    tenant_id: Optional[str],
+    group_id: Optional[str],
+    mode: str,
+    allow_clarify: bool = False,
+) -> Dict[str, Any]:
+    """
+    Identity gate is restricted to context/safety interpretation.
+    Clarification decisions are planner-only.
+    """
+    policy = get_grounding_policy(query)
+    if bool(policy.get("is_smalltalk")):
+        return {
+            "decision": "ANSWER",
+            "requires_owner": False,
+            "reason": "smalltalk_bypass_pre_identity_gate",
+            "gate_mode": mode,
+            "owner_memory": [],
+            "owner_memory_refs": [],
+            "owner_memory_context": "",
+        }
+
+    gate = await run_identity_gate(
+        query=query,
+        history=history,
+        twin_id=twin_id,
+        tenant_id=tenant_id,
+        group_id=group_id,
+        mode=mode,
+        allow_clarify=allow_clarify,
+    )
+    if str(gate.get("decision") or "").upper() == "CLARIFY":
+        return {
+            **gate,
+            "decision": "ANSWER",
+            "reason": f"clarify_suppressed:{gate.get('reason') or 'identity_gate'}",
+            "question": "",
+            "options": [],
+            "memory_write_proposal": {},
+            "owner_memory": gate.get("owner_memory") or [],
+            "owner_memory_refs": gate.get("owner_memory_refs") or [],
+            "owner_memory_context": gate.get("owner_memory_context") or "",
+        }
+    return gate
 
 
 def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
@@ -1260,92 +1307,15 @@ async def chat(
                         "content": msg.get("content", "")
                     })
 
-            gate = await run_identity_gate(
+            gate = await _run_identity_gate_passthrough(
                 query=query,
                 history=history_for_gate,
                 twin_id=twin_id,
                 tenant_id=user.get("tenant_id") if user else None,
                 group_id=group_id,
                 mode=mode,
-                allow_clarify=(resolved_context.context == InteractionContext.OWNER_TRAINING),
+                allow_clarify=False,
             )
-
-            # If clarification required, emit single clarify event and stop
-            if gate.get("decision") == "CLARIFY":
-                # Ensure conversation exists for audit trail
-                if not conversation_id:
-                    user_id = user.get("user_id") if user else None
-                    conv = create_conversation(
-                        twin_id,
-                        user_id,
-                        group_id=group_id,
-                        interaction_context=resolved_context.context.value,
-                        origin_endpoint=resolved_context.origin_endpoint,
-                        share_link_id=resolved_context.share_link_id,
-                        training_session_id=resolved_context.training_session_id,
-                    )
-                    conversation_id = conv["id"]
-
-                # Create clarification thread
-                clarif = create_clarification_thread(
-                    twin_id=twin_id,
-                    tenant_id=user.get("tenant_id") if user else None,
-                    question=gate.get("question", ""),
-                    options=gate.get("options", []),
-                    memory_write_proposal=gate.get("memory_write_proposal", {}),
-                    original_query=query,
-                    conversation_id=conversation_id,
-                    mode=clarification_mode_for_context(resolved_context.context),
-                    requested_by="owner" if not resolved_context.is_public else "public",
-                    created_by=user.get("user_id") if user else None
-                )
-
-                # Audit event for pending clarification
-                try:
-                    if user and user.get("tenant_id"):
-                        await create_memory_event(
-                            twin_id=twin_id,
-                            tenant_id=user.get("tenant_id"),
-                            event_type="owner_memory_pending",
-                            payload={
-                                "clarification_id": clarif.get("id") if clarif else None,
-                                "question": gate.get("question"),
-                                "topic": gate.get("topic"),
-                                "memory_type": gate.get("memory_type")
-                            },
-                            status="pending_review",
-                            source_type="chat_turn",
-                            source_id=conversation_id
-                        )
-                except Exception as e:
-                    logger.warning(f"Memory event pending log failed: {e}")
-
-                # Log interaction
-                log_interaction(
-                    conversation_id,
-                    "user",
-                    query,
-                    interaction_context=resolved_context.context.value,
-                )
-                log_interaction(
-                    conversation_id,
-                    "assistant",
-                    gate.get("question", ""),
-                    interaction_context=resolved_context.context.value,
-                )
-
-                clarify_event = {
-                    "type": "clarify",
-                    "clarification_id": clarif.get("id") if clarif else None,
-                    "question": gate.get("question"),
-                    "options": gate.get("options", []),
-                    "memory_write_proposal": gate.get("memory_write_proposal", {}),
-                    "status": "pending_owner",
-                    "conversation_id": conversation_id,
-                    "identity_gate_mode": gate.get("gate_mode"),
-                }
-                yield json.dumps(clarify_event) + "\n"
-                return
 
             owner_memory_context = gate.get("owner_memory_context", "")
             owner_memory_refs = gate.get("owner_memory_refs", [])
@@ -2019,45 +1989,16 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
     
     history = get_messages(conversation_id)
 
-    # Identity gate for public/widget
-    gate = await run_identity_gate(
+    # Identity gate for public/widget (context only; no pre-agent clarification)
+    gate = await _run_identity_gate_passthrough(
         query=query,
         history=[{"role": m.get("role"), "content": m.get("content", "")} for m in (history or [])[-6:]],
         twin_id=twin_id,
         tenant_id=None,
         group_id=group_id,
-        mode=identity_gate_mode_for_context(resolved_context.context)
+        mode=identity_gate_mode_for_context(resolved_context.context),
+        allow_clarify=False,
     )
-
-    if gate.get("decision") == "CLARIFY":
-        # Create clarification thread for owner to resolve
-        clarif = create_clarification_thread(
-            twin_id=twin_id,
-            tenant_id=None,
-            question=gate.get("question", ""),
-            options=gate.get("options", []),
-            memory_write_proposal=gate.get("memory_write_proposal", {}),
-            original_query=query,
-            conversation_id=conversation_id,
-            mode=clarification_mode_for_context(resolved_context.context),
-            requested_by="public",
-            created_by=None
-        )
-
-        async def widget_clarify_stream():
-            yield json.dumps({
-                "type": "clarify",
-                "clarification_id": clarif.get("id") if clarif else None,
-                "question": gate.get("question"),
-                "options": gate.get("options", []),
-                "memory_write_proposal": gate.get("memory_write_proposal", {}),
-                "status": "pending_owner",
-                "conversation_id": conversation_id,
-                "session_id": session_id,
-                "identity_gate_mode": gate.get("gate_mode"),
-                **context_trace,
-            }) + "\n"
-        return StreamingResponse(widget_clarify_stream(), media_type="text/event-stream")
 
     owner_memory_context = gate.get("owner_memory_context", "")
     owner_memory_refs = gate.get("owner_memory_refs", [])
@@ -2445,38 +2386,16 @@ async def public_chat_endpoint(
             elif role == "assistant":
                 history.append(AIMessage(content=content))
 
-    # Identity gate for public chat
-    gate = await run_identity_gate(
+    # Identity gate for public chat (context only; no pre-agent clarification)
+    gate = await _run_identity_gate_passthrough(
         query=request.message,
         history=[{"role": "user", "content": m.content} for m in history[-6:]] if history else [],
         twin_id=twin_id,
         tenant_id=None,
         group_id=group_id,
-        mode=identity_gate_mode_for_context(resolved_context.context)
+        mode=identity_gate_mode_for_context(resolved_context.context),
+        allow_clarify=False,
     )
-
-    if gate.get("decision") == "CLARIFY":
-        clarif = create_clarification_thread(
-            twin_id=twin_id,
-            tenant_id=None,
-            question=gate.get("question", ""),
-            options=gate.get("options", []),
-            memory_write_proposal=gate.get("memory_write_proposal", {}),
-            original_query=request.message,
-            conversation_id=None,
-            mode=clarification_mode_for_context(resolved_context.context),
-            requested_by="public",
-            created_by=None
-        )
-        return {
-            "status": "queued",
-            "message": "Queued for owner confirmation.",
-            "clarification_id": clarif.get("id") if clarif else None,
-            "question": gate.get("question"),
-            "options": gate.get("options", []),
-            "identity_gate_mode": gate.get("gate_mode"),
-            **context_trace,
-        }
 
     owner_memory_context = gate.get("owner_memory_context", "")
     owner_memory_refs = gate.get("owner_memory_refs", [])
