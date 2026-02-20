@@ -113,6 +113,152 @@ def _grounding_tokens(text: str) -> Set[str]:
     return {tok for tok in tokens if len(tok) > 2 and tok not in _GROUNDING_STOPWORDS}
 
 
+def _safe_float(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _avg(values: List[float]) -> float:
+    if not values:
+        return 0.0
+    return float(sum(values) / float(len(values)))
+
+
+def _is_quote_intent(query: str) -> bool:
+    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
+    if not q:
+        return False
+    patterns = (
+        r"\bquote\b",
+        r"\bverbatim\b",
+        r"\bexact (line|phrase|text|quote)\b",
+        r"\bonly the exact\b",
+        r"\bshow (me )?the exact\b",
+    )
+    return any(re.search(pattern, q) for pattern in patterns)
+
+
+def _classify_query_class(query: str) -> str:
+    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
+    if not q:
+        return "factual"
+    smalltalk_markers = {
+        "hi",
+        "hello",
+        "hey",
+        "thanks",
+        "thank you",
+        "ok",
+        "okay",
+        "cool",
+        "good morning",
+        "good afternoon",
+        "good evening",
+    }
+    if q in smalltalk_markers:
+        return "smalltalk"
+    if any(marker in q for marker in ("who are you", "tell me about yourself", "introduce yourself", "what do you do")):
+        return "identity"
+    if any(marker in q for marker in ("how to", "how do", "how should", "steps", "workflow", "process")):
+        return "procedural"
+    if any(marker in q for marker in ("should", "recommend", "vs", "versus", "tradeoff", "would this twin like")):
+        return "evaluative"
+    return "factual"
+
+
+def _summarize_retrieval_stats(contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = [row for row in (contexts or []) if isinstance(row, dict)]
+
+    def _extract_scores(keys: Tuple[str, ...]) -> List[float]:
+        values: List[float] = []
+        for row in rows:
+            score = None
+            for key in keys:
+                candidate = _safe_float(row.get(key))
+                if candidate is not None:
+                    score = candidate
+                    break
+            if score is not None:
+                values.append(score)
+        values.sort(reverse=True)
+        return values
+
+    dense_scores = _extract_scores(("vector_score",))
+    sparse_scores = _extract_scores(("sparse_score", "lexical_score"))
+    rerank_scores = _extract_scores(("score",))
+
+    dense_top1 = dense_scores[0] if dense_scores else 0.0
+    sparse_top1 = sparse_scores[0] if sparse_scores else 0.0
+    rerank_top1 = rerank_scores[0] if rerank_scores else 0.0
+
+    block_counts: Dict[str, int] = {}
+    for row in rows:
+        block_type = str(row.get("block_type") or row.get("chunk_type") or "unknown").strip().lower() or "unknown"
+        block_counts[block_type] = block_counts.get(block_type, 0) + 1
+
+    return {
+        "chunk_count": len(rows),
+        "dense_top1": dense_top1,
+        "dense_top5_avg": _avg(dense_scores[:5]),
+        "sparse_top1": sparse_top1,
+        "sparse_top5_avg": _avg(sparse_scores[:5]),
+        "rerank_top1": rerank_top1,
+        "rerank_top5_avg": _avg(rerank_scores[:5]),
+        "evidence_block_counts": block_counts,
+    }
+
+
+def _extract_answerability_state(planning_output: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(planning_output, dict):
+        return "unknown"
+    raw = planning_output.get("answerability")
+    if isinstance(raw, dict):
+        normalized = str(raw.get("answerability") or "").strip().lower()
+        if normalized:
+            return normalized
+    return "unknown"
+
+
+def _selected_evidence_block_types(contexts: List[Dict[str, Any]]) -> List[str]:
+    values: List[str] = []
+    for row in contexts:
+        if not isinstance(row, dict):
+            continue
+        block_type = str(row.get("block_type") or row.get("chunk_type") or "").strip().lower()
+        if block_type and block_type not in values:
+            values.append(block_type)
+    return values
+
+
+def _build_debug_snapshot(
+    *,
+    query: str,
+    requires_evidence: Optional[bool],
+    planning_output: Optional[Dict[str, Any]],
+    routing_decision: Optional[Dict[str, Any]],
+    contexts: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    query_class = _classify_query_class(query)
+    quote_intent = _is_quote_intent(query)
+    answerability_state = _extract_answerability_state(planning_output)
+    planner_action = "unknown"
+    if isinstance(routing_decision, dict):
+        planner_action = str(routing_decision.get("action") or planner_action)
+    retrieval_stats = _summarize_retrieval_stats(contexts)
+    selected_block_types = _selected_evidence_block_types(contexts)
+    return {
+        "query_class": query_class,
+        "requires_evidence": bool(requires_evidence) if requires_evidence is not None else None,
+        "quote_intent": quote_intent,
+        "answerability_state": answerability_state,
+        "planner_action": planner_action,
+        "retrieval_stats": retrieval_stats,
+        "selected_evidence_block_types": selected_block_types,
+    }
+
+
 def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     if not isinstance(incoming, list):
         return existing
@@ -135,7 +281,7 @@ def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[L
         if sig in seen:
             continue
         normalized_row: Dict[str, Any] = {"source_id": source_id, "text": text}
-        for key in ("section_title", "section_path", "chunk_type"):
+        for key in ("section_title", "section_path", "chunk_type", "block_type"):
             value = row.get(key)
             if isinstance(value, str) and value.strip():
                 normalized_row[key] = value.strip()
@@ -736,7 +882,7 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
                                 "source_id": str(row.get("source_id") or "").strip(),
                                 "text": text,
                             }
-                            for key in ("section_title", "section_path", "chunk_type"):
+                            for key in ("section_title", "section_path", "chunk_type", "block_type"):
                                 value = row.get(key)
                                 if isinstance(value, str) and value.strip():
                                     normalized_row[key] = value.strip()
@@ -1597,6 +1743,14 @@ async def chat(
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
             
+            debug_snapshot = _build_debug_snapshot(
+                query=query,
+                requires_evidence=requires_evidence,
+                planning_output=planning_output if isinstance(planning_output, dict) else {},
+                routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
+                contexts=retrieved_context_snippets,
+            )
+
             # 3. Send metadata first
             metadata = _normalize_json({
                 "type": "metadata",
@@ -1618,6 +1772,13 @@ async def chat(
                 "router_knowledge_available": router_knowledge_available,
                 "routing_decision": routing_decision,
                 "render_strategy": render_strategy,
+                "query_class": debug_snapshot.get("query_class"),
+                "quote_intent": debug_snapshot.get("quote_intent"),
+                "answerability_state": debug_snapshot.get("answerability_state"),
+                "planner_action": debug_snapshot.get("planner_action"),
+                "retrieval_stats": debug_snapshot.get("retrieval_stats"),
+                "selected_evidence_block_types": debug_snapshot.get("selected_evidence_block_types"),
+                "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
                 "router_policy": {
@@ -2022,6 +2183,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         workflow_intent = None
         module_ids = []
         render_strategy = None
+        planning_output = {}
         routing_decision: Optional[Dict[str, Any]] = None
         retrieved_context_snippets: List[Dict[str, Any]] = []
 
@@ -2158,6 +2320,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         context_trace["online_eval_score"] = online_eval_result.get("overall_score")
         context_trace["online_eval_flags"] = online_eval_result.get("flags")
         citation_details = _resolve_citation_details(citations, twin_id)
+        debug_snapshot = _build_debug_snapshot(
+            query=query,
+            requires_evidence=True,
+            planning_output=planning_output if isinstance(planning_output, dict) else {},
+            routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
+            contexts=retrieved_context_snippets,
+        )
 
         output = {
             "type": "metadata",
@@ -2173,6 +2342,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "module_ids": module_ids,
             "routing_decision": routing_decision,
             "render_strategy": render_strategy,
+            "query_class": debug_snapshot.get("query_class"),
+            "quote_intent": debug_snapshot.get("quote_intent"),
+            "answerability_state": debug_snapshot.get("answerability_state"),
+            "planner_action": debug_snapshot.get("planner_action"),
+            "retrieval_stats": debug_snapshot.get("retrieval_stats"),
+            "selected_evidence_block_types": debug_snapshot.get("selected_evidence_block_types"),
+            "debug_snapshot": debug_snapshot,
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
             "session_id": session_id,
@@ -2427,6 +2603,7 @@ async def public_chat_endpoint(
             workflow_intent = None
             module_ids = []
             render_strategy = None
+            planning_output = {}
             routing_decision: Optional[Dict[str, Any]] = None
             retrieved_context_snippets: List[Dict[str, Any]] = []
             async for event in run_agent_stream(
@@ -2598,6 +2775,13 @@ async def public_chat_endpoint(
             owner_memory_refs = _normalize_json(owner_memory_refs)
             owner_memory_topics = _normalize_json(owner_memory_topics)
             routing_decision = _normalize_json(routing_decision)
+            debug_snapshot = _build_debug_snapshot(
+                query=request.message,
+                requires_evidence=True,
+                planning_output=planning_output if isinstance(planning_output, dict) else {},
+                routing_decision=routing_decision if isinstance(routing_decision, dict) else {},
+                contexts=retrieved_context_snippets,
+            )
 
             try:
                 _persist_runtime_audit(
@@ -2637,6 +2821,13 @@ async def public_chat_endpoint(
                 "module_ids": module_ids,
                 "routing_decision": routing_decision,
                 "render_strategy": render_strategy,
+                "query_class": debug_snapshot.get("query_class"),
+                "quote_intent": debug_snapshot.get("quote_intent"),
+                "answerability_state": debug_snapshot.get("answerability_state"),
+                "planner_action": debug_snapshot.get("planner_action"),
+                "retrieval_stats": debug_snapshot.get("retrieval_stats"),
+                "selected_evidence_block_types": debug_snapshot.get("selected_evidence_block_types"),
+                "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
                 "used_owner_memory": bool(owner_memory_refs),
