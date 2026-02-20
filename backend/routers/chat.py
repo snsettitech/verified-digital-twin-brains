@@ -336,25 +336,7 @@ def _extract_planner_telemetry(planning_output: Optional[Dict[str, Any]]) -> Dic
 def _emit_langfuse_turn_telemetry(debug_snapshot: Dict[str, Any]) -> None:
     if not isinstance(debug_snapshot, dict):
         return
-    counter_payload = {
-        "deepagents_route_rate": int(debug_snapshot.get("deepagents_route_rate", 0) or 0),
-        "deepagents_forbidden_context_rate": int(
-            debug_snapshot.get("deepagents_forbidden_context_rate", 0) or 0
-        ),
-        "deepagents_missing_params_rate": int(
-            debug_snapshot.get("deepagents_missing_params_rate", 0) or 0
-        ),
-        "deepagents_needs_approval_rate": int(
-            debug_snapshot.get("deepagents_needs_approval_rate", 0) or 0
-        ),
-        "deepagents_executed_rate": int(debug_snapshot.get("deepagents_executed_rate", 0) or 0),
-        "public_action_query_guarded_rate": int(
-            debug_snapshot.get("public_action_query_guarded_rate", 0) or 0
-        ),
-        "selection_recovery_failure_rate": int(
-            debug_snapshot.get("selection_recovery_failure_rate", 0) or 0
-        ),
-    }
+    counter_payload = _extract_turn_counter_payload(debug_snapshot)
     payload = {
         "retrieval.retry_reason": debug_snapshot.get("retrieval.retry_reason", "none"),
         "retrieval.prompt_question_dominance": bool(
