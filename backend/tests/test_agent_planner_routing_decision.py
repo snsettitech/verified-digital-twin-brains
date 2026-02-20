@@ -318,3 +318,154 @@ async def test_planner_insufficient_low_chunk_count_triggers_second_pass_retriev
     assert out["routing_decision"]["action"] == "answer"
     assert plan["answerability"]["answerability"] == "derivable"
     assert plan["teaching_questions"] == []
+
+
+@pytest.mark.asyncio
+async def test_planner_confidence_is_calibrated_from_retrieval_stats(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.evaluate_answerability",
+        AsyncMock(
+            return_value={
+                "answerability": "direct",
+                "confidence": 0.9,
+                "reasoning": "Directly answerable.",
+                "missing_information": [],
+                "ambiguity_level": "low",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.invoke_json",
+        AsyncMock(
+            return_value=(
+                {
+                    "answer_points": ["Use containers first for predictable operations."],
+                    "citations": ["src-1"],
+                    "confidence": 0.95,
+                    "reasoning_trace": "High-level recommendation.",
+                },
+                {"provider": "test"},
+            )
+        ),
+    )
+
+    state = {
+        "messages": [HumanMessage(content="Containers or serverless?")],
+        "dialogue_mode": "QA_FACT",
+        "query_class": "evaluative",
+        "quote_intent": False,
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "src-1",
+                    "text": "Recommendation: Start with containers.",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
+                    "retrieval_stats": {
+                        "dense_top1": 0.12,
+                        "dense_top5_avg": 0.1,
+                        "sparse_top1": 0.08,
+                        "sparse_top5_avg": 0.06,
+                        "rerank_top1": 0.0,
+                        "rerank_top5_avg": 0.0,
+                        "evidence_block_counts": {"answer_text": 1},
+                    },
+                }
+            ]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+    }
+
+    out = await planner_node(state)
+    confidence = float(out["planning_output"]["confidence"])
+
+    assert 0.0 < confidence < 0.90
+    assert out["confidence_score"] == confidence
+
+
+@pytest.mark.asyncio
+async def test_planner_confidence_prefers_rerank_signal_when_present(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.evaluate_answerability",
+        AsyncMock(
+            return_value={
+                "answerability": "derivable",
+                "confidence": 0.72,
+                "reasoning": "Derivable from multiple chunks.",
+                "missing_information": [],
+                "ambiguity_level": "medium",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.invoke_json",
+        AsyncMock(
+            return_value=(
+                {
+                    "answer_points": ["Recommendation: containers first, then revisit serverless when traffic pattern stabilizes."],
+                    "citations": ["src-1"],
+                    "confidence": 0.74,
+                    "reasoning_trace": "Reranked evidence is strong.",
+                },
+                {"provider": "test"},
+            )
+        ),
+    )
+
+    state = {
+        "messages": [HumanMessage(content="Containers or serverless?")],
+        "dialogue_mode": "QA_FACT",
+        "query_class": "evaluative",
+        "quote_intent": False,
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "src-1",
+                    "text": "Recommendation: Start with containers on a managed platform.",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
+                    "retrieval_stats": {
+                        "dense_top1": 0.35,
+                        "dense_top5_avg": 0.29,
+                        "sparse_top1": 0.22,
+                        "sparse_top5_avg": 0.17,
+                        "rerank_top1": 0.91,
+                        "rerank_top5_avg": 0.82,
+                        "evidence_block_counts": {"answer_text": 1},
+                    },
+                }
+            ]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+    }
+
+    out = await planner_node(state)
+    confidence = float(out["planning_output"]["confidence"])
+
+    assert 0.70 <= confidence <= 0.97

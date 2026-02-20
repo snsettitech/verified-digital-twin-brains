@@ -779,6 +779,88 @@ def _collect_valid_source_ids(context_data: List[Dict[str, Any]]) -> List[str]:
     return out
 
 
+def _extract_retrieval_stats(context_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    for row in context_data:
+        if not isinstance(row, dict):
+            continue
+        stats = row.get("retrieval_stats")
+        if isinstance(stats, dict):
+            return dict(stats)
+    return {}
+
+
+def _select_retrieval_signal(stats: Dict[str, Any], context_data: List[Dict[str, Any]]) -> float:
+    rerank = stats.get("rerank_top1")
+    dense = stats.get("dense_top1")
+    sparse = stats.get("sparse_top1")
+
+    for candidate in (rerank, dense, sparse):
+        try:
+            value = float(candidate)
+            if value > 0.0:
+                return max(0.0, min(1.0, value))
+        except Exception:
+            continue
+
+    best_score = 0.0
+    for row in context_data:
+        if not isinstance(row, dict):
+            continue
+        try:
+            best_score = max(
+                best_score,
+                float(row.get("score", row.get("vector_score", 0.0)) or 0.0),
+            )
+        except Exception:
+            continue
+    return max(0.0, min(1.0, best_score))
+
+
+def _grounding_coverage_score(context_data: List[Dict[str, Any]]) -> float:
+    if not context_data:
+        return 0.0
+    answer_rows = 0
+    source_ids: set[str] = set()
+    for row in context_data:
+        if not isinstance(row, dict):
+            continue
+        source_id = str(row.get("source_id") or "").strip()
+        if source_id:
+            source_ids.add(source_id)
+        raw_answer = row.get("is_answer_text")
+        block_type = str(row.get("block_type") or row.get("chunk_type") or "").strip().lower()
+        is_answer = bool(raw_answer) if isinstance(raw_answer, bool) else block_type not in {"prompt_question", "heading"}
+        if is_answer:
+            answer_rows += 1
+    answer_ratio = answer_rows / float(max(len(context_data), 1))
+    source_diversity = min(len(source_ids) / 3.0, 1.0)
+    return max(0.0, min(1.0, (0.65 * answer_ratio) + (0.35 * source_diversity)))
+
+
+def _calibrate_confidence_score(
+    *,
+    raw_confidence: float,
+    answerability_state: str,
+    context_data: List[Dict[str, Any]],
+) -> float:
+    stats = _extract_retrieval_stats(context_data)
+    retrieval_signal = _select_retrieval_signal(stats, context_data)
+    coverage_signal = _grounding_coverage_score(context_data)
+
+    base = max(0.0, min(1.0, float(raw_confidence or 0.0)))
+    calibrated = (0.35 * base) + (0.40 * retrieval_signal) + (0.25 * coverage_signal)
+
+    state = str(answerability_state or "").strip().lower()
+    if state == "direct":
+        calibrated += 0.08
+    elif state == "derivable":
+        calibrated += 0.03
+    elif state == "insufficient":
+        calibrated = min(calibrated, 0.30)
+
+    return max(0.05, min(0.97, calibrated))
+
+
 def _is_evaluative_query(query: str) -> bool:
     q = re.sub(r"\s+", " ", str(query or "").strip().lower())
     if not q:
@@ -1028,10 +1110,11 @@ async def planner_node(state: TwinState):
     dialogue_mode = str(state.get("dialogue_mode") or "").strip().upper()
     if dialogue_mode == "SMALLTALK" or _is_smalltalk_query(user_query):
         answer_text = _smalltalk_response(user_query)
+        smalltalk_confidence = 0.9
         smalltalk_answerability = {
             "answerability": "direct",
             "answerable": True,
-            "confidence": 0.95,
+            "confidence": smalltalk_confidence,
             "reasoning": "Smalltalk bypass: conversational message handled without retrieval/evaluator.",
             "missing_information": [],
             "ambiguity_level": "low",
@@ -1039,7 +1122,7 @@ async def planner_node(state: TwinState):
         updated_routing_decision = {
             **routing_decision,
             "action": "answer",
-            "confidence": 0.95,
+            "confidence": smalltalk_confidence,
             "required_inputs_missing": [],
             "clarifying_questions": [],
         }
@@ -1048,12 +1131,13 @@ async def planner_node(state: TwinState):
                 "answer_points": [answer_text],
                 "citations": [],
                 "follow_up_question": "",
-                "confidence": 0.95,
+                "confidence": smalltalk_confidence,
                 "teaching_questions": [],
                 "render_strategy": "source_faithful",
                 "reasoning_trace": "Smalltalk planner bypass.",
                 "answerability": smalltalk_answerability,
             },
+            "confidence_score": smalltalk_confidence,
             "routing_decision": updated_routing_decision,
             "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
             "intent_label": persona_trace.get("intent_label"),
@@ -1121,6 +1205,11 @@ async def planner_node(state: TwinState):
             evidence_chunks=context_data,
             limit=3,
         )
+        insufficient_confidence = _calibrate_confidence_score(
+            raw_confidence=float(answerability.get("confidence") or 0.0),
+            answerability_state=answerability_state,
+            context_data=context_data,
+        )
         answer_points = [UNCERTAINTY_RESPONSE]
         for idx, question in enumerate(clarification_questions, 1):
             answer_points.append(f"{idx}. {question}")
@@ -1128,7 +1217,7 @@ async def planner_node(state: TwinState):
         updated_routing_decision = {
             **routing_decision,
             "action": "clarify",
-            "confidence": max(0.05, min(0.95, float(answerability.get("confidence") or 0.0))),
+            "confidence": insufficient_confidence,
             "required_inputs_missing": [str(v) for v in missing_information[:3]],
             "clarifying_questions": clarification_questions[:3],
         }
@@ -1138,12 +1227,13 @@ async def planner_node(state: TwinState):
                 "answer_points": answer_points,
                 "citations": [],
                 "follow_up_question": "",
-                "confidence": max(0.05, min(0.95, float(answerability.get("confidence") or 0.0))),
+                "confidence": insufficient_confidence,
                 "teaching_questions": clarification_questions[:3],
                 "render_strategy": "source_faithful",
                 "reasoning_trace": str(answerability.get("reasoning") or ""),
                 "answerability": answerability,
             },
+            "confidence_score": insufficient_confidence,
             "routing_decision": updated_routing_decision,
             "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
             "intent_label": persona_trace.get("intent_label"),
@@ -1232,12 +1322,17 @@ Rules:
     if not citations and valid_source_ids:
         citations = valid_source_ids[:3]
 
-    confidence = max(
+    raw_confidence = max(
         0.0,
         min(
             1.0,
             float(plan.get("confidence", answerability.get("confidence", 0.5)) or 0.5),
         ),
+    )
+    confidence = _calibrate_confidence_score(
+        raw_confidence=raw_confidence,
+        answerability_state=answerability_state,
+        context_data=context_data,
     )
 
     updated_routing_decision = {
@@ -1259,6 +1354,7 @@ Rules:
             "reasoning_trace": str(plan.get("reasoning_trace") or answerability.get("reasoning") or ""),
             "answerability": answerability,
         },
+        "confidence_score": confidence,
         "routing_decision": updated_routing_decision,
         "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
         "intent_label": persona_trace.get("intent_label"),
@@ -1278,6 +1374,7 @@ async def realizer_node(state: TwinState):
     render_strategy = str(plan.get("render_strategy", "")).strip().lower() if isinstance(plan, dict) else ""
 
     if render_strategy == "source_faithful":
+        confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
         points = []
         for p in (plan.get("answer_points", []) if isinstance(plan, dict) else []):
             if isinstance(p, str) and p.strip():
@@ -1309,6 +1406,7 @@ async def realizer_node(state: TwinState):
         res.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
         res.additional_kwargs["render_strategy"] = "source_faithful"
         res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        res.additional_kwargs["confidence_score"] = confidence_score
         if isinstance(state.get("routing_decision"), dict):
             res.additional_kwargs["routing_decision"] = state.get("routing_decision")
         if state.get("persona_spec_version"):
@@ -1319,6 +1417,7 @@ async def realizer_node(state: TwinState):
         return {
             "messages": [res],
             "citations": citations,
+            "confidence_score": confidence_score,
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Realizer: source-faithful deterministic rendering (no paraphrase)."
             ],
@@ -1350,6 +1449,7 @@ async def realizer_node(state: TwinState):
         # Post-process for citations and teaching metadata (Phase 4)
         citations = plan.get("citations", [])
         teaching_questions = plan.get("teaching_questions", [])
+        confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
         
         # Enrich message with metadata for the UI
         res.additional_kwargs["teaching_questions"] = teaching_questions
@@ -1362,6 +1462,7 @@ async def realizer_node(state: TwinState):
         res.additional_kwargs["router_reason"] = state.get("router_reason")
         res.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
         res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        res.additional_kwargs["confidence_score"] = confidence_score
         if isinstance(state.get("routing_decision"), dict):
             res.additional_kwargs["routing_decision"] = state.get("routing_decision")
         if state.get("persona_spec_version"):
@@ -1376,6 +1477,7 @@ async def realizer_node(state: TwinState):
         return {
             "messages": [res],
             "citations": citations,
+            "confidence_score": confidence_score,
             "reasoning_history": (state.get("reasoning_history") or []) + ["Realizer: Response reified with Metadata."]
         }
     except Exception as e:
@@ -1415,12 +1517,18 @@ async def realizer_node(state: TwinState):
         fallback_msg.additional_kwargs["router_reason"] = state.get("router_reason")
         fallback_msg.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
         fallback_msg.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+        fallback_msg.additional_kwargs["confidence_score"] = float(
+            plan.get("confidence", state.get("confidence_score", 0.0)) if isinstance(plan, dict) else 0.0
+        )
         if isinstance(state.get("routing_decision"), dict):
             fallback_msg.additional_kwargs["routing_decision"] = state.get("routing_decision")
 
         return {
             "messages": [fallback_msg],
             "citations": plan.get("citations", []) if isinstance(plan, dict) else [],
+            "confidence_score": float(
+                plan.get("confidence", state.get("confidence_score", 0.0)) if isinstance(plan, dict) else 0.0
+            ),
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Realizer: deterministic fallback used after exception."
             ],
@@ -1624,7 +1732,7 @@ async def run_agent_stream(
     state = {
         "messages": initial_messages,
         "twin_id": twin_id,
-        "confidence_score": 1.0,
+        "confidence_score": 0.0,
         "citations": [],
         "sub_queries": [],
         "reasoning_history": [],

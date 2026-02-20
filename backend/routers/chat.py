@@ -315,6 +315,9 @@ def _merge_context_snippets(existing: List[Dict[str, Any]], incoming: Optional[L
             value = row.get(key)
             if isinstance(value, str) and value.strip():
                 normalized_row[key] = value.strip()
+        raw_stats = row.get("retrieval_stats")
+        if isinstance(raw_stats, dict):
+            normalized_row["retrieval_stats"] = dict(raw_stats)
         for key in ("score", "vector_score"):
             value = row.get(key)
             if isinstance(value, (int, float)):
@@ -907,6 +910,9 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
                                 value = row.get(key)
                                 if isinstance(value, str) and value.strip():
                                     normalized_row[key] = value.strip()
+                            raw_stats = row.get("retrieval_stats")
+                            if isinstance(raw_stats, dict):
+                                normalized_row["retrieval_stats"] = dict(raw_stats)
                             for key in ("score", "vector_score"):
                                 value = row.get(key)
                                 if isinstance(value, (int, float)):
@@ -1358,7 +1364,7 @@ async def chat(
             # 2. Run Agent Stream - collect final response
             full_response = ""
             citations = []
-            confidence_score = 1.0
+            confidence_score = 0.0
             decision_trace = None
             teaching_questions = []
             planning_output = {}
