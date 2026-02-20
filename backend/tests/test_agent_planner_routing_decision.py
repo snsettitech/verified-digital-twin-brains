@@ -1,5 +1,5 @@
 import pytest
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from unittest.mock import AsyncMock
 
 from modules.agent import planner_node
@@ -545,3 +545,91 @@ async def test_planner_identity_insufficient_triggers_second_pass_with_rich_cont
     assert evaluate_mock.await_count == 2
     assert out["routing_decision"]["action"] == "answer"
     assert out["planning_output"]["answerability"]["answerability"] == "direct"
+
+
+@pytest.mark.asyncio
+async def test_planner_breaks_clarification_loop_on_selection_reply(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.evaluate_answerability",
+        AsyncMock(
+            return_value={
+                "answerability": "insufficient",
+                "confidence": 0.24,
+                "reasoning": "Model is conservative.",
+                "missing_information": ["specific characteristics of founders"],
+                "ambiguity_level": "medium",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.invoke_json",
+        AsyncMock(
+            return_value=(
+                {
+                    "answer_points": [
+                        "Founders are evaluated on clarity of thinking, execution discipline, and learning velocity."
+                    ],
+                    "citations": ["kb-1"],
+                    "confidence": 0.64,
+                    "reasoning_trace": "Synthesized from rubric evidence.",
+                },
+                {"provider": "test"},
+            )
+        ),
+    )
+
+    state = {
+        "twin_id": "twin-loop",
+        "messages": [
+            HumanMessage(content="what do you see in the founders"),
+            AIMessage(
+                content=(
+                    "I don't know based on available sources.\n\n"
+                    "1. Do you want specific qualities?\n"
+                    "2. Do you want interaction behavior?\n"
+                    "3. Do you want examples?"
+                )
+            ),
+            HumanMessage(content="all three"),
+        ],
+        "dialogue_mode": "QA_FACT",
+        "query_class": "evaluative",
+        "quote_intent": False,
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "kb-1",
+                    "text": "Decision rubric: prioritize clarity, velocity, and coachability in founders.",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
+                },
+                {
+                    "source_id": "kb-2",
+                    "text": "Style guidance: practical and direct founder feedback.",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
+                },
+            ]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+        "retrieval_group_id": None,
+        "resolve_default_group_filtering": True,
+    }
+
+    out = await planner_node(state)
+    assert out["routing_decision"]["action"] == "answer"
+    assert out["planning_output"]["answerability"]["answerability"] == "derivable"
+    assert out["planning_output"]["teaching_questions"] == []

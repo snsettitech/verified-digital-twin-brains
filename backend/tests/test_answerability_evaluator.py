@@ -187,3 +187,31 @@ def test_clarification_filters_noisy_section_candidates():
     joined = " ".join(questions).lower()
     assert "mean" not in joined
     assert "e) > mean" not in joined
+
+
+@pytest.mark.asyncio
+async def test_founder_query_derivable_from_profile_evidence(monkeypatch):
+    monkeypatch.setattr("modules.answerability.invoke_json", AsyncMock(side_effect=RuntimeError("offline")))
+
+    result = await evaluate_answerability(
+        "What do you see in the founders?",
+        [
+            {
+                "source_id": "kb-1",
+                "text": "Decision rubric: prioritize founder clarity, execution discipline, and speed of learning.",
+                "section_title": "Decision rubric",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            },
+            {
+                "source_id": "kb-2",
+                "text": "Communication style rules: direct feedback and practical next steps.",
+                "section_title": "Communication style rules",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            },
+        ],
+    )
+    assert result["answerability"] in {"direct", "derivable"}
+    assert result["answerable"] is True
+    assert result["missing_information"] == []

@@ -894,6 +894,56 @@ def _is_identity_query(query: str) -> bool:
     return any(marker in q for marker in markers)
 
 
+def _is_selection_reply(query: str) -> bool:
+    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
+    if not q:
+        return False
+    if q in {"1", "2", "3", "yes", "no", "both", "either", "all", "all three", "all 3"}:
+        return True
+    patterns = (
+        r"^all (three|3|of them)$",
+        r"^(first|second|third)( one)?$",
+        r"^option ?(1|2|3)$",
+        r"^the (first|second|third) one$",
+    )
+    return any(re.match(pattern, q) for pattern in patterns)
+
+
+def _clarification_streak(messages: List[BaseMessage]) -> int:
+    streak = 0
+    for msg in reversed(messages or []):
+        if isinstance(msg, HumanMessage):
+            continue
+        if not isinstance(msg, AIMessage):
+            continue
+        content = re.sub(r"\s+", " ", str(msg.content or "").strip().lower())
+        if not content:
+            break
+        if UNCERTAINTY_RESPONSE.lower() in content:
+            streak += 1
+            continue
+        break
+    return streak
+
+
+def _should_break_clarification_loop(
+    *,
+    messages: List[BaseMessage],
+    user_query: str,
+    context_data: List[Dict[str, Any]],
+) -> bool:
+    if not context_data:
+        return False
+    streak = _clarification_streak(messages)
+    if streak <= 0:
+        return False
+    if _is_selection_reply(user_query):
+        return True
+    if streak >= 2:
+        return True
+    return False
+
+
 def _merge_context_rows(
     base_rows: List[Dict[str, Any]],
     extra_rows: List[Dict[str, Any]],
@@ -1069,6 +1119,7 @@ async def planner_node(state: TwinState):
     """General evidence-driven planner."""
     raw_context = state.get("retrieved_context", {}).get("results", [])
     context_data = [row for row in raw_context if isinstance(row, dict)] if isinstance(raw_context, list) else []
+    state_messages = [m for m in (state.get("messages") or []) if isinstance(m, BaseMessage)]
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
     query_class = str(state.get("query_class") or "factual").strip().lower() or "factual"
     quote_intent = bool(state.get("quote_intent"))
@@ -1187,9 +1238,15 @@ async def planner_node(state: TwinState):
     answerability["answerable"] = answerability_state in {"direct", "derivable"}
 
     second_pass_used = False
+    loop_break_candidate = _should_break_clarification_loop(
+        messages=state_messages,
+        user_query=user_query,
+        context_data=context_data,
+    )
     should_second_pass = answerability_state == "insufficient" and (
         (0 < len(context_data) < 3)
         or (query_class == "identity" and 0 < len(context_data) < PLANNER_SECOND_PASS_RETRIEVAL_TOP_K)
+        or loop_break_candidate
     )
     if should_second_pass:
         twin_id = str(state.get("twin_id") or "").strip()
@@ -1218,6 +1275,27 @@ async def planner_node(state: TwinState):
                     answerability_state = "direct" if bool(answerability.get("answerable")) else "insufficient"
                     answerability["answerability"] = answerability_state
                 answerability["answerable"] = answerability_state in {"direct", "derivable"}
+
+    if (
+        answerability_state == "insufficient"
+        and _should_break_clarification_loop(
+            messages=state_messages,
+            user_query=user_query,
+            context_data=context_data,
+        )
+    ):
+        answerability_state = "derivable"
+        answerability["answerability"] = "derivable"
+        answerability["answerable"] = True
+        answerability["missing_information"] = []
+        answerability["confidence"] = max(float(answerability.get("confidence") or 0.0), 0.52)
+        answerability["ambiguity_level"] = "medium"
+        reason = re.sub(r"\s+", " ", str(answerability.get("reasoning") or "").strip())
+        answerability["reasoning"] = (
+            f"{reason} Loop-break policy: user replied to prior clarification, so planner synthesizes best grounded answer."
+            if reason
+            else "Loop-break policy: user replied to prior clarification, so planner synthesizes best grounded answer."
+        )
 
     if answerability_state == "insufficient":
         missing_information = answerability.get("missing_information") or []

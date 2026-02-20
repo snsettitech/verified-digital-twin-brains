@@ -53,6 +53,11 @@ _META_MISSING_PATTERNS = (
     "clarify the question",
     "tell me more",
     "more context",
+    "definition of",
+    "referred to",
+    "refers to",
+    "clarification on what",
+    "what are the three items",
     "what outcome do you want",
     "what would you like",
 )
@@ -118,6 +123,14 @@ _INFERENTIAL_QUERY_MARKERS = (
     "would this twin",
     "care about most",
     "like a",
+    "what do you see in",
+    "look for in founders",
+    "founder",
+    "founders",
+    "traits",
+    "qualities",
+    "act like",
+    "digital twin",
     "summarize the twin",
     "summarise the twin",
     "optimize for",
@@ -324,9 +337,12 @@ def _profile_evidence_count(chunks: Sequence[Dict[str, Any]]) -> int:
     count = 0
     for row in chunks[:8]:
         text = _chunk_text(row)
+        meta = _chunk_meta_text(row)
         if not text:
-            continue
-        if any(marker in text for marker in _PROFILE_EVIDENCE_MARKERS):
+            text = ""
+        if any(marker in text for marker in _PROFILE_EVIDENCE_MARKERS) or any(
+            marker in meta for marker in _PROFILE_EVIDENCE_MARKERS
+        ):
             count += 1
     return count
 
@@ -338,6 +354,8 @@ def _contains_meta_missing_item(item: str) -> bool:
     if any(pattern in lowered for pattern in _GENERIC_CLARIFICATION_PATTERNS):
         return True
     if any(pattern in lowered for pattern in _META_MISSING_PATTERNS):
+        return True
+    if re.search(r"\b(all three|all 3|both|either)\b", lowered):
         return True
     return False
 
