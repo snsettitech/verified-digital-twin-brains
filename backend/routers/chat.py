@@ -1606,6 +1606,8 @@ async def chat(
                     owner_memory_context=owner_memory_context,
                     interaction_context=resolved_context.context.value,
                     enforce_group_filtering=(resolved_context.is_public or bool(requested_group_id)),
+                    actor_user_id=user.get("user_id") if user else None,
+                    tenant_id=user.get("tenant_id") if user else None,
                 ).__aiter__()
 
                 pending_task = None
@@ -2271,6 +2273,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             conversation_id=conversation_id,
             owner_memory_context=owner_memory_context,
             interaction_context=resolved_context.context.value,
+            actor_user_id=None,
+            tenant_id=None,
         ):
             tools_payload, agent_payload = _extract_stream_payload(event)
 
@@ -2684,6 +2688,8 @@ async def public_chat_endpoint(
                 conversation_id=conversation_id,
                 owner_memory_context=owner_memory_context,
                 interaction_context=resolved_context.context.value,
+                actor_user_id=None,
+                tenant_id=None,
             ):
                 tools_payload, agent_payload = _extract_stream_payload(event)
                 if tools_payload:
