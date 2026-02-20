@@ -189,6 +189,37 @@ def test_clarification_filters_noisy_section_candidates():
     assert "e) > mean" not in joined
 
 
+def test_non_identity_clarification_ignores_prompt_section_labels():
+    questions = build_targeted_clarification_questions(
+        "What do you see in the founders?",
+        ['personal background from "mean" or "E) > mean"'],
+        evidence_chunks=[
+            {
+                "source_id": "s1",
+                "section_title": "mean",
+                "section_path": "E) > mean",
+                "text": "Who are you (short bio used in the twin)?",
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            },
+            {
+                "source_id": "s2",
+                "section_title": "E) > mean",
+                "section_path": "Sham/mean",
+                "text": "What do you optimize for?",
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            },
+        ],
+        limit=3,
+    )
+    assert questions
+    joined = " ".join(questions).lower()
+    assert "mean" not in joined
+    assert "e) > mean" not in joined
+    assert "are you asking about" not in joined
+
+
 @pytest.mark.asyncio
 async def test_founder_query_derivable_from_profile_evidence(monkeypatch):
     monkeypatch.setattr("modules.answerability.invoke_json", AsyncMock(side_effect=RuntimeError("offline")))

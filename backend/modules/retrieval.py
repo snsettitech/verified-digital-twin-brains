@@ -399,7 +399,7 @@ def _apply_prompt_question_policy(query: str, contexts: List[Dict[str, Any]]) ->
 
     policy = get_grounding_policy(query)
     query_class = str(policy.get("query_class") or "").strip().lower()
-    prioritize_answer_blocks = query_class == "identity" or _query_is_basic_summary(query)
+    prioritize_answer_blocks = query_class in {"identity", "evaluative", "procedural"} or _query_is_basic_summary(query)
 
     adjusted: List[Dict[str, Any]] = []
     for ctx in contexts:

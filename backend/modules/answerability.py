@@ -355,6 +355,10 @@ def _contains_meta_missing_item(item: str) -> bool:
         return True
     if any(pattern in lowered for pattern in _META_MISSING_PATTERNS):
         return True
+    if re.search(r'from\s+"[^"]+"', lowered) and re.search(r'\bor\s+"[^"]+"', lowered):
+        return True
+    if lowered.startswith(("are you asking about ", "do you want this answered from ")):
+        return True
     if re.search(r"\b(all three|all 3|both|either)\b", lowered):
         return True
     return False
@@ -404,14 +408,19 @@ def _derive_section_candidates(
             return
         candidates.append(item)
 
-    for row in evidence_chunks[:8]:
+    answer_rows = [row for row in evidence_chunks[:10] if isinstance(row, dict) and _is_answer_text_chunk(row)]
+    rows_for_sections = answer_rows if answer_rows else [row for row in evidence_chunks[:10] if isinstance(row, dict)]
+
+    for row in rows_for_sections:
         if not isinstance(row, dict):
             continue
         _add(str(row.get("section_title") or ""))
         section_path = str(row.get("section_path") or "")
         if section_path:
             _add(section_path.split("/")[-1])
-        _add(str(row.get("doc_name") or ""))
+        doc_name = str(row.get("doc_name") or "")
+        if _is_answer_text_chunk(row):
+            _add(doc_name)
 
     return candidates[: max(1, limit)]
 
@@ -744,7 +753,12 @@ def build_targeted_clarification_questions(
     limit: int = 3,
 ) -> List[str]:
     evidence_rows = [row for row in (evidence_chunks or []) if isinstance(row, dict)]
-    section_candidates = _derive_section_candidates(evidence_rows, limit=4) if evidence_rows else []
+    has_answer_evidence = any(_is_answer_text_chunk(row) for row in evidence_rows)
+    section_candidates = (
+        _derive_section_candidates(evidence_rows, limit=4)
+        if (evidence_rows and has_answer_evidence)
+        else []
+    )
     has_evidence = bool(evidence_rows)
 
     if _is_identity_intro_query(query):
@@ -774,7 +788,7 @@ def build_targeted_clarification_questions(
                     f'Do you want this answered from "{section_candidates[0]}" '
                     f'focused on {item}?'
                 )
-        elif has_evidence:
+        elif has_evidence and has_answer_evidence:
             focus = item if len(item) <= 84 else f"{item[:81]}..."
             question = f"Within the retrieved document sections, should I focus on {focus}?"
         elif item.endswith("?"):
@@ -802,11 +816,17 @@ def build_targeted_clarification_questions(
                     f'Do you want a summary or recommendation based on "{section_candidates[0]}"?',
                     "Should I keep this grounded strictly to the retrieved section above?",
                 ]
-        elif has_evidence:
+        elif has_evidence and has_answer_evidence:
             default_targets = [
                 "Should I keep the answer strictly within the retrieved document sections?",
                 "Do you want a summary, recommendation, or evaluation from the retrieved evidence?",
                 "Should I focus on one specific section of the retrieved document?",
+            ]
+        elif has_evidence:
+            default_targets = [
+                "Should I retry and focus on non-questionnaire guidance sections in your documents?",
+                "Do you want an evidence-based summary from profile/rubric sections if available?",
+                "Should I answer only from blocks that contain direct guidance rather than interview prompts?",
             ]
         else:
             default_targets = [

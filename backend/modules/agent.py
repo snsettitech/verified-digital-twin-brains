@@ -876,6 +876,12 @@ def _is_evaluative_query(query: str) -> bool:
         "assessment",
         "feedback the way",
         "care about most",
+        "what do you see in",
+        "look for in founders",
+        "founders",
+        "founder",
+        "act like",
+        "digital twin",
     )
     return any(marker in q for marker in markers)
 
@@ -906,7 +912,83 @@ def _is_selection_reply(query: str) -> bool:
         r"^option ?(1|2|3)$",
         r"^the (first|second|third) one$",
     )
-    return any(re.match(pattern, q) for pattern in patterns)
+    if any(re.match(pattern, q) for pattern in patterns):
+        return True
+    return q.startswith("are you asking about ") or q.startswith("do you want this answered from ")
+
+
+def _extract_last_substantive_user_query(messages: List[BaseMessage]) -> str:
+    """
+    Recover the most recent non-clarification user intent.
+    Helps resolve "all three" / clicked-clarifier follow-ups back to the real question.
+    """
+    candidates: List[str] = []
+    for msg in messages or []:
+        if not isinstance(msg, HumanMessage):
+            continue
+        content = re.sub(r"\s+", " ", str(msg.content or "").strip())
+        if content:
+            candidates.append(content)
+
+    if not candidates:
+        return ""
+
+    current = candidates[-1]
+    for prior in reversed(candidates[:-1]):
+        lowered = prior.lower()
+        if len(prior) < 8:
+            continue
+        if _is_selection_reply(prior):
+            continue
+        if lowered.startswith("are you asking about ") or lowered.startswith("do you want this answered from "):
+            continue
+        if lowered.startswith("should i answer from ") or lowered.startswith("should i keep this grounded"):
+            continue
+        return prior
+    return current
+
+
+def _answer_text_quality(context_data: List[Dict[str, Any]]) -> Dict[str, float]:
+    total = len(context_data)
+    if total <= 0:
+        return {"answer_text_ratio": 0.0, "prompt_question_ratio": 0.0}
+
+    answer_count = 0
+    prompt_count = 0
+    for row in context_data:
+        if not isinstance(row, dict):
+            continue
+        block_type = str(row.get("block_type") or row.get("chunk_type") or "").strip().lower()
+        if block_type == "prompt_question":
+            prompt_count += 1
+        raw_answer = row.get("is_answer_text")
+        if isinstance(raw_answer, bool):
+            is_answer = raw_answer
+        elif block_type:
+            is_answer = block_type not in {"prompt_question", "heading"}
+        else:
+            is_answer = True
+        if is_answer:
+            answer_count += 1
+
+    return {
+        "answer_text_ratio": answer_count / float(max(total, 1)),
+        "prompt_question_ratio": prompt_count / float(max(total, 1)),
+    }
+
+
+def _should_retry_low_quality_evidence(context_data: List[Dict[str, Any]], query_class: str) -> bool:
+    if not context_data:
+        return False
+
+    quality = _answer_text_quality(context_data)
+    prompt_ratio = float(quality.get("prompt_question_ratio") or 0.0)
+    answer_ratio = float(quality.get("answer_text_ratio") or 0.0)
+    if prompt_ratio >= 0.5:
+        return True
+    if query_class in {"identity", "procedural", "evaluative"} and answer_ratio < 0.45:
+        return True
+    return False
 
 
 def _clarification_streak(messages: List[BaseMessage]) -> int:
@@ -1121,6 +1203,11 @@ async def planner_node(state: TwinState):
     context_data = [row for row in raw_context if isinstance(row, dict)] if isinstance(raw_context, list) else []
     state_messages = [m for m in (state.get("messages") or []) if isinstance(m, BaseMessage)]
     user_query = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
+    effective_query = user_query
+    if _is_selection_reply(user_query):
+        recovered_query = _extract_last_substantive_user_query(state_messages)
+        if recovered_query:
+            effective_query = recovered_query
     query_class = str(state.get("query_class") or "factual").strip().lower() or "factual"
     quote_intent = bool(state.get("quote_intent"))
     _system_msg, persona_trace = build_system_prompt_with_trace(state)
@@ -1219,7 +1306,7 @@ async def planner_node(state: TwinState):
         }
 
     try:
-        answerability = await evaluate_answerability(user_query, context_data)
+        answerability = await evaluate_answerability(effective_query, context_data)
     except Exception as exc:
         print(f"Planner answerability error: {exc}")
         answerability = {
@@ -1243,16 +1330,18 @@ async def planner_node(state: TwinState):
         user_query=user_query,
         context_data=context_data,
     )
+    low_quality_retry_candidate = _should_retry_low_quality_evidence(context_data, query_class)
     should_second_pass = answerability_state == "insufficient" and (
         (0 < len(context_data) < 3)
         or (query_class == "identity" and 0 < len(context_data) < PLANNER_SECOND_PASS_RETRIEVAL_TOP_K)
         or loop_break_candidate
+        or low_quality_retry_candidate
     )
     if should_second_pass:
         twin_id = str(state.get("twin_id") or "").strip()
         if twin_id:
             second_pass_rows = await _run_second_pass_retrieval(
-                user_query,
+                effective_query,
                 twin_id,
                 group_id=state.get("retrieval_group_id"),
                 resolve_default_group=bool(state.get("resolve_default_group_filtering", True)),
@@ -1267,7 +1356,7 @@ async def planner_node(state: TwinState):
                 valid_source_ids = _collect_valid_source_ids(context_data)
                 second_pass_used = True
                 try:
-                    answerability = await evaluate_answerability(user_query, context_data)
+                    answerability = await evaluate_answerability(effective_query, context_data)
                 except Exception as exc:
                     print(f"Planner second-pass answerability error: {exc}")
                 answerability_state = str(answerability.get("answerability") or "").strip().lower()
@@ -1300,7 +1389,7 @@ async def planner_node(state: TwinState):
     if answerability_state == "insufficient":
         missing_information = answerability.get("missing_information") or []
         clarification_questions = build_targeted_clarification_questions(
-            user_query,
+            effective_query,
             missing_information,
             evidence_chunks=context_data,
             limit=3,
@@ -1351,7 +1440,7 @@ You are a grounded answer composer.
 Use only the provided evidence. Do not use outside knowledge.
 
 USER QUESTION:
-{user_query}
+{effective_query}
 
 ANSWERABILITY JUDGEMENT:
 {json.dumps(answerability, ensure_ascii=True)}
@@ -1386,7 +1475,7 @@ Rules:
     except Exception as exc:
         print(f"Planner composition error: {exc}")
         composed = compose_answer_points(
-            query=user_query,
+            query=effective_query,
             query_class=query_class,
             quote_intent=quote_intent,
             planner_points=[],
@@ -1404,7 +1493,7 @@ Rules:
 
     planner_points = _sanitize_answer_points(plan.get("answer_points"))
     composed = compose_answer_points(
-        query=user_query,
+        query=effective_query,
         query_class=query_class,
         quote_intent=quote_intent,
         planner_points=planner_points,
@@ -1464,6 +1553,7 @@ Rules:
         "reasoning_history": (state.get("reasoning_history") or []) + [
             f"Planner: answerability={answerability_state}, generated grounded answer with citations."
             + (" (after second-pass retrieval)." if second_pass_used else "")
+            + (" (resolved clarification follow-up to prior user question)." if effective_query != user_query else "")
         ],
     }
 @observe(name="realizer_node")

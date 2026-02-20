@@ -508,6 +508,30 @@ class TestPromptQuestionFiltering:
         assert all(bool(row.get("prompt_question_fallback")) for row in filtered)
         assert float(filtered[0]["score"]) < 0.80
 
+    async def test_evaluative_query_excludes_prompt_question_when_answer_text_exists(self):
+        from modules.retrieval import _apply_prompt_question_policy
+
+        contexts = [
+            {
+                "text": "Q: What do you look for in founders?",
+                "score": 0.84,
+                "block_type": "prompt_question",
+                "is_answer_text": False,
+            },
+            {
+                "text": "Decision rubric: prioritize founder clarity, execution discipline, and learning speed.",
+                "score": 0.63,
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            },
+        ]
+
+        filtered = _apply_prompt_question_policy("What do you see in the founders?", contexts)
+
+        assert len(filtered) == 1
+        assert filtered[0]["block_type"] == "answer_text"
+        assert "Decision rubric" in filtered[0]["text"]
+
 
 class TestHybridRetrievalControls:
     """Test sparse fusion, diversity capping, and confidence-floor retry behavior."""

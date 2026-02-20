@@ -56,6 +56,12 @@ _EVALUATIVE_MARKERS = (
     "would this twin",
     "would you invest",
     "would you like",
+    "what do you see in",
+    "look for in founders",
+    "founders",
+    "founder",
+    "act like",
+    "digital twin",
 )
 
 _QUOTE_PATTERNS = (
@@ -146,4 +152,3 @@ def get_grounding_policy(query: str, *, interaction_context: str | None = None) 
         "allow_line_extractor": allow_line_extractor,
         "interaction_context": (interaction_context or "").strip().lower() if interaction_context else None,
     }
-

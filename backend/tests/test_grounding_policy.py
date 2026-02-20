@@ -32,3 +32,9 @@ def test_explicit_source_requests_are_strict():
     policy = get_grounding_policy("Based on my sources, what is my stance on GTM?")
     assert policy["strict_grounding"] is True
     assert policy["requires_evidence"] is True
+
+
+def test_founder_evaluative_query_classification():
+    policy = get_grounding_policy("What do you see in the founders?")
+    assert policy["is_smalltalk"] is False
+    assert policy["query_class"] == "evaluative"

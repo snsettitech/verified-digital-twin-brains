@@ -548,6 +548,88 @@ async def test_planner_identity_insufficient_triggers_second_pass_with_rich_cont
 
 
 @pytest.mark.asyncio
+async def test_planner_prompt_question_dominance_triggers_second_pass_even_when_chunk_count_is_high(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    evaluate_mock = AsyncMock(
+        side_effect=[
+            {
+                "answerability": "insufficient",
+                "confidence": 0.22,
+                "reasoning": "Retrieved chunks are mostly interview prompts.",
+                "missing_information": ["the founder evaluation criteria from guidance sections"],
+                "ambiguity_level": "medium",
+            },
+            {
+                "answerability": "derivable",
+                "confidence": 0.69,
+                "reasoning": "Derivable from rubric + style guidance.",
+                "missing_information": [],
+                "ambiguity_level": "medium",
+            },
+        ]
+    )
+    monkeypatch.setattr("modules.agent.evaluate_answerability", evaluate_mock)
+    second_pass_mock = AsyncMock(
+        return_value=[
+            {
+                "source_id": "kb-a1",
+                "text": "Decision rubric: prioritize founder clarity, execution rigor, and learning velocity.",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "section_title": "Decision rubric",
+            },
+            {
+                "source_id": "kb-a2",
+                "text": "Communication style: direct and practical feedback for founders.",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "section_title": "Communication style rules",
+            },
+        ]
+    )
+    monkeypatch.setattr("modules.agent._run_second_pass_retrieval", second_pass_mock)
+    monkeypatch.setattr("modules.agent.invoke_json", AsyncMock(side_effect=RuntimeError("planner unavailable")))
+
+    state = {
+        "twin_id": "twin-sham",
+        "messages": [HumanMessage(content="What do you see in the founders?")],
+        "dialogue_mode": "QA_FACT",
+        "query_class": "evaluative",
+        "quote_intent": False,
+        "retrieved_context": {
+            "results": [
+                {"source_id": "kb-q1", "text": "Q1: What is your background?", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "kb-q2", "text": "Q2: What do you optimize for?", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "kb-q3", "text": "Q3: How do you decide?", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "kb-q4", "text": "Q4: What are your boundaries?", "block_type": "prompt_question", "is_answer_text": False},
+                {"source_id": "kb-q5", "text": "Q5: How should users engage?", "block_type": "prompt_question", "is_answer_text": False},
+            ]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+        "retrieval_group_id": None,
+        "resolve_default_group_filtering": True,
+    }
+
+    out = await planner_node(state)
+    assert second_pass_mock.await_count == 1
+    assert evaluate_mock.await_count == 2
+    assert out["routing_decision"]["action"] == "answer"
+    assert out["planning_output"]["answerability"]["answerability"] == "derivable"
+
+
+@pytest.mark.asyncio
 async def test_planner_breaks_clarification_loop_on_selection_reply(monkeypatch):
     monkeypatch.setattr(
         "modules.agent.build_system_prompt_with_trace",
@@ -632,4 +714,76 @@ async def test_planner_breaks_clarification_loop_on_selection_reply(monkeypatch)
     out = await planner_node(state)
     assert out["routing_decision"]["action"] == "answer"
     assert out["planning_output"]["answerability"]["answerability"] == "derivable"
+    assert out["planning_output"]["teaching_questions"] == []
+
+
+@pytest.mark.asyncio
+async def test_planner_resolves_clarification_echo_to_previous_user_query(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    seen_queries = []
+
+    async def _fake_eval(query, _chunks):
+        seen_queries.append(query)
+        return {
+            "answerability": "derivable",
+            "confidence": 0.66,
+            "reasoning": "Derivable from founder rubric evidence.",
+            "missing_information": [],
+            "ambiguity_level": "medium",
+        }
+
+    monkeypatch.setattr("modules.agent.evaluate_answerability", AsyncMock(side_effect=_fake_eval))
+    monkeypatch.setattr("modules.agent.invoke_json", AsyncMock(side_effect=RuntimeError("planner unavailable")))
+
+    state = {
+        "twin_id": "twin-sham",
+        "messages": [
+            HumanMessage(content="what do you see in the founders"),
+            AIMessage(
+                content=(
+                    "I don't know based on available sources.\n\n"
+                    "1. Are you asking about personal background from \"mean\" or \"E) > mean\"?\n"
+                    "2. Are you asking about professional experience from \"mean\" or \"E) > mean\"?"
+                )
+            ),
+            HumanMessage(content="Are you asking about personal background from \"mean\" or \"E) > mean\"?"),
+        ],
+        "dialogue_mode": "QA_FACT",
+        "query_class": "evaluative",
+        "quote_intent": False,
+        "retrieved_context": {
+            "results": [
+                {
+                    "source_id": "kb-1",
+                    "text": "Decision rubric: prioritize clarity, velocity, and coachability in founders.",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
+                },
+                {
+                    "source_id": "kb-2",
+                    "text": "Communication style rules: direct, calm, and recommendation-first.",
+                    "block_type": "answer_text",
+                    "is_answer_text": True,
+                },
+            ]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+    }
+
+    out = await planner_node(state)
+    assert seen_queries
+    assert seen_queries[0].lower() == "what do you see in the founders"
+    assert out["routing_decision"]["action"] == "answer"
     assert out["planning_output"]["teaching_questions"] == []
