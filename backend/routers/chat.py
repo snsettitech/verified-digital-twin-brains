@@ -28,6 +28,7 @@ from modules.interaction_context import (
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
+from modules.grounding_policy import get_grounding_policy
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
     persist_response_audit,
@@ -127,45 +128,11 @@ def _avg(values: List[float]) -> float:
 
 
 def _is_quote_intent(query: str) -> bool:
-    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
-    if not q:
-        return False
-    patterns = (
-        r"\bquote\b",
-        r"\bverbatim\b",
-        r"\bexact (line|phrase|text|quote)\b",
-        r"\bonly the exact\b",
-        r"\bshow (me )?the exact\b",
-    )
-    return any(re.search(pattern, q) for pattern in patterns)
+    return bool(get_grounding_policy(query).get("quote_intent"))
 
 
 def _classify_query_class(query: str) -> str:
-    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
-    if not q:
-        return "factual"
-    smalltalk_markers = {
-        "hi",
-        "hello",
-        "hey",
-        "thanks",
-        "thank you",
-        "ok",
-        "okay",
-        "cool",
-        "good morning",
-        "good afternoon",
-        "good evening",
-    }
-    if q in smalltalk_markers:
-        return "smalltalk"
-    if any(marker in q for marker in ("who are you", "tell me about yourself", "introduce yourself", "what do you do")):
-        return "identity"
-    if any(marker in q for marker in ("how to", "how do", "how should", "steps", "workflow", "process")):
-        return "procedural"
-    if any(marker in q for marker in ("should", "recommend", "vs", "versus", "tradeoff", "would this twin like")):
-        return "evaluative"
-    return "factual"
+    return str(get_grounding_policy(query).get("query_class") or "factual")
 
 
 def _summarize_retrieval_stats(contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -240,8 +207,9 @@ def _build_debug_snapshot(
     routing_decision: Optional[Dict[str, Any]],
     contexts: List[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    query_class = _classify_query_class(query)
-    quote_intent = _is_quote_intent(query)
+    policy = get_grounding_policy(query)
+    query_class = str(policy.get("query_class") or "factual")
+    quote_intent = bool(policy.get("quote_intent"))
     answerability_state = _extract_answerability_state(planning_output)
     planner_action = "unknown"
     if isinstance(routing_decision, dict):
@@ -600,81 +568,7 @@ async def _apply_online_eval_policy(
 
 
 def _query_requires_strict_grounding(query: str) -> bool:
-    """
-    Decide whether missing citations should force uncertainty.
-    Keep this strict for owner-specific/source-grounded requests, but allow
-    normal conversation turns (greetings/meta/coaching) to remain fluent.
-    """
-    q = (query or "").strip().lower()
-    if not q:
-        return False
-    q_plain = re.sub(r"[^a-z0-9\s']", "", q).strip()
-
-    conversational_exempt_markers = (
-        "hi",
-        "hello",
-        "hey",
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "how are you",
-        "what's up",
-        "whats up",
-        "who are you",
-        "introduce yourself",
-        "tell me about yourself",
-    )
-    if q in conversational_exempt_markers or q_plain in conversational_exempt_markers:
-        return False
-    if any(marker in q for marker in ("how's your day", "hows your day")):
-        return False
-
-    explicit_source_requests = (
-        "based on my sources",
-        "from my sources",
-        "from my documents",
-        "cite",
-        "citation",
-        "with sources",
-        "according to my",
-    )
-    if any(marker in q for marker in explicit_source_requests):
-        return True
-
-    owner_specific_patterns = [
-        r"\bwhat (do|did) i think\b",
-        r"\bwhat('?s| is) my (stance|view|opinion|belief|thesis|principle)\b",
-        r"\bmy (stance|view|opinion|belief|thesis|principle)\b",
-        r"\bhow do i (approach|decide|evaluate)\b",
-    ]
-    if any(re.search(pattern, q) for pattern in owner_specific_patterns):
-        return True
-
-    # Only escalate to identity-gate fallback when the query explicitly contains
-    # first-person owner references; avoid over-triggering on generic "we should"
-    # product questions that should remain in soft grounding mode.
-    owner_reference_markers = (
-        " my ",
-        " i ",
-        " me ",
-        " mine ",
-        " myself ",
-        " i'm ",
-        " i've ",
-        " i'd ",
-        " i'll ",
-    )
-    padded = f" {q_plain} "
-    if not any(marker in padded for marker in owner_reference_markers):
-        return False
-
-    # Reuse the identity gate classifier as a last-mile signal.
-    try:
-        from modules.identity_gate import classify_query
-
-        return bool(classify_query(query).get("requires_owner"))
-    except Exception:
-        return False
+    return bool(get_grounding_policy(query).get("strict_grounding"))
 
 
 def _should_hard_enforce_grounding(

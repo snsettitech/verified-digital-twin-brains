@@ -26,6 +26,7 @@ from modules.persona_spec_store import get_active_persona_spec
 from modules.inference_router import invoke_json, invoke_text
 from modules.routing_decision import build_routing_decision
 from modules.response_policy import UNCERTAINTY_RESPONSE
+from modules.grounding_policy import get_grounding_policy
 from modules.answerability import (
     build_targeted_clarification_questions,
     evaluate_answerability,
@@ -223,6 +224,8 @@ class TwinState(TypedDict):
     routing_decision: Optional[Dict[str, Any]]
     retrieval_group_id: Optional[str]
     resolve_default_group_filtering: Optional[bool]
+    query_class: Optional[str]
+    quote_intent: Optional[bool]
     
     # Path B / Phase 4 Context
     full_settings: Optional[Dict[str, Any]]
@@ -424,49 +427,13 @@ def _twin_has_groundable_knowledge(twin_id: Optional[str]) -> bool:
 
 
 def _is_identity_intro_query(query: str) -> bool:
-    q = (query or "").strip().lower()
-    if not q:
-        return False
-    markers = (
-        "who are you",
-        "what are you",
-        "introduce yourself",
-        "tell me about yourself",
-        "what can you do",
-    )
-    return any(marker in q for marker in markers)
+    policy = get_grounding_policy(query)
+    return str(policy.get("query_class") or "") == "identity"
 
 
 def _is_smalltalk_query(query: str) -> bool:
-    q = (query or "").strip().lower()
-    if not q:
-        return False
-    q_plain = re.sub(r"[^a-z0-9\s']", "", q)
-    smalltalk_markers = {
-        "hi",
-        "hello",
-        "hey",
-        "yo",
-        "good morning",
-        "good afternoon",
-        "good evening",
-        "thanks",
-        "thank you",
-        "ok",
-        "okay",
-        "cool",
-        "sounds good",
-        "got it",
-        "understood",
-        "how are you",
-        "what's up",
-        "whats up",
-    }
-    return (
-        q in smalltalk_markers
-        or q_plain in smalltalk_markers
-        or any(marker in q for marker in {"how's your day", "hows your day"})
-    )
+    policy = get_grounding_policy(query)
+    return bool(policy.get("is_smalltalk"))
 
 
 def _resolve_twin_pronoun_query(query: str) -> str:
@@ -680,9 +647,10 @@ async def router_node(state: TwinState):
     interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
     twin_id = state.get("twin_id")
     knowledge_available = _twin_has_groundable_knowledge(twin_id)
-    is_smalltalk = _is_smalltalk_query(user_query)
+    query_policy = get_grounding_policy(user_query, interaction_context=interaction_context)
+    is_smalltalk = bool(query_policy.get("is_smalltalk"))
     dialogue_mode = "SMALLTALK" if is_smalltalk else "QA_FACT"
-    requires_evidence = not is_smalltalk
+    requires_evidence = bool(query_policy.get("requires_evidence"))
     resolved_query = _resolve_twin_pronoun_query(user_query) if requires_evidence else ""
     intent_label = classify_query_intent(user_query, dialogue_mode=dialogue_mode)
 
@@ -725,6 +693,8 @@ async def router_node(state: TwinState):
         "router_knowledge_available": knowledge_available,
         "workflow_intent": decision_payload.get("intent") or "answer",
         "routing_decision": decision_payload,
+        "query_class": query_policy.get("query_class"),
+        "quote_intent": bool(query_policy.get("quote_intent")),
         "reasoning_history": (state.get("reasoning_history") or []) + [
             "Router: smalltalk bypass." if is_smalltalk else "Router: evidence-first routing."
         ],
@@ -1666,6 +1636,8 @@ async def run_agent_stream(
         "workflow_intent": "answer",
         "retrieval_group_id": effective_group_id,
         "resolve_default_group_filtering": enforce_group_filtering,
+        "query_class": None,
+        "quote_intent": False,
         "routing_decision": {
             "intent": "answer",
             "confidence": 1.0,
