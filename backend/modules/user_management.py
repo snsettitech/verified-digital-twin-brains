@@ -9,6 +9,35 @@ from datetime import datetime, timedelta
 from modules.observability import supabase
 
 
+def _is_missing_users_column_error(error: Exception, column_name: str) -> bool:
+    text = str(error or "")
+    lowered = text.lower()
+    return "pgrst204" in lowered and column_name.lower() in lowered and "users" in lowered
+
+
+def _safe_users_update_by_id(user_id: str, payload: Dict[str, Any]) -> None:
+    try:
+        supabase.table("users").update(payload).eq("id", user_id).execute()
+    except Exception as exc:
+        if payload.get("full_name") and _is_missing_users_column_error(exc, "full_name"):
+            fallback_payload = dict(payload)
+            fallback_payload.pop("full_name", None)
+            supabase.table("users").update(fallback_payload).eq("id", user_id).execute()
+            return
+        raise
+
+
+def _safe_users_insert(payload: Dict[str, Any]):
+    try:
+        return supabase.table("users").insert(payload).execute()
+    except Exception as exc:
+        if payload.get("full_name") and _is_missing_users_column_error(exc, "full_name"):
+            fallback_payload = dict(payload)
+            fallback_payload.pop("full_name", None)
+            return supabase.table("users").insert(fallback_payload).execute()
+        raise
+
+
 def list_users(tenant_id: str) -> List[Dict[str, Any]]:
     """
     List all users for a tenant with their roles and basic info.
@@ -188,7 +217,7 @@ def accept_invitation(
                 target_id = existing_id
 
         if target_id:
-            supabase.table("users").update(update_payload).eq("id", target_id).execute()
+            _safe_users_update_by_id(target_id, update_payload)
             user_lookup = supabase.table("users").select("*").eq("id", target_id).limit(1).execute()
             user_row = (user_lookup.data or [None])[0]
         else:
@@ -208,7 +237,7 @@ def accept_invitation(
         if full_name:
             user_create_data["full_name"] = full_name
 
-        user_response = supabase.table("users").insert(user_create_data).execute()
+        user_response = _safe_users_insert(user_create_data)
         if not user_response.data:
             raise ValueError("Failed to create user")
         user_row = user_response.data[0]
