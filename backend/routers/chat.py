@@ -68,6 +68,7 @@ ONLINE_EVAL_POLICY_TIMEOUT_SECONDS = float(os.getenv("ONLINE_EVAL_POLICY_TIMEOUT
 ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS = max(0, int(os.getenv("ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS", "80")))
 ONLINE_EVAL_POLICY_STRICT_ONLY = os.getenv("ONLINE_EVAL_POLICY_STRICT_ONLY", "false").lower() == "true"
 ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FALLBACK_POINTS", "3")))
+ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE = float(os.getenv("ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE", "0.2"))
 
 _GROUNDING_STOPWORDS = {
     "a",
@@ -472,12 +473,65 @@ def _build_eval_citation_payload(citations: List[str], contexts: List[Dict[str, 
     return payload
 
 
-def _build_source_faithful_fallback_answer(query: str, contexts: List[Dict[str, Any]]) -> str:
-    if not contexts:
+def _is_answer_text_block(row: Dict[str, Any]) -> bool:
+    if not isinstance(row, dict):
+        return False
+    raw = row.get("is_answer_text")
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        lowered = raw.strip().lower()
+        if lowered in {"true", "1", "yes", "y"}:
+            return True
+        if lowered in {"false", "0", "no", "n"}:
+            return False
+    block_type = str(row.get("block_type") or row.get("chunk_type") or "").strip().lower()
+    if not block_type:
+        return True
+    return block_type not in {"prompt_question", "heading"}
+
+
+def _has_strong_quote_evidence(contexts: List[Dict[str, Any]]) -> bool:
+    rows = [row for row in contexts if isinstance(row, dict)]
+    if not rows:
+        return False
+
+    for row in rows:
+        stats = row.get("retrieval_stats")
+        if isinstance(stats, dict):
+            floor_value = _safe_float(stats.get("confidence_floor_value"))
+            threshold = _safe_float(stats.get("confidence_floor_threshold"))
+            if floor_value is not None:
+                required = threshold if threshold is not None else ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE
+                return float(floor_value) >= float(required)
+
+    max_score = 0.0
+    for row in rows:
+        score = _safe_float(row.get("score"))
+        vector_score = _safe_float(row.get("vector_score"))
+        max_score = max(max_score, float(score or vector_score or 0.0))
+    return max_score >= ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE
+
+
+def _build_source_faithful_fallback_answer(
+    query: str,
+    contexts: List[Dict[str, Any]],
+    *,
+    quote_intent: bool,
+) -> str:
+    if not quote_intent:
+        return ""
+    if not contexts or not _has_strong_quote_evidence(contexts):
         return ""
 
     query_tokens = _grounding_tokens(query)
-    candidate_contexts = contexts[: max(GROUNDING_MAX_CONTEXT_SNIPPETS, ONLINE_EVAL_POLICY_FALLBACK_POINTS * 2)]
+    candidate_contexts = [
+        row
+        for row in contexts[: max(GROUNDING_MAX_CONTEXT_SNIPPETS, ONLINE_EVAL_POLICY_FALLBACK_POINTS * 3)]
+        if isinstance(row, dict) and _is_answer_text_block(row)
+    ]
+    if not candidate_contexts:
+        return ""
 
     def _candidate_lines(text: str, *, min_len: int = 18) -> List[str]:
         rows: List[str] = []
@@ -550,6 +604,8 @@ async def _apply_online_eval_policy(
     trace_id: Optional[str],
     strict_grounding: bool,
     source_faithful: bool,
+    planner_answerability: str,
+    quote_intent: bool,
 ) -> Tuple[str, Dict[str, Any]]:
     policy_result: Dict[str, Any] = {
         "enabled": ONLINE_EVAL_POLICY_ENABLED,
@@ -561,6 +617,12 @@ async def _apply_online_eval_policy(
         "flags": [],
         "action": "none",
     }
+
+    normalized_answerability = str(planner_answerability or "").strip().lower()
+    if normalized_answerability in {"direct", "derivable"} and not quote_intent:
+        policy_result["skipped_reason"] = "no_override_planner_answerable_non_quote"
+        policy_result["action"] = "annotate_only"
+        return response, policy_result
 
     if not ONLINE_EVAL_POLICY_ENABLED:
         policy_result["skipped_reason"] = "disabled"
@@ -611,7 +673,11 @@ async def _apply_online_eval_policy(
         )
         low_quality = bool(eval_result.needs_review or below_threshold)
         if low_quality and not source_faithful:
-            fallback_answer = _build_source_faithful_fallback_answer(query, contexts)
+            fallback_answer = _build_source_faithful_fallback_answer(
+                query,
+                contexts,
+                quote_intent=quote_intent,
+            )
             if fallback_answer:
                 policy_result["action"] = "fallback_source_faithful"
                 return fallback_answer, policy_result
@@ -1611,6 +1677,10 @@ async def chat(
                 trace_id=trace_id or conversation_id,
                 strict_grounding=grounding_enforced,
                 source_faithful=source_faithful,
+                planner_answerability=_extract_answerability_state(
+                    planning_output if isinstance(planning_output, dict) else {}
+                ),
+                quote_intent=_is_quote_intent(query),
             )
             if online_eval_result.get("action") == "fallback_uncertainty":
                 confidence_score = min(confidence_score, 0.2)
@@ -2159,6 +2229,10 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             trace_id=_resolve_trace_id(conversation_id or session_id),
             strict_grounding=strict_grounding,
             source_faithful=source_faithful,
+            planner_answerability=_extract_answerability_state(
+                planning_output if isinstance(planning_output, dict) else {}
+            ),
+            quote_intent=_is_quote_intent(query),
         )
         if online_eval_result.get("action") == "fallback_uncertainty":
             confidence_score = min(confidence_score, 0.2)
@@ -2567,6 +2641,10 @@ async def public_chat_endpoint(
                 trace_id=trace_id,
                 strict_grounding=strict_grounding,
                 source_faithful=source_faithful,
+                planner_answerability=_extract_answerability_state(
+                    planning_output if isinstance(planning_output, dict) else {}
+                ),
+                quote_intent=_is_quote_intent(request.message),
             )
             if online_eval_result.get("action") == "fallback_uncertainty":
                 confidence_score = min(confidence_score, 0.2)

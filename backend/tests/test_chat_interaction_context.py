@@ -832,23 +832,31 @@ async def test_online_eval_policy_low_score_falls_back_to_source_faithful(monkey
     )
 
     rewritten, policy = await chat_router._apply_online_eval_policy(
-        query="Should we use containers or serverless for our MVP?",
+        query="Quote the recommendation for containers vs serverless for our MVP.",
         response="Use what feels right for now.",
         fallback_message="I don't know.",
         contexts=[
             {
                 "source_id": "src-1",
                 "text": "Recommendation: Start with containers on a managed platform for predictable deployments.",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "score": 0.81,
             },
             {
                 "source_id": "src-1",
                 "text": "Why: Serverless cold starts and timeout debugging can slow MVP iteration.",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "score": 0.79,
             },
         ],
         citations=["src-1"],
         trace_id="trace-1",
         strict_grounding=False,
         source_faithful=False,
+        planner_answerability="insufficient",
+        quote_intent=True,
     )
 
     assert policy["ran"] is True
@@ -857,6 +865,102 @@ async def test_online_eval_policy_low_score_falls_back_to_source_faithful(monkey
     assert "containers" in rewritten.lower()
     assert "serverless" in rewritten.lower()
     assert "source=src-1" in (captured.get("context") or "")
+
+
+@pytest.mark.asyncio
+async def test_online_eval_policy_does_not_override_non_quote_answerable(monkeypatch):
+    import routers.chat as chat_router
+
+    class _FakeEvalResult:
+        def __init__(self):
+            self.trace_id = "trace-2"
+            self.overall_score = 0.11
+            self.needs_review = True
+            self.flags = ["low_faithfulness"]
+
+    class _FakePipeline:
+        async def evaluate_response(self, **_kwargs):
+            return _FakeEvalResult()
+
+    monkeypatch.setattr(chat_router, "ONLINE_EVAL_POLICY_ENABLED", True)
+    monkeypatch.setattr(chat_router, "ONLINE_EVAL_POLICY_MIN_OVERALL_SCORE", 0.72)
+    monkeypatch.setattr(chat_router, "ONLINE_EVAL_POLICY_STRICT_ONLY", False)
+    monkeypatch.setattr(chat_router, "_online_eval_capable", lambda: True)
+    monkeypatch.setattr(
+        "modules.evaluation_pipeline.get_evaluation_pipeline",
+        lambda threshold=0.7: _FakePipeline(),
+    )
+
+    response = "Use containers first for predictable deployment and debugging."
+    rewritten, policy = await chat_router._apply_online_eval_policy(
+        query="Should we use containers or serverless for our MVP?",
+        response=response,
+        fallback_message="I don't know.",
+        contexts=[
+            {
+                "source_id": "src-2",
+                "text": "Recommendation: Start with containers on a managed platform for predictable deployments.",
+                "block_type": "answer_text",
+                "is_answer_text": True,
+            }
+        ],
+        citations=["src-2"],
+        trace_id="trace-2",
+        strict_grounding=False,
+        source_faithful=False,
+        planner_answerability="derivable",
+        quote_intent=False,
+    )
+
+    assert rewritten == response
+    assert policy["action"] == "annotate_only"
+    assert policy["skipped_reason"] == "no_override_planner_answerable_non_quote"
+
+
+def test_source_faithful_fallback_requires_quote_and_answer_text_blocks():
+    import routers.chat as chat_router
+
+    prompt_only = [
+        {
+            "source_id": "src-prompt",
+            "text": "1) Who are you (short bio used in the twin)",
+            "score": 0.92,
+            "block_type": "prompt_question",
+            "is_answer_text": False,
+        }
+    ]
+    assert (
+        chat_router._build_source_faithful_fallback_answer(
+            "Quote your bio",
+            prompt_only,
+            quote_intent=True,
+        )
+        == ""
+    )
+
+    answer_rows = [
+        {
+            "source_id": "src-ans",
+            "text": "I am a pragmatic operator focused on fast decisions.",
+            "score": 0.82,
+            "block_type": "answer_text",
+            "is_answer_text": True,
+        }
+    ]
+    assert (
+        chat_router._build_source_faithful_fallback_answer(
+            "Tell me about yourself",
+            answer_rows,
+            quote_intent=False,
+        )
+        == ""
+    )
+    extracted = chat_router._build_source_faithful_fallback_answer(
+        "Quote your bio",
+        answer_rows,
+        quote_intent=True,
+    )
+    assert "pragmatic operator" in extracted.lower()
 
 
 def test_owner_chat_async_eval_uses_retrieved_chunk_text_context():
