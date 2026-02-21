@@ -25,14 +25,18 @@ export function StepIngestionProgress({ twinId, onComplete }: StepIngestionProgr
     const fetchStatus = async () => {
       try {
         // Fetch the latest job for this twin
-        const response = await fetch(`/api/twins/${twinId}/link-compile-job`);
+        const response = await fetch(`/api/persona/link-compile/twins/${twinId}/job`);
         if (!response.ok) return;
         
         const data = await response.json();
         setJobStatus(data);
 
-        // Check if complete
-        if (data.status === 'completed' || data.status === 'claims_ready') {
+        // Map job status to twin status and check if complete
+        const isComplete = data.status === 'completed' || 
+                           data.status === 'claims_ready' ||
+                           data.extracted_claims > 0;
+        
+        if (isComplete) {
           if (pollInterval) {
             clearInterval(pollInterval);
             setPollInterval(null);

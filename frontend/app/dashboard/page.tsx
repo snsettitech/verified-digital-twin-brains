@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useTwin } from '@/lib/context/TwinContext';
+import { useTwin, Twin, getOnboardingResumeUrl } from '@/lib/context/TwinContext';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 import { EmptyState, EmptyTwinNoActivity } from '@/components/ui/EmptyState';
 import { API_BASE_URL, API_ENDPOINTS } from '@/lib/constants';
@@ -49,7 +49,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   // Use TwinContext as single source of truth for active twin
-  const { activeTwin, isLoading: twinsLoading } = useTwin();
+  const { activeTwin, twins, isLoading: twinsLoading } = useTwin();
+
+  // Filter non-active twins for "Continue Setup" section
+  const nonActiveTwins = twins.filter(t => t.status && t.status !== 'active');
 
   // Modal states
   const [showConversationsModal, setShowConversationsModal] = useState(false);
@@ -185,6 +188,37 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Non-Active Twins - Continue Setup */}
+      {nonActiveTwins.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+          <h2 className="text-lg font-bold text-amber-900 mb-4 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            Continue Setup ({nonActiveTwins.length})
+          </h2>
+          <div className="space-y-3">
+            {nonActiveTwins.map((twin) => (
+              <div 
+                key={twin.id}
+                className="flex items-center justify-between bg-white rounded-xl p-4 border border-amber-100"
+              >
+                <div>
+                  <p className="font-semibold text-slate-900">{twin.name}</p>
+                  <p className="text-sm text-slate-500 capitalize">
+                    Status: {twin.status?.replace('_', ' ') || 'Draft'}
+                  </p>
+                </div>
+                <Link 
+                  href={getOnboardingResumeUrl(twin.id)}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  Continue Setup →
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards - CLICKABLE */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

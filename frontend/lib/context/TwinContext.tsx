@@ -8,12 +8,15 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 // Types
 // ============================================================================
 
+export type TwinStatus = 'draft' | 'ingesting' | 'claims_ready' | 'clarification_pending' | 'persona_built' | 'active';
+
 export interface Twin {
     id: string;
     name: string;
     owner_id: string;
     tenant_id: string;
     specialization: string;
+    status: TwinStatus;
     is_active: boolean;
     settings?: Record<string, unknown>;
     system_instructions?: string;
@@ -741,4 +744,28 @@ export function useActiveTwin(): Twin | null {
 export function useUser(): UserProfile | null {
     const { user } = useTwin();
     return user;
+}
+
+/**
+ * Check if a twin can be chatted with (status === 'active')
+ */
+export function useCanChat(twin?: Twin | null): boolean {
+    const { activeTwin } = useTwin();
+    const targetTwin = twin || activeTwin;
+    return targetTwin?.status === 'active' || targetTwin?.is_active === true;
+}
+
+/**
+ * Get the onboarding resume URL for a non-active twin
+ */
+export function getOnboardingResumeUrl(twinId: string): string {
+    return `/onboarding?twinId=${encodeURIComponent(twinId)}`;
+}
+
+/**
+ * Check if twin is in link-first mode (status !== 'active' and has link_first_urls in settings)
+ */
+export function isLinkFirstTwin(twin: Twin | null): boolean {
+    if (!twin) return false;
+    return twin.status !== 'active' && !!twin.settings?.link_first_urls;
 }

@@ -437,6 +437,204 @@ async def get_claims(
 
 
 # =============================================================================
+# Twin Job Status (for polling)
+# =============================================================================
+
+@router.get("/persona/link-compile/twins/{twin_id}/job")
+async def get_twin_link_compile_job(
+    twin_id: str,
+    user=Depends(get_current_user),
+):
+    """
+    Get the latest link-compile job for a twin.
+    Used by frontend for polling during ingestion.
+    """
+    result = (
+        supabase.table("link_compile_jobs")
+        .select("*")
+        .eq("twin_id", twin_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    
+    if not result.data:
+        raise HTTPException(404, "No job found for this twin")
+    
+    job = result.data[0]
+    
+    # Also get claim count
+    claims_result = (
+        supabase.table("persona_claims")
+        .select("id", count="exact")
+        .eq("twin_id", twin_id)
+        .execute()
+    )
+    
+    return {
+        "job_id": job["id"],
+        "status": job["status"],
+        "mode": job["mode"],
+        "total_sources": job.get("total_sources", 0),
+        "processed_sources": job.get("processed_sources", 0),
+        "extracted_claims": job.get("extracted_claims") or len(claims_result.data or []),
+        "error_message": job.get("error_message"),
+        "created_at": job["created_at"],
+        "updated_at": job.get("updated_at"),
+    }
+
+
+# =============================================================================
+# State Transition Endpoints
+# =============================================================================
+
+@router.post("/twins/{twin_id}/transition/clarification-pending")
+async def transition_to_clarification_pending(
+    twin_id: str,
+    user=Depends(get_current_user),
+):
+    """
+    Transition twin from 'claims_ready' to 'clarification_pending'.
+    Called after user reviews and approves claims.
+    """
+    from modules.auth_guard import verify_twin_ownership
+    verify_twin_ownership(twin_id, user)
+    
+    # Update twin status
+    result = (
+        supabase.table("twins")
+        .update({"status": "clarification_pending", "updated_at": datetime.utcnow().isoformat()})
+        .eq("id", twin_id)
+        .execute()
+    )
+    
+    if not result.data:
+        raise HTTPException(404, "Twin not found")
+    
+    # Log transition
+    AuditLogger.log(
+        event_type="twin_status_transition",
+        twin_id=twin_id,
+        details={"from_status": "claims_ready", "to_status": "clarification_pending"},
+    )
+    
+    return {"twin_id": twin_id, "status": "clarification_pending"}
+
+
+@router.post("/twins/{twin_id}/transition/persona-built")
+async def transition_to_persona_built(
+    twin_id: str,
+    user=Depends(get_current_user),
+):
+    """
+    Transition twin from 'clarification_pending' to 'persona_built'.
+    Called after user completes clarification questions.
+    """
+    from modules.auth_guard import verify_twin_ownership
+    verify_twin_ownership(twin_id, user)
+    
+    # Update twin status
+    result = (
+        supabase.table("twins")
+        .update({"status": "persona_built", "updated_at": datetime.utcnow().isoformat()})
+        .eq("id", twin_id)
+        .execute()
+    )
+    
+    if not result.data:
+        raise HTTPException(404, "Twin not found")
+    
+    # Log transition
+    AuditLogger.log(
+        event_type="twin_status_transition",
+        twin_id=twin_id,
+        details={"from_status": "clarification_pending", "to_status": "persona_built"},
+    )
+    
+    return {"twin_id": twin_id, "status": "persona_built"}
+
+
+@router.post("/twins/{twin_id}/activate")
+async def activate_twin(
+    twin_id: str,
+    final_name: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    """
+    Activate a link-first twin by setting status to 'active'.
+    Creates the active persona spec from compiled data.
+    """
+    from modules.auth_guard import verify_twin_ownership
+    from modules.persona_spec_store_v2 import create_persona_spec_v2
+    verify_twin_ownership(twin_id, user)
+    
+    # Get twin data
+    twin_result = supabase.table("twins").select("*").eq("id", twin_id).single().execute()
+    if not twin_result.data:
+        raise HTTPException(404, "Twin not found")
+    
+    twin = twin_result.data
+    
+    # Get the latest job with persona spec
+    job_result = (
+        supabase.table("link_compile_jobs")
+        .select("*")
+        .eq("twin_id", twin_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    
+    if not job_result.data:
+        raise HTTPException(400, "No link-compile job found for this twin")
+    
+    job = job_result.data[0]
+    persona_spec = job.get("result_persona_spec")
+    
+    if not persona_spec:
+        raise HTTPException(400, "Persona spec not yet compiled. Wait for job to complete.")
+    
+    # Update twin name if provided
+    update_data = {"status": "active", "updated_at": datetime.utcnow().isoformat()}
+    if final_name:
+        update_data["name"] = final_name
+    
+    result = supabase.table("twins").update(update_data).eq("id", twin_id).execute()
+    
+    # Create active persona spec
+    try:
+        persona_record = create_persona_spec_v2(
+            twin_id=twin_id,
+            tenant_id=twin.get("tenant_id"),
+            created_by=user.get("user_id"),
+            spec=persona_spec,
+            status="active",
+            source="link-compile",
+            metadata={
+                "compiled_from_job": job["id"],
+                "activation_time": datetime.utcnow().isoformat(),
+            }
+        )
+    except Exception as e:
+        print(f"[Activate] Warning: Failed to create persona spec: {e}")
+        persona_record = None
+    
+    # Log activation
+    AuditLogger.log(
+        event_type="twin_activated",
+        twin_id=twin_id,
+        details={"mode": "link_first", "final_name": final_name},
+    )
+    
+    return {
+        "twin_id": twin_id,
+        "status": "active",
+        "name": final_name or twin.get("name"),
+        "persona_spec_id": persona_record.get("id") if persona_record else None,
+    }
+
+
+# =============================================================================
 # Validation Endpoints
 # =============================================================================
 
