@@ -635,6 +635,87 @@ async def activate_twin(
 
 
 # =============================================================================
+# Link Suggestion (Deep Search)
+# =============================================================================
+
+class LinkSuggestionResponse(BaseModel):
+    """Response for link suggestion endpoint."""
+    candidates: list
+    search_query: str
+    total_found: int
+
+
+@router.get("/persona/link-compile/suggest")
+async def suggest_links(
+    name: str,
+    location: Optional[str] = None,
+    role: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    """
+    Search for public links matching a person's identity.
+    
+    Returns ranked candidates with confidence scores and match signals.
+    User must explicitly confirm which links are actually them.
+    """
+    from modules.robots_checker import check_url_fetchable
+    
+    # Build search query
+    search_terms = [name]
+    if location:
+        search_terms.append(location)
+    if role:
+        search_terms.append(role)
+    
+    search_query = " ".join(search_terms)
+    
+    # TODO: Integrate with actual search API (Serper, Google Custom Search, etc.)
+    # For now, return mock candidates that demonstrate the UX
+    mock_candidates = [
+        {
+            "id": "cand_1",
+            "url": f"https://linkedin.com/in/{name.lower().replace(' ', '-')}",
+            "title": f"{name} - Professional Profile",
+            "snippet": f"View {name}'s professional profile on LinkedIn. {role or ''}",
+            "favicon": "https://linkedin.com/favicon.ico",
+            "confidence": "high",
+            "match_signals": ["Exact name match", "Professional profile"],
+        },
+        {
+            "id": "cand_2", 
+            "url": f"https://twitter.com/{name.lower().replace(' ', '')}",
+            "title": f"{name} (@{name.lower().replace(' ', '')}) / X",
+            "snippet": f"Follow {name} on X. {location or ''}",
+            "favicon": "https://x.com/favicon.ico",
+            "confidence": "medium",
+            "match_signals": ["Name match", "Location match"],
+        },
+        {
+            "id": "cand_3",
+            "url": f"https://github.com/{name.lower().replace(' ', '-')}",
+            "title": f"{name} · GitHub",
+            "snippet": f"{name} has 42 repositories available. Follow their code on GitHub.",
+            "favicon": "https://github.com/favicon.ico",
+            "confidence": "medium",
+            "match_signals": ["Name match"],
+        },
+    ]
+    
+    # Validate which URLs can actually be fetched
+    valid_candidates = []
+    for cand in mock_candidates:
+        validation = await check_url_fetchable(cand["url"])
+        if validation["allowed"]:
+            valid_candidates.append(cand)
+    
+    return LinkSuggestionResponse(
+        candidates=valid_candidates,
+        search_query=search_query,
+        total_found=len(valid_candidates),
+    )
+
+
+# =============================================================================
 # Validation Endpoints
 # =============================================================================
 
