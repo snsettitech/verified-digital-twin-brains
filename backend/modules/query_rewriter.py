@@ -33,7 +33,16 @@ except ImportError:
 
 # Configuration
 QUERY_REWRITING_ENABLED = os.getenv("QUERY_REWRITING_ENABLED", "false").lower() == "true"
-QUERY_REWRITING_MODEL = os.getenv("QUERY_REWRITING_MODEL", "gpt-4o-mini")
+
+# LLM Model Selection - Using Latest OpenAI Models
+# Available options (latest to older):
+#   - "gpt-4o"          : Latest flagship (best quality, ~2x cost of mini)
+#   - "gpt-4o-mini"     : Fast & cost-effective (recommended for production)
+#   - "o1-preview"      : Reasoning model (slower, overkill for query rewriting)
+#   - "o1-mini"         : Faster reasoning (still slower than 4o)
+# Note: GPT-5 has not been released yet (as of Feb 2026)
+QUERY_REWRITING_MODEL = os.getenv("QUERY_REWRITING_MODEL", "gpt-4o")
+
 QUERY_REWRITING_MAX_HISTORY = int(os.getenv("QUERY_REWRITING_MAX_HISTORY", "5"))
 QUERY_REWRITING_MIN_CONFIDENCE = float(os.getenv("QUERY_REWRITING_MIN_CONFIDENCE", "0.7"))
 QUERY_REWRITING_TIMEOUT = float(os.getenv("QUERY_REWRITING_TIMEOUT", "3.0"))

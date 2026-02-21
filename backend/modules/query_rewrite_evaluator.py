@@ -237,7 +237,7 @@ Provide ONLY a JSON response:
             
             def _call():
                 return client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model="gpt-4o",  # Using latest model for evaluation
                     messages=[
                         {"role": "system", "content": "You are an expert evaluator of query rewriting systems."},
                         {"role": "user", "content": prompt}

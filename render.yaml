@@ -78,8 +78,9 @@ services:
       # Query Rewriting for Conversational Context
       - key: QUERY_REWRITING_ENABLED
         value: "false"  # Set to "true" after testing
+      # LLM Model Selection (Latest: gpt-4o, Cost-effective: gpt-4o-mini)
       - key: QUERY_REWRITING_MODEL
-        value: "gpt-4o-mini"
+        value: "gpt-4o"  # Latest OpenAI model (gpt-4o, gpt-4o-mini, o1-preview, o1-mini)
       - key: QUERY_REWRITING_MAX_HISTORY
         value: "5"
       - key: QUERY_REWRITING_MIN_CONFIDENCE
@@ -155,7 +156,7 @@ services:
       - key: QUERY_REWRITING_ENABLED
         value: "false"
       - key: QUERY_REWRITING_MODEL
-        value: "gpt-4o-mini"
+        value: "gpt-4o"  # Latest OpenAI model
       - key: QUERY_REWRITING_MAX_HISTORY
         value: "5"
       - key: QUERY_REWRITING_MIN_CONFIDENCE
