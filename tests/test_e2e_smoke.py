@@ -13,6 +13,20 @@ from typing import Dict, Optional
 API_URL = os.getenv("API_URL", "http://localhost:8000")
 TEST_TOKEN = os.getenv("TEST_TOKEN", "")
 
+
+def _backend_is_reachable() -> bool:
+    try:
+        response = requests.get(f"{API_URL}/health", timeout=2)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _backend_is_reachable(),
+    reason=f"Backend not reachable at {API_URL}; start server or set API_URL",
+)
+
 @pytest.fixture
 def api_headers() -> Dict[str, str]:
     """Create headers with auth token"""

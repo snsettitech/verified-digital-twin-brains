@@ -75,6 +75,22 @@ services:
         value: "0.75"
       - key: RERANK_CACHE_ENABLED
         value: "true"
+      # Query Rewriting for Conversational Context
+      - key: QUERY_REWRITING_ENABLED
+        value: "false"  # Set to "true" after testing
+      - key: QUERY_REWRITING_MODEL
+        value: "gpt-4o-mini"
+      - key: QUERY_REWRITING_MAX_HISTORY
+        value: "5"
+      - key: QUERY_REWRITING_MIN_CONFIDENCE
+        value: "0.7"
+      - key: QUERY_REWRITING_TIMEOUT
+        value: "3.0"
+      # A/B Testing for Query Rewriting
+      - key: QUERY_REWRITE_AB_TEST_ENABLED
+        value: "false"
+      - key: QUERY_REWRITE_ROLLOUT_PERCENT
+        value: "0"  # Gradually increase: 10, 25, 50, 100
 
     # Ephemeral disk for temp files
     disk:
@@ -135,3 +151,12 @@ services:
         value: "true"
       - key: ENABLE_FLASHRANK
         value: "true"
+      # Query Rewriting for Conversational Context
+      - key: QUERY_REWRITING_ENABLED
+        value: "false"
+      - key: QUERY_REWRITING_MODEL
+        value: "gpt-4o-mini"
+      - key: QUERY_REWRITING_MAX_HISTORY
+        value: "5"
+      - key: QUERY_REWRITING_MIN_CONFIDENCE
+        value: "0.7"

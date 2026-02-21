@@ -40,6 +40,13 @@ from modules.deepagents_router import (
 from modules.deepagents_executor import execute_deepagents_plan
 from modules.mem0_client import get_memory_provider
 
+# Query Rewriting for conversational context
+from modules.query_rewriter import (
+    ConversationalQueryRewriter,
+    QueryRewriteResult,
+    QUERY_REWRITING_ENABLED,
+)
+
 # Try to import checkpointer (optional - P1-A)
 try:
     from langgraph.checkpoint.postgres import PostgresSaver
@@ -607,6 +614,105 @@ def _is_entity_probe_query(query: str) -> bool:
     return any(re.search(p, q) for p in patterns)
 
 
+def _extract_conversation_history(
+    messages: List[BaseMessage],
+    max_turns: int = 5,
+) -> List[Dict[str, str]]:
+    """
+    Extract conversation history from LangChain messages for query rewriting.
+    
+    Args:
+        messages: List of LangChain messages (HumanMessage, AIMessage)
+        max_turns: Maximum number of conversation turns to include
+        
+    Returns:
+        List of {role, content} dicts suitable for query rewriter
+    """
+    history = []
+    
+    # Work backwards to get most recent turns
+    user_assistant_pairs = []
+    temp_pair = {}
+    
+    for msg in reversed(messages[:-1]):  # Exclude current query (last message)
+        if isinstance(msg, HumanMessage):
+            temp_pair["user"] = msg.content
+            if "assistant" in temp_pair:
+                user_assistant_pairs.append({
+                    "user": temp_pair["user"],
+                    "assistant": temp_pair["assistant"]
+                })
+                temp_pair = {}
+                if len(user_assistant_pairs) >= max_turns:
+                    break
+        elif isinstance(msg, AIMessage):
+            temp_pair["assistant"] = msg.content
+    
+    # Reverse to get chronological order
+    for pair in reversed(user_assistant_pairs):
+        history.append({"role": "user", "content": pair["user"]})
+        history.append({"role": "assistant", "content": pair["assistant"]})
+    
+    return history
+
+
+async def _rewrite_query_with_context(
+    user_query: str,
+    messages: List[BaseMessage],
+    twin_id: Optional[str],
+) -> Tuple[str, Optional[QueryRewriteResult]]:
+    """
+    Rewrite conversational query using conversation history.
+    
+    Args:
+        user_query: Current user query
+        messages: Full conversation history
+        twin_id: Twin ID for context
+        
+    Returns:
+        Tuple of (effective_query, rewrite_result)
+    """
+    if not QUERY_REWRITING_ENABLED:
+        return user_query, None
+    
+    try:
+        # Extract conversation history (last N turns)
+        conversation_history = _extract_conversation_history(messages, max_turns=5)
+        
+        # Skip rewriting if no history or first message
+        if not conversation_history:
+            return user_query, None
+        
+        # Initialize rewriter
+        rewriter = ConversationalQueryRewriter()
+        
+        # Get twin context if available
+        twin_context = None
+        if twin_id:
+            twin_context = {"twin_id": twin_id}
+        
+        # Perform rewrite
+        rewrite_result = await rewriter.rewrite(
+            current_query=user_query,
+            conversation_history=conversation_history,
+            twin_context=twin_context,
+        )
+        
+        # Use rewritten query if confident
+        if rewrite_result.rewrite_applied and rewrite_result.rewrite_confidence >= 0.7:
+            print(f"[QueryRewrite] '{user_query}' -> '{rewrite_result.standalone_query}' "
+                  f"(intent: {rewrite_result.intent}, conf: {rewrite_result.rewrite_confidence:.2f})")
+            return rewrite_result.standalone_query, rewrite_result
+        else:
+            print(f"[QueryRewrite] Skipped rewrite for '{user_query}' "
+                  f"(applied: {rewrite_result.rewrite_applied}, conf: {rewrite_result.rewrite_confidence:.2f})")
+            return user_query, rewrite_result
+            
+    except Exception as e:
+        print(f"[QueryRewrite] Error rewriting query: {e}")
+        return user_query, None
+
+
 def _log_router_observation(
     *,
     mode: str,
@@ -655,6 +761,7 @@ async def router_node(state: TwinState):
     Generalized router for document reasoning:
     - Gate 0: bypass greetings/acknowledgements as smalltalk.
     - Gate 1: resolve second-person pronouns to twin persona semantics.
+    - Gate 2: rewrite conversational queries using conversation history.
     - Non-smalltalk turns use retrieval + answerability evaluation.
     """
     messages = state["messages"]
@@ -662,25 +769,47 @@ async def router_node(state: TwinState):
     interaction_context = (state.get("interaction_context") or "owner_chat").strip().lower()
     twin_id = state.get("twin_id")
     knowledge_available = _twin_has_groundable_knowledge(twin_id)
-    query_policy = get_grounding_policy(user_query, interaction_context=interaction_context)
+    
+    # STEP 1: Conversational Query Rewriting
+    # Transform underspecified queries ("what about that?") into standalone queries
+    effective_query = user_query
+    rewrite_result: Optional[QueryRewriteResult] = None
+    
+    if QUERY_REWRITING_ENABLED and len(messages) > 1:
+        try:
+            effective_query, rewrite_result = await _rewrite_query_with_context(
+                user_query=user_query,
+                messages=messages,
+                twin_id=twin_id,
+            )
+        except Exception as e:
+            print(f"[Router] Query rewriting failed: {e}")
+            effective_query = user_query
+    
+    # STEP 2: Apply grounding policy to effective query
+    query_policy = get_grounding_policy(effective_query, interaction_context=interaction_context)
     is_smalltalk = bool(query_policy.get("is_smalltalk"))
     deepagents_plan = (
-        build_deepagents_plan(user_query, interaction_context=interaction_context)
+        build_deepagents_plan(effective_query, interaction_context=interaction_context)
         if not is_smalltalk
         else {"is_action_or_control": False}
     )
     execution_lane = bool(deepagents_plan.get("is_action_or_control"))
     dialogue_mode = "SMALLTALK" if is_smalltalk else "QA_FACT"
     requires_evidence = bool(query_policy.get("requires_evidence")) and not execution_lane
-    resolved_query = _resolve_twin_pronoun_query(user_query) if requires_evidence else ""
+    
+    # STEP 3: Resolve pronouns (use effective query)
+    resolved_query = _resolve_twin_pronoun_query(effective_query) if requires_evidence else ""
+    
+    # STEP 4: Classify intent (use effective query for better classification)
     intent_label = (
         "action_or_tool_execution"
         if execution_lane
-        else classify_query_intent(user_query, dialogue_mode=dialogue_mode)
+        else classify_query_intent(effective_query, dialogue_mode=dialogue_mode)
     )
 
     routing_decision = build_routing_decision(
-        query=user_query,
+        query=effective_query,
         mode=dialogue_mode,
         intent_label=intent_label,
         interaction_context=interaction_context,
@@ -700,15 +829,42 @@ async def router_node(state: TwinState):
         router_reason = "deepagents_execution_lane: action/tool request bypasses evidence clarify loop."
     else:
         router_reason = "general_rag_router: retrieval required for answerability evaluation."
-    _log_router_observation(
-        mode=dialogue_mode,
-        intent_label=intent_label,
-        requires_evidence=requires_evidence,
-        target_owner_scope=False,
-        interaction_context=interaction_context,
-        knowledge_available=knowledge_available,
-        router_reason=router_reason,
-    )
+    
+    # Build router observation with rewrite info
+    router_metadata = {
+        "router_mode": dialogue_mode,
+        "router_intent_label": intent_label,
+        "router_requires_evidence": bool(requires_evidence),
+        "router_target_owner_scope": False,
+        "router_interaction_context": interaction_context,
+        "router_knowledge_available": bool(knowledge_available),
+        "router_reason": (router_reason or "")[:500],
+    }
+    
+    # Add query rewrite info to metadata if available
+    if rewrite_result:
+        router_metadata["query_rewrite.original"] = user_query
+        router_metadata["query_rewrite.rewritten"] = effective_query
+        router_metadata["query_rewrite.intent"] = rewrite_result.intent
+        router_metadata["query_rewrite.confidence"] = rewrite_result.rewrite_confidence
+        router_metadata["query_rewrite.applied"] = rewrite_result.rewrite_applied
+    
+    try:
+        langfuse_context.update_current_observation(metadata=router_metadata)
+    except Exception:
+        pass
+
+    # Build reasoning history entry
+    reasoning_entry = "Router: "
+    if is_smalltalk:
+        reasoning_entry += "smalltalk bypass."
+    elif execution_lane:
+        reasoning_entry += "deepagents execution lane selected."
+    else:
+        reasoning_entry += "evidence-first routing."
+    
+    if rewrite_result and rewrite_result.rewrite_applied:
+        reasoning_entry += f" Query rewritten ({rewrite_result.intent})."
 
     return {
         "dialogue_mode": dialogue_mode,
@@ -724,15 +880,11 @@ async def router_node(state: TwinState):
         "quote_intent": bool(query_policy.get("quote_intent")),
         "execution_lane": execution_lane,
         "deepagents_plan": deepagents_plan if execution_lane else None,
-        "reasoning_history": (state.get("reasoning_history") or []) + [
-            "Router: smalltalk bypass."
-            if is_smalltalk
-            else (
-                "Router: deepagents execution lane selected."
-                if execution_lane
-                else "Router: evidence-first routing."
-            )
-        ],
+        # Query rewriting metadata
+        "original_query": user_query,
+        "effective_query": effective_query,
+        "query_rewrite_result": rewrite_result.model_dump() if rewrite_result else None,
+        "reasoning_history": (state.get("reasoning_history") or []) + [reasoning_entry],
     }
 
 @observe(name="evidence_gate_node")

@@ -14,12 +14,22 @@ import os
 import re
 import json
 import asyncio
+import hashlib
+import time
 from typing import List, Dict, Any, Optional, Tuple
+from functools import lru_cache
 from pydantic import BaseModel, Field
 from datetime import datetime
 
 from modules.clients import get_openai_client
-from modules.langfuse_sdk import observe
+from modules.langfuse_sdk import observe, langfuse_context
+
+# Try to import metrics collector
+try:
+    from modules.metrics_collector import get_metrics_collector
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
 
 # Configuration
 QUERY_REWRITING_ENABLED = os.getenv("QUERY_REWRITING_ENABLED", "false").lower() == "true"
@@ -27,6 +37,15 @@ QUERY_REWRITING_MODEL = os.getenv("QUERY_REWRITING_MODEL", "gpt-4o-mini")
 QUERY_REWRITING_MAX_HISTORY = int(os.getenv("QUERY_REWRITING_MAX_HISTORY", "5"))
 QUERY_REWRITING_MIN_CONFIDENCE = float(os.getenv("QUERY_REWRITING_MIN_CONFIDENCE", "0.7"))
 QUERY_REWRITING_TIMEOUT = float(os.getenv("QUERY_REWRITING_TIMEOUT", "3.0"))
+
+# Caching Configuration
+QUERY_REWRITE_CACHE_ENABLED = os.getenv("QUERY_REWRITE_CACHE_ENABLED", "true").lower() == "true"
+QUERY_REWRITE_CACHE_SIZE = int(os.getenv("QUERY_REWRITE_CACHE_SIZE", "1000"))
+QUERY_REWRITE_CACHE_TTL_SECONDS = float(os.getenv("QUERY_REWRITE_CACHE_TTL_SECONDS", "300"))  # 5 minutes
+
+# A/B Testing Configuration
+QUERY_REWRITE_AB_TEST_ENABLED = os.getenv("QUERY_REWRITE_AB_TEST_ENABLED", "false").lower() == "true"
+QUERY_REWRITE_ROLLOUT_PERCENT = float(os.getenv("QUERY_REWRITE_ROLLOUT_PERCENT", "0"))  # 0-100
 
 # Common pronouns and references to resolve
 PRONOUN_PATTERNS = {
@@ -67,6 +86,72 @@ class QueryRewriteResult(BaseModel):
     rewrite_confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence score")
     reasoning: str = Field(default="", description="Reasoning for the rewrite")
     latency_ms: float = Field(default=0.0, description="Processing time in milliseconds")
+    from_cache: bool = Field(default=False, description="Whether result was from cache")
+
+
+class QueryRewriteCache:
+    """Simple TTL cache for query rewrites."""
+    
+    def __init__(self, maxsize: int = 1000, ttl_seconds: float = 300):
+        self.maxsize = maxsize
+        self.ttl_seconds = ttl_seconds
+        self._cache: Dict[str, Tuple[QueryRewriteResult, float]] = {}
+    
+    def _make_key(self, query: str, history: List[Dict[str, str]]) -> str:
+        """Create cache key from query and history."""
+        # Normalize for caching
+        history_str = json.dumps(history, sort_keys=True, ensure_ascii=True)
+        key_str = f"{query.lower().strip()}:{history_str}"
+        return hashlib.md5(key_str.encode()).hexdigest()
+    
+    def get(self, query: str, history: List[Dict[str, str]]) -> Optional[QueryRewriteResult]:
+        """Get cached result if not expired."""
+        if not QUERY_REWRITE_CACHE_ENABLED:
+            return None
+        
+        key = self._make_key(query, history)
+        if key in self._cache:
+            result, timestamp = self._cache[key]
+            if time.time() - timestamp < self.ttl_seconds:
+                # Return copy with cache flag
+                cached_result = result.copy()
+                cached_result.from_cache = True
+                return cached_result
+            else:
+                # Expired
+                del self._cache[key]
+        return None
+    
+    def set(self, query: str, history: List[Dict[str, str]], result: QueryRewriteResult):
+        """Cache a result."""
+        if not QUERY_REWRITE_CACHE_ENABLED:
+            return
+        
+        # Evict oldest if at capacity (simple FIFO)
+        if len(self._cache) >= self.maxsize:
+            oldest_key = next(iter(self._cache))
+            del self._cache[oldest_key]
+        
+        key = self._make_key(query, history)
+        self._cache[key] = (result, time.time())
+    
+    def clear(self):
+        """Clear all cached entries."""
+        self._cache.clear()
+    
+    def get_stats(self) -> Dict[str, int]:
+        """Get cache statistics."""
+        return {
+            "size": len(self._cache),
+            "maxsize": self.maxsize,
+        }
+
+
+# Global cache instance
+_query_rewrite_cache = QueryRewriteCache(
+    maxsize=QUERY_REWRITE_CACHE_SIZE,
+    ttl_seconds=QUERY_REWRITE_CACHE_TTL_SECONDS,
+)
 
 
 class ConversationalQueryRewriter:
@@ -117,9 +202,17 @@ class ConversationalQueryRewriter:
         """
         start_time = datetime.utcnow()
         
+        # Check cache first
+        cached = _query_rewrite_cache.get(current_query, conversation_history)
+        if cached:
+            print(f"[QueryRewrite] Cache hit for '{current_query[:50]}...'")
+            cached.latency_ms = 0.0  # Reset latency for cached result
+            self._log_metrics(cached, cached=True)
+            return cached
+        
         # Fast path: standalone queries don't need rewriting
         if self._is_standalone_query(current_query):
-            return QueryRewriteResult(
+            result = QueryRewriteResult(
                 standalone_query=current_query,
                 original_query=current_query,
                 intent="standalone",
@@ -167,7 +260,56 @@ class ConversationalQueryRewriter:
             llm_result.rewrite_applied = False
             llm_result.reasoning += " (confidence too low, using original)"
         
+        # Cache the result
+        if llm_result.rewrite_applied:
+            _query_rewrite_cache.set(current_query, conversation_history, llm_result)
+        
+        # Log metrics
+        self._log_metrics(llm_result, cached=False)
+        
         return llm_result
+    
+    def _log_metrics(self, result: QueryRewriteResult, cached: bool = False):
+        """Log metrics for observability."""
+        try:
+            # Log to Langfuse if available
+            if hasattr(langfuse_context, 'update_current_observation'):
+                langfuse_context.update_current_observation(
+                    metadata={
+                        "query_rewrite.original": result.original_query[:100],
+                        "query_rewrite.rewritten": result.standalone_query[:100],
+                        "query_rewrite.intent": result.intent,
+                        "query_rewrite.confidence": result.rewrite_confidence,
+                        "query_rewrite.applied": result.rewrite_applied,
+                        "query_rewrite.cached": cached,
+                        "query_rewrite.latency_ms": result.latency_ms,
+                    }
+                )
+            
+            # Log to metrics collector if available
+            if METRICS_AVAILABLE:
+                metrics = get_metrics_collector()
+                if metrics:
+                    # Use safe method calls with fallbacks
+                    try:
+                        if hasattr(metrics, 'increment_counter'):
+                            metrics.increment_counter("query_rewrite.total")
+                            if result.rewrite_applied:
+                                metrics.increment_counter("query_rewrite.applied")
+                            if cached:
+                                metrics.increment_counter("query_rewrite.cache_hit")
+                    except Exception:
+                        pass
+                    
+                    try:
+                        if hasattr(metrics, 'record_histogram'):
+                            metrics.record_histogram("query_rewrite.confidence", result.rewrite_confidence)
+                            metrics.record_histogram("query_rewrite.latency_ms", result.latency_ms)
+                    except Exception:
+                        pass
+        except Exception as e:
+            # Don't fail on metrics logging
+            print(f"[QueryRewrite] Metrics logging failed: {e}")
     
     def _is_standalone_query(self, query: str) -> bool:
         """
@@ -562,6 +704,7 @@ async def rewrite_conversational_query(
     current_query: str,
     conversation_history: List[Dict[str, str]],
     twin_context: Optional[Dict[str, Any]] = None,
+    user_id: Optional[str] = None,
 ) -> QueryRewriteResult:
     """
     Convenience function to rewrite a conversational query.
@@ -570,6 +713,7 @@ async def rewrite_conversational_query(
         current_query: Current user query
         conversation_history: List of {role, content} dicts
         twin_context: Optional twin context
+        user_id: Optional user ID for A/B testing assignment
         
     Returns:
         QueryRewriteResult
@@ -582,8 +726,42 @@ async def rewrite_conversational_query(
             reasoning="Query rewriting disabled",
         )
     
+    # A/B Testing: Check if user should get rewritten queries
+    if QUERY_REWRITE_AB_TEST_ENABLED and user_id:
+        # Deterministic assignment based on user_id
+        import hashlib
+        user_hash = int(hashlib.md5(user_id.encode()).hexdigest(), 16)
+        user_bucket = user_hash % 100
+        
+        if user_bucket >= QUERY_REWRITE_ROLLOUT_PERCENT:
+            # User in control group - skip rewriting
+            return QueryRewriteResult(
+                standalone_query=current_query,
+                original_query=current_query,
+                rewrite_applied=False,
+                reasoning=f"A/B test control group (bucket: {user_bucket})",
+            )
+    
     rewriter = ConversationalQueryRewriter()
     return await rewriter.rewrite(current_query, conversation_history, twin_context)
+
+
+def get_query_rewrite_stats() -> Dict[str, Any]:
+    """Get query rewriting statistics."""
+    return {
+        "enabled": QUERY_REWRITING_ENABLED,
+        "cache": _query_rewrite_cache.get_stats(),
+        "ab_test": {
+            "enabled": QUERY_REWRITE_AB_TEST_ENABLED,
+            "rollout_percent": QUERY_REWRITE_ROLLOUT_PERCENT,
+        },
+        "config": {
+            "model": QUERY_REWRITING_MODEL,
+            "max_history": QUERY_REWRITING_MAX_HISTORY,
+            "min_confidence": QUERY_REWRITING_MIN_CONFIDENCE,
+            "timeout": QUERY_REWRITING_TIMEOUT,
+        },
+    }
 
 
 # For testing

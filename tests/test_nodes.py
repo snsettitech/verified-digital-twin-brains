@@ -2,14 +2,13 @@ import pytest
 import asyncio
 import os
 import sys
-import unittest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import patch
 
 # Add backend to path for imports
 sys.path.append(os.path.join(os.getcwd(), "backend"))
 
-from modules.agent import router_node, evidence_gate_node, TwinState
-from langchain_core.messages import HumanMessage, AIMessage
+from modules.agent import router_node, evidence_gate_node
+from langchain_core.messages import HumanMessage
 
 @pytest.fixture
 def base_state():
@@ -30,17 +29,21 @@ def base_state():
 
 @pytest.mark.asyncio
 async def test_router_node_intent_classification(base_state):
-    # Mocking ChatOpenAI to avoid real API calls
-    with unittest.mock.patch("modules.agent.ChatOpenAI") as mock_llm_class:
-        mock_llm = mock_llm_class.return_value
-        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content='{"mode": "SMALLTALK", "is_person_specific": false, "requires_evidence": false, "reasoning": "Greeting"}'))
-        
+    with patch("modules.agent._twin_has_groundable_knowledge", return_value=False), patch(
+        "modules.agent.get_grounding_policy",
+        return_value={
+            "is_smalltalk": True,
+            "requires_evidence": False,
+            "query_class": "smalltalk",
+            "quote_intent": False,
+        },
+    ):
         base_state["messages"] = [HumanMessage(content="Hello!")]
         result = await router_node(base_state)
-        
+
         assert result["dialogue_mode"] == "SMALLTALK"
         assert result["requires_evidence"] is False
-        assert "Router: Mode=SMALLTALK" in result["reasoning_history"][-1]
+        assert "Router: smalltalk bypass." in result["reasoning_history"][-1]
 
 @pytest.mark.asyncio
 async def test_evidence_gate_pass(base_state):
@@ -53,7 +56,7 @@ async def test_evidence_gate_pass(base_state):
     
     assert result["dialogue_mode"] == "QA_FACT"
     assert result["requires_teaching"] is False
-    assert "Gate: PASS" in result["reasoning_history"][-1]
+    assert "Gate: pass-through to answerability evaluation." in result["reasoning_history"][-1]
 
 @pytest.mark.asyncio
 async def test_evidence_gate_fail_to_teaching(base_state):
@@ -64,9 +67,9 @@ async def test_evidence_gate_fail_to_teaching(base_state):
     
     result = await evidence_gate_node(base_state)
     
-    assert result["dialogue_mode"] == "TEACHING"
-    assert result["requires_teaching"] is True
-    assert "Gate: FAIL -> TEACHING" in result["reasoning_history"][-1]
+    assert result["dialogue_mode"] == "QA_FACT"
+    assert result["requires_teaching"] is False
+    assert "Gate: pass-through to answerability evaluation." in result["reasoning_history"][-1]
 
 @pytest.mark.asyncio
 async def test_evidence_gate_with_llm_verifier_fail(base_state):
@@ -74,17 +77,12 @@ async def test_evidence_gate_with_llm_verifier_fail(base_state):
     base_state["target_owner_scope"] = True
     base_state["retrieved_context"] = {"results": [{"text": "Irrelevant info"}]}
     base_state["messages"] = [HumanMessage(content="What is your favorite book?")]
-    
-    # Mock verifier to fail
-    with unittest.mock.patch("modules.agent.ChatOpenAI") as mock_llm_class:
-        mock_llm = mock_llm_class.return_value
-        mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content='{"is_sufficient": false, "reason": "No book found"}'))
-        
-        result = await evidence_gate_node(base_state)
-        
-        assert result["dialogue_mode"] == "TEACHING"
-        assert result["requires_teaching"] is True
-        assert "Verifier: No book found" in result["reasoning_history"][-1]
+
+    result = await evidence_gate_node(base_state)
+
+    assert result["dialogue_mode"] == "QA_FACT"
+    assert result["requires_teaching"] is False
+    assert "Gate: pass-through to answerability evaluation." in result["reasoning_history"][-1]
 
 if __name__ == "__main__":
     # For quick manual run

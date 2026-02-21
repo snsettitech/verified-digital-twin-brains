@@ -6,6 +6,21 @@
 
 ---
 
+## Current Pinecone Runtime Target (2026-02-21)
+
+This document contains historical migration steps for namespace refactoring.
+For current runtime index targeting, use:
+
+```env
+PINECONE_HOST=digitalminds-nrnzovv.svc.aped-4627-b74a.pinecone.io
+PINECONE_INDEX_NAME=digitalminds
+PINECONE_INDEX_MODE=integrated
+PINECONE_TEXT_FIELD=chunk_text
+COHERE_RERANK_MODEL=rerank-v3.5
+```
+
+---
+
 ## Executive Summary
 
 This guide documents the migration from UUID-based namespaces to creator-based namespaces (`creator_{creator_id}_twin_{twin_id}`) following Delphi.ai's architecture pattern.

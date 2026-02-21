@@ -4,7 +4,7 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
 
 ## Core Services
 - **FastAPI**: REST API framework.
-- **Pinecone**: Vector database for knowledge retrieval.
+- **Pinecone**: Vector database for knowledge retrieval (vector + integrated modes).
 - **OpenAI**: Embeddings (`text-embedding-3-large`) and Chat (`gpt-4o`).
 - **Supabase**: PostgreSQL for relational data and Auth.
 
@@ -58,7 +58,10 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    ```env
    OPENAI_API_KEY=...
    PINECONE_API_KEY=...
-   PINECONE_INDEX_NAME=...
+   PINECONE_INDEX_NAME=digitalminds
+   PINECONE_HOST=digitalminds-nrnzovv.svc.aped-4627-b74a.pinecone.io
+   PINECONE_INDEX_MODE=integrated
+   PINECONE_TEXT_FIELD=chunk_text
    SUPABASE_URL=...
    SUPABASE_KEY=...
    JWT_SECRET=...
@@ -66,16 +69,21 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    LANGFUSE_SECRET_KEY=...
    LANGFUSE_HOST=https://cloud.langfuse.com
 
-   # HF embeddings on starter plan (API-backed)
-   EMBEDDING_PROVIDER=huggingface
-   HF_EMBEDDING_BACKEND=inference_api
-   HF_API_TOKEN=...
-
    # Reranking
    ENABLE_FLASHRANK=true
    ENABLE_COHERE_RERANK=true
+   COHERE_RERANK_MODEL=rerank-v3.5
    COHERE_API_KEY=...
    ```
+
+### Pinecone Index Modes
+- `vector` (default): Uses external embeddings and Pinecone `upsert/query`.
+- `integrated`: Uses Pinecone hosted embedding model and `upsert_records/search_records`.
+- Current production target:
+  - `PINECONE_HOST=digitalminds-nrnzovv.svc.aped-4627-b74a.pinecone.io`
+  - `PINECONE_INDEX_NAME=digitalminds`
+  - `PINECONE_INDEX_MODE=integrated`
+  - `PINECONE_TEXT_FIELD=chunk_text`
 
 3. **Run Application**:
    ```bash

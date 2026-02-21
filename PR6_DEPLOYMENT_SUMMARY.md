@@ -144,3 +144,21 @@ Watch for:
 1. Monitor widget usage for 24 hours
 2. Document publish_controls setup for widget users
 3. Consider PR6-B (locked-only memories for identity queries) for next sprint
+
+---
+
+## Operational Update: Pinecone Index Cutover
+
+As of this sprint, runtime configuration has been prepared for the new Pinecone index:
+
+```env
+PINECONE_HOST=digitalminds-nrnzovv.svc.aped-4627-b74a.pinecone.io
+PINECONE_INDEX_NAME=digitalminds
+PINECONE_INDEX_MODE=integrated
+PINECONE_TEXT_FIELD=chunk_text
+COHERE_RERANK_MODEL=rerank-v3.5
+```
+
+Notes:
+- Retrieval/ingestion now support both `vector` and `integrated` modes via adapter.
+- Default code path remains backward-compatible (`vector`) when mode is not set.

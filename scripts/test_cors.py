@@ -11,7 +11,7 @@ import sys
 import requests
 from urllib.parse import urljoin
 
-def test_cors(backend_url: str, origin: str) -> dict:
+def run_cors_check(backend_url: str, origin: str) -> dict:
     """Test CORS for a specific origin."""
     headers = {
         'Origin': origin,
@@ -62,7 +62,7 @@ def main():
         print("-" * 40)
         
         try:
-            result = test_cors(backend_url, origin)
+            result = run_cors_check(backend_url, origin)
             
             print(f"  Preflight: {result['preflight_status']}")
             print(f"  Actual: {result['actual_status']}")

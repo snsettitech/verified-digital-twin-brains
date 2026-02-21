@@ -200,46 +200,48 @@ class TestPineconeQueries:
         mock_index = Mock()
         mock_index.query = Mock(side_effect=asyncio.TimeoutError("Query timed out"))
         
-        with patch('modules.retrieval.get_pinecone_index', return_value=mock_index):
-            with patch('modules.retrieval.get_namespace_candidates_for_twin', return_value=["ns-1"]):
-                result = await _execute_pinecone_queries(
-                    [[0.1, 0.2, 0.3]], "test-twin", timeout=0.1
-                )
-                # Should return empty list on timeout
-                assert result == []
-    
+        with patch.dict('os.environ', {'PINECONE_INDEX_MODE': 'vector'}):
+            with patch('modules.retrieval.get_pinecone_index', return_value=mock_index):
+                with patch('modules.retrieval.get_namespace_candidates_for_twin', return_value=["ns-1"]):
+                    result = await _execute_pinecone_queries(
+                        [[0.1, 0.2, 0.3]], "test-twin", timeout=0.1
+                    )
+                    # Should return empty list on timeout
+                    assert result == []
+
     async def test_execute_pinecone_queries_merges_results(self):
         """Should merge results from multiple namespaces."""
         from modules.retrieval import _execute_pinecone_queries
-        
+
         mock_response = Mock()
         mock_response.matches = [
             Mock(id="doc-1", score=0.9, metadata={"text": "Match 1"}),
             Mock(id="doc-2", score=0.8, metadata={"text": "Match 2"})
         ]
-        
+
         mock_index = Mock()
         mock_index.query = Mock(return_value=mock_response)
-        
-        with patch('modules.retrieval.get_pinecone_index', return_value=mock_index):
-            with patch('modules.retrieval.get_namespace_candidates_for_twin', return_value=["ns-1"]):
-                result = await _execute_pinecone_queries(
-                    [[0.1, 0.2, 0.3]], "test-twin"
-                )
-                
-                assert len(result) > 0
-                # First result is verified query, others are general
-                assert "matches" in result[0]
-                assert mock_index.query.call_count >= 2
-                filters = [call.kwargs.get("filter") for call in mock_index.query.call_args_list]
-                assert any(f == {"twin_id": {"$eq": "test-twin"}} for f in filters)
-                assert any(
-                    isinstance(f, dict)
-                    and "$and" in f
-                    and {"twin_id": {"$eq": "test-twin"}} in f.get("$and", [])
-                    and {"is_verified": {"$eq": True}} in f.get("$and", [])
-                    for f in filters
-                )
+
+        with patch.dict('os.environ', {'PINECONE_INDEX_MODE': 'vector'}):
+            with patch('modules.retrieval.get_pinecone_index', return_value=mock_index):
+                with patch('modules.retrieval.get_namespace_candidates_for_twin', return_value=["ns-1"]):
+                    result = await _execute_pinecone_queries(
+                        [[0.1, 0.2, 0.3]], "test-twin"
+                    )
+
+                    assert len(result) > 0
+                    # First result is verified query, others are general
+                    assert "matches" in result[0]
+                    assert mock_index.query.call_count >= 2
+                    filters = [call.kwargs.get("filter") for call in mock_index.query.call_args_list]
+                    assert any(f == {"twin_id": {"$eq": "test-twin"}} for f in filters)
+                    assert any(
+                        isinstance(f, dict)
+                        and "$and" in f
+                        and {"twin_id": {"$eq": "test-twin"}} in f.get("$and", [])
+                        and {"is_verified": {"$eq": True}} in f.get("$and", [])
+                        for f in filters
+                    )
 
 
 class TestGroupFiltering:
@@ -622,6 +624,7 @@ class TestHybridRetrievalControls:
         monkeypatch.setattr(retrieval, "RETRIEVAL_CONFIDENCE_RETRY_ENABLED", True)
         monkeypatch.setattr(retrieval, "RETRIEVAL_CONFIDENCE_FLOOR", 0.2)
         monkeypatch.setattr(retrieval, "RETRIEVAL_RETRY_TOP_K", 8)
+        monkeypatch.setattr(retrieval, "_cohere_strict_mode", False)
 
         rows = await retrieval.retrieve_context_vectors("startup rubric", "twin-1", top_k=2)
 

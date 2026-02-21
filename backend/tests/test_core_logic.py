@@ -21,7 +21,8 @@ async def test_retrieve_context_structure():
         ]
     }
     
-    with patch("modules.retrieval.get_pinecone_index", return_value=mock_index), \
+    with patch.dict("os.environ", {"PINECONE_INDEX_MODE": "vector"}), \
+         patch("modules.retrieval.get_pinecone_index", return_value=mock_index), \
          patch("modules.retrieval.get_embedding", return_value=[0.1]*3072), \
          patch("modules.retrieval.expand_query", return_value=["query var"]), \
          patch("modules.retrieval.generate_hyde_answer", return_value="hyde answer"), \
