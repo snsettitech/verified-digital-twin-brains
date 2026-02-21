@@ -2,12 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Brain, Lightbulb, Plus, Trash2 } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 interface MemoryAnchor {
   id: string;
@@ -66,23 +61,19 @@ export function Step5Memory({ data, onChange }: Step5Props) {
     {
       id: 'experiences' as const,
       label: 'Key Experiences',
-      icon: Brain,
+      icon: '🧠',
       description: 'Significant experiences that shaped your perspective',
     },
     {
       id: 'lessons' as const,
       label: 'Lessons Learned',
-      icon: Lightbulb,
+      icon: '💡',
       description: 'Principles and insights from your experience',
     },
     {
       id: 'patterns' as const,
       label: 'Recurring Patterns',
-      icon: () => (
-        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 3v18M3 12h18M7.5 7.5l9 9M16.5 7.5l-9 9" />
-        </svg>
-      ),
+      icon: '🔀',
       description: 'Trends or patterns you have observed repeatedly',
     },
   ];
@@ -96,7 +87,7 @@ export function Step5Memory({ data, onChange }: Step5Props) {
     >
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 5: Memory Anchors</h2>
-        <p className="text-muted-foreground">
+        <p className="text-slate-400">
           Key experiences, lessons, and patterns that inform your judgment. These contextualize your advice.
         </p>
       </div>
@@ -112,34 +103,30 @@ export function Step5Memory({ data, onChange }: Step5Props) {
             }}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
               activeTab === tab.id
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted hover:bg-muted/80'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
           >
-            <tab.icon className="h-4 w-4" />
+            <span>{tab.icon}</span>
             {tab.label}
           </button>
         ))}
       </div>
 
       {/* Active Tab Content */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            {(() => {
-              const TabIcon = tabs.find((t) => t.id === activeTab)?.icon || Brain;
-              return <TabIcon className="h-5 w-5" />;
-            })()}
-            {tabs.find((t) => t.id === activeTab)?.label}
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {tabs.find((t) => t.id === activeTab)?.description}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+          <span className="text-xl">{tabs.find((t) => t.id === activeTab)?.icon}</span>
+          {tabs.find((t) => t.id === activeTab)?.label}
+        </h3>
+        <p className="text-sm text-slate-400 mb-4">
+          {tabs.find((t) => t.id === activeTab)?.description}
+        </p>
+        
+        <div className="space-y-4">
           {/* Existing Items */}
           {data[activeTab].length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+            <div className="text-center py-8 text-slate-400 border-2 border-dashed border-slate-700 rounded-lg">
               <p>No {tabs.find((t) => t.id === activeTab)?.label.toLowerCase()} added yet.</p>
               <p className="text-sm">Add memories to help your twin give contextualized advice.</p>
             </div>
@@ -149,28 +136,26 @@ export function Step5Memory({ data, onChange }: Step5Props) {
                 key={item.id}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-4 border rounded-lg bg-muted/30 space-y-2"
+                className="p-4 border border-slate-700 rounded-lg bg-slate-800/30 space-y-2"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-medium flex-1">{item.content}</p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
+                  <p className="font-medium text-white flex-1">{item.content}</p>
+                  <button
+                    className="text-red-400 hover:text-red-300 p-1"
                     onClick={() => removeItem(activeTab, index)}
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    🗑️
+                  </button>
                 </div>
                 {item.context && (
-                  <p className="text-sm text-muted-foreground">{item.context}</p>
+                  <p className="text-sm text-slate-400">{item.context}</p>
                 )}
                 {item.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {item.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+                        className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 text-xs rounded-full"
                       >
                         {tag}
                       </span>
@@ -186,15 +171,15 @@ export function Step5Memory({ data, onChange }: Step5Props) {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              className="space-y-4 p-4 border rounded-lg bg-muted/50"
+              className="space-y-4 p-4 border border-slate-700 rounded-lg bg-slate-800/50"
             >
               <div className="space-y-2">
-                <Label>
+                <label className="block text-sm font-medium text-slate-300">
                   {activeTab === 'experiences' && 'What happened?'}
                   {activeTab === 'lessons' && 'What did you learn?'}
                   {activeTab === 'patterns' && 'What pattern do you observe?'}
-                </Label>
-                <Textarea
+                </label>
+                <textarea
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
                   placeholder={
@@ -205,79 +190,85 @@ export function Step5Memory({ data, onChange }: Step5Props) {
                       : "e.g., Most successful pivots happen when teams listen to customer pain points..."
                   }
                   rows={3}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Context (Optional)</Label>
-                <Input
+                <label className="block text-sm font-medium text-slate-300">Context (Optional)</label>
+                <input
+                  type="text"
                   value={newContext}
                   onChange={(e) => setNewContext(e.target.value)}
                   placeholder="When is this most relevant?"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Tags (Optional, comma-separated)</Label>
-                <Input
+                <label className="block text-sm font-medium text-slate-300">Tags (Optional, comma-separated)</label>
+                <input
+                  type="text"
                   value={newTags}
                   onChange={(e) => setNewTags(e.target.value)}
                   placeholder="e.g., leadership, product, fundraising"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div className="flex gap-2">
-                <Button onClick={addItem} disabled={!newContent.trim()}>
+                <button
+                  onClick={addItem}
+                  disabled={!newContent.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
                   Add
-                </Button>
-                <Button variant="ghost" onClick={() => setShowAddForm(false)}>
+                </button>
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
                   Cancel
-                </Button>
+                </button>
               </div>
             </motion.div>
           ) : (
-            <Button
-              variant="outline"
-              className="w-full"
+            <button
               onClick={() => setShowAddForm(true)}
+              className="w-full py-3 border-2 border-dashed border-slate-700 rounded-lg text-slate-400 hover:border-slate-500 hover:text-slate-300 transition-colors"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Add {tabs.find((t) => t.id === activeTab)?.label.slice(0, -1)}
-            </Button>
+              + Add {tabs.find((t) => t.id === activeTab)?.label.slice(0, -1)}
+            </button>
           )}
-        </CardContent>
+        </div>
       </Card>
 
       {/* Summary Card */}
-      <Card className="bg-muted/30">
-        <CardHeader>
-          <CardTitle className="text-base">Memory Summary</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold text-primary">{data.experiences.length}</div>
-              <div className="text-sm text-muted-foreground">Experiences</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-primary">{data.lessons.length}</div>
-              <div className="text-sm text-muted-foreground">Lessons</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-primary">{data.patterns.length}</div>
-              <div className="text-sm text-muted-foreground">Patterns</div>
-            </div>
+      <Card className="p-6 bg-slate-800/30">
+        <h3 className="text-base font-semibold mb-4">Memory Summary</h3>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <div className="text-2xl font-bold text-indigo-400">{data.experiences.length}</div>
+            <div className="text-sm text-slate-400">Experiences</div>
           </div>
-        </CardContent>
+          <div>
+            <div className="text-2xl font-bold text-indigo-400">{data.lessons.length}</div>
+            <div className="text-sm text-slate-400">Lessons</div>
+          </div>
+          <div>
+            <div className="text-2xl font-bold text-indigo-400">{data.patterns.length}</div>
+            <div className="text-sm text-slate-400">Patterns</div>
+          </div>
+        </div>
       </Card>
 
       {/* Help Text */}
-      <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground">
-        <p className="font-medium mb-2">Why memory anchors matter:</p>
+      <div className="bg-slate-800/50 p-4 rounded-lg text-sm text-slate-400 border border-slate-700">
+        <p className="font-medium text-white mb-2">Why memory anchors matter:</p>
         <p>
           These memories give your digital twin context for advice. When evaluating a situation, 
           it can reference relevant experiences to provide more nuanced guidance. Think of these 
-          as "stories I often tell when advising people."
+          as &quot;stories I often tell when advising people.&quot;
         </p>
       </div>
     </motion.div>

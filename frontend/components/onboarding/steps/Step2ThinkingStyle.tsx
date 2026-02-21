@@ -2,12 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
-import { Brain, HelpCircle, Lightbulb, Scale, Target } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 interface ThinkingStyleData {
   decisionFramework: string;
@@ -27,25 +22,25 @@ const frameworks = [
     id: 'evidence_based',
     label: 'Evidence-Based',
     description: 'Base decisions on available data and evidence. Disclose uncertainty.',
-    icon: Scale,
+    icon: '⚖️',
   },
   {
     id: 'intuitive',
     label: 'Pattern-Recognition',
     description: 'Rely on pattern matching and intuition from experience.',
-    icon: Lightbulb,
+    icon: '💡',
   },
   {
     id: 'analytical',
     label: 'Analytical',
     description: 'Break down problems systematically. Use frameworks.',
-    icon: Brain,
+    icon: '🧠',
   },
   {
     id: 'first_principles',
     label: 'First Principles',
     description: 'Question assumptions. Reason from fundamentals.',
-    icon: Target,
+    icon: '🎯',
   },
 ];
 
@@ -97,166 +92,165 @@ export function Step2ThinkingStyle({ data, onChange }: Step2Props) {
     >
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 2: Thinking Style</h2>
-        <p className="text-muted-foreground">
+        <p className="text-slate-400">
           How do you think through problems? Your cognitive heuristics and decision framework.
         </p>
       </div>
 
       {/* Decision Framework */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Decision Framework</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RadioGroup
-            value={data.decisionFramework}
-            onValueChange={(value) => updateField('decisionFramework', value)}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-          >
-            {frameworks.map((framework) => (
-              <div key={framework.id}>
-                <RadioGroupItem
-                  value={framework.id}
-                  id={framework.id}
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor={framework.id}
-                  className="flex flex-col items-start p-4 border rounded-lg cursor-pointer transition-all hover:bg-muted peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
-                >
-                  <div className="flex items-center gap-3 mb-2">
-                    <framework.icon className="h-5 w-5 text-primary" />
-                    <span className="font-semibold">{framework.label}</span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">{framework.description}</span>
-                </Label>
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Decision Framework</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {frameworks.map((framework) => (
+            <button
+              key={framework.id}
+              onClick={() => updateField('decisionFramework', framework.id)}
+              className={`p-4 rounded-xl border-2 text-left transition-all ${
+                data.decisionFramework === framework.id
+                  ? 'border-indigo-500 bg-indigo-500/10'
+                  : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-xl">{framework.icon}</span>
+                <span className="font-semibold text-white">{framework.label}</span>
               </div>
-            ))}
-          </RadioGroup>
-        </CardContent>
+              <span className="text-sm text-slate-400">{framework.description}</span>
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* Cognitive Heuristics */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Cognitive Heuristics</CardTitle>
-            <button
-              onClick={() => setShowHeuristicHelp(!showHeuristicHelp)}
-              className="text-muted-foreground hover:text-foreground"
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Cognitive Heuristics</h3>
+          <button
+            onClick={() => setShowHeuristicHelp(!showHeuristicHelp)}
+            className="text-slate-400 hover:text-white"
+          >
+            <span className="text-lg">❓</span>
+          </button>
+        </div>
+        {showHeuristicHelp && (
+          <p className="text-sm text-slate-400 mb-4">
+            Heuristics are mental shortcuts you use when evaluating situations. 
+            Select the ones that match how you naturally think.
+          </p>
+        )}
+        <div className="space-y-3">
+          {defaultHeuristics.map((heuristic) => (
+            <div
+              key={heuristic.id}
+              onClick={() => toggleHeuristic(heuristic.id)}
+              className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                data.heuristics?.includes(heuristic.id)
+                  ? 'border-indigo-500 bg-indigo-500/10'
+                  : 'border-slate-700 hover:bg-slate-800/50'
+              }`}
             >
-              <HelpCircle className="h-5 w-5" />
-            </button>
-          </div>
-          {showHeuristicHelp && (
-            <p className="text-sm text-muted-foreground mt-2">
-              Heuristics are mental shortcuts you use when evaluating situations. 
-              Select the ones that match how you naturally think.
-            </p>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-3">
-            {defaultHeuristics.map((heuristic) => (
-              <div
-                key={heuristic.id}
-                className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <Checkbox
-                  id={heuristic.id}
-                  checked={data.heuristics?.includes(heuristic.id)}
-                  onCheckedChange={() => toggleHeuristic(heuristic.id)}
-                />
-                <div className="flex-1">
-                  <Label
-                    htmlFor={heuristic.id}
-                    className="font-medium cursor-pointer"
-                  >
-                    {heuristic.label}
-                  </Label>
-                  <p className="text-sm text-muted-foreground">{heuristic.desc}</p>
-                </div>
+              <div className={`w-5 h-5 rounded border flex items-center justify-center mt-0.5 ${
+                data.heuristics?.includes(heuristic.id)
+                  ? 'bg-indigo-500 border-indigo-500'
+                  : 'border-slate-500'
+              }`}>
+                {data.heuristics?.includes(heuristic.id) && <span className="text-white text-xs">✓</span>}
               </div>
-            ))}
-          </div>
+              <div className="flex-1">
+                <p className="font-medium text-white">{heuristic.label}</p>
+                <p className="text-sm text-slate-400">{heuristic.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
-          <div className="space-y-2 pt-4 border-t">
-            <Label htmlFor="custom-heuristics">Additional Heuristics (Optional)</Label>
-            <Textarea
-              id="custom-heuristics"
-              placeholder="Describe any other mental models or heuristics you use..."
-              value={data.customHeuristics || ''}
-              onChange={(e) => updateField('customHeuristics', e.target.value)}
-              rows={3}
-            />
-          </div>
-        </CardContent>
+        <div className="space-y-2 pt-4 border-t border-slate-700 mt-4">
+          <label className="block text-sm font-medium text-slate-300">Additional Heuristics (Optional)</label>
+          <textarea
+            placeholder="Describe any other mental models or heuristics you use..."
+            value={data.customHeuristics || ''}
+            onChange={(e) => updateField('customHeuristics', e.target.value)}
+            rows={3}
+            className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+          />
+        </div>
       </Card>
 
       {/* Clarifying Behavior */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">When Information is Insufficient</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <RadioGroup
-            value={data.clarifyingBehavior}
-            onValueChange={(value: 'ask' | 'infer') => updateField('clarifyingBehavior', value)}
-            className="space-y-3"
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">When Information is Insufficient</h3>
+        <div className="space-y-3">
+          <div
+            onClick={() => updateField('clarifyingBehavior', 'ask')}
+            className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+              data.clarifyingBehavior === 'ask'
+                ? 'border-indigo-500 bg-indigo-500/10'
+                : 'border-slate-700 hover:bg-slate-800/50'
+            }`}
           >
-            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-muted/50">
-              <RadioGroupItem value="ask" id="clarify-ask" />
-              <div className="flex-1">
-                <Label htmlFor="clarify-ask" className="font-medium cursor-pointer">
-                  Ask Clarifying Questions
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  When uncertain, ask the user for more information before giving an assessment.
-                </p>
-              </div>
+            <div className={`w-5 h-5 rounded-full border flex items-center justify-center mt-0.5 ${
+              data.clarifyingBehavior === 'ask'
+                ? 'bg-indigo-500 border-indigo-500'
+                : 'border-slate-500'
+            }`}>
+              {data.clarifyingBehavior === 'ask' && <span className="text-white text-xs">●</span>}
             </div>
-            <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-muted/50">
-              <RadioGroupItem value="infer" id="clarify-infer" />
-              <div className="flex-1">
-                <Label htmlFor="clarify-infer" className="font-medium cursor-pointer">
-                  Infer Best Effort
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  Make reasonable assumptions and proceed with evaluation, disclosing uncertainty.
-                </p>
-              </div>
+            <div className="flex-1">
+              <p className="font-medium text-white">Ask Clarifying Questions</p>
+              <p className="text-sm text-slate-400">
+                When uncertain, ask the user for more information before giving an assessment.
+              </p>
             </div>
-          </RadioGroup>
-        </CardContent>
+          </div>
+          <div
+            onClick={() => updateField('clarifyingBehavior', 'infer')}
+            className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+              data.clarifyingBehavior === 'infer'
+                ? 'border-indigo-500 bg-indigo-500/10'
+                : 'border-slate-700 hover:bg-slate-800/50'
+            }`}
+          >
+            <div className={`w-5 h-5 rounded-full border flex items-center justify-center mt-0.5 ${
+              data.clarifyingBehavior === 'infer'
+                ? 'bg-indigo-500 border-indigo-500'
+                : 'border-slate-500'
+            }`}>
+              {data.clarifyingBehavior === 'infer' && <span className="text-white text-xs">●</span>}
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-white">Infer Best Effort</p>
+              <p className="text-sm text-slate-400">
+                Make reasonable assumptions and proceed with evaluation, disclosing uncertainty.
+              </p>
+            </div>
+          </div>
+        </div>
       </Card>
 
       {/* Evidence Standards */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Evidence Standards</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            What makes evidence credible to you?
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-3">
-            {evidenceStandards.map((standard) => (
-              <div
-                key={standard.id}
-                className="flex items-center space-x-2"
-              >
-                <Checkbox
-                  id={standard.id}
-                  checked={data.evidenceStandards?.includes(standard.id)}
-                  onCheckedChange={() => toggleEvidenceStandard(standard.id)}
-                />
-                <Label htmlFor={standard.id} className="text-sm cursor-pointer">
-                  {standard.label}
-                </Label>
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Evidence Standards</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          What makes evidence credible to you?
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {evidenceStandards.map((standard) => (
+            <div
+              key={standard.id}
+              onClick={() => toggleEvidenceStandard(standard.id)}
+              className="flex items-center space-x-2 cursor-pointer"
+            >
+              <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                data.evidenceStandards?.includes(standard.id)
+                  ? 'bg-indigo-500 border-indigo-500'
+                  : 'border-slate-500'
+              }`}>
+                {data.evidenceStandards?.includes(standard.id) && <span className="text-white text-xs">✓</span>}
               </div>
-            ))}
-          </div>
-        </CardContent>
+              <span className="text-sm text-slate-300">{standard.label}</span>
+            </div>
+          ))}
+        </div>
       </Card>
     </motion.div>
   );

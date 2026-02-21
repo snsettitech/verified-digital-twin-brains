@@ -2,11 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { ArrowUp, ArrowDown, GripVertical, Heart, Plus, Trash2 } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
 
 interface ValueItem {
   id: string;
@@ -114,79 +110,72 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
     >
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 3: Values & Priorities</h2>
-        <p className="text-muted-foreground">
+        <p className="text-slate-400">
           Drag to rank what matters most to you. The order determines priority when values conflict.
         </p>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Heart className="h-5 w-5 text-rose-500" />
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <span className="text-xl">❤️</span>
               Your Value Hierarchy
-            </CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">
+            </h3>
+            <p className="text-sm text-slate-400 mt-1">
               Ranked by priority (1st = most important)
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={resetToDefaults}>
+          <button
+            onClick={resetToDefaults}
+            className="px-3 py-1.5 text-sm bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+          >
             Reset to Defaults
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          </button>
+        </div>
+        
+        <div className="space-y-3">
           {values.map((value, index) => (
             <motion.div
               key={value.id}
               layout
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-3 p-4 border rounded-lg bg-card hover:shadow-sm transition-shadow"
+              className="flex items-center gap-3 p-4 border border-slate-700 rounded-lg bg-slate-800/50"
             >
               {/* Rank Number */}
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center font-semibold text-sm">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center font-semibold text-sm text-indigo-400">
                 {index + 1}
-              </div>
-
-              {/* Drag Handle */}
-              <div className="flex-shrink-0 text-muted-foreground">
-                <GripVertical className="h-5 w-5" />
               </div>
 
               {/* Value Content */}
               <div className="flex-1 min-w-0">
-                <h4 className="font-medium truncate">{value.name}</h4>
-                <p className="text-sm text-muted-foreground truncate">{value.description}</p>
+                <h4 className="font-medium text-white truncate">{value.name}</h4>
+                <p className="text-sm text-slate-400 truncate">{value.description}</p>
               </div>
 
               {/* Actions */}
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                <button
+                  className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-30 transition-colors"
                   disabled={index === 0}
                   onClick={() => moveValue(index, 'up')}
                 >
-                  <ArrowUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
+                  <span className="text-slate-400">↑</span>
+                </button>
+                <button
+                  className="p-2 hover:bg-slate-700 rounded-lg disabled:opacity-30 transition-colors"
                   disabled={index === values.length - 1}
                   onClick={() => moveValue(index, 'down')}
                 >
-                  <ArrowDown className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
+                  <span className="text-slate-400">↓</span>
+                </button>
+                <button
+                  className="p-2 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors"
                   onClick={() => removeValue(index)}
                 >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                  <span>🗑️</span>
+                </button>
               </div>
             </motion.div>
           ))}
@@ -196,73 +185,73 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              className="p-4 border rounded-lg bg-muted/50 space-y-3"
+              className="p-4 border border-slate-700 rounded-lg bg-slate-800/50 space-y-3"
             >
               <div className="space-y-2">
-                <Label htmlFor="new-value-name">Value Name</Label>
+                <label className="block text-sm font-medium text-slate-300">Value Name</label>
                 <input
-                  id="new-value-name"
                   type="text"
                   value={newValueName}
                   onChange={(e) => setNewValueName(e.target.value)}
                   placeholder="e.g., Customer Obsession"
-                  className="w-full px-3 py-2 border rounded-md bg-background"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-value-desc">Description</Label>
+                <label className="block text-sm font-medium text-slate-300">Description</label>
                 <input
-                  id="new-value-desc"
                   type="text"
                   value={newValueDesc}
                   onChange={(e) => setNewValueDesc(e.target.value)}
                   placeholder="Briefly describe what this value means to you..."
-                  className="w-full px-3 py-2 border rounded-md bg-background"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={addValue} disabled={!newValueName.trim()}>
+                <button
+                  onClick={addValue}
+                  disabled={!newValueName.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg transition-colors"
+                >
                   Add Value
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>
+                </button>
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                >
                   Cancel
-                </Button>
+                </button>
               </div>
             </motion.div>
           ) : (
-            <Button
-              variant="outline"
-              className="w-full"
+            <button
               onClick={() => setShowAddForm(true)}
+              className="w-full py-3 border-2 border-dashed border-slate-700 rounded-lg text-slate-400 hover:border-slate-500 hover:text-slate-300 transition-colors"
             >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Custom Value
-            </Button>
+              + Add Custom Value
+            </button>
           )}
-        </CardContent>
+        </div>
       </Card>
 
       {/* Tradeoff Notes */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Value Tradeoff Notes</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            When values conflict, how do you typically decide?
-          </p>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="e.g., 'Quality usually wins over speed for customer-facing work, but speed matters more for internal tools...'"
-            value={data.tradeoffNotes || ''}
-            onChange={(e) => onChange({ ...data, tradeoffNotes: e.target.value })}
-            rows={4}
-          />
-        </CardContent>
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Value Tradeoff Notes</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          When values conflict, how do you typically decide?
+        </p>
+        <textarea
+          placeholder="e.g., 'Quality usually wins over speed for customer-facing work, but speed matters more for internal tools...'"
+          value={data.tradeoffNotes || ''}
+          onChange={(e) => onChange({ ...data, tradeoffNotes: e.target.value })}
+          rows={4}
+          className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+        />
       </Card>
 
       {/* Help Text */}
-      <div className="bg-muted/50 p-4 rounded-lg text-sm text-muted-foreground">
-        <p className="font-medium mb-2">Why this matters:</p>
+      <div className="bg-slate-800/50 p-4 rounded-lg text-sm text-slate-400 border border-slate-700">
+        <p className="font-medium text-white mb-2">Why this matters:</p>
         <p>
           Your value hierarchy guides how your digital twin evaluates situations and makes 
           recommendations. When facing tradeoffs (e.g., quality vs. speed), it will prioritize 

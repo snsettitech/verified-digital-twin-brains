@@ -1,15 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { User, Briefcase, Target, Shield, Sparkles } from 'lucide-react';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 
 // =============================================================================
 // Types
@@ -113,96 +107,90 @@ export function Step1Identity({ data, onChange, onSpecializationChange }: Step1P
     >
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 1: Identity Frame</h2>
-        <p className="text-muted-foreground">
+        <p className="text-slate-400">
           Who is your digital twin? Define their role, expertise, and background.
         </p>
       </div>
 
       {/* Specialization */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
-            Specialization
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-3">
-            {SPECIALIZATIONS.map((spec) => (
-              <button
-                key={spec.id}
-                onClick={() => handleSpecializationChange(spec.id)}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
-                  specialization === spec.id
-                    ? 'border-primary bg-primary/5'
-                    : 'border-muted bg-card hover:bg-muted/50'
-                }`}
-              >
-                <span className="text-2xl mb-2 block">{spec.emoji}</span>
-                <p className="font-semibold text-sm">{spec.label}</p>
-                <p className="text-xs text-muted-foreground mt-1">{spec.description}</p>
-              </button>
-            ))}
-          </div>
-        </CardContent>
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-xl">✨</span>
+          Specialization
+        </h3>
+        <div className="grid grid-cols-2 gap-3">
+          {SPECIALIZATIONS.map((spec) => (
+            <button
+              key={spec.id}
+              onClick={() => handleSpecializationChange(spec.id)}
+              className={`p-4 rounded-xl border-2 text-left transition-all ${
+                specialization === spec.id
+                  ? 'border-indigo-500 bg-indigo-500/10'
+                  : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800'
+              }`}
+            >
+              <span className="text-2xl mb-2 block">{spec.emoji}</span>
+              <p className="font-semibold text-sm text-white">{spec.label}</p>
+              <p className="text-xs text-slate-400 mt-1">{spec.description}</p>
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* Basic Identity */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <User className="h-5 w-5 text-primary" />
-            Basic Identity
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="twin-name">Twin Name *</Label>
-            <Input
-              id="twin-name"
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-xl">👤</span>
+          Basic Identity
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Twin Name *</label>
+            <input
+              type="text"
               value={data.twinName}
               onChange={(e) => updateField('twinName', e.target.value)}
               placeholder="e.g., Alex's Twin"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="handle">Handle (optional)</Label>
-            <div className="flex items-center">
-              <span className="px-3 py-2 border border-r-0 rounded-l-md bg-muted text-muted-foreground">@</span>
-              <Input
-                id="handle"
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Handle (optional)</label>
+            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl px-4">
+              <span className="text-slate-500">@</span>
+              <input
+                type="text"
                 value={data.handle}
                 onChange={(e) => updateField('handle', e.target.value.replace(/\s+/g, '').toLowerCase())}
                 placeholder="alex"
-                className="rounded-l-none"
+                className="flex-1 px-2 py-3 bg-transparent text-white placeholder-slate-500 focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="tagline">Tagline (optional)</Label>
-            <Input
-              id="tagline"
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Tagline (optional)</label>
+            <input
+              type="text"
               value={data.tagline}
               onChange={(e) => updateField('tagline', e.target.value)}
               placeholder="e.g., Startup founder sharing lessons learned"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Expertise */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Briefcase className="h-5 w-5 text-primary" />
-            Areas of Expertise
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-xl">💼</span>
+          Areas of Expertise
+        </h3>
+        <div className="space-y-4">
           <div>
-            <Label className="mb-3 block">Select domains</Label>
+            <label className="block text-sm font-medium text-slate-300 mb-3">Select domains</label>
             <div className="flex flex-wrap gap-2">
               {EXPERTISE_DOMAINS.map((domain) => (
                 <button
@@ -210,8 +198,8 @@ export function Step1Identity({ data, onChange, onSpecializationChange }: Step1P
                   onClick={() => toggleDomain(domain)}
                   className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
                     data.expertise?.includes(domain)
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                   }`}
                 >
                   {domain}
@@ -220,18 +208,24 @@ export function Step1Identity({ data, onChange, onSpecializationChange }: Step1P
             </div>
           </div>
 
-          <div className="space-y-2 pt-4 border-t">
-            <Label>Custom Expertise</Label>
+          <div className="pt-4 border-t border-slate-700">
+            <label className="block text-sm font-medium text-slate-300 mb-2">Custom Expertise</label>
             <div className="flex gap-2">
-              <Input
+              <input
+                type="text"
                 value={customTag}
                 onChange={(e) => setCustomTag(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addCustomExpertise()}
                 placeholder="Add custom area..."
+                className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
-              <Button onClick={addCustomExpertise} disabled={!customTag}>
+              <button
+                onClick={addCustomExpertise}
+                disabled={!customTag}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium"
+              >
                 Add
-              </Button>
+              </button>
             </div>
             {data.customExpertise?.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
@@ -243,90 +237,86 @@ export function Step1Identity({ data, onChange, onSpecializationChange }: Step1P
               </div>
             )}
           </div>
-        </CardContent>
+        </div>
       </Card>
 
       {/* Goals */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Target className="h-5 w-5 text-primary" />
-            Goals (Next 90 Days)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-xl">🎯</span>
+          Goals (Next 90 Days)
+        </h3>
+        <div className="space-y-3">
           {[0, 1, 2].map((idx) => (
-            <Input
+            <input
               key={idx}
+              type="text"
               value={data.goals90Days[idx] || ''}
               onChange={(e) => updateGoal(idx, e.target.value)}
               placeholder={`Goal ${idx + 1} (optional)`}
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
             />
           ))}
-        </CardContent>
+        </div>
       </Card>
 
       {/* Boundaries & Preferences */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="h-5 w-5 text-primary" />
-            Boundaries & Preferences
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="boundaries">Boundaries (optional)</Label>
-            <Textarea
-              id="boundaries"
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <span className="text-xl">🛡️</span>
+          Boundaries & Preferences
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Boundaries (optional)</label>
+            <textarea
               value={data.boundaries}
               onChange={(e) => updateField('boundaries', e.target.value)}
               placeholder="What should this twin avoid? What is out of scope?"
               rows={3}
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="privacy">Privacy Constraints (optional)</Label>
-            <Textarea
-              id="privacy"
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Privacy Constraints (optional)</label>
+            <textarea
               value={data.privacyConstraints}
               onChange={(e) => updateField('privacyConstraints', e.target.value)}
               placeholder="List confidential topics or data that should never be exposed"
               rows={3}
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>When Information is Insufficient</Label>
-            <RadioGroup
-              value={data.uncertaintyPreference}
-              onValueChange={(value: 'ask' | 'infer') => updateField('uncertaintyPreference', value)}
-              className="grid grid-cols-2 gap-3"
-            >
-              <div>
-                <RadioGroupItem value="ask" id="ask" className="peer sr-only" />
-                <Label
-                  htmlFor="ask"
-                  className="flex flex-col p-4 border rounded-lg cursor-pointer transition-all hover:bg-muted peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
-                >
-                  <span className="font-semibold">Ask Questions</span>
-                  <span className="text-xs text-muted-foreground">Prefer clarification over guessing</span>
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem value="infer" id="infer" className="peer sr-only" />
-                <Label
-                  htmlFor="infer"
-                  className="flex flex-col p-4 border rounded-lg cursor-pointer transition-all hover:bg-muted peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
-                >
-                  <span className="font-semibold">Infer Best Effort</span>
-                  <span className="text-xs text-muted-foreground">Make reasonable assumptions</span>
-                </Label>
-              </div>
-            </RadioGroup>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">When Information is Insufficient</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => updateField('uncertaintyPreference', 'ask')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  data.uncertaintyPreference === 'ask'
+                    ? 'border-indigo-500 bg-indigo-500/10'
+                    : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800'
+                }`}
+              >
+                <p className="font-semibold text-white">Ask Questions</p>
+                <p className="text-xs text-slate-400 mt-1">Prefer clarification over guessing</p>
+              </button>
+              <button
+                onClick={() => updateField('uncertaintyPreference', 'infer')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  data.uncertaintyPreference === 'infer'
+                    ? 'border-indigo-500 bg-indigo-500/10'
+                    : 'border-slate-700 bg-slate-800/50 hover:bg-slate-800'
+                }`}
+              >
+                <p className="font-semibold text-white">Infer Best Effort</p>
+                <p className="text-xs text-slate-400 mt-1">Make reasonable assumptions</p>
+              </button>
+            </div>
           </div>
-        </CardContent>
+        </div>
       </Card>
     </motion.div>
   );
@@ -366,60 +356,36 @@ interface LegacyStep1IdentityProps {
   onUncertaintyPreferenceChange: (value: 'ask' | 'infer') => void;
 }
 
-export default function LegacyStep1Identity({
-  twinName,
-  handle,
-  tagline,
-  specialization,
-  selectedDomains,
-  customExpertise,
-  personality,
-  goals90Days,
-  boundaries,
-  privacyConstraints,
-  uncertaintyPreference,
-  onTwinNameChange,
-  onHandleChange,
-  onTaglineChange,
-  onSpecializationChange,
-  onDomainsChange,
-  onCustomExpertiseChange,
-  onPersonalityChange,
-  onGoalsChange,
-  onBoundariesChange,
-  onPrivacyConstraintsChange,
-  onUncertaintyPreferenceChange,
-}: LegacyStep1IdentityProps) {
-  // Convert legacy props to new data format
+export default function LegacyStep1Identity(props: LegacyStep1IdentityProps) {
   const data: IdentityFormData = {
-    twinName,
-    handle,
-    tagline,
-    expertise: selectedDomains,
-    customExpertise,
-    goals90Days,
-    boundaries,
-    privacyConstraints,
-    uncertaintyPreference,
+    twinName: props.twinName,
+    handle: props.handle,
+    tagline: props.tagline,
+    expertise: props.selectedDomains,
+    customExpertise: props.customExpertise,
+    goals90Days: props.goals90Days,
+    boundaries: props.boundaries,
+    privacyConstraints: props.privacyConstraints,
+    uncertaintyPreference: props.uncertaintyPreference,
   };
 
   const handleChange = (newData: IdentityFormData) => {
-    if (newData.twinName !== twinName) onTwinNameChange(newData.twinName);
-    if (newData.handle !== handle) onHandleChange(newData.handle);
-    if (newData.tagline !== tagline) onTaglineChange(newData.tagline);
-    if (newData.expertise !== selectedDomains) onDomainsChange(newData.expertise);
-    if (newData.customExpertise !== customExpertise) onCustomExpertiseChange(newData.customExpertise);
-    if (newData.goals90Days !== goals90Days) onGoalsChange(newData.goals90Days);
-    if (newData.boundaries !== boundaries) onBoundariesChange(newData.boundaries);
-    if (newData.privacyConstraints !== privacyConstraints) onPrivacyConstraintsChange(newData.privacyConstraints);
-    if (newData.uncertaintyPreference !== uncertaintyPreference) onUncertaintyPreferenceChange(newData.uncertaintyPreference);
+    if (newData.twinName !== props.twinName) props.onTwinNameChange(newData.twinName);
+    if (newData.handle !== props.handle) props.onHandleChange(newData.handle);
+    if (newData.tagline !== props.tagline) props.onTaglineChange(newData.tagline);
+    if (newData.expertise !== props.selectedDomains) props.onDomainsChange(newData.expertise);
+    if (newData.customExpertise !== props.customExpertise) props.onCustomExpertiseChange(newData.customExpertise);
+    if (newData.goals90Days !== props.goals90Days) props.onGoalsChange(newData.goals90Days);
+    if (newData.boundaries !== props.boundaries) props.onBoundariesChange(newData.boundaries);
+    if (newData.privacyConstraints !== props.privacyConstraints) props.onPrivacyConstraintsChange(newData.privacyConstraints);
+    if (newData.uncertaintyPreference !== props.uncertaintyPreference) props.onUncertaintyPreferenceChange(newData.uncertaintyPreference);
   };
 
   return (
     <Step1Identity
       data={data}
       onChange={handleChange}
-      onSpecializationChange={onSpecializationChange}
+      onSpecializationChange={props.onSpecializationChange}
     />
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StepIndicator } from '@/components/onboarding/StepIndicator';
@@ -10,10 +10,7 @@ import { Step3Values } from '@/components/onboarding/steps/Step3Values';
 import { Step4Communication } from '@/components/onboarding/steps/Step4Communication';
 import { Step5Memory } from '@/components/onboarding/steps/Step5Memory';
 import { Step6Review } from '@/components/onboarding/steps/Step6Review';
-import { Button } from '@/components/ui/button';
 import { authFetchStandalone } from '@/lib/supabase/client';
-import { toast } from '@/components/ui/use-toast';
-import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 
 // =============================================================================
 // Types
@@ -59,9 +56,10 @@ const STEP_TITLES = [
 
 const defaultIdentityData: IdentityFormData = {
   twinName: '',
-  tagline: '',
   handle: '',
+  tagline: '',
   expertise: [],
+  customExpertise: [],
   goals90Days: ['', '', ''],
   boundaries: '',
   privacyConstraints: '',
@@ -106,6 +104,7 @@ export default function OnboardingPage() {
     responseLength: 'balanced',
     firstPerson: true,
     customInstructions: '',
+    signaturePhrases: [] as string[],
   });
   const [thinkingData, setThinkingData] = useState<ThinkingStyleData>(defaultThinkingData);
   const [valuesData, setValuesData] = useState<ValuesData>(defaultValuesData);
@@ -123,15 +122,15 @@ export default function OnboardingPage() {
       case 1:
         return identityData.twinName.trim().length >= 2;
       case 2:
-        return true; // All fields have defaults
+        return true;
       case 3:
         return valuesData.prioritizedValues.length > 0;
       case 4:
-        return true; // All fields have defaults
+        return true;
       case 5:
-        return true; // Optional
+        return true;
       case 6:
-        return true; // Review step
+        return true;
       default:
         return false;
     }
@@ -162,12 +161,7 @@ export default function OnboardingPage() {
   // =============================================================================
 
   const buildPersonaV2Data = () => {
-    /**
-     * Build structured 5-Layer Persona data for backend.
-     * This replaces the legacy flattened system_prompt approach.
-     */
     return {
-      // Layer 1: Identity Frame
       twin_name: identityData.twinName,
       tagline: identityData.tagline,
       specialization: specialization,
@@ -180,8 +174,6 @@ export default function OnboardingPage() {
       goals_90_days: identityData.goals90Days.filter((g) => g.trim()),
       boundaries: identityData.boundaries ? [identityData.boundaries] : [],
       uncertainty_preference: identityData.uncertaintyPreference,
-
-      // Layer 2: Cognitive Heuristics
       decision_framework: thinkingData.decisionFramework,
       heuristics: thinkingData.heuristics.map((h) => ({
         id: h,
@@ -192,8 +184,6 @@ export default function OnboardingPage() {
       })),
       clarifying_behavior: thinkingData.clarifyingBehavior,
       evidence_standards: thinkingData.evidenceStandards,
-
-      // Layer 3: Value Hierarchy
       prioritized_values: valuesData.prioritizedValues,
       tradeoff_preferences: valuesData.tradeoffNotes
         ? [
@@ -205,17 +195,13 @@ export default function OnboardingPage() {
             },
           ]
         : [],
-
-      // Layer 4: Communication Patterns
       personality: {
         tone: personalityData.tone,
         response_length: personalityData.responseLength,
         first_person: personalityData.firstPerson,
         custom_instructions: personalityData.customInstructions,
       },
-      signature_phrases: [],
-
-      // Layer 5: Memory Anchors
+      signature_phrases: personalityData.signaturePhrases,
       key_experiences: memoryData.experiences.map((e) => ({
         content: e.content,
         context: e.context,
@@ -241,10 +227,8 @@ export default function OnboardingPage() {
     setIsLaunching(true);
 
     try {
-      // Build structured persona v2 data (NOT flattened text)
       const personaV2Data = buildPersonaV2Data();
 
-      // Legacy system_prompt for backwards compatibility (DEPRECATED for new twins)
       const expertiseText = identityData.expertise.join(', ');
       const legacySystemInstructions = `You are ${identityData.twinName}${
         identityData.tagline ? `, ${identityData.tagline}` : ''
@@ -269,7 +253,6 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
           name: identityData.twinName,
           description: identityData.tagline,
           specialization: specialization,
-          // Legacy settings (for backwards compatibility)
           settings: {
             system_prompt: legacySystemInstructions,
             handle: identityData.handle,
@@ -282,11 +265,9 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
               privacy_constraints: identityData.privacyConstraints,
               uncertainty_preference: identityData.uncertaintyPreference,
             },
-            // NEW: Enable 5-Layer Persona
             use_5layer_persona: true,
             persona_v2_version: '2.0.0',
           },
-          // NEW: Structured 5-Layer Persona Data
           persona_v2_data: personaV2Data,
         }),
       });
@@ -298,11 +279,6 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
 
       const twin = await response.json();
 
-      toast({
-        title: 'Digital Twin Created!',
-        description: `${identityData.twinName} is now live with 5-Layer Persona v2.`,
-      });
-
       // Redirect to the new twin or return to caller
       if (returnTo) {
         router.push(returnTo);
@@ -313,11 +289,7 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
       }
     } catch (error) {
       console.error('Failed to create twin:', error);
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create twin',
-        variant: 'destructive',
-      });
+      alert(error instanceof Error ? error.message : 'Failed to create twin');
     } finally {
       setIsLaunching(false);
     }
@@ -377,10 +349,7 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
               memoryCount: memoryData.experiences.length + memoryData.lessons.length + memoryData.patterns.length,
             }}
             onTestChat={() => {
-              toast({
-                title: 'Test Chat',
-                description: 'Test chat feature coming soon!',
-              });
+              alert('Test chat feature coming soon!');
             }}
             onEditStep={handleEditStep}
             onLaunch={createTwin}
@@ -398,17 +367,17 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
   // =============================================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
+    <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold">Create Digital Twin</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-bold text-white">Create Digital Twin</h1>
+            <p className="text-sm text-slate-400">
               5-Layer Persona System v2
             </p>
           </div>
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-slate-400">
             Step {currentStep} of {TOTAL_STEPS}
           </div>
         </div>
@@ -435,23 +404,25 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
       </main>
 
       {/* Navigation Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t bg-background/95 backdrop-blur-sm">
+      <footer className="fixed bottom-0 left-0 right-0 border-t border-slate-800 bg-slate-900/95 backdrop-blur-sm">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Button
-            variant="outline"
+          <button
             onClick={handleBack}
             disabled={currentStep === 1 || isLaunching}
+            className="px-4 py-2 border border-slate-700 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
+            ← Back
+          </button>
 
-          {currentStep < TOTAL_STEPS ? (
-            <Button onClick={handleNext} disabled={!isStepValid()}>
-              Next
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          ) : null}
+          {currentStep < TOTAL_STEPS && (
+            <button
+              onClick={handleNext}
+              disabled={!isStepValid()}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              Next →
+            </button>
+          )}
         </div>
       </footer>
     </div>

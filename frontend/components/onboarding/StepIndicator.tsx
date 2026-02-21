@@ -1,7 +1,6 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Check } from 'lucide-react';
 
 interface StepIndicatorProps {
   currentStep: number;
@@ -13,9 +12,9 @@ export function StepIndicator({ currentStep, totalSteps, stepTitles }: StepIndic
   return (
     <div className="w-full">
       {/* Progress bar */}
-      <div className="relative h-2 bg-muted rounded-full overflow-hidden mb-6">
+      <div className="relative h-2 bg-slate-800 rounded-full overflow-hidden mb-6">
         <motion.div
-          className="absolute top-0 left-0 h-full bg-primary"
+          className="absolute top-0 left-0 h-full bg-indigo-600"
           initial={{ width: 0 }}
           animate={{ width: `${(currentStep / totalSteps) * 100}%` }}
           transition={{ duration: 0.3, ease: 'easeInOut' }}
@@ -27,29 +26,24 @@ export function StepIndicator({ currentStep, totalSteps, stepTitles }: StepIndic
         {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => {
           const isCompleted = step < currentStep;
           const isCurrent = step === currentStep;
-          const isPending = step > currentStep;
 
           return (
             <div key={step} className="flex flex-col items-center flex-1">
               <motion.div
                 initial={false}
-                animate={{
-                  scale: isCurrent ? 1.1 : 1,
-                }}
+                animate={{ scale: isCurrent ? 1.1 : 1 }}
                 className={`
                   w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold
                   transition-colors duration-200 border-2
                   ${
-                    isCompleted
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : isCurrent
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background text-muted-foreground border-muted'
+                    isCompleted || isCurrent
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-slate-800 text-slate-400 border-slate-700'
                   }
                 `}
               >
                 {isCompleted ? (
-                  <Check className="h-5 w-5" />
+                  <span>✓</span>
                 ) : (
                   step
                 )}
@@ -57,7 +51,7 @@ export function StepIndicator({ currentStep, totalSteps, stepTitles }: StepIndic
               <span
                 className={`
                   mt-2 text-xs font-medium hidden sm:block
-                  ${isCurrent ? 'text-primary' : 'text-muted-foreground'}
+                  ${isCurrent ? 'text-indigo-400' : 'text-slate-500'}
                 `}
               >
                 {stepTitles[step - 1] || `Step ${step}`}
