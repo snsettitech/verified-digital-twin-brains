@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+// import { Badge } from '@/components/ui/Badge';
 
 // =============================================================================
 // Types
@@ -225,9 +225,13 @@ export function Step1Identity({ data, onChange, onSpecializationChange }: Step1P
             {data.customExpertise?.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {data.customExpertise.map((tag) => (
-                  <Badge key={tag} variant="neutral" className="cursor-pointer" onClick={() => removeCustomExpertise(tag)}>
+                  <button
+                    key={tag}
+                    onClick={() => removeCustomExpertise(tag)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  >
                     {tag} ×
-                  </Badge>
+                  </button>
                 ))}
               </div>
             )}
