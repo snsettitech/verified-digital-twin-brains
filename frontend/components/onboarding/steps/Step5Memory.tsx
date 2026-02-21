@@ -132,10 +132,8 @@ export function Step5Memory({ data, onChange }: Step5Props) {
             </div>
           ) : (
             data[activeTab].map((item, index) => (
-              <motion.div
+              <div
                 key={item.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
                 className="p-4 border border-slate-700 rounded-lg bg-slate-800/30 space-y-2"
               >
                 <div className="flex items-start justify-between gap-3">
