@@ -84,6 +84,22 @@ class CognitiveHeuristic(BaseModel):
         le=100,
         description="Priority (lower = higher priority, like z-index)"
     )
+    
+    # Link-First Persona: Inference honesty fields
+    verification_required: bool = Field(
+        default=True,
+        description="Whether claims using this heuristic require source verification (Layer 2 default: True)"
+    )
+    evidence_claim_ids: List[str] = Field(
+        default_factory=list,
+        description="IDs of supporting persona_claims"
+    )
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in this heuristic (0-1)"
+    )
 
 
 class CognitiveHeuristics(BaseModel):
@@ -142,6 +158,22 @@ class ValueItem(BaseModel):
     applicable_contexts: List[str] = Field(
         default_factory=list,
         description="Contexts where this value is most relevant"
+    )
+    
+    # Link-First Persona: Inference honesty fields
+    verification_required: bool = Field(
+        default=True,
+        description="Whether claims about this value require source verification (Layer 3 default: True)"
+    )
+    evidence_claim_ids: List[str] = Field(
+        default_factory=list,
+        description="IDs of supporting persona_claims"
+    )
+    confidence: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Confidence in this value (0-1)"
     )
 
 

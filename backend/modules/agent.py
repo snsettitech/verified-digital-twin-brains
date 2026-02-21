@@ -463,11 +463,16 @@ def _build_prompt_from_v2_persona(spec: Dict[str, Any], twin_name: str) -> str:
     Build system prompt text from 5-Layer Persona Spec v2.
     
     This creates a readable prompt from structured persona data.
+    Includes Link-First citation enforcement if source is link-first.
     """
     identity = spec.get("identity_frame", {})
     cognitive = spec.get("cognitive_heuristics", {})
     values = spec.get("value_hierarchy", {})
     communication = spec.get("communication_patterns", {})
+    
+    # Check if this is a Link-First persona (has source metadata)
+    source = spec.get("source", "")
+    is_link_first = "link" in source.lower() or source == "link-compile"
     
     # Layer 1: Identity
     role = identity.get("role_definition", f"{twin_name}")
@@ -510,6 +515,22 @@ def _build_prompt_from_v2_persona(spec: Dict[str, Any], twin_name: str) -> str:
         "- Ask clarifying questions when needed",
     ])
     
+    # Link-First: Add verification requirements for Layer 2
+    heuristics = cognitive.get("heuristics", [])
+    verification_required_heuristics = [
+        h for h in heuristics 
+        if h.get("verification_required", True)
+    ]
+    
+    if is_link_first and verification_required_heuristics:
+        prompt_parts.extend([
+            "",
+            "INFERENCE HONESTY (Layer 2 - Cognitive Heuristics):",
+            "The following heuristics REQUIRE source verification:",
+        ])
+        for h in verification_required_heuristics[:5]:
+            prompt_parts.append(f"- {h.get('name', 'Unnamed')}: Cite claims when applying")
+    
     # Layer 3: Values (prioritized)
     value_items = values.get("values", [])
     if value_items:
@@ -517,6 +538,34 @@ def _build_prompt_from_v2_persona(spec: Dict[str, Any], twin_name: str) -> str:
         prompt_parts.extend([
             "",
             f"CORE VALUES (in priority order): {', '.join(top_values)}",
+        ])
+        
+        # Link-First: Add verification requirements for Layer 3
+        if is_link_first:
+            verification_required_values = [
+                v for v in value_items 
+                if v.get("verification_required", True)
+            ]
+            if verification_required_values:
+                prompt_parts.extend([
+                    "",
+                    "INFERENCE HONESTY (Layer 3 - Values):",
+                    "Value-based claims REQUIRE documented evidence:",
+                ])
+                for v in verification_required_values[:3]:
+                    prompt_parts.append(f"- {v.get('name', 'Unnamed')}: Link to source claims")
+    
+    # Link-First: Citation Enforcement Rules
+    if is_link_first:
+        prompt_parts.extend([
+            "",
+            "CITATION RULES (Link-First Persona):",
+            "1. Every owner-specific factual claim MUST cite [claim_id]",
+            "2. If no claim supports a statement, ask a clarification question",
+            "3. Do NOT make assumptions beyond the documented claims",
+            "4. Uncertainty is preferred to unsupported assertions",
+            "",
+            "CITATION FORMAT: 'I prefer B2B investments [claim_abc123]'",
         ])
     
     # Layer 5: Safety

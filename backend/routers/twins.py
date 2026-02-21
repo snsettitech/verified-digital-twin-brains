@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pydantic import BaseModel
 from modules.auth_guard import verify_owner, get_current_user, verify_twin_ownership, resolve_tenant_id
 from modules.schemas import (
@@ -73,6 +73,9 @@ class TwinCreateRequest(BaseModel):
     settings: Optional[Dict[str, Any]] = None
     # NEW: Structured 5-Layer Persona data from onboarding
     persona_v2_data: Optional[Dict[str, Any]] = None
+    # NEW: Mode selector for Link-First vs Manual onboarding
+    mode: Optional[str] = None  # "link_first" | "manual" (default: "manual")
+    links: Optional[List[str]] = None  # URLs for link-first mode (Mode C)
 
 
 class DeleteTwinResponse(BaseModel):
@@ -104,13 +107,15 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
     """
     Create a new twin with 5-Layer Persona Spec v2.
     
-    This is the PRIMARY path for new twin creation. The system automatically:
-    1. Creates the twin record
-    2. Bootstraps a structured 5-Layer Persona Spec v2 from onboarding data
-    3. Publishes the persona as ACTIVE (no manual steps)
-    4. Configures twin to use 5-Layer Persona by default
-    
-    Legacy flattened system_prompt is DEPRECATED for new twins.
+    Supports TWO modes:
+    1. MANUAL mode (default): Traditional onboarding flow with 6-step persona builder
+       - Creates twin with status="active"
+       - Auto-bootstraps 5-Layer Persona from onboarding data
+       
+    2. LINK-FIRST mode: Ingests external content to build persona from claims
+       - Creates twin with status="draft"
+       - Skips persona bootstrap (will be built from claims)
+       - Links are queued for ingestion via /persona/link-compile endpoints
     
     SECURITY: Client-provided tenant_id is IGNORED.
     Server uses resolve_tenant_id() to determine the correct tenant.
@@ -159,10 +164,22 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         # STEP 1: Create the twin with 5-Layer Persona enabled
         # ====================================================================
         
+        # Determine mode: link_first vs manual (default: manual)
+        is_link_first = request.mode == "link_first"
+        
         # Enhanced settings with 5-Layer Persona configuration
         settings = request.settings or {}
         settings["use_5layer_persona"] = True  # NEW: Always true for new twins
         settings["persona_v2_version"] = "2.0.0"  # NEW: Track persona version
+        
+        # Store links in settings for link-first mode
+        if is_link_first and request.links:
+            settings["link_first_urls"] = request.links[:10]  # Max 10 links
+        
+        # Status based on mode:
+        # - manual: active (ready to chat immediately)
+        # - link_first: draft (requires ingestion → claims → clarification → active)
+        twin_status = "draft" if is_link_first else "active"
         
         data = {
             "name": requested_name,
@@ -172,7 +189,8 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
             "creator_id": (derive_creator_ids(user) or [f"tenant_{tenant_id}"])[0],
             "description": request.description or f"{requested_name}'s digital twin",
             "specialization": request.specialization,
-            "settings": settings
+            "settings": settings,
+            "status": twin_status,  # NEW: State machine for link-first
         }
 
         print(f"[TWINS] Creating twin '{requested_name}' for user={user_id}, tenant={tenant_id}")
@@ -196,47 +214,58 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
             print(f"[TWINS] Twin created: {twin_id}")
             
             # ====================================================================
-            # STEP 2: Auto-Create 5-Layer Persona Spec v2
+            # STEP 2: Auto-Create 5-Layer Persona Spec v2 (MANUAL MODE ONLY)
             # ====================================================================
             
-            try:
-                # Merge persona data from request with defaults
-                onboarding_data = request.persona_v2_data or {}
-                onboarding_data["twin_name"] = requested_name
-                onboarding_data["specialization"] = request.specialization
-                
-                # Bootstrap the structured persona spec
-                persona_spec = bootstrap_persona_from_onboarding(onboarding_data)
-                
-                # Store in persona_specs table as ACTIVE
-                persona_record = create_persona_spec_v2(
-                    twin_id=twin_id,
-                    tenant_id=tenant_id,
-                    created_by=user_id,
-                    spec=persona_spec.model_dump(mode="json"),
-                    status="active",  # Auto-publish
-                    source="onboarding_v2",
-                    metadata={
-                        "onboarding_version": "2.0",
-                        "specialization": request.specialization,
-                        "auto_published": True,
+            if not is_link_first:
+                # MANUAL MODE: Bootstrap persona from onboarding answers
+                try:
+                    # Merge persona data from request with defaults
+                    onboarding_data = request.persona_v2_data or {}
+                    onboarding_data["twin_name"] = requested_name
+                    onboarding_data["specialization"] = request.specialization
+                    
+                    # Bootstrap the structured persona spec
+                    persona_spec = bootstrap_persona_from_onboarding(onboarding_data)
+                    
+                    # Store in persona_specs table as ACTIVE
+                    persona_record = create_persona_spec_v2(
+                        twin_id=twin_id,
+                        tenant_id=tenant_id,
+                        created_by=user_id,
+                        spec=persona_spec.model_dump(mode="json"),
+                        status="active",  # Auto-publish
+                        source="onboarding_v2",
+                        metadata={
+                            "onboarding_version": "2.0",
+                            "specialization": request.specialization,
+                            "auto_published": True,
+                        }
+                    )
+                    
+                    print(f"[TWINS] 5-Layer Persona Spec v2 created and activated: {persona_record.get('id')}")
+                    
+                    # Add persona info to twin response
+                    twin["persona_v2"] = {
+                        "id": persona_record.get("id"),
+                        "version": "2.0.0",
+                        "status": "active",
+                        "auto_created": True,
                     }
-                )
-                
-                print(f"[TWINS] 5-Layer Persona Spec v2 created and activated: {persona_record.get('id')}")
-                
-                # Add persona info to twin response
-                twin["persona_v2"] = {
-                    "id": persona_record.get("id"),
-                    "version": "2.0.0",
-                    "status": "active",
-                    "auto_created": True,
+                    
+                except Exception as persona_error:
+                    # Log but don't fail twin creation - persona can be created later
+                    print(f"[TWINS] WARNING: Failed to auto-create persona spec for twin {twin_id}: {persona_error}")
+                    twin["persona_v2_error"] = str(persona_error)
+            else:
+                # LINK-FIRST MODE: Skip bootstrap - persona will be built from claims
+                print(f"[TWINS] Link-first mode: Skipping persona bootstrap for twin {twin_id}")
+                print(f"[TWINS] Use /persona/link-compile endpoints to ingest content and build persona")
+                twin["link_first"] = {
+                    "status": "draft",
+                    "links": request.links or [],
+                    "next_step": "POST /persona/link-compile/jobs/mode-c (web fetch) or mode-b (paste/import)"
                 }
-                
-            except Exception as persona_error:
-                # Log but don't fail twin creation - persona can be created later
-                print(f"[TWINS] WARNING: Failed to auto-create persona spec for twin {twin_id}: {persona_error}")
-                twin["persona_v2_error"] = str(persona_error)
             
             # ====================================================================
             # STEP 3: Auto-Create Default Group
