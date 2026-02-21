@@ -29,10 +29,18 @@ interface ValuesData {
   tradeoffNotes: string;
 }
 
+interface MemoryAnchor {
+  id: string;
+  type: 'experience' | 'lesson' | 'pattern';
+  content: string;
+  context: string;
+  tags: string[];
+}
+
 interface MemoryData {
-  experiences: { id: string; type: 'experience'; content: string; context: string; tags: string[] }[];
-  lessons: { id: string; type: 'lesson'; content: string; context: string; tags: string[] }[];
-  patterns: { id: string; type: 'pattern'; content: string; context: string; tags: string[] }[];
+  experiences: MemoryAnchor[];
+  lessons: MemoryAnchor[];
+  patterns: MemoryAnchor[];
 }
 
 // =============================================================================
