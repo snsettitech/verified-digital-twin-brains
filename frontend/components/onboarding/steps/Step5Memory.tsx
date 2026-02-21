@@ -85,12 +85,7 @@ export function Step5Memory({ data, onChange }: Step5Props) {
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
-    >
+    <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 5: Memory Anchors</h2>
         <p className="text-slate-400">
@@ -273,6 +268,6 @@ export function Step5Memory({ data, onChange }: Step5Props) {
           as &quot;stories I often tell when advising people.&quot;
         </p>
       </div>
-    </motion.div>
+    </div>
   );
 }
