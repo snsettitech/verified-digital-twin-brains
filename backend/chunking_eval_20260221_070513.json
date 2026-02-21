@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-02-21T07:05:13.931293",
+  "baseline_version": "1.0",
+  "treatment_version": "2.0",
+  "deltas": {
+    "recall_at_5": 0.0,
+    "recall_at_10": 0.0,
+    "precision_at_5": 0.0,
+    "mrr": 0.0,
+    "ndcg_at_10": 0.0,
+    "latency_ms": -376.09565258026123
+  },
+  "percent_improvements": {
+    "recall_at_5": 0.0,
+    "recall_at_10": 0.0,
+    "precision_at_5": 0.0,
+    "mrr": 0.0,
+    "ndcg_at_10": 0.0
+  },
+  "chunk_stats": {
+    "baseline_total": 13,
+    "treatment_total": 18,
+    "chunk_count_delta": 5,
+    "baseline_avg_size": 33.07692307692308,
+    "treatment_avg_size": 20.944444444444443
+  },
+  "wins": [],
+  "regressions": [],
+  "win_count": 0,
+  "regression_count": 0
+}
