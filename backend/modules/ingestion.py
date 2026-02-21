@@ -26,6 +26,7 @@ from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
 from modules.delphi_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
 from modules.doc_sectioning import extract_section_blocks
+from modules.pinecone_adapter import PineconeIndexAdapter
 
 
 # ============================================================================
@@ -2000,6 +2001,8 @@ async def process_and_index_text(
 
     # Generate embeddings and prepare vectors
     index = get_pinecone_index()
+    pinecone_adapter = PineconeIndexAdapter(index)
+    use_integrated_mode = pinecone_adapter.mode == "integrated"
     vectors = []
     db_chunks = []
     
@@ -2014,9 +2017,6 @@ async def process_and_index_text(
             # Analyze chunk for enrichment
             analysis = await analyze_chunk_content(chunk)
             synth_questions = analysis.get("questions", [])
-
-            embedding_text = _build_embedding_text(entry, chunk)
-            embedding = get_embedding(embedding_text)
 
             metadata = {
                 "source_id": source_id,
@@ -2050,11 +2050,15 @@ async def process_and_index_text(
             if metadata_override:
                 metadata.update(metadata_override)
 
-            vectors.append({
+            vector_payload = {
                 "id": vector_id,
-                "values": embedding,
-                "metadata": metadata
-            })
+                "metadata": metadata,
+            }
+            if not use_integrated_mode:
+                embedding_text = _build_embedding_text(entry, chunk)
+                vector_payload["values"] = get_embedding(embedding_text)
+
+            vectors.append(vector_payload)
             
             db_chunks.append({
                 "id": chunk_id,
@@ -2123,7 +2127,7 @@ async def process_and_index_text(
                 md["twin_id"] = twin_id
                 vector["metadata"] = md
 
-            index.upsert(vectors=vectors, namespace=namespace)
+            pinecone_adapter.upsert(vectors=vectors, namespace=namespace)
             print(f"[Pinecone] Upserted {len(vectors)} vectors to namespace={namespace}")
 
         # Ensure default group has access to this source (required for retrieval filtering)

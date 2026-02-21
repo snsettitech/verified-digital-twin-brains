@@ -16,15 +16,97 @@ _openai_client = None
 _async_openai_client = None
 _cohere_client = None
 
-def get_cohere_client():
+def get_cohere_client(required: bool = False):
+    """
+    Get or create singleton Cohere client.
+    
+    Args:
+        required: If True, raises error if client cannot be created
+        
+    Returns:
+        Cohere client instance or None (if not required)
+        
+    Raises:
+        ValueError: If required=True and COHERE_API_KEY not set or cohere package missing
+    """
     global _cohere_client
     if _cohere_client is None:
         api_key = os.getenv("COHERE_API_KEY")
-        if api_key and cohere is not None:
+        
+        # Validation with clear error messages
+        if not api_key:
+            error_msg = (
+                "COHERE_API_KEY environment variable not set. "
+                "Reranking requires Cohere API key. "
+                "Get one at: https://dashboard.cohere.com/api-keys"
+            )
+            if required:
+                raise ValueError(error_msg)
+            print(f"[Cohere] {error_msg}")
+            return None
+            
+        if cohere is None:
+            error_msg = (
+                "cohere package not installed. "
+                "Run: pip install cohere"
+            )
+            if required:
+                raise ValueError(error_msg)
+            print(f"[Cohere] {error_msg}")
+            return None
+            
+        try:
             _cohere_client = cohere.ClientV2(api_key=api_key)
-        elif api_key and cohere is None:
-            print("Warning: cohere package not installed. Run: pip install -r requirements-ml.txt")
+            print("[Cohere] Client initialized successfully")
+        except Exception as e:
+            error_msg = f"Failed to initialize Cohere client: {e}"
+            if required:
+                raise ValueError(error_msg) from e
+            print(f"[Cohere] {error_msg}")
+            return None
+            
     return _cohere_client
+
+
+def validate_cohere_config(strict: bool = True) -> bool:
+    """
+    Validate Cohere configuration and raise clear errors if invalid.
+    
+    Args:
+        strict: If True, raises ValueError on any issue
+        
+    Returns:
+        True if valid, False if not (only when strict=False)
+    """
+    api_key = os.getenv("COHERE_API_KEY")
+    
+    if not api_key:
+        if strict:
+            raise ValueError(
+                "RERANKING ERROR: COHERE_API_KEY environment variable not set. "
+                "Reranking is REQUIRED for production. "
+                "Get your API key at: https://dashboard.cohere.com/api-keys "
+                "Set it with: export COHERE_API_KEY='your-key-here'"
+            )
+        return False
+        
+    if cohere is None:
+        if strict:
+            raise ValueError(
+                "RERANKING ERROR: cohere package not installed. "
+                "Run: pip install cohere"
+            )
+        return False
+        
+    # Try to create client to validate key format
+    try:
+        client = cohere.ClientV2(api_key=api_key)
+        print("[Cohere] Configuration validated successfully")
+        return True
+    except Exception as e:
+        if strict:
+            raise ValueError(f"RERANKING ERROR: Invalid Cohere API key: {e}")
+        return False
 
 def get_openai_client():
     global _openai_client
@@ -58,12 +140,33 @@ def get_pinecone_index():
     if _pinecone_index is None:
         pc = get_pinecone_client()
         index_name = os.getenv("PINECONE_INDEX_NAME")
-        if not index_name:
+        host = (os.getenv("PINECONE_HOST") or "").strip()
+        mode = (os.getenv("PINECONE_INDEX_MODE", "vector") or "vector").strip().lower()
+
+        if host.startswith("https://"):
+            host = host[len("https://") :]
+        elif host.startswith("http://"):
+            host = host[len("http://") :]
+        host = host.rstrip("/")
+
+        if not host and not index_name:
             raise ValueError("PINECONE_INDEX_NAME not found in environment")
         try:
-            _pinecone_index = pc.Index(index_name)
+            if host:
+                print(
+                    f"[Pinecone] Initializing index via host override "
+                    f"(mode={mode}, host_override=true)"
+                )
+                _pinecone_index = pc.Index(host=host)
+            else:
+                print(
+                    f"[Pinecone] Initializing index by name "
+                    f"(mode={mode}, host_override=false, index={index_name})"
+                )
+                _pinecone_index = pc.Index(index_name)
         except Exception as e:
-            print(f"Error connecting to Pinecone index '{index_name}': {e}")
+            target = host or index_name
+            print(f"Error connecting to Pinecone index '{target}': {e}")
             raise e
     return _pinecone_index
 

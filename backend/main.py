@@ -424,6 +424,19 @@ async def startup_event():
         print("[Startup] Namespace cache cleared")
     except Exception as e:
         print(f"[Startup] Warning: Could not clear namespace cache: {e}")
+    
+    # RERANKING IMPROVEMENTS: Warm up reranking models on startup
+    try:
+        from modules.retrieval import warmup_rerankers
+        warmup_rerankers()
+    except ValueError as e:
+        # Strict mode error - re-raise to fail startup
+        print(f"[Startup] ❌ CRITICAL: {e}")
+        raise
+    except Exception as e:
+        # Non-critical error - log but continue
+        print(f"[Startup] Warning: Reranker warmup failed: {e}")
+    
     sys.stdout.flush()
 
 

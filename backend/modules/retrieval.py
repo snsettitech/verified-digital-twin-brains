@@ -4,6 +4,7 @@ import time
 import logging
 import json
 import re
+import inspect
 from typing import List, Dict, Any, Optional, Set, Tuple
 from contextlib import contextmanager
 from modules.clients import get_openai_client, get_pinecone_index, get_cohere_client
@@ -19,6 +20,7 @@ from modules.delphi_namespace import (
     resolve_creator_id_for_twin,
 )
 from modules.grounding_policy import get_grounding_policy
+from modules.pinecone_adapter import PineconeIndexAdapter, get_pinecone_index_mode
 
 # Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
@@ -860,64 +862,185 @@ def parse_namespace(namespace: str) -> tuple[Optional[str], str]:
             return parts[0], parts[1]
     return None, namespace
 
-# FlashRank reranking is opt-in to avoid startup/runtime regressions in production.
-_flashrank_enabled = os.getenv("ENABLE_FLASHRANK", "false").lower() == "true"
+# =============================================================================
+# RERANKING CONFIGURATION (IMPROVEMENTS IMPLEMENTED)
+# =============================================================================
+
+# FlashRank reranking - ENABLED by default for local fallback
+_flashrank_enabled = os.getenv("ENABLE_FLASHRANK", "true").lower() == "true"
+_flashrank_available = False
+_ranker_instance = None
+Ranker = None
+RerankRequest = None
+
 if _flashrank_enabled:
     try:
         from flashrank import Ranker, RerankRequest
         _flashrank_available = True
-        _ranker_instance = None
     except ImportError:
+        print("[FlashRank] Package not installed. Run: pip install flashrank")
         _flashrank_available = False
-        _ranker_instance = None
-else:
-    Ranker = None  # type: ignore[assignment]
-    RerankRequest = None  # type: ignore[assignment]
-    _flashrank_available = False
-    _ranker_instance = None
 
+# Cohere reranking - STRICT MODE: Required for production
 _cohere_rerank_enabled = os.getenv("ENABLE_COHERE_RERANK", "true").lower() == "true"
 _cohere_rerank_model = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5")
+_cohere_strict_mode = os.getenv("COHERE_RERANK_STRICT", "true").lower() == "true"
+_cohere_rerank_timeout = float(os.getenv("COHERE_RERANK_TIMEOUT_SECONDS", "5.0"))
 
-def get_ranker():
-    """Lazy load FlashRank to avoid startup overhead."""
+# Hybrid reranking ensemble weights
+_hybrid_cohere_weight = float(os.getenv("HYBRID_COHERE_WEIGHT", "0.7"))
+_hybrid_flashrank_weight = float(os.getenv("HYBRID_FLASHRANK_WEIGHT", "0.3"))
+
+# Selective reranking threshold (skip reranking if initial confidence high)
+_selective_reranking_threshold = float(os.getenv("SELECTIVE_RERANKING_THRESHOLD", "0.75"))
+_selective_reranking_enabled = os.getenv("SELECTIVE_RERANKING_ENABLED", "true").lower() == "true"
+
+# Reranking cache
+_rerank_cache_enabled = os.getenv("RERANK_CACHE_ENABLED", "true").lower() == "true"
+_rerank_cache_maxsize = int(os.getenv("RERANK_CACHE_MAXSIZE", "1000"))
+
+
+def _get_cache_key(query: str, contexts: List[Dict[str, Any]]) -> str:
+    """Generate cache key for reranking results."""
+    import hashlib
+    context_hash = hashlib.md5(
+        "".join(c.get("text", "")[:100] for c in contexts).encode()
+    ).hexdigest()[:16]
+    query_hash = hashlib.md5(query.encode()).hexdigest()[:16]
+    return f"{query_hash}:{context_hash}"
+
+
+class RerankCache:
+    """Simple LRU cache for reranking results."""
+    
+    def __init__(self, maxsize: int = 1000):
+        self._cache: Dict[str, Tuple[List[Dict[str, Any]], float]] = {}
+        self._maxsize = maxsize
+        self._access_times: Dict[str, float] = {}
+        
+    def get(self, key: str) -> Optional[List[Dict[str, Any]]]:
+        if key in self._cache:
+            self._access_times[key] = time.time()
+            return self._cache[key][0]
+        return None
+        
+    def set(self, key: str, value: List[Dict[str, Any]]):
+        if len(self._cache) >= self._maxsize:
+            # Evict oldest
+            oldest = min(self._access_times, key=self._access_times.get)
+            del self._cache[oldest]
+            del self._access_times[oldest]
+        self._cache[key] = (value, time.time())
+        self._access_times[key] = time.time()
+        
+    def clear(self):
+        self._cache.clear()
+        self._access_times.clear()
+
+
+# Global rerank cache instance
+_rerank_cache = RerankCache(maxsize=_rerank_cache_maxsize)
+
+
+def get_ranker(preload: bool = False):
+    """
+    Lazy load FlashRank to avoid startup overhead.
+    
+    Args:
+        preload: If True, forces model load immediately
+    """
     global _ranker_instance
-    if _flashrank_enabled and _flashrank_available and _ranker_instance is None:
-        try:
-            # Use a lightweight model
-            _ranker_instance = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="./.model_cache")
-        except Exception as e:
-            print(f"Failed to initialize FlashRank: {e}")
+    if _flashrank_enabled and _flashrank_available:
+        if _ranker_instance is None or preload:
+            try:
+                print("[FlashRank] Loading model ms-marco-MiniLM-L-12-v2...")
+                _ranker_instance = Ranker(
+                    model_name="ms-marco-MiniLM-L-12-v2", 
+                    cache_dir="./.model_cache"
+                )
+                print("[FlashRank] Model loaded successfully")
+            except Exception as e:
+                print(f"[FlashRank] Failed to initialize: {e}")
+                _ranker_instance = None
     return _ranker_instance
 
 
-def _rerank_with_cohere(
+def warmup_rerankers():
+    """Pre-warm reranking models on startup."""
+    print("[Reranking] Warming up models...")
+    
+    # Validate Cohere configuration (strict mode)
+    if _cohere_rerank_enabled and _cohere_strict_mode:
+        try:
+            from modules.clients import validate_cohere_config
+            validate_cohere_config(strict=True)
+            print("[Cohere] Configuration validated (strict mode)")
+        except ValueError as e:
+            print(f"{e}")
+            raise  # Re-raise to fail startup
+    
+    # Pre-load FlashRank model
+    if _flashrank_enabled and _flashrank_available:
+        get_ranker(preload=True)
+        print("[FlashRank] Model pre-loaded")
+    
+    print("[Reranking] Warmup complete")
+
+
+async def _rerank_with_cohere(
     query: str,
     contexts: List[Dict[str, Any]],
     top_k: int,
+    timeout: float = None,
 ) -> Optional[List[Dict[str, Any]]]:
     """
-    Rerank contexts with Cohere when configured.
-    Returns None when unavailable or rerank fails.
+    Rerank contexts with Cohere.
+    
+    IMPROVEMENTS:
+    - Timeout handling with asyncio
+    - Strict mode: raises error if Cohere unavailable
+    - Better error messages
     """
-    if not _cohere_rerank_enabled or not contexts:
+    if not _cohere_rerank_enabled:
+        return None
+        
+    if not contexts:
         return None
 
-    cohere_client = get_cohere_client()
+    timeout = timeout or _cohere_rerank_timeout
+    
+    # Get client with strict validation
+    from modules.clients import get_cohere_client
+    cohere_client = get_cohere_client(required=_cohere_strict_mode)
+    
     if cohere_client is None:
+        if _cohere_strict_mode:
+            raise ValueError("Cohere reranking is required but client unavailable")
         return None
 
     try:
-        response = cohere_client.rerank(
-            model=_cohere_rerank_model,
-            query=query,
-            documents=[c.get("text", "") for c in contexts],
-            top_n=min(max(1, top_k), len(contexts)),
+        # Run Cohere rerank with timeout
+        def _do_rerank():
+            return cohere_client.rerank(
+                model=_cohere_rerank_model,
+                query=query,
+                documents=[c.get("text", "") for c in contexts],
+                top_n=min(max(1, top_k), len(contexts)),
+            )
+        
+        # Execute with timeout
+        loop = asyncio.get_event_loop()
+        response = await asyncio.wait_for(
+            loop.run_in_executor(None, _do_rerank),
+            timeout=timeout
         )
+        
+        # Parse results
         results = getattr(response, "results", None)
         if results is None and isinstance(response, dict):
             results = response.get("results")
         if not isinstance(results, list):
+            print("[Cohere] Invalid response format")
             return None
 
         reranked: List[Dict[str, Any]] = []
@@ -938,33 +1061,46 @@ def _rerank_with_cohere(
                 ctx = dict(contexts[original_idx])
                 ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
                 ctx["score"] = float(score or 0.0)
+                ctx["rerank_source"] = "cohere"
                 reranked.append(ctx)
             except Exception:
                 continue
 
         if not reranked:
+            print("[Cohere] No valid reranked results")
             return None
 
         max_rerank_score = max((float(c.get("score", 0.0) or 0.0) for c in reranked), default=0.0)
         if max_rerank_score < 0.001:
-            print("[Retrieval] Cohere rerank scores too low. Falling back.")
+            print("[Cohere] Rerank scores too low (max < 0.001)")
             return None
 
-        print(f"[Retrieval] Cohere reranked {len(contexts)} -> {len(reranked[:top_k])} contexts")
+        print(f"[Cohere] Reranked {len(contexts)} -> {len(reranked[:top_k])} contexts (max_score: {max_rerank_score:.3f})")
         return reranked[:top_k]
+        
+    except asyncio.TimeoutError:
+        print(f"[Cohere] Timeout after {timeout}s")
+        if _cohere_strict_mode:
+            raise ValueError(f"Cohere reranking timeout after {timeout}s")
+        return None
     except Exception as e:
-        print(f"[Retrieval] Cohere reranking failed: {e}. Falling back.")
+        print(f"[Cohere] Error: {e}")
+        if _cohere_strict_mode:
+            raise ValueError(f"Cohere reranking failed: {e}")
         return None
 
 
-def _rerank_with_flashrank(
+async def _rerank_with_flashrank(
     query: str,
     contexts: List[Dict[str, Any]],
     top_k: int,
 ) -> Optional[List[Dict[str, Any]]]:
     """
-    Rerank contexts with FlashRank when configured.
-    Returns None when unavailable or rerank fails.
+    Rerank contexts with FlashRank (local model).
+    
+    IMPROVEMENTS:
+    - Better error handling
+    - Source tracking
     """
     ranker = get_ranker()
     if ranker is None or not contexts:
@@ -977,7 +1113,7 @@ def _rerank_with_flashrank(
 
         max_rerank_score = max((float(res.get("score", 0) or 0) for res in results), default=0.0)
         if max_rerank_score < 0.001:
-            print("[Retrieval] FlashRank scores too low. Falling back.")
+            print("[FlashRank] Scores too low")
             return None
 
         reranked: List[Dict[str, Any]] = []
@@ -986,13 +1122,189 @@ def _rerank_with_flashrank(
             ctx = dict(contexts[original_idx])
             ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
             ctx["score"] = float(res.get("score", 0.0) or 0.0)
+            ctx["rerank_source"] = "flashrank"
             reranked.append(ctx)
 
-        print(f"[Retrieval] FlashRank reranked {len(contexts)} -> {len(reranked[:top_k])} contexts")
+        print(f"[FlashRank] Reranked {len(contexts)} -> {len(reranked[:top_k])} contexts (max_score: {max_rerank_score:.3f})")
         return reranked[:top_k]
+        
     except Exception as e:
-        print(f"[Retrieval] FlashRank reranking failed: {e}. Falling back.")
+        print(f"[FlashRank] Error: {e}")
         return None
+
+
+async def _hybrid_rerank(
+    query: str,
+    contexts: List[Dict[str, Any]],
+    top_k: int,
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Hybrid reranking: Ensemble Cohere + FlashRank scores.
+    
+    IMPROVEMENTS:
+    - Combines both rerankers for better accuracy
+    - Weighted ensemble (configurable)
+    - More robust than single reranker
+    """
+    print(f"[Hybrid] Running ensemble reranking with {len(contexts)} contexts...")
+    
+    # Get scores from both rerankers
+    cohere_call = _rerank_with_cohere(query, contexts, top_k)
+    cohere_results = await cohere_call if inspect.isawaitable(cohere_call) else cohere_call
+
+    flashrank_call = _rerank_with_flashrank(query, contexts, top_k)
+    flashrank_results = await flashrank_call if inspect.isawaitable(flashrank_call) else flashrank_call
+    
+    # Build score maps
+    cohere_scores = {}
+    if cohere_results:
+        for i, ctx in enumerate(cohere_results):
+            # Use index from original contexts
+            orig_idx = contexts.index(next(c for c in contexts if c.get("text") == ctx.get("text")))
+            cohere_scores[orig_idx] = ctx.get("score", 0.0)
+    
+    flashrank_scores = {}
+    if flashrank_results:
+        for i, ctx in enumerate(flashrank_results):
+            orig_idx = contexts.index(next(c for c in contexts if c.get("text") == ctx.get("text")))
+            flashrank_scores[orig_idx] = ctx.get("score", 0.0)
+    
+    if not cohere_scores and not flashrank_scores:
+        print("[Hybrid] Both rerankers failed")
+        return None
+    
+    # Ensemble scores
+    ensemble_scores = []
+    for i, ctx in enumerate(contexts):
+        c_score = cohere_scores.get(i, 0.0)
+        f_score = flashrank_scores.get(i, 0.0)
+        
+        # Weighted ensemble
+        if c_score > 0 and f_score > 0:
+            ensemble_score = (_hybrid_cohere_weight * c_score + 
+                            _hybrid_flashrank_weight * f_score)
+        elif c_score > 0:
+            ensemble_score = c_score
+        elif f_score > 0:
+            ensemble_score = f_score * 0.9  # Slight penalty for FlashRank-only
+        else:
+            ensemble_score = ctx.get("score", 0.0)  # Fallback to vector score
+        
+        ensemble_scores.append((i, ensemble_score))
+    
+    # Sort by ensemble score
+    ensemble_scores.sort(key=lambda x: x[1], reverse=True)
+    
+    # Build final reranked list
+    reranked = []
+    for idx, score in ensemble_scores[:top_k]:
+        ctx = dict(contexts[idx])
+        ctx["vector_score"] = float(ctx.get("vector_score", ctx.get("score", 0.0)) or 0.0)
+        ctx["score"] = float(score)
+        ctx["rerank_source"] = "hybrid"
+        ctx["cohere_score"] = cohere_scores.get(idx, 0.0)
+        ctx["flashrank_score"] = flashrank_scores.get(idx, 0.0)
+        reranked.append(ctx)
+    
+    print(f"[Hybrid] Ensemble reranked {len(contexts)} -> {len(reranked)} contexts")
+    return reranked
+
+
+async def rerank_contexts(
+    query: str,
+    contexts: List[Dict[str, Any]],
+    top_k: int,
+    max_vector_score: float = 0.0,
+) -> Tuple[List[Dict[str, Any]], str]:
+    """
+    Main reranking entry point with all improvements.
+    
+    IMPROVEMENTS:
+    1. Selective reranking (skip if high confidence)
+    2. Cache lookup
+    3. Hybrid ensemble reranking
+    4. Cache storage
+    5. Strict mode error handling
+    
+    Args:
+        query: Search query
+        contexts: Contexts to rerank
+        top_k: Number of results to return
+        max_vector_score: Highest initial vector score (for selective reranking)
+        
+    Returns:
+        Tuple of (reranked_contexts, provider_used)
+    """
+    if not contexts:
+        return [], "none"
+    
+    rerank_target_k = max(top_k * 2, RETRIEVAL_RETRY_TOP_K)
+    
+    # IMPROVEMENT 5: Selective Reranking
+    if _selective_reranking_enabled and max_vector_score >= _selective_reranking_threshold:
+        print(f"[Reranking] Skipping reranking (max_vector_score {max_vector_score:.3f} >= threshold {_selective_reranking_threshold})")
+        return [dict(c) for c in contexts[:rerank_target_k]], "vector"
+    
+    # IMPROVEMENT 6: Cache Lookup
+    cache_key = None
+    if _rerank_cache_enabled:
+        cache_key = _get_cache_key(query, contexts)
+        cached = _rerank_cache.get(cache_key)
+        if cached is not None:
+            print(f"[Reranking] Cache hit")
+            return cached, "cached"
+    
+    final_contexts: List[Dict[str, Any]] = []
+    rerank_provider_used = "vector"
+
+    async def _resolve(value: Any) -> Any:
+        return await value if inspect.isawaitable(value) else value
+
+    try:
+        # IMPROVEMENT 4: Hybrid Reranking (ensemble both)
+        # Try hybrid first if both available
+        if _cohere_rerank_enabled and _flashrank_enabled and _flashrank_available:
+            hybrid_results = await _hybrid_rerank(query, contexts, rerank_target_k)
+            if hybrid_results:
+                final_contexts = hybrid_results
+                rerank_provider_used = "hybrid"
+        
+        # Fallback to individual rerankers
+        if not final_contexts and _cohere_rerank_enabled:
+            cohere_results = await _resolve(
+                _rerank_with_cohere(query, contexts, rerank_target_k)
+            )
+            if cohere_results:
+                final_contexts = cohere_results
+                rerank_provider_used = "cohere"
+
+        if not final_contexts and _flashrank_enabled and _flashrank_available:
+            flashrank_results = await _resolve(
+                _rerank_with_flashrank(query, contexts, rerank_target_k)
+            )
+            if flashrank_results:
+                final_contexts = flashrank_results
+                rerank_provider_used = "flashrank"
+        
+        # Final fallback to vector scores
+        if not final_contexts:
+            final_contexts = [dict(c) for c in contexts[:rerank_target_k]]
+            rerank_provider_used = "vector"
+            if _cohere_strict_mode and rerank_provider_used == "vector":
+                raise ValueError("Cohere reranking required but all rerankers failed")
+        
+        # IMPROVEMENT 6: Cache Store
+        if _rerank_cache_enabled and cache_key and rerank_provider_used != "vector":
+            _rerank_cache.set(cache_key, final_contexts)
+        
+        return final_contexts, rerank_provider_used
+        
+    except Exception as e:
+        print(f"[Reranking] Critical error: {e}")
+        if _cohere_strict_mode:
+            raise
+        # Return unranked on error
+        return [dict(c) for c in contexts[:rerank_target_k]], "vector"
 
 
 async def expand_query(query: str) -> List[str]:
@@ -1256,6 +1568,7 @@ async def _execute_pinecone_queries(
     creator_id: Optional[str] = None,
     timeout: float = 5.0,
     general_top_k: Optional[int] = None,
+    search_texts: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Execute Pinecone queries for all embeddings.
@@ -1289,6 +1602,7 @@ async def _execute_pinecone_queries(
             asyncio.to_thread(get_pinecone_index),
             timeout=max(1.0, RETRIEVAL_INDEX_INIT_TIMEOUT),
         )
+        pinecone_adapter = PineconeIndexAdapter(index)
     except Exception as e:
         print(f"[Retrieval] Pinecone index unavailable: {e}")
         return []
@@ -1322,7 +1636,11 @@ async def _execute_pinecone_queries(
         merged = sorted(dedup.values(), key=lambda x: float(x.get("score", 0.0) or 0.0), reverse=True)
         return {"matches": merged}
 
-    async def pinecone_query(embedding: List[float], is_verified: bool = False) -> Dict[str, Any]:
+    async def pinecone_query(
+        embedding: List[float],
+        query_text: Optional[str] = None,
+        is_verified: bool = False,
+    ) -> Dict[str, Any]:
         """Execute one query across namespace candidates and merge."""
         top_k = (
             RETRIEVAL_TOP_K_VERIFIED
@@ -1333,22 +1651,26 @@ async def _execute_pinecone_queries(
 
         async def query_namespace(namespace: str):
             def _fetch():
-                query_params = {
-                    "vector": embedding,
-                    "top_k": top_k,
-                    "include_metadata": True,
-                    "namespace": namespace,
-                }
                 filters: List[Dict[str, Any]] = []
                 if target_twin_id:
                     filters.append({"twin_id": {"$eq": target_twin_id}})
                 if is_verified:
                     filters.append({"is_verified": {"$eq": True}})
                 if len(filters) == 1:
-                    query_params["filter"] = filters[0]
+                    metadata_filter: Optional[Dict[str, Any]] = filters[0]
                 elif len(filters) > 1:
-                    query_params["filter"] = {"$and": filters}
-                return index.query(**query_params)
+                    metadata_filter = {"$and": filters}
+                else:
+                    metadata_filter = None
+
+                return pinecone_adapter.query(
+                    vector=embedding,
+                    query_text=query_text,
+                    top_k=top_k,
+                    namespace=namespace,
+                    include_metadata=True,
+                    metadata_filter=metadata_filter,
+                )
 
             attempts: List[float] = [RETRIEVAL_PER_NAMESPACE_TIMEOUT]
             # Optional retry for primary namespace only (disabled by default to avoid long tail timeouts).
@@ -1419,22 +1741,26 @@ async def _execute_pinecone_queries(
                 )
 
                 def _retry_fetch():
-                    query_params = {
-                        "vector": embedding,
-                        "top_k": top_k,
-                        "include_metadata": True,
-                        "namespace": primary_ns,
-                    }
                     filters: List[Dict[str, Any]] = []
                     if target_twin_id:
                         filters.append({"twin_id": {"$eq": target_twin_id}})
                     if is_verified:
                         filters.append({"is_verified": {"$eq": True}})
                     if len(filters) == 1:
-                        query_params["filter"] = filters[0]
+                        metadata_filter: Optional[Dict[str, Any]] = filters[0]
                     elif len(filters) > 1:
-                        query_params["filter"] = {"$and": filters}
-                    return index.query(**query_params)
+                        metadata_filter = {"$and": filters}
+                    else:
+                        metadata_filter = None
+
+                    return pinecone_adapter.query(
+                        vector=embedding,
+                        query_text=query_text,
+                        top_k=top_k,
+                        namespace=primary_ns,
+                        include_metadata=True,
+                        metadata_filter=metadata_filter,
+                    )
 
                 retry_result = await asyncio.wait_for(
                     asyncio.to_thread(_retry_fetch),
@@ -1455,8 +1781,17 @@ async def _execute_pinecone_queries(
 
         return _merge_matches(merged_matches)
 
-    verified_task = pinecone_query(embeddings[0], is_verified=True)
-    general_tasks = [pinecone_query(emb, is_verified=False) for emb in embeddings]
+    query_variants = search_texts or []
+    verified_query_text = query_variants[0] if query_variants else None
+    verified_task = pinecone_query(embeddings[0], query_text=verified_query_text, is_verified=True)
+    general_tasks = [
+        pinecone_query(
+            emb,
+            query_text=(query_variants[idx] if idx < len(query_variants) else None),
+            is_verified=False,
+        )
+        for idx, emb in enumerate(embeddings)
+    ]
 
     try:
         results = await asyncio.wait_for(
@@ -1939,27 +2274,38 @@ async def retrieve_context_vectors(
     
     # 2. Embeddings under timeout with single-query fallback.
     all_embeddings: List[List[float]] = []
-    try:
-        all_embeddings = await asyncio.wait_for(
-            get_embeddings_async(search_queries),
-            timeout=RETRIEVAL_EMBEDDING_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
-        print(f"[Retrieval] Embedding batch timed out after {RETRIEVAL_EMBEDDING_TIMEOUT}s, falling back to single embedding")
-    except Exception as e:
-        print(f"[Retrieval] Embedding batch failed: {e}, falling back to single embedding")
+    pinecone_index_mode = get_pinecone_index_mode()
+    if pinecone_index_mode == "integrated":
+        # Integrated mode searches by text directly and does not require external query embeddings.
+        all_embeddings = [[0.0] for _ in search_queries]
+    else:
+        try:
+            all_embeddings = await asyncio.wait_for(
+                get_embeddings_async(search_queries),
+                timeout=RETRIEVAL_EMBEDDING_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            print(f"[Retrieval] Embedding batch timed out after {RETRIEVAL_EMBEDDING_TIMEOUT}s, falling back to single embedding")
+        except Exception as e:
+            print(f"[Retrieval] Embedding batch failed: {e}, falling back to single embedding")
 
     if not all_embeddings:
-        try:
-            one = await asyncio.wait_for(
-                asyncio.to_thread(get_embedding, query),
-                timeout=min(RETRIEVAL_EMBEDDING_TIMEOUT, 4.0),
-            )
-            if one:
-                all_embeddings = [one]
-        except Exception as e:
-            print(f"[Retrieval] Single-embedding fallback failed: {e}")
-            return []
+        if pinecone_index_mode == "integrated":
+            all_embeddings = [[0.0]]
+            search_queries = [query]
+            search_weights = [1.0]
+            search_kinds = ["original"]
+        else:
+            try:
+                one = await asyncio.wait_for(
+                    asyncio.to_thread(get_embedding, query),
+                    timeout=min(RETRIEVAL_EMBEDDING_TIMEOUT, 4.0),
+                )
+                if one:
+                    all_embeddings = [one]
+            except Exception as e:
+                print(f"[Retrieval] Single-embedding fallback failed: {e}")
+                return []
 
     if len(all_embeddings) != len(search_queries):
         aligned = min(len(all_embeddings), len(search_queries))
@@ -1972,14 +2318,44 @@ async def retrieve_context_vectors(
             all_embeddings = []
     if not all_embeddings:
         return []
-    
+
+    async def _execute_queries_with_compat(
+        embeddings_batch: List[List[float]],
+        search_text_batch: Optional[List[str]],
+        top_k_override: int,
+        timeout_override: float,
+    ) -> List[Dict[str, Any]]:
+        kwargs = {
+            "creator_id": creator_id,
+            "timeout": timeout_override,
+            "general_top_k": top_k_override,
+        }
+        if search_text_batch is not None:
+            kwargs["search_texts"] = search_text_batch
+        try:
+            return await _execute_pinecone_queries(
+                embeddings_batch,
+                twin_id,
+                **kwargs,
+            )
+        except TypeError as e:
+            # Backward compatibility for monkeypatched test doubles that still
+            # use the pre-Phase2 function signature.
+            if "search_texts" not in str(e):
+                raise
+            kwargs.pop("search_texts", None)
+            return await _execute_pinecone_queries(
+                embeddings_batch,
+                twin_id,
+                **kwargs,
+            )
+
     # 3. Parallel Vector Search with bounded timeout.
-    all_results = await _execute_pinecone_queries(
-        all_embeddings,
-        twin_id,
-        creator_id=creator_id,
-        timeout=RETRIEVAL_VECTOR_TIMEOUT,
-        general_top_k=max(RETRIEVAL_TOP_K_GENERAL, top_k * 2),
+    all_results = await _execute_queries_with_compat(
+        embeddings_batch=all_embeddings,
+        search_text_batch=search_queries,
+        top_k_override=max(RETRIEVAL_TOP_K_GENERAL, top_k * 2),
+        timeout_override=RETRIEVAL_VECTOR_TIMEOUT,
     )
 
     # Fallback pass: if the full pipeline failed, retry a single direct query embedding.
@@ -1989,16 +2365,18 @@ async def retrieve_context_vectors(
             "single-query fallback."
         )
         try:
-            fallback_embedding = await asyncio.wait_for(
-                asyncio.to_thread(get_embedding, query),
-                timeout=min(RETRIEVAL_EMBEDDING_TIMEOUT, 8.0),
-            )
-            all_results = await _execute_pinecone_queries(
-                [fallback_embedding],
-                twin_id,
-                creator_id=creator_id,
-                timeout=max(RETRIEVAL_VECTOR_TIMEOUT, RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5),
-                general_top_k=max(RETRIEVAL_RETRY_TOP_K, top_k * 2),
+            if pinecone_index_mode == "integrated":
+                fallback_embedding = [0.0]
+            else:
+                fallback_embedding = await asyncio.wait_for(
+                    asyncio.to_thread(get_embedding, query),
+                    timeout=min(RETRIEVAL_EMBEDDING_TIMEOUT, 8.0),
+                )
+            all_results = await _execute_queries_with_compat(
+                embeddings_batch=[fallback_embedding],
+                search_text_batch=[query],
+                top_k_override=max(RETRIEVAL_RETRY_TOP_K, top_k * 2),
+                timeout_override=max(RETRIEVAL_VECTOR_TIMEOUT, RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5),
             )
         except Exception as e:
             print(f"[Retrieval] Minimal fallback retrieval failed: {e}")
@@ -2057,25 +2435,19 @@ async def retrieve_context_vectors(
     )
     print(f"DEBUG: Unique contexts before rerank: {len(unique_contexts)}")
     
-    # 8. Rerank
-    # Priority: Cohere (remote) -> FlashRank (local) -> vector score fallback.
-    final_contexts: List[Dict[str, Any]] = []
-    rerank_provider_used = "vector"
-
-    rerank_target_k = max(top_k * 2, RETRIEVAL_RETRY_TOP_K)
-    if unique_contexts:
-        cohere_reranked = _rerank_with_cohere(query, unique_contexts, rerank_target_k)
-        if cohere_reranked:
-            final_contexts = cohere_reranked
-            rerank_provider_used = "cohere"
-        else:
-            flashrank_reranked = _rerank_with_flashrank(query, unique_contexts, rerank_target_k)
-            if flashrank_reranked:
-                final_contexts = flashrank_reranked
-                rerank_provider_used = "flashrank"
-
-    if not final_contexts:
-        final_contexts = [dict(c) for c in unique_contexts[:rerank_target_k]]
+    # 8. Rerank with all improvements (timeout, hybrid, selective, cache)
+    # Calculate max vector score for selective reranking
+    max_vector_score = max(
+        (float(c.get("vector_score", c.get("score", 0.0)) or 0.0) for c in unique_contexts),
+        default=0.0
+    )
+    
+    final_contexts, rerank_provider_used = await rerank_contexts(
+        query=query,
+        contexts=unique_contexts,
+        top_k=top_k,
+        max_vector_score=max_vector_score
+    )
 
     # Keep raw vector score available after reranking updates score.
     for ctx in final_contexts:
@@ -2160,10 +2532,14 @@ async def retrieve_context_vectors(
                     "doc_ids": [c.get("source_id", "unknown")[:50] for c in final_contexts],
                     "similarity_scores": [round(c.get("score", 0.0), 3) for c in final_contexts],
                     "chunk_lengths": [len(c.get("text", "")) for c in final_contexts],
-                    "reranked": rerank_provider_used != "vector",
+                    "reranked": rerank_provider_used not in ("vector", "none"),
                     "rerank_provider": rerank_provider_used,
                     "cohere_rerank_enabled": _cohere_rerank_enabled,
+                    "cohere_strict_mode": _cohere_strict_mode,
                     "flashrank_enabled": _flashrank_enabled,
+                    "hybrid_weights": {"cohere": _hybrid_cohere_weight, "flashrank": _hybrid_flashrank_weight},
+                    "selective_reranking_enabled": _selective_reranking_enabled,
+                    "rerank_cache_enabled": _rerank_cache_enabled,
                     "lexical_fusion_enabled": RETRIEVAL_LEXICAL_FUSION_ENABLED,
                     "lexical_fusion_alpha": RETRIEVAL_LEXICAL_FUSION_ALPHA,
                     "top_k": top_k,
@@ -2314,3 +2690,89 @@ async def get_retrieval_health_status(twin_id: Optional[str] = None) -> Dict[str
         status["warnings"].append("DELPHI_DUAL_READ is disabled - legacy namespaces may not be queried")
     
     return status
+
+
+# =============================================================================
+# RERANKING STATUS AND HEALTH FUNCTIONS
+# =============================================================================
+
+def get_reranker_status() -> Dict[str, Any]:
+    """
+    Get complete status of the reranking system with all improvements.
+    
+    Returns:
+        Dict with configuration, availability, and health status
+    """
+    from modules.clients import get_cohere_client
+    
+    # Check Cohere availability
+    cohere_available = False
+    cohere_error = None
+    try:
+        client = get_cohere_client(required=False)
+        cohere_available = client is not None
+    except Exception as e:
+        cohere_error = str(e)
+    
+    # Check FlashRank availability
+    flashrank_available = _flashrank_available and get_ranker() is not None
+    
+    return {
+        "configuration": {
+            "cohere": {
+                "enabled": _cohere_rerank_enabled,
+                "strict_mode": _cohere_strict_mode,
+                "model": _cohere_rerank_model,
+                "timeout_seconds": _cohere_rerank_timeout,
+                "available": cohere_available,
+                "error": cohere_error,
+            },
+            "flashrank": {
+                "enabled": _flashrank_enabled,
+                "available": flashrank_available,
+                "model": "ms-marco-MiniLM-L-12-v2" if flashrank_available else None,
+                "preloaded": _ranker_instance is not None,
+            },
+            "hybrid": {
+                "enabled": _cohere_rerank_enabled and _flashrank_enabled,
+                "cohere_weight": _hybrid_cohere_weight,
+                "flashrank_weight": _hybrid_flashrank_weight,
+            },
+            "selective_reranking": {
+                "enabled": _selective_reranking_enabled,
+                "threshold": _selective_reranking_threshold,
+            },
+            "cache": {
+                "enabled": _rerank_cache_enabled,
+                "maxsize": _rerank_cache_maxsize,
+                "current_size": len(_rerank_cache._cache) if _rerank_cache else 0,
+            },
+        },
+        "health": {
+            "ready": cohere_available if _cohere_strict_mode else (cohere_available or flashrank_available),
+            "strict_mode": _cohere_strict_mode,
+            "primary_reranker": "cohere" if cohere_available else ("flashrank" if flashrank_available else "none"),
+        },
+        "recommendations": [
+            "Enable FlashRank: Set ENABLE_FLASHRANK=true" if not _flashrank_enabled else None,
+            "Install FlashRank: pip install flashrank" if _flashrank_enabled and not _flashrank_available else None,
+            "Set COHERE_API_KEY for production reranking" if not cohere_available and _cohere_strict_mode else None,
+            "Run warmup_rerankers() on startup" if not flashrank_available and _flashrank_enabled else None,
+        ],
+    }
+
+
+def clear_rerank_cache():
+    """Clear the reranking cache."""
+    global _rerank_cache
+    if _rerank_cache:
+        _rerank_cache.clear()
+        print("[Reranking] Cache cleared")
+
+
+# Alias for backward compatibility
+get_rerank_cache_stats = lambda: {
+    "enabled": _rerank_cache_enabled,
+    "size": len(_rerank_cache._cache) if _rerank_cache else 0,
+    "maxsize": _rerank_cache_maxsize,
+} if _rerank_cache_enabled else {"enabled": False}
