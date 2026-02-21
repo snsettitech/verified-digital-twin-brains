@@ -37,9 +37,15 @@ export function Step5Memory({ data, onChange }: Step5Props) {
   const addItem = () => {
     if (!newContent.trim()) return;
 
+    const typeMap = {
+      experiences: 'experience' as const,
+      lessons: 'lesson' as const,
+      patterns: 'pattern' as const,
+    };
+    
     const newAnchor: MemoryAnchor = {
       id: `${activeTab}_${Date.now()}`,
-      type: activeTab,
+      type: typeMap[activeTab],
       content: newContent.trim(),
       context: newContext.trim(),
       tags: newTags.split(',').map((t) => t.trim()).filter(Boolean),
