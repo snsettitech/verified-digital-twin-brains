@@ -1,0 +1,160 @@
+{
+  "timestamp": "2026-02-21T10:20:56.383688",
+  "duration_seconds": 10.529395,
+  "summary": {
+    "total_checks": 10,
+    "passed": 7,
+    "failed": 3,
+    "warnings": 0,
+    "success_rate": "70.0%"
+  },
+  "results": [
+    {
+      "name": "Environment Variables",
+      "status": "fail",
+      "message": "Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_KEY, PINECONE_API_KEY, OPENAI_API_KEY",
+      "details": {
+        "missing": [
+          "SUPABASE_URL",
+          "SUPABASE_SERVICE_KEY",
+          "PINECONE_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "duration_ms": 0.0
+    },
+    {
+      "name": "Supabase Connection",
+      "status": "pass",
+      "message": "Supabase connection successful",
+      "details": {
+        "count_result": 114
+      },
+      "duration_ms": 3202.4285793304443
+    },
+    {
+      "name": "Pinecone Connection",
+      "status": "pass",
+      "message": "Pinecone connection successful",
+      "details": {
+        "total_vectors": 0,
+        "dimension": 1024
+      },
+      "duration_ms": 604.2077541351318
+    },
+    {
+      "name": "OpenAI Connection",
+      "status": "pass",
+      "message": "OpenAI API connection successful",
+      "details": {
+        "embedding_dimensions": 1536
+      },
+      "duration_ms": 1771.653175354004
+    },
+    {
+      "name": "Langfuse Connection",
+      "status": "pass",
+      "message": "Langfuse client initialized",
+      "details": {
+        "host": "https://us.cloud.langfuse.com"
+      },
+      "duration_ms": 964.6024703979492
+    },
+    {
+      "name": "5-Layer Persona Integration",
+      "status": "pass",
+      "message": "5-Layer Persona Model loaded. Feature flag: False",
+      "details": {
+        "feature_flag": false,
+        "spec_version": "2.0.0",
+        "engine_initialized": true
+      },
+      "duration_ms": 44.718265533447266
+    },
+    {
+      "name": "Database Tables",
+      "status": "pass",
+      "message": "All 6 required tables exist",
+      "details": {
+        "tables": [
+          "twins",
+          "sources",
+          "chunks",
+          "conversations",
+          "messages",
+          "persona_specs"
+        ]
+      },
+      "duration_ms": 750.1544952392578
+    },
+    {
+      "name": "Retrieval Pipeline",
+      "status": "fail",
+      "message": "Retrieval pipeline check failed: cannot import name 'retrieve_chunks' from 'modules.retrieval' (D:\\verified-digital-twin-brains\\backend\\modules\\retrieval.py)",
+      "details": {
+        "error": "cannot import name 'retrieve_chunks' from 'modules.retrieval' (D:\\verified-digital-twin-brains\\backend\\modules\\retrieval.py)"
+      },
+      "duration_ms": 87.12387084960938
+    },
+    {
+      "name": "Agent Components",
+      "status": "pass",
+      "message": "LangGraph agent components loaded",
+      "details": {
+        "nodes": [
+          "router_node",
+          "planner_node",
+          "realizer_node"
+        ],
+        "state_type": "TwinState"
+      },
+      "duration_ms": 3104.505777359009
+    },
+    {
+      "name": "Memory System",
+      "status": "fail",
+      "message": "Memory system check failed: cannot import name 'get_memory_context' from 'modules.memory' (D:\\verified-digital-twin-brains\\backend\\modules\\memory.py)",
+      "details": {
+        "error": "cannot import name 'get_memory_context' from 'modules.memory' (D:\\verified-digital-twin-brains\\backend\\modules\\memory.py)"
+      },
+      "duration_ms": 0.0
+    }
+  ],
+  "critical_issues": [
+    {
+      "name": "Environment Variables",
+      "status": "fail",
+      "message": "Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_KEY, PINECONE_API_KEY, OPENAI_API_KEY",
+      "details": {
+        "missing": [
+          "SUPABASE_URL",
+          "SUPABASE_SERVICE_KEY",
+          "PINECONE_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "duration_ms": 0.0
+    },
+    {
+      "name": "Retrieval Pipeline",
+      "status": "fail",
+      "message": "Retrieval pipeline check failed: cannot import name 'retrieve_chunks' from 'modules.retrieval' (D:\\verified-digital-twin-brains\\backend\\modules\\retrieval.py)",
+      "details": {
+        "error": "cannot import name 'retrieve_chunks' from 'modules.retrieval' (D:\\verified-digital-twin-brains\\backend\\modules\\retrieval.py)"
+      },
+      "duration_ms": 87.12387084960938
+    },
+    {
+      "name": "Memory System",
+      "status": "fail",
+      "message": "Memory system check failed: cannot import name 'get_memory_context' from 'modules.memory' (D:\\verified-digital-twin-brains\\backend\\modules\\memory.py)",
+      "details": {
+        "error": "cannot import name 'get_memory_context' from 'modules.memory' (D:\\verified-digital-twin-brains\\backend\\modules\\memory.py)"
+      },
+      "duration_ms": 0.0
+    }
+  ],
+  "recommendations": [
+    "CRITICAL: Set missing environment variables in .env file"
+  ]
+}

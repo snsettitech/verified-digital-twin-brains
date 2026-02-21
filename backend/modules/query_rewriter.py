@@ -210,12 +210,28 @@ class ConversationalQueryRewriter:
             QueryRewriteResult with standalone query and metadata
         """
         start_time = datetime.utcnow()
+        if current_query is None:
+            current_query = ""
+        current_query = str(current_query)
+
+        if current_query.strip() == "":
+            return QueryRewriteResult(
+                standalone_query="",
+                original_query=current_query,
+                intent="standalone",
+                requires_history=False,
+                rewrite_applied=False,
+                rewrite_confidence=1.0,
+                reasoning="Empty query",
+                latency_ms=(datetime.utcnow() - start_time).total_seconds() * 1000,
+            )
         
         # Check cache first
-        cached = _query_rewrite_cache.get(current_query, conversation_history)
+        cache_query = f"{id(self)}::{current_query}"
+        cached = _query_rewrite_cache.get(cache_query, conversation_history)
         if cached:
             print(f"[QueryRewrite] Cache hit for '{current_query[:50]}...'")
-            cached.latency_ms = 0.0  # Reset latency for cached result
+            cached.latency_ms = max(float(cached.latency_ms or 0.0), 0.1)
             self._log_metrics(cached, cached=True)
             return cached
         
@@ -229,8 +245,10 @@ class ConversationalQueryRewriter:
                 rewrite_applied=False,
                 rewrite_confidence=1.0,
                 reasoning="Query is already standalone",
-                latency_ms=0.0,
+                latency_ms=(datetime.utcnow() - start_time).total_seconds() * 1000,
             )
+            self._log_metrics(result, cached=False)
+            return result
         
         # Step 1: Rule-based pronoun resolution (fast)
         rule_based = self._resolve_pronouns_rule_based(
@@ -271,7 +289,7 @@ class ConversationalQueryRewriter:
         
         # Cache the result
         if llm_result.rewrite_applied:
-            _query_rewrite_cache.set(current_query, conversation_history, llm_result)
+            _query_rewrite_cache.set(cache_query, conversation_history, llm_result)
         
         # Log metrics
         self._log_metrics(llm_result, cached=False)

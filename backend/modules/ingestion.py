@@ -27,6 +27,7 @@ from modules.governance import AuditLogger
 from modules.delphi_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
 from modules.doc_sectioning import extract_section_blocks
 from modules.pinecone_adapter import PineconeIndexAdapter
+from modules.persona_extraction_service import run_persona_extraction_for_source
 
 
 # ============================================================================
@@ -2171,6 +2172,22 @@ async def process_and_index_text(
             error=err,
         )
         raise
+
+    # Optional persona extraction path (safe, non-fatal, flag-gated).
+    try:
+        extraction_summary = run_persona_extraction_for_source(
+            twin_id=twin_id,
+            source_id=source_id,
+            text=text,
+            provider=provider,
+        )
+        if extraction_summary.get("enabled"):
+            print(
+                "[Ingestion] Persona extraction summary "
+                f"source_id={source_id} twin_id={twin_id} outcome={extraction_summary}"
+            )
+    except Exception as e:
+        print(f"[Ingestion] Persona extraction hook failed (non-fatal): {e}")
 
     return len(vectors)
 

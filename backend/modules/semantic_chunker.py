@@ -158,7 +158,7 @@ async def create_semantic_chunks(
         block_type = block.get("block_type", "paragraph")
         
         # Step 2: Smart chunking based on content type
-        if source_type in ("transcript", "youtube") and block_text.count('\n') > 3:
+        if source_type in ("transcript", "youtube") and block_text.count('\n') >= 3:
             # Use speaker-aware chunking for transcripts
             sub_chunks = _chunk_transcript(
                 block_text,
@@ -182,6 +182,7 @@ async def create_semantic_chunks(
                 section_level=_detect_section_level(section_title),
                 chunk_type=block_type,
                 chunk_index=chunk_index,
+                speaker=sub_chunk.get("speaker"),
             )
             chunks.append(chunk)
             chunk_index += 1

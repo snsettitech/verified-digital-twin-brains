@@ -1,8 +1,342 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { User, Briefcase, Target, Shield, Sparkles } from 'lucide-react';
 
-interface Step1IdentityProps {
+// =============================================================================
+// Types
+// =============================================================================
+
+export interface IdentityFormData {
+  twinName: string;
+  handle: string;
+  tagline: string;
+  expertise: string[];
+  customExpertise: string[];
+  goals90Days: string[];
+  boundaries: string;
+  privacyConstraints: string;
+  uncertaintyPreference: 'ask' | 'infer';
+}
+
+interface Step1Props {
+  data: IdentityFormData;
+  onChange: (data: IdentityFormData) => void;
+  onSpecializationChange?: (specialization: string) => void;
+}
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+const SPECIALIZATIONS = [
+  { id: 'vanilla', label: 'General Purpose', emoji: '🧠', description: 'A well-rounded digital twin for general knowledge' },
+  { id: 'founder', label: 'Founder', emoji: '🚀', description: 'Share your startup journey and business insights' },
+  { id: 'creator', label: 'Creator', emoji: '🎨', description: 'For artists, writers, and content creators' },
+  { id: 'technical', label: 'Technical Expert', emoji: '⚡', description: 'Deep technical knowledge and engineering expertise' },
+];
+
+const EXPERTISE_DOMAINS = [
+  'Business Strategy',
+  'Product Management',
+  'Engineering',
+  'Design',
+  'Marketing',
+  'Sales',
+  'Operations',
+  'Finance',
+  'Leadership',
+  'Startup Growth',
+  'AI/ML',
+  'Web Development',
+  'Mobile Development',
+  'UX Research',
+  'Content Strategy',
+];
+
+// =============================================================================
+// Component
+// =============================================================================
+
+export function Step1Identity({ data, onChange, onSpecializationChange }: Step1Props) {
+  const [customTag, setCustomTag] = useState('');
+  const [specialization, setSpecialization] = useState('vanilla');
+
+  const updateField = <K extends keyof IdentityFormData>(field: K, value: IdentityFormData[K]) => {
+    onChange({ ...data, [field]: value });
+  };
+
+  const handleSpecializationChange = (spec: string) => {
+    setSpecialization(spec);
+    onSpecializationChange?.(spec);
+  };
+
+  const toggleDomain = (domain: string) => {
+    const current = data.expertise || [];
+    const updated = current.includes(domain)
+      ? current.filter((d) => d !== domain)
+      : [...current, domain];
+    updateField('expertise', updated);
+  };
+
+  const addCustomExpertise = () => {
+    if (customTag && !data.customExpertise.includes(customTag)) {
+      updateField('customExpertise', [...data.customExpertise, customTag]);
+      setCustomTag('');
+    }
+  };
+
+  const removeCustomExpertise = (tag: string) => {
+    updateField('customExpertise', data.customExpertise.filter((t) => t !== tag));
+  };
+
+  const updateGoal = (index: number, value: string) => {
+    const newGoals = [...data.goals90Days];
+    newGoals[index] = value;
+    updateField('goals90Days', newGoals);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-6"
+    >
+      <div className="text-center mb-8">
+        <h2 className="text-2xl font-bold mb-2">Layer 1: Identity Frame</h2>
+        <p className="text-muted-foreground">
+          Who is your digital twin? Define their role, expertise, and background.
+        </p>
+      </div>
+
+      {/* Specialization */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            Specialization
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3">
+            {SPECIALIZATIONS.map((spec) => (
+              <button
+                key={spec.id}
+                onClick={() => handleSpecializationChange(spec.id)}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  specialization === spec.id
+                    ? 'border-primary bg-primary/5'
+                    : 'border-muted bg-card hover:bg-muted/50'
+                }`}
+              >
+                <span className="text-2xl mb-2 block">{spec.emoji}</span>
+                <p className="font-semibold text-sm">{spec.label}</p>
+                <p className="text-xs text-muted-foreground mt-1">{spec.description}</p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Basic Identity */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <User className="h-5 w-5 text-primary" />
+            Basic Identity
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="twin-name">Twin Name *</Label>
+            <Input
+              id="twin-name"
+              value={data.twinName}
+              onChange={(e) => updateField('twinName', e.target.value)}
+              placeholder="e.g., Alex's Twin"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="handle">Handle (optional)</Label>
+            <div className="flex items-center">
+              <span className="px-3 py-2 border border-r-0 rounded-l-md bg-muted text-muted-foreground">@</span>
+              <Input
+                id="handle"
+                value={data.handle}
+                onChange={(e) => updateField('handle', e.target.value.replace(/\s+/g, '').toLowerCase())}
+                placeholder="alex"
+                className="rounded-l-none"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tagline">Tagline (optional)</Label>
+            <Input
+              id="tagline"
+              value={data.tagline}
+              onChange={(e) => updateField('tagline', e.target.value)}
+              placeholder="e.g., Startup founder sharing lessons learned"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Expertise */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Briefcase className="h-5 w-5 text-primary" />
+            Areas of Expertise
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="mb-3 block">Select domains</Label>
+            <div className="flex flex-wrap gap-2">
+              {EXPERTISE_DOMAINS.map((domain) => (
+                <button
+                  key={domain}
+                  onClick={() => toggleDomain(domain)}
+                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                    data.expertise?.includes(domain)
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  {domain}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-4 border-t">
+            <Label>Custom Expertise</Label>
+            <div className="flex gap-2">
+              <Input
+                value={customTag}
+                onChange={(e) => setCustomTag(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && addCustomExpertise()}
+                placeholder="Add custom area..."
+              />
+              <Button onClick={addCustomExpertise} disabled={!customTag}>
+                Add
+              </Button>
+            </div>
+            {data.customExpertise?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {data.customExpertise.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => removeCustomExpertise(tag)}>
+                    {tag} ×
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Goals */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Target className="h-5 w-5 text-primary" />
+            Goals (Next 90 Days)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {[0, 1, 2].map((idx) => (
+            <Input
+              key={idx}
+              value={data.goals90Days[idx] || ''}
+              onChange={(e) => updateGoal(idx, e.target.value)}
+              placeholder={`Goal ${idx + 1} (optional)`}
+            />
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Boundaries & Preferences */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            Boundaries & Preferences
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="boundaries">Boundaries (optional)</Label>
+            <Textarea
+              id="boundaries"
+              value={data.boundaries}
+              onChange={(e) => updateField('boundaries', e.target.value)}
+              placeholder="What should this twin avoid? What is out of scope?"
+              rows={3}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="privacy">Privacy Constraints (optional)</Label>
+            <Textarea
+              id="privacy"
+              value={data.privacyConstraints}
+              onChange={(e) => updateField('privacyConstraints', e.target.value)}
+              placeholder="List confidential topics or data that should never be exposed"
+              rows={3}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>When Information is Insufficient</Label>
+            <RadioGroup
+              value={data.uncertaintyPreference}
+              onValueChange={(value: 'ask' | 'infer') => updateField('uncertaintyPreference', value)}
+              className="grid grid-cols-2 gap-3"
+            >
+              <div>
+                <RadioGroupItem value="ask" id="ask" className="peer sr-only" />
+                <Label
+                  htmlFor="ask"
+                  className="flex flex-col p-4 border rounded-lg cursor-pointer transition-all hover:bg-muted peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                >
+                  <span className="font-semibold">Ask Questions</span>
+                  <span className="text-xs text-muted-foreground">Prefer clarification over guessing</span>
+                </Label>
+              </div>
+              <div>
+                <RadioGroupItem value="infer" id="infer" className="peer sr-only" />
+                <Label
+                  htmlFor="infer"
+                  className="flex flex-col p-4 border rounded-lg cursor-pointer transition-all hover:bg-muted peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5"
+                >
+                  <span className="font-semibold">Infer Best Effort</span>
+                  <span className="text-xs text-muted-foreground">Make reasonable assumptions</span>
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+// =============================================================================
+// Legacy Default Export (for backwards compatibility)
+// =============================================================================
+
+interface LegacyStep1IdentityProps {
   twinName: string;
   handle: string;
   tagline: string;
@@ -32,32 +366,7 @@ interface Step1IdentityProps {
   onUncertaintyPreferenceChange: (value: 'ask' | 'infer') => void;
 }
 
-const SPECIALIZATIONS = [
-  { id: 'vanilla', label: 'General Purpose', emoji: '🧠', description: 'A well-rounded digital twin for general knowledge' },
-  { id: 'founder', label: 'Founder', emoji: '🚀', description: 'Share your startup journey and business insights' },
-  { id: 'creator', label: 'Creator', emoji: '🎨', description: 'For artists, writers, and content creators' },
-  { id: 'technical', label: 'Technical Expert', emoji: '⚡', description: 'Deep technical knowledge and engineering expertise' },
-];
-
-const EXPERTISE_DOMAINS = [
-  'Business Strategy',
-  'Product Management',
-  'Engineering',
-  'Design',
-  'Marketing',
-  'Sales',
-  'Operations',
-  'Finance',
-  'Leadership',
-  'Startup Growth',
-  'AI/ML',
-  'Web Development',
-  'Mobile Development',
-  'UX Research',
-  'Content Strategy',
-];
-
-export default function Step1Identity({
+export default function LegacyStep1Identity({
   twinName,
   handle,
   tagline,
@@ -80,362 +389,37 @@ export default function Step1Identity({
   onBoundariesChange,
   onPrivacyConstraintsChange,
   onUncertaintyPreferenceChange,
-}: Step1IdentityProps) {
-  const [customTag, setCustomTag] = useState('');
-  const [activeTab, setActiveTab] = useState<'basic' | 'expertise' | 'anchors' | 'personality'>('basic');
-
-  const toggleDomain = (domain: string) => {
-    if (selectedDomains.includes(domain)) {
-      onDomainsChange(selectedDomains.filter(d => d !== domain));
-    } else {
-      onDomainsChange([...selectedDomains, domain]);
-    }
+}: LegacyStep1IdentityProps) {
+  // Convert legacy props to new data format
+  const data: IdentityFormData = {
+    twinName,
+    handle,
+    tagline,
+    expertise: selectedDomains,
+    customExpertise,
+    goals90Days,
+    boundaries,
+    privacyConstraints,
+    uncertaintyPreference,
   };
 
-  const addCustomExpertise = () => {
-    if (customTag && !customExpertise.includes(customTag)) {
-      onCustomExpertiseChange([...customExpertise, customTag]);
-      setCustomTag('');
-    }
-  };
-
-  const removeCustomExpertise = (tag: string) => {
-    onCustomExpertiseChange(customExpertise.filter(t => t !== tag));
+  const handleChange = (newData: IdentityFormData) => {
+    if (newData.twinName !== twinName) onTwinNameChange(newData.twinName);
+    if (newData.handle !== handle) onHandleChange(newData.handle);
+    if (newData.tagline !== tagline) onTaglineChange(newData.tagline);
+    if (newData.expertise !== selectedDomains) onDomainsChange(newData.expertise);
+    if (newData.customExpertise !== customExpertise) onCustomExpertiseChange(newData.customExpertise);
+    if (newData.goals90Days !== goals90Days) onGoalsChange(newData.goals90Days);
+    if (newData.boundaries !== boundaries) onBoundariesChange(newData.boundaries);
+    if (newData.privacyConstraints !== privacyConstraints) onPrivacyConstraintsChange(newData.privacyConstraints);
+    if (newData.uncertaintyPreference !== uncertaintyPreference) onUncertaintyPreferenceChange(newData.uncertaintyPreference);
   };
 
   return (
-    <div className="space-y-6">
-      {/* Welcome Header */}
-      <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Create Your Digital Twin</h2>
-        <p className="text-slate-400">Let&apos;s set up your AI in 3 simple steps</p>
-      </div>
-
-      {/* Tab Navigation */}
-      <div className="flex gap-2 p-1 bg-white/5 rounded-xl mb-6">
-        {(['basic', 'expertise', 'anchors', 'personality'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
-              activeTab === tab
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            {tab === 'basic' && 'Basic Info'}
-            {tab === 'expertise' && 'Expertise'}
-            {tab === 'anchors' && 'Goals & Boundaries'}
-            {tab === 'personality' && 'Personality'}
-          </button>
-        ))}
-      </div>
-
-      {/* Basic Info Tab */}
-      {activeTab === 'basic' && (
-        <div className="space-y-6 animate-fadeIn">
-          {/* Twin Type Selection */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">What type of twin?</label>
-            <div className="grid grid-cols-2 gap-3">
-              {SPECIALIZATIONS.map((spec) => (
-                <button
-                  key={spec.id}
-                  onClick={() => onSpecializationChange(spec.id)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all ${
-                    specialization === spec.id
-                      ? 'border-indigo-500 bg-indigo-500/10'
-                      : 'border-white/10 bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  <span className="text-2xl mb-2 block">{spec.emoji}</span>
-                  <p className="font-semibold text-white text-sm">{spec.label}</p>
-                  <p className="text-xs text-slate-400 mt-1">{spec.description}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Identity Fields */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Twin Name</label>
-              <input
-                type="text"
-                value={twinName}
-                onChange={(e) => onTwinNameChange(e.target.value)}
-                placeholder="e.g., Alex's Twin"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Handle (optional)</label>
-              <div className="flex items-center bg-white/5 border border-white/10 rounded-xl px-4">
-                <span className="text-slate-500">@</span>
-                <input
-                  type="text"
-                  value={handle}
-                  onChange={(e) => onHandleChange(e.target.value.replace(/\s+/g, '').toLowerCase())}
-                  placeholder="alex"
-                  className="flex-1 px-2 py-3 bg-transparent text-white placeholder-slate-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Tagline (optional)</label>
-              <input
-                type="text"
-                value={tagline}
-                onChange={(e) => onTaglineChange(e.target.value)}
-                placeholder="e.g., Startup founder sharing lessons learned"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Goals & Boundaries Tab */}
-      {activeTab === 'anchors' && (
-        <div className="space-y-6 animate-fadeIn">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Top 3 Goals (next 90 days)
-            </label>
-            <div className="space-y-2">
-              {[0, 1, 2].map((idx) => (
-                <input
-                  key={idx}
-                  type="text"
-                  value={goals90Days[idx] || ''}
-                  onChange={(e) => {
-                    const next = [...goals90Days];
-                    next[idx] = e.target.value;
-                    onGoalsChange(next);
-                  }}
-                  placeholder={`Goal ${idx + 1}`}
-                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Boundaries (do / do not)
-            </label>
-            <textarea
-              value={boundaries}
-              onChange={(e) => onBoundariesChange(e.target.value)}
-              rows={4}
-              placeholder="What should this twin avoid? What is out of scope?"
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Privacy constraints
-            </label>
-            <textarea
-              value={privacyConstraints}
-              onChange={(e) => onPrivacyConstraintsChange(e.target.value)}
-              rows={3}
-              placeholder="List confidential topics or data that should never be exposed."
-              className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Uncertainty preference
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => onUncertaintyPreferenceChange('ask')}
-                className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                  uncertaintyPreference === 'ask'
-                    ? 'border-indigo-500 bg-indigo-500/10 text-white'
-                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                <div className="font-semibold">Ask when uncertain</div>
-                <div className="text-xs text-slate-400">Prefer targeted clarification over guessing.</div>
-              </button>
-              <button
-                onClick={() => onUncertaintyPreferenceChange('infer')}
-                className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${
-                  uncertaintyPreference === 'infer'
-                    ? 'border-indigo-500 bg-indigo-500/10 text-white'
-                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
-                }`}
-              >
-                <div className="font-semibold">Infer then confirm</div>
-                <div className="text-xs text-slate-400">Infer best effort and verify in follow-up.</div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Expertise Tab */}
-      {activeTab === 'expertise' && (
-        <div className="space-y-6 animate-fadeIn">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">Areas of Expertise</label>
-            <p className="text-xs text-slate-400 mb-3">Select domains your twin should know about</p>
-            <div className="flex flex-wrap gap-2">
-              {EXPERTISE_DOMAINS.map((domain) => (
-                <button
-                  key={domain}
-                  onClick={() => toggleDomain(domain)}
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
-                    selectedDomains.includes(domain)
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {domain}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Custom Expertise Tags */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Custom Expertise</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={customTag}
-                onChange={(e) => setCustomTag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addCustomExpertise()}
-                placeholder="Add custom area..."
-                className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
-              <button
-                onClick={addCustomExpertise}
-                disabled={!customTag}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-medium transition-colors"
-              >
-                Add
-              </button>
-            </div>
-            {customExpertise.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3">
-                {customExpertise.map((tag) => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600/20 text-emerald-400 rounded-lg text-sm"
-                  >
-                    {tag}
-                    <button
-                      onClick={() => removeCustomExpertise(tag)}
-                      className="hover:text-emerald-300"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Personality Tab */}
-      {activeTab === 'personality' && (
-        <div className="space-y-6 animate-fadeIn">
-          {/* Tone Selection */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">Communication Tone</label>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { id: 'professional', label: 'Professional', desc: 'Formal and polished' },
-                { id: 'friendly', label: 'Friendly', desc: 'Warm and approachable' },
-                { id: 'casual', label: 'Casual', desc: 'Relaxed and conversational' },
-                { id: 'technical', label: 'Technical', desc: 'Precise and detailed' },
-              ].map((tone) => (
-                <button
-                  key={tone.id}
-                  onClick={() => onPersonalityChange({ ...personality, tone: tone.id })}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    personality.tone === tone.id
-                      ? 'border-indigo-500 bg-indigo-500/10'
-                      : 'border-white/10 bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  <p className="font-medium text-white text-sm">{tone.label}</p>
-                  <p className="text-xs text-slate-400">{tone.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Response Length */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-3">Response Length</label>
-            <div className="flex gap-2">
-              {[
-                { id: 'concise', label: 'Concise' },
-                { id: 'balanced', label: 'Balanced' },
-                { id: 'detailed', label: 'Detailed' },
-              ].map((length) => (
-                <button
-                  key={length.id}
-                  onClick={() => onPersonalityChange({ ...personality, responseLength: length.id })}
-                  className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all ${
-                    personality.responseLength === length.id
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {length.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* First Person Toggle */}
-          <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
-            <div>
-              <p className="font-medium text-white">Speak in First Person</p>
-              <p className="text-sm text-slate-400">Twin says &quot;I think...&quot; instead of &quot;{twinName || 'Alex'} thinks...&quot;</p>
-            </div>
-            <button
-              onClick={() => onPersonalityChange({ ...personality, firstPerson: !personality.firstPerson })}
-              className={`relative w-12 h-6 rounded-full transition-colors ${
-                personality.firstPerson ? 'bg-indigo-600' : 'bg-slate-600'
-              }`}
-            >
-              <span
-                className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                  personality.firstPerson ? 'translate-x-6' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Summary Footer */}
-      <div className="pt-4 border-t border-white/10">
-        <div className="flex items-center gap-4 text-sm">
-          <div className="flex-1">
-            <p className="text-slate-400">Ready to continue?</p>
-            <p className="text-white font-medium">
-              {twinName || 'Your Twin'} • {specialization ? SPECIALIZATIONS.find(s => s.id === specialization)?.label : 'General'} • {selectedDomains.length + customExpertise.length} expertise areas
-            </p>
-            {goals90Days.filter((goal) => goal.trim().length > 0).length > 0 && (
-              <p className="text-xs text-slate-400 mt-1">
-                {goals90Days.filter((goal) => goal.trim().length > 0).length} goals captured
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <Step1Identity
+      data={data}
+      onChange={handleChange}
+      onSpecializationChange={onSpecializationChange}
+    />
   );
 }

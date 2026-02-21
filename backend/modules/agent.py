@@ -23,6 +23,23 @@ from modules.persona_prompt_variant_store import (
 )
 from modules.persona_spec import PersonaSpec
 from modules.persona_spec_store import get_active_persona_spec
+from modules.persona_agent_integration import (
+    should_use_5layer_persona,
+    maybe_use_5layer_persona,
+    PersonaAgentIntegration,
+    build_persona_v2_state_updates,
+    PERSONA_V2_STATE_FIELDS,
+)
+from modules.persona_profile_store import (
+    get_persona_profile,
+    is_profile_eligible_for_fastpath,
+)
+from modules.fastpath_intent_router import (
+    classify_fastpath_intent,
+    is_persona_fastpath_enabled,
+    is_persona_draft_profile_allowed,
+)
+from modules.fastpath_response_builder import build_fastpath_response
 from modules.inference_router import invoke_json, invoke_text
 from modules.routing_decision import build_routing_decision
 from modules.response_policy import UNCERTAINTY_RESPONSE
@@ -237,6 +254,8 @@ class TwinState(TypedDict):
     router_knowledge_available: Optional[bool]
     workflow_intent: Optional[str]
     routing_decision: Optional[Dict[str, Any]]
+    fastpath_intent: Optional[str]
+    fastpath_response: Optional[Dict[str, Any]]
     retrieval_group_id: Optional[str]
     resolve_default_group_filtering: Optional[bool]
     query_class: Optional[str]
@@ -255,6 +274,21 @@ class TwinState(TypedDict):
     mem0_preferences_source: Optional[str]
     system_prompt_override: Optional[str]
     interaction_context: Optional[str]
+    
+    # 5-Layer Persona State (Phase 4)
+    persona_v2_enabled: Optional[bool]
+    persona_v2_spec_version: Optional[str]
+    persona_v2_dimension_scores: Optional[Dict[str, int]]
+    persona_v2_overall_score: Optional[float]
+    persona_v2_reasoning_steps: Optional[List[str]]
+    persona_v2_values_prioritized: Optional[List[str]]
+    persona_v2_value_conflicts: Optional[List[Dict[str, Any]]]
+    persona_v2_heuristics_applied: Optional[List[str]]
+    persona_v2_memory_anchors: Optional[List[str]]
+    persona_v2_safety_checks: Optional[List[Dict[str, Any]]]
+    persona_v2_safety_blocked: Optional[bool]
+    persona_v2_consistency_hash: Optional[str]
+    persona_v2_processing_time_ms: Optional[int]
 
 def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any]]:
     """
@@ -314,34 +348,58 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
     variant_overrides = (active_variant_row or {}).get("render_options") or {}
     render_options = get_prompt_render_options(active_variant_id, overrides=variant_overrides)
 
-    active_persona_row = get_active_persona_spec(twin_id=twin_id)
-    if active_persona_row and active_persona_row.get("spec"):
+    # ====================================================================
+    # NEW: Check for 5-Layer Persona Spec v2 FIRST (for new twins)
+    # ====================================================================
+    v2_persona_spec = None
+    has_v2_persona = full_settings.get("use_5layer_persona", False)
+    
+    if has_v2_persona:
         try:
-            parsed = PersonaSpec.model_validate(active_persona_row["spec"])
-            runtime_modules = list_runtime_modules_for_intent(
-                twin_id=twin_id,
-                intent_label=intent_label,
-                limit=8,
-                include_draft=True,
-            )
-            prompt_plan = compile_prompt_plan(
-                spec=parsed,
-                intent_label=intent_label,
-                user_query=last_human_msg,
-                runtime_modules=runtime_modules,
-                max_few_shots=max(0, int(render_options.max_few_shots)),
-                module_detail_level=render_options.module_detail_level,
-            )
-            persona_section = render_prompt_plan_with_options(plan=prompt_plan, options=render_options)
-            persona_trace["module_ids"] = prompt_plan.selected_module_ids
-            persona_trace["intent_label"] = prompt_plan.intent_label or intent_label
-            persona_trace["persona_spec_version"] = active_persona_row.get("version") or parsed.version
-            persona_trace["persona_prompt_variant"] = render_options.variant_id
+            from modules.persona_spec_store_v2 import get_active_persona_spec_v2
+            v2_row = get_active_persona_spec_v2(twin_id)
+            if v2_row and v2_row.get("spec"):
+                v2_persona_spec = v2_row.get("spec")
+                # Build persona section from v2 spec
+                persona_section = _build_prompt_from_v2_persona(v2_persona_spec, full_settings.get("name", "Digital Twin"))
+                persona_trace["persona_spec_version"] = v2_row.get("version") or "2.0.0"
+                persona_trace["persona_prompt_variant"] = "v2_default"
+                print(f"[AGENT] Using 5-Layer Persona v2 for twin {twin_id}")
         except Exception as e:
-            print(f"[PersonaCompiler] Active spec compile failed, using legacy settings fallback: {e}")
-            persona_section = ""
-            persona_trace["persona_spec_version"] = active_persona_row.get("version")
-            persona_trace["persona_prompt_variant"] = active_variant_id
+            print(f"[AGENT] Warning: Could not use v2 persona for {twin_id}: {e}")
+    
+    # ====================================================================
+    # FALLBACK: Check for v1 persona spec (legacy twins)
+    # ====================================================================
+    if not persona_section:
+        active_persona_row = get_active_persona_spec(twin_id=twin_id)
+        if active_persona_row and active_persona_row.get("spec"):
+            try:
+                parsed = PersonaSpec.model_validate(active_persona_row["spec"])
+                runtime_modules = list_runtime_modules_for_intent(
+                    twin_id=twin_id,
+                    intent_label=intent_label,
+                    limit=8,
+                    include_draft=True,
+                )
+                prompt_plan = compile_prompt_plan(
+                    spec=parsed,
+                    intent_label=intent_label,
+                    user_query=last_human_msg,
+                    runtime_modules=runtime_modules,
+                    max_few_shots=max(0, int(render_options.max_few_shots)),
+                    module_detail_level=render_options.module_detail_level,
+                )
+                persona_section = render_prompt_plan_with_options(plan=prompt_plan, options=render_options)
+                persona_trace["module_ids"] = prompt_plan.selected_module_ids
+                persona_trace["intent_label"] = prompt_plan.intent_label or intent_label
+                persona_trace["persona_spec_version"] = active_persona_row.get("version") or parsed.version
+                persona_trace["persona_prompt_variant"] = render_options.variant_id
+            except Exception as e:
+                print(f"[PersonaCompiler] Active spec compile failed, using legacy settings fallback: {e}")
+                persona_section = ""
+                persona_trace["persona_spec_version"] = active_persona_row.get("version")
+                persona_trace["persona_prompt_variant"] = active_variant_id
 
     if not persona_section:
         persona_section = f"YOUR PERSONA STYLE:\n- DESCRIPTION: {style_desc}"
@@ -398,6 +456,80 @@ AGENTIC RAG OPERATING PROCEDURES:
 def build_system_prompt(state: TwinState) -> str:
     prompt, _ = build_system_prompt_with_trace(state)
     return prompt
+
+
+def _build_prompt_from_v2_persona(spec: Dict[str, Any], twin_name: str) -> str:
+    """
+    Build system prompt text from 5-Layer Persona Spec v2.
+    
+    This creates a readable prompt from structured persona data.
+    """
+    identity = spec.get("identity_frame", {})
+    cognitive = spec.get("cognitive_heuristics", {})
+    values = spec.get("value_hierarchy", {})
+    communication = spec.get("communication_patterns", {})
+    
+    # Layer 1: Identity
+    role = identity.get("role_definition", f"{twin_name}")
+    expertise = identity.get("expertise_domains", [])
+    background = identity.get("background_summary", "")
+    reasoning_style = identity.get("reasoning_style", "balanced")
+    relationship = identity.get("relationship_to_user", "advisor")
+    
+    # Layer 4: Communication
+    brevity = communication.get("brevity_preference", "balanced")
+    signature_phrases = communication.get("signature_phrases", [])
+    
+    prompt_parts = [
+        f"You are {twin_name}, {role}.",
+        "",
+        f"EXPERTISE: {', '.join(expertise) if expertise else 'General knowledge'}",
+    ]
+    
+    if background:
+        prompt_parts.extend(["", f"BACKGROUND:\n{background}"])
+    
+    prompt_parts.extend([
+        "",
+        f"COMMUNICATION STYLE:",
+        f"- Brevity preference: {brevity}",
+        f"- Reasoning style: {reasoning_style}",
+        f"- Relationship to user: {relationship}",
+    ])
+    
+    if signature_phrases:
+        prompt_parts.append(f"- Signature phrases: {', '.join(signature_phrases[:3])}")
+    
+    # Layer 2: Cognitive Framework
+    framework = cognitive.get("default_framework", "evidence_based")
+    prompt_parts.extend([
+        "",
+        f"DECISION FRAMEWORK: {framework}",
+        "- Base assessments on available evidence",
+        "- Disclose uncertainty when information is insufficient",
+        "- Ask clarifying questions when needed",
+    ])
+    
+    # Layer 3: Values (prioritized)
+    value_items = values.get("values", [])
+    if value_items:
+        top_values = [v.get("name", "").replace("_", " ").title() for v in value_items[:3]]
+        prompt_parts.extend([
+            "",
+            f"CORE VALUES (in priority order): {', '.join(top_values)}",
+        ])
+    
+    # Layer 5: Safety
+    boundaries = spec.get("safety_boundaries", [])
+    if boundaries:
+        prompt_parts.extend([
+            "",
+            "SAFETY BOUNDARIES:",
+            "- Provide perspective, not professional advice (legal, medical, investment)",
+            "- Clarify when information is insufficient",
+        ])
+    
+    return "\n".join(prompt_parts)
 
 
 def _twin_has_groundable_knowledge(twin_id: Optional[str]) -> bool:
@@ -785,6 +917,82 @@ async def router_node(state: TwinState):
         except Exception as e:
             print(f"[Router] Query rewriting failed: {e}")
             effective_query = user_query
+
+    # STEP 1.5: Persona identity fast-path (optional, feature-flagged).
+    # Keeps retrieval path unchanged unless explicitly enabled and profile is eligible.
+    if is_persona_fastpath_enabled():
+        fastpath_match = classify_fastpath_intent(effective_query)
+        if fastpath_match.get("matched") and twin_id:
+            allow_draft = is_persona_draft_profile_allowed()
+            profile = get_persona_profile(str(twin_id))
+            if profile and is_profile_eligible_for_fastpath(profile, allow_draft=allow_draft):
+                fastpath_payload = build_fastpath_response(
+                    intent=str(fastpath_match.get("intent")),
+                    profile=profile,
+                    query=effective_query,
+                )
+                if str(fastpath_payload.get("text") or "").strip():
+                    router_reason = "persona_fastpath_identity"
+                    decision_payload = {
+                        "intent": "answer",
+                        "chosen_workflow": "answer",
+                        "output_schema": "workflow.answer.v1",
+                        "action": "answer",
+                        "confidence": float(fastpath_match.get("confidence") or 0.0),
+                        "required_inputs_missing": [],
+                        "clarifying_questions": [],
+                    }
+                    print(
+                        "[PersonaFastPath] hit "
+                        f"twin_id={twin_id} intent={fastpath_payload.get('intent')} "
+                        f"profile_status={profile.get('profile_status')}"
+                    )
+                    try:
+                        langfuse_context.update_current_observation(
+                            metadata={
+                                "router_mode": "IDENTITY_FACT",
+                                "router_intent_label": "meta_or_system",
+                                "router_requires_evidence": False,
+                                "router_target_owner_scope": False,
+                                "router_interaction_context": interaction_context,
+                                "router_knowledge_available": bool(knowledge_available),
+                                "router_reason": router_reason,
+                                "persona_fastpath_hit": True,
+                                "persona_fastpath_intent": fastpath_payload.get("intent"),
+                                "persona_fastpath_profile_status": profile.get("profile_status"),
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                    return {
+                        "dialogue_mode": "IDENTITY_FACT",
+                        "intent_label": "meta_or_system",
+                        "target_owner_scope": False,
+                        "requires_evidence": False,
+                        "sub_queries": [],
+                        "router_reason": router_reason,
+                        "router_knowledge_available": knowledge_available,
+                        "workflow_intent": "answer",
+                        "routing_decision": decision_payload,
+                        "fastpath_intent": fastpath_payload.get("intent"),
+                        "fastpath_response": fastpath_payload,
+                        "query_class": "identity",
+                        "quote_intent": False,
+                        "execution_lane": False,
+                        "deepagents_plan": None,
+                        "original_query": user_query,
+                        "effective_query": effective_query,
+                        "query_rewrite_result": rewrite_result.model_dump() if rewrite_result else None,
+                        "reasoning_history": (state.get("reasoning_history") or [])
+                        + [f"Router: persona fast-path ({fastpath_payload.get('intent')})."],
+                    }
+            else:
+                print(
+                    "[PersonaFastPath] miss "
+                    f"twin_id={twin_id} reason={'no_profile' if not profile else 'profile_not_eligible'} "
+                    f"allow_draft={allow_draft}"
+                )
     
     # STEP 2: Apply grounding policy to effective query
     query_policy = get_grounding_policy(effective_query, interaction_context=interaction_context)
@@ -880,6 +1088,8 @@ async def router_node(state: TwinState):
         "quote_intent": bool(query_policy.get("quote_intent")),
         "execution_lane": execution_lane,
         "deepagents_plan": deepagents_plan if execution_lane else None,
+        "fastpath_intent": None,
+        "fastpath_response": None,
         # Query rewriting metadata
         "original_query": user_query,
         "effective_query": effective_query,
@@ -1764,6 +1974,53 @@ def _prepare_mem0_preferences_for_prompt(
 @observe(name="planner_node")
 async def planner_node(state: TwinState):
     """General evidence-driven planner."""
+    fastpath_payload = state.get("fastpath_response")
+    if isinstance(fastpath_payload, dict) and str(fastpath_payload.get("text") or "").strip():
+        fastpath_text = str(fastpath_payload.get("text") or "").strip()
+        confidence = max(0.0, min(1.0, float(fastpath_payload.get("confidence") or 0.92)))
+        routing_decision = (
+            dict(state.get("routing_decision"))
+            if isinstance(state.get("routing_decision"), dict)
+            else {
+                "intent": "answer",
+                "chosen_workflow": "answer",
+                "output_schema": "workflow.answer.v1",
+            }
+        )
+        updated_routing_decision = {
+            **routing_decision,
+            "action": "answer",
+            "confidence": confidence,
+            "required_inputs_missing": [],
+            "clarifying_questions": [],
+        }
+        answerability = {
+            "answerability": "direct",
+            "answerable": True,
+            "confidence": confidence,
+            "reasoning": "Persona fast-path response from canonical profile.",
+            "missing_information": [],
+            "ambiguity_level": "low",
+        }
+        return {
+            "planning_output": {
+                "answer_points": [fastpath_text],
+                "citations": [],
+                "follow_up_question": "",
+                "confidence": confidence,
+                "teaching_questions": [],
+                "render_strategy": "source_faithful",
+                "reasoning_trace": "Planner fast-path identity response.",
+                "answerability": answerability,
+                "telemetry": _build_planner_telemetry(),
+            },
+            "confidence_score": confidence,
+            "routing_decision": updated_routing_decision,
+            "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
+            "reasoning_history": (state.get("reasoning_history") or [])
+            + [f"Planner: persona fast-path served ({state.get('fastpath_intent')})."],
+        }
+
     raw_context = state.get("retrieved_context", {}).get("results", [])
     context_data = [row for row in raw_context if isinstance(row, dict)] if isinstance(raw_context, list) else []
     state_messages = [m for m in (state.get("messages") or []) if isinstance(m, BaseMessage)]
@@ -1832,6 +2089,74 @@ async def planner_node(state: TwinState):
         }
     )
 
+    # =====================================================================
+    # 5-Layer Persona Integration (Phase 4)
+    # =====================================================================
+    # Check if we should use 5-Layer persona for this query
+    used_5layer = False
+    v2_result = None
+    v2_state_updates = {}
+    
+    if should_use_5layer_persona(state):
+        try:
+            used_5layer, v2_result = await maybe_use_5layer_persona(
+                state=state,
+                user_query=user_query,
+                context_data=context_data,
+            )
+            
+            if used_5layer and v2_result:
+                # Build state updates from v2 result
+                v2_state_updates = {
+                    "persona_v2_enabled": True,
+                    "persona_v2_safety_blocked": v2_result.safety_blocked,
+                }
+                
+                if v2_result.decision_output:
+                    v2_state_updates.update(build_persona_v2_state_updates(v2_result.decision_output))
+                
+                # If safety blocked, return early
+                if v2_result.safety_blocked:
+                    safety_output = {
+                        "planning_output": {
+                            "answer_points": v2_result.answer_points,
+                            "citations": [],
+                            "follow_up_question": "",
+                            "confidence": 0.0,
+                            "teaching_questions": [],
+                            "render_strategy": "source_faithful",
+                            "reasoning_trace": "5-Layer Persona: Safety boundary triggered.",
+                            "answerability": {
+                                "answerability": "insufficient",
+                                "answerable": False,
+                                "confidence": 0.0,
+                                "reasoning": "Request blocked by safety boundaries.",
+                                "missing_information": [],
+                                "ambiguity_level": "low",
+                            },
+                            "telemetry": _build_planner_telemetry(),
+                        },
+                        "confidence_score": 0.0,
+                        "routing_decision": {
+                            **routing_decision,
+                            "action": "refuse",
+                            "confidence": 0.0,
+                        },
+                        "workflow_intent": "refuse",
+                        "intent_label": persona_trace.get("intent_label"),
+                        "persona_module_ids": [],
+                        "persona_spec_version": v2_result.decision_output.persona_version if v2_result.decision_output else None,
+                        "reasoning_history": (state.get("reasoning_history") or []) + [
+                            "Planner: 5-Layer Persona safety boundary triggered."
+                        ],
+                        **v2_state_updates,
+                    }
+                    return safety_output
+                
+        except Exception as e:
+            print(f"[Planner] 5-Layer Persona integration error: {e}")
+            used_5layer = False
+    
     dialogue_mode = str(state.get("dialogue_mode") or "").strip().upper()
     if dialogue_mode == "SMALLTALK" or _is_smalltalk_query(user_query):
         answer_text = _smalltalk_response(user_query)
@@ -2142,7 +2467,8 @@ Rules:
         selection_recovery_failure_rate=1 if selection_recovery_failed else 0,
     )
 
-    return {
+    # Build base result
+    result = {
         "planning_output": {
             "answer_points": answer_points[:3],
             "citations": citations[:3],
@@ -2167,6 +2493,14 @@ Rules:
             + (" (resolved clarification follow-up to prior user question)." if effective_query != user_query else "")
         ],
     }
+    
+    # Add 5-Layer Persona state updates if used
+    if used_5layer and v2_state_updates:
+        result.update(v2_state_updates)
+        # Update reasoning history to indicate 5-Layer was used
+        result["reasoning_history"][-1] += " (5-Layer Persona enriched)."
+    
+    return result
 @observe(name="realizer_node")
 async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
@@ -2577,6 +2911,8 @@ async def run_agent_stream(
         "router_reason": None,
         "router_knowledge_available": None,
         "workflow_intent": "answer",
+        "fastpath_intent": None,
+        "fastpath_response": None,
         "retrieval_group_id": effective_group_id,
         "resolve_default_group_filtering": enforce_group_filtering,
         "query_class": None,

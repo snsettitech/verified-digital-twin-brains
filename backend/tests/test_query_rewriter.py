@@ -133,7 +133,7 @@ class TestEntityExtraction:
     def test_extract_quoted_terms(self, rewriter):
         """Test extraction of quoted terms."""
         history = [
-            {"role": "assistant", "content": 'The project is called "Project Phoenix"."}
+            {"role": "assistant", "content": 'The project is called "Project Phoenix".'}
         ]
         
         entities = rewriter._extract_entities_from_history(history)

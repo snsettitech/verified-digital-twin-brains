@@ -1,0 +1,163 @@
+{
+  "timestamp": "2026-02-21T10:22:12.216086",
+  "duration_seconds": 22.005258,
+  "summary": {
+    "total_checks": 10,
+    "passed": 7,
+    "failed": 3,
+    "warnings": 0,
+    "success_rate": "70.0%"
+  },
+  "results": [
+    {
+      "name": "Environment Variables",
+      "status": "fail",
+      "message": "Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_KEY, PINECONE_API_KEY, OPENAI_API_KEY",
+      "details": {
+        "missing": [
+          "SUPABASE_URL",
+          "SUPABASE_SERVICE_KEY",
+          "PINECONE_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "duration_ms": 0.0
+    },
+    {
+      "name": "Supabase Connection",
+      "status": "pass",
+      "message": "Supabase connection successful",
+      "details": {
+        "count_result": 114
+      },
+      "duration_ms": 2720.7789421081543
+    },
+    {
+      "name": "Pinecone Connection",
+      "status": "pass",
+      "message": "Pinecone connection successful",
+      "details": {
+        "total_vectors": 0,
+        "dimension": 1024
+      },
+      "duration_ms": 619.6985244750977
+    },
+    {
+      "name": "OpenAI Connection",
+      "status": "fail",
+      "message": "OpenAI connection failed: Connection error.",
+      "details": {
+        "error": "Connection error."
+      },
+      "duration_ms": 13148.320436477661
+    },
+    {
+      "name": "Langfuse Connection",
+      "status": "pass",
+      "message": "Langfuse client initialized",
+      "details": {
+        "host": "https://us.cloud.langfuse.com"
+      },
+      "duration_ms": 1176.5553951263428
+    },
+    {
+      "name": "5-Layer Persona Integration",
+      "status": "pass",
+      "message": "5-Layer Persona Model loaded. Feature flag: False",
+      "details": {
+        "feature_flag": false,
+        "spec_version": "2.0.0",
+        "engine_initialized": true
+      },
+      "duration_ms": 40.23480415344238
+    },
+    {
+      "name": "Database Tables",
+      "status": "pass",
+      "message": "All 6 required tables exist",
+      "details": {
+        "tables": [
+          "twins",
+          "sources",
+          "chunks",
+          "conversations",
+          "messages",
+          "persona_specs"
+        ]
+      },
+      "duration_ms": 1182.9233169555664
+    },
+    {
+      "name": "Retrieval Pipeline",
+      "status": "fail",
+      "message": "Retrieval pipeline check failed: cannot import name 'get_embeddings_with_fallback' from 'modules.embeddings' (D:\\verified-digital-twin-brains\\backend\\modules\\embeddings.py)",
+      "details": {
+        "error": "cannot import name 'get_embeddings_with_fallback' from 'modules.embeddings' (D:\\verified-digital-twin-brains\\backend\\modules\\embeddings.py)"
+      },
+      "duration_ms": 79.03027534484863
+    },
+    {
+      "name": "Agent Components",
+      "status": "pass",
+      "message": "LangGraph agent components loaded",
+      "details": {
+        "nodes": [
+          "router_node",
+          "planner_node",
+          "realizer_node"
+        ],
+        "state_type": "TwinState"
+      },
+      "duration_ms": 3037.7161502838135
+    },
+    {
+      "name": "Memory System",
+      "status": "pass",
+      "message": "Memory system components loaded",
+      "details": {
+        "owner_memory": "list_owner_memories",
+        "memory_provider": "get_memory_provider"
+      },
+      "duration_ms": 0.0
+    }
+  ],
+  "critical_issues": [
+    {
+      "name": "Environment Variables",
+      "status": "fail",
+      "message": "Missing required environment variables: SUPABASE_URL, SUPABASE_SERVICE_KEY, PINECONE_API_KEY, OPENAI_API_KEY",
+      "details": {
+        "missing": [
+          "SUPABASE_URL",
+          "SUPABASE_SERVICE_KEY",
+          "PINECONE_API_KEY",
+          "OPENAI_API_KEY"
+        ]
+      },
+      "duration_ms": 0.0
+    },
+    {
+      "name": "OpenAI Connection",
+      "status": "fail",
+      "message": "OpenAI connection failed: Connection error.",
+      "details": {
+        "error": "Connection error."
+      },
+      "duration_ms": 13148.320436477661
+    },
+    {
+      "name": "Retrieval Pipeline",
+      "status": "fail",
+      "message": "Retrieval pipeline check failed: cannot import name 'get_embeddings_with_fallback' from 'modules.embeddings' (D:\\verified-digital-twin-brains\\backend\\modules\\embeddings.py)",
+      "details": {
+        "error": "cannot import name 'get_embeddings_with_fallback' from 'modules.embeddings' (D:\\verified-digital-twin-brains\\backend\\modules\\embeddings.py)"
+      },
+      "duration_ms": 79.03027534484863
+    }
+  ],
+  "recommendations": [
+    "CRITICAL: Set missing environment variables in .env file - connections failing",
+    "HIGH: Fix OpenAI connection - embeddings and LLM calls will fail",
+    "HIGH: Fix retrieval pipeline - document search will not work"
+  ]
+}
