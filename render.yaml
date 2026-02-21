@@ -60,6 +60,21 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Cohere Reranking (REQUIRED for production)
+      - key: COHERE_API_KEY
+        sync: false
+      - key: COHERE_RERANK_STRICT
+        value: "true"
+      - key: ENABLE_FLASHRANK
+        value: "true"
+      - key: COHERE_RERANK_TIMEOUT_SECONDS
+        value: "5.0"
+      - key: HYBRID_COHERE_WEIGHT
+        value: "0.7"
+      - key: SELECTIVE_RERANKING_THRESHOLD
+        value: "0.75"
+      - key: RERANK_CACHE_ENABLED
+        value: "true"
 
     # Ephemeral disk for temp files
     disk:
@@ -113,3 +128,10 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      # Cohere Reranking (REQUIRED for worker)
+      - key: COHERE_API_KEY
+        sync: false
+      - key: COHERE_RERANK_STRICT
+        value: "true"
+      - key: ENABLE_FLASHRANK
+        value: "true"
