@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StepIndicator } from '@/components/onboarding/StepIndicator';
@@ -97,7 +97,7 @@ const defaultMemoryData: MemoryData = {
 // Component
 // =============================================================================
 
-export default function OnboardingPage() {
+function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get('returnTo');
@@ -433,5 +433,14 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
         </div>
       </footer>
     </div>
+  );
+}
+
+// Wrapper component with Suspense boundary for useSearchParams
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Loading...</div>}>
+      <OnboardingContent />
+    </Suspense>
   );
 }
