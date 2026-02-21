@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+
 import { Card } from '@/components/ui/Card';
 
 interface PersonalityData {
@@ -49,12 +49,7 @@ export function Step4Communication({ personality, onPersonalityChange }: Step4Pr
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
-    >
+    <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 4: Communication Patterns</h2>
         <p className="text-slate-400">
@@ -199,6 +194,6 @@ export function Step4Communication({ personality, onPersonalityChange }: Step4Pr
           className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
         />
       </Card>
-    </motion.div>
+    </div>
   );
 }

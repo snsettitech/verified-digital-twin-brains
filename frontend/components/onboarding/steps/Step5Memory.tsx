@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+// Animations removed for production deployment
 import { Card } from '@/components/ui/Card';
 
 interface MemoryAnchor {
@@ -162,15 +162,13 @@ export function Step5Memory({ data, onChange }: Step5Props) {
                     ))}
                   </div>
                 )}
-              </motion.div>
+              </div>
             ))
           )}
 
           {/* Add New Form */}
           {showAddForm ? (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
+            <div
               className="space-y-4 p-4 border border-slate-700 rounded-lg bg-slate-800/50"
             >
               <div className="space-y-2">
@@ -231,7 +229,7 @@ export function Step5Memory({ data, onChange }: Step5Props) {
                   Cancel
                 </button>
               </div>
-            </motion.div>
+            </div>
           ) : (
             <button
               onClick={() => setShowAddForm(true)}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+
 import { Card } from '@/components/ui/Card';
 
 interface ValueItem {
@@ -102,12 +102,7 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
-    >
+    <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 3: Values & Priorities</h2>
         <p className="text-slate-400">
@@ -136,11 +131,8 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
         
         <div className="space-y-3">
           {values.map((value, index) => (
-            <motion.div
+            <div
               key={value.id}
-              layout
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
               className="flex items-center gap-3 p-4 border border-slate-700 rounded-lg bg-slate-800/50"
             >
               {/* Rank Number */}
@@ -177,14 +169,12 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
                   <span>🗑️</span>
                 </button>
               </div>
-            </motion.div>
+            </div>
           ))}
 
           {/* Add New Value */}
           {showAddForm ? (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
+            <div
               className="p-4 border border-slate-700 rounded-lg bg-slate-800/50 space-y-3"
             >
               <div className="space-y-2">
@@ -222,7 +212,7 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
                   Cancel
                 </button>
               </div>
-            </motion.div>
+            </div>
           ) : (
             <button
               onClick={() => setShowAddForm(true)}
@@ -258,6 +248,6 @@ export function Step3Values({ data, onChange, specialization }: Step3Props) {
           based on your ranked values. This is Layer 3 of your persona.
         </p>
       </div>
-    </motion.div>
+    </div>
   );
 }

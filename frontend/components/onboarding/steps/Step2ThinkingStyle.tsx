@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+
 import { Card } from '@/components/ui/Card';
 
 interface ThinkingStyleData {
@@ -84,12 +84,7 @@ export function Step2ThinkingStyle({ data, onChange }: Step2Props) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
-    >
+    <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold mb-2">Layer 2: Thinking Style</h2>
         <p className="text-slate-400">
@@ -252,6 +247,6 @@ export function Step2ThinkingStyle({ data, onChange }: Step2Props) {
           ))}
         </div>
       </Card>
-    </motion.div>
+    </div>
   );
 }

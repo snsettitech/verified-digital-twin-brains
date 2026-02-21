@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+// Animations removed for production deployment
 import { Card } from '@/components/ui/Card';
 
 interface ReviewData {
@@ -150,12 +150,7 @@ export function Step6Review({ data, onTestChat, onEditStep, onLaunch, isLaunchin
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-6"
-    >
+    <div className="space-y-6">
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/20 rounded-full mb-4">
           <span className="text-xl">✨</span>
@@ -353,6 +348,6 @@ export function Step6Review({ data, onTestChat, onEditStep, onLaunch, isLaunchin
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }

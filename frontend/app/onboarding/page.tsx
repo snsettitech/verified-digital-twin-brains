@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+
 import { StepIndicator } from '@/components/onboarding/StepIndicator';
 import { Step1Identity, IdentityFormData } from '@/components/onboarding/steps/Step1Identity';
 import { Step2ThinkingStyle } from '@/components/onboarding/steps/Step2ThinkingStyle';
@@ -10,7 +10,7 @@ import { Step3Values } from '@/components/onboarding/steps/Step3Values';
 import { Step4Communication } from '@/components/onboarding/steps/Step4Communication';
 import { Step5Memory } from '@/components/onboarding/steps/Step5Memory';
 import { Step6Review } from '@/components/onboarding/steps/Step6Review';
-import { authFetchStandalone } from '@/lib/supabase/client';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 // =============================================================================
 // Types
@@ -246,9 +246,16 @@ Uncertainty preference: ${
       }
 ${personalityData.customInstructions ? `Additional instructions: ${personalityData.customInstructions}` : ''}`;
 
-      const response = await authFetchStandalone('/twins', {
+      const supabase = getSupabaseClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      const response = await fetch('/api/twins', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           name: identityData.twinName,
           description: identityData.tagline,
@@ -390,17 +397,9 @@ ${personalityData.customInstructions ? `Additional instructions: ${personalityDa
 
       {/* Main Content */}
       <main className="max-w-3xl mx-auto px-4 pb-32">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentStep}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-          >
-            {renderStep()}
-          </motion.div>
-        </AnimatePresence>
+        <div key={currentStep}>
+          {renderStep()}
+        </div>
       </main>
 
       {/* Navigation Footer */}
