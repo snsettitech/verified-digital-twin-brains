@@ -225,7 +225,7 @@ export function Step1Identity({ data, onChange, onSpecializationChange }: Step1P
             {data.customExpertise?.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {data.customExpertise.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => removeCustomExpertise(tag)}>
+                  <Badge key={tag} variant="neutral" className="cursor-pointer" onClick={() => removeCustomExpertise(tag)}>
                     {tag} ×
                   </Badge>
                 ))}
