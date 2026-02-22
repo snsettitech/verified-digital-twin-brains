@@ -1270,8 +1270,10 @@ async def evidence_gate_node(state: TwinState):
     Lightweight gate for generalized RAG flow.
     Retrieval always proceeds to planner answerability evaluation.
     """
+    # Preserve existing dialogue_mode (don't overwrite SMALLTALK)
+    current_mode = state.get("dialogue_mode", "QA_FACT")
     return {
-        "dialogue_mode": "QA_FACT",
+        "dialogue_mode": current_mode,
         "requires_teaching": False,
         "reasoning_history": (state.get("reasoning_history") or []) + [
             "Gate: pass-through to answerability evaluation."
