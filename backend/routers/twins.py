@@ -764,10 +764,16 @@ async def archive_twin(twin_id: str, user=Depends(get_current_user)):
 
 
 @router.delete("/twins/{twin_id}", response_model=DeleteTwinResponse)
-async def delete_twin(twin_id: str, user=Depends(get_current_user)):
+async def delete_twin(
+    twin_id: str, 
+    hard: bool = Query(False, description="Perform hard delete (permanent)"),
+    user=Depends(get_current_user)
+):
     """
-    Delete (hard-delete) a twin and all its associated data.
-    WARNING: This is destructive and cannot be undone.
+    Delete a twin. 
+    - If hard=false (default): Archive (soft-delete) the twin
+    - If hard=true: Hard-delete the twin and all associated data
+    WARNING: Hard delete is destructive and cannot be undone.
     """
     user = _require_authenticated_user(user)
     ensure_twin_owner_or_403(twin_id, user)
@@ -782,33 +788,152 @@ async def delete_twin(twin_id: str, user=Depends(get_current_user)):
                 message="Twin not found"
             )
         
-        # Hard delete - remove from database
-        delete_res = supabase.table("twins").delete().eq("id", twin_id).execute()
+        twin_name = twin_res.data.get("name", "Unknown")
         
-        if not delete_res.data:
-            raise HTTPException(status_code=500, detail="Failed to delete twin")
+        # If not hard delete, perform archive instead
+        if not hard:
+            settings = twin_res.data.get("settings") or {}
+            
+            # Check if already archived
+            if settings.get("deleted_at"):
+                return DeleteTwinResponse(
+                    status="already_archived",
+                    twin_id=twin_id,
+                    deleted_at=settings.get("deleted_at"),
+                    message="Twin is already archived"
+                )
+            
+            # Set deleted_at timestamp
+            deleted_at = datetime.utcnow().isoformat()
+            settings["deleted_at"] = deleted_at
+            
+            # Update
+            update_res = supabase.table("twins").update({
+                "settings": settings
+            }).eq("id", twin_id).execute()
+            
+            if not update_res.data:
+                raise HTTPException(status_code=500, detail="Failed to archive twin")
+            
+            return DeleteTwinResponse(
+                status="archived",
+                twin_id=twin_id,
+                deleted_at=deleted_at,
+                message="Twin archived successfully"
+            )
         
-        # Audit log
-        audit_logger = AuditLogger(supabase)
-        await audit_logger.log(
-            event_type="twin_deleted",
-            user_id=user.get("user_id"),
-            twin_id=twin_id,
-            details={"twin_name": twin_res.data.get("name")}
-        )
+        # Hard delete - delete related data first, then the twin
+        # Most tables have ON DELETE CASCADE, but we need to handle those that don't
         
-        return DeleteTwinResponse(
-            status="deleted",
-            twin_id=twin_id,
-            cleanup_status="done",
-            message="Twin permanently deleted"
-        )
+        # Use a transaction-like approach with proper error handling
+        try:
+            # Delete from tables that might not have CASCADE set up correctly
+            # Order matters - delete child tables before parents
+            
+            # 1. Delete from persona_specs (has ON DELETE CASCADE, but be explicit)
+            try:
+                supabase.table("persona_specs").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete persona_specs: {e}")
+            
+            # 2. Delete from persona_prompt_optimization_runs
+            try:
+                supabase.table("persona_prompt_optimization_runs").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete optimization runs: {e}")
+            
+            # 3. Delete from persona_prompt_optimization_results  
+            try:
+                supabase.table("persona_prompt_optimization_results").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete optimization results: {e}")
+            
+            # 4. Delete from memory_events
+            try:
+                supabase.table("memory_events").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete memory events: {e}")
+            
+            # 5. Delete from twin_verifications
+            try:
+                supabase.table("twin_verifications").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete verifications: {e}")
+            
+            # 6. Delete from access_groups (this will cascade to memberships and permissions)
+            try:
+                supabase.table("access_groups").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete access groups: {e}")
+            
+            # 7. Delete from owner_memory_entries and owner_memory_snapshots
+            try:
+                supabase.table("owner_memory_snapshots").delete().eq("twin_id", twin_id).execute()
+                supabase.table("owner_memory_entries").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete owner memory: {e}")
+            
+            # 8. Delete from training_sessions and related tables
+            try:
+                # These have CASCADE, but be explicit for clarity
+                supabase.table("training_decisions").delete().eq("twin_id", twin_id).execute()
+                supabase.table("training_interactions").delete().eq("twin_id", twin_id).execute()
+                supabase.table("training_sessions").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete training data: {e}")
+            
+            # 9. Delete sources (this should cascade to chunks via FK)
+            try:
+                supabase.table("sources").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete sources: {e}")
+            
+            # 10. Delete conversations (this should cascade to messages)
+            try:
+                supabase.table("conversations").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete conversations: {e}")
+            
+            # 11. Finally delete the twin
+            delete_res = supabase.table("twins").delete().eq("id", twin_id).execute()
+            
+            if not delete_res.data:
+                raise HTTPException(status_code=500, detail="Failed to delete twin from database")
+            
+            # Audit log
+            try:
+                audit_logger = AuditLogger(supabase)
+                await audit_logger.log(
+                    event_type="twin_deleted",
+                    user_id=user.get("user_id"),
+                    twin_id=twin_id,
+                    details={"twin_name": twin_name, "hard_delete": True}
+                )
+            except Exception as e:
+                print(f"[TWINS] Warning: Could not write audit log: {e}")
+            
+            return DeleteTwinResponse(
+                status="deleted",
+                twin_id=twin_id,
+                cleanup_status="done",
+                message="Twin permanently deleted"
+            )
+            
+        except Exception as inner_e:
+            error_msg = str(inner_e).lower()
+            if "foreign key" in error_msg or "constraint" in error_msg:
+                print(f"[TWINS] Foreign key constraint error deleting twin {twin_id}: {inner_e}")
+                raise HTTPException(
+                    status_code=409, 
+                    detail="Cannot delete twin: related data exists. Please try archiving instead."
+                )
+            raise
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[TWINS] ERROR deleting twin: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[TWINS] ERROR deleting twin {twin_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 # ============================================================================
