@@ -286,11 +286,26 @@ def extract_pdf_text_and_chunk_entries(
 
 def extract_text_from_docx(file_path: str) -> str:
     """Extract text from a Word document."""
-    doc = docx.Document(file_path)
-    text = []
-    for para in doc.paragraphs:
-        text.append(para.text)
-    return "\n".join(text)
+    try:
+        doc = docx.Document(file_path)
+        text = []
+        for para in doc.paragraphs:
+            if para.text:
+                text.append(para.text)
+        
+        # Also extract text from tables
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.text:
+                        text.append(cell.text)
+        
+        result = "\n".join(text)
+        if not result.strip():
+            raise ValueError("DOCX file appears to be empty or contains no extractable text")
+        return result
+    except Exception as e:
+        raise ValueError(f"Failed to extract text from DOCX: {str(e)}")
 
 
 def extract_text_from_excel(file_path: str) -> str:
@@ -1378,6 +1393,222 @@ def _linkedin_login_wall(html_text: str, final_url: str) -> bool:
     return False
 
 
+def _provider_display_name(provider: str) -> str:
+    normalized = (provider or "web").strip().lower()
+    if normalized in {"youtube", "yt"}:
+        return "YouTube"
+    if normalized in {"linkedin"}:
+        return "LinkedIn"
+    if normalized in {"x", "twitter"}:
+        return "X"
+    if normalized in {"podcast"}:
+        return "Podcast"
+    return "Web"
+
+
+def _truncate_text(value: Optional[str], limit: int = 800) -> str:
+    text_value = str(value or "").strip()
+    if not text_value:
+        return ""
+    return text_value[:limit]
+
+
+def _source_update_missing_column(exc: Exception, column_name: str) -> bool:
+    msg = str(exc).lower()
+    col = (column_name or "").lower()
+    return (
+        bool(col)
+        and col in msg
+        and (
+            "column" in msg
+            or "does not exist" in msg
+            or "could not find" in msg
+            or "pgrst204" in msg
+        )
+    )
+
+
+def _upsert_source_resilient(payload: Dict[str, Any]) -> None:
+    """Upsert source row while tolerating optional-column drift across deployments."""
+    data = dict(payload)
+    while True:
+        try:
+            supabase.table("sources").upsert(data).execute()
+            return
+        except Exception as e:
+            removed = None
+            for optional_column in ("staging_status", "content_hash", "extracted_text_length"):
+                if optional_column in data and _source_update_missing_column(e, optional_column):
+                    removed = optional_column
+                    break
+            if removed:
+                data.pop(removed, None)
+                continue
+            raise
+
+
+def _mark_source_live_resilient(source_id: str, chunk_count: int) -> None:
+    """Mark source live while tolerating optional-column drift across deployments."""
+    update_payload: Dict[str, Any] = {
+        "status": "live",
+        "staging_status": "live",
+        "chunk_count": chunk_count,
+    }
+    while True:
+        try:
+            supabase.table("sources").update(update_payload).eq("id", source_id).execute()
+            return
+        except Exception as e:
+            removed = None
+            for optional_column in ("staging_status", "chunk_count"):
+                if optional_column in update_payload and _source_update_missing_column(e, optional_column):
+                    removed = optional_column
+                    break
+            if removed:
+                update_payload.pop(removed, None)
+                continue
+            raise
+
+
+async def ingest_url_metadata_fallback(
+    source_id: str,
+    twin_id: str,
+    url: str,
+    provider: str = "web",
+    correlation_id: Optional[str] = None,
+    error_message: Optional[str] = None,
+    source_type: str = "url_metadata_fallback",
+    preferred_title: Optional[str] = None,
+) -> int:
+    """
+    Last-resort URL ingestion path.
+    Builds a metadata-only text document so indexing can proceed even when full content extraction fails.
+    """
+    provider_norm = (provider or "web").strip().lower()
+    provider_label = _provider_display_name(provider_norm)
+
+    final_url = url
+    http_status: Optional[int] = None
+    fetch_error: Optional[str] = None
+    title = _truncate_text(preferred_title, limit=200) or None
+    description: Optional[str] = None
+    canonical: Optional[str] = None
+    html_text = ""
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.8",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=headers) as client:
+            response = await client.get(url)
+            http_status = response.status_code
+            final_url = str(response.url)
+            html_text = response.text or ""
+    except Exception as fetch_exc:
+        fetch_error = _truncate_text(str(fetch_exc), limit=500)
+
+    if html_text:
+        try:
+            soup = BeautifulSoup(html_text, "html.parser")
+            if not title:
+                og_title = _extract_og(soup, "og:title")
+                page_title = soup.title.string.strip() if soup.title and soup.title.string else None
+                title = _truncate_text(og_title or page_title, limit=200) or None
+            description = _truncate_text(
+                _extract_og(soup, "og:description") or _extract_meta_name(soup, "description"),
+                limit=1000,
+            ) or None
+            canonical = _truncate_text(_extract_canonical(soup), limit=300) or None
+        except Exception as parse_exc:
+            parse_error = _truncate_text(str(parse_exc), limit=400)
+            fetch_error = fetch_error or f"metadata_parse_failed: {parse_error}"
+
+    title = title or _truncate_text(final_url or url, limit=200) or "Untitled"
+    error_summary = _truncate_text(error_message, limit=700)
+
+    doc_lines = [
+        f"{provider_label} Source (metadata fallback)",
+        f"Original URL: {url}",
+    ]
+    if final_url and final_url != url:
+        doc_lines.append(f"Final URL: {final_url}")
+    if canonical:
+        doc_lines.append(f"Canonical URL: {canonical}")
+    if http_status is not None:
+        doc_lines.append(f"HTTP Status: {http_status}")
+    doc_lines.append(f"Title: {title}")
+    if description:
+        doc_lines.append(f"Description: {description}")
+    doc_lines.append(
+        "Content note: Full body extraction failed or was inaccessible; this entry stores only discovered metadata."
+    )
+    if error_summary:
+        doc_lines.append(f"Primary ingestion error: {error_summary}")
+    if fetch_error and fetch_error != error_summary:
+        doc_lines.append(f"Fallback fetch note: {fetch_error}")
+
+    metadata_text = "\n".join(line for line in doc_lines if line).strip()
+    if len(metadata_text) < 40:
+        metadata_text = (
+            f"{provider_label} Source (metadata fallback)\n"
+            f"Original URL: {url}\n"
+            "Content note: Metadata fallback used."
+        )
+
+    filename = f"{provider_label} (metadata): {title}"[:240]
+    content_hash = calculate_content_hash(metadata_text)
+
+    source_payload: Dict[str, Any] = {
+        "id": source_id,
+        "twin_id": twin_id,
+        "filename": filename,
+        "file_size": len(metadata_text),
+        "content_text": metadata_text,
+        "content_hash": content_hash,
+        "status": "processing",
+        "staging_status": "staged",
+        "extracted_text_length": len(metadata_text),
+        "citation_url": url,
+    }
+    _upsert_source_resilient(source_payload)
+
+    log_ingestion_event(
+        source_id,
+        twin_id,
+        "warning",
+        f"Metadata fallback ingestion engaged for {provider_norm or 'web'} URL",
+    )
+
+    metadata_override: Dict[str, Any] = {
+        "filename": filename,
+        "type": source_type,
+        "url": url,
+        "provider": provider_norm,
+        "is_metadata_fallback": True,
+    }
+    if final_url:
+        metadata_override["final_url"] = final_url
+    if canonical:
+        metadata_override["canonical_url"] = canonical
+    if http_status is not None:
+        metadata_override["http_status"] = http_status
+
+    num_chunks = await process_and_index_text(
+        source_id=source_id,
+        twin_id=twin_id,
+        text=metadata_text,
+        metadata_override=metadata_override,
+        provider=f"{provider_norm}_fallback" if provider_norm else "web_fallback",
+        correlation_id=correlation_id,
+    )
+
+    _mark_source_live_resilient(source_id, num_chunks)
+    return num_chunks
+
+
 async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, correlation_id: Optional[str] = None) -> int:
     """
     Compliance-first LinkedIn ingestion:
@@ -1665,7 +1896,17 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
             correlation_id=correlation_id,
             error=err,
         )
-        raise
+        # FALLBACK: Use metadata-only ingestion when fetch fails
+        print(f"[Web] Fetch failed for {url}, falling back to metadata-only ingestion")
+        return await ingest_url_metadata_fallback(
+            source_id=source_id,
+            twin_id=twin_id,
+            url=url,
+            provider=provider,
+            correlation_id=correlation_id,
+            error_message=str(e),
+            source_type="web_fetch_failed",
+        )
 
     parsed_event_id = start_step(
         source_id=source_id,
@@ -1726,7 +1967,18 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
             correlation_id=correlation_id,
             error=err,
         )
-        raise
+        # FALLBACK: Use metadata-only ingestion when full content extraction fails
+        print(f"[Web] Content extraction failed for {url}, falling back to metadata-only ingestion")
+        return await ingest_url_metadata_fallback(
+            source_id=source_id,
+            twin_id=twin_id,
+            url=url,
+            provider=provider,
+            correlation_id=correlation_id,
+            error_message=str(e),
+            source_type="web_fallback",
+            preferred_title=title if 'title' in locals() else None,
+        )
 
     num_chunks = await process_and_index_text(
         source_id,
@@ -2251,6 +2503,7 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
 
     # 1. Extract text (PDF, Docx, Excel, or Audio)
     pdf_chunk_entries: Optional[List[Dict[str, Any]]] = None
+    text = ""
     if file_path.endswith('.pdf'):
         text, pdf_chunk_entries = extract_pdf_text_and_chunk_entries(
             file_path,
@@ -2266,6 +2519,13 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
         # Generic text extraction for other types if needed, or error
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             text = f.read()
+    
+    # Validate extracted text
+    if not text or not text.strip():
+        raise ValueError(
+            f"No text could be extracted from {filename or file_path}. "
+            f"The file may be empty, corrupted, or in an unsupported format."
+        )
 
     # Extract text and run health checks before indexing
     content_hash = calculate_content_hash(text)

@@ -520,15 +520,76 @@ async def _process_job_impl(job_id: str):
         
         elif mode == "C":
             urls = job.get("source_urls", [])
+            failed_urls = []
             for url in urls:
                 try:
                     source_id = await ingest_url(twin_id, url)
                     chunks.append({"source_id": source_id, "text": f"Content from {url}"})
                 except Exception as e:
+                    error_str = str(e).lower()
+                    # Classify error for better user feedback
+                    if "auth" in error_str or "age-restrict" in error_str or "sign in" in error_str:
+                        error_type = "auth_required"
+                    elif "not available" in error_str or "unavailable" in error_str:
+                        error_type = "unavailable"
+                    elif "robot" in error_str or "blocked" in error_str:
+                        error_type = "blocked"
+                    else:
+                        error_type = "fetch_failed"
+                    
+                    failed_urls.append({"url": url, "error": str(e), "type": error_type})
                     print(f"[ModeC] Failed to fetch {url}: {e}")
+            
+            # Store failed URLs in job metadata for UI feedback
+            if failed_urls:
+                supabase.table("link_compile_jobs").update({
+                    "failed_sources": failed_urls,
+                }).eq("id", job_id).execute()
+            
+            # Partial success: if at least one URL succeeded, continue
+            # If all failed but we have metadata, create fallback chunks
+            if not chunks and failed_urls:
+                # Create fallback chunks from metadata for failed URLs
+                for fail_info in failed_urls:
+                    url = fail_info["url"]
+                    # Create a minimal source with metadata only
+                    try:
+                        source_id = _create_link_compile_source(
+                            twin_id=twin_id,
+                            filename=f"Web: {url}"[:240],
+                            content=f"URL: {url}\nStatus: {fail_info['type']}\nNote: Content could not be extracted. This URL may require authentication, be blocked, or have no accessible content.",
+                        )
+                        num_chunks = await process_and_index_text(
+                            source_id=source_id,
+                            twin_id=twin_id,
+                            text=f"URL: {url}\nThis source was submitted but content could not be fully extracted.",
+                            metadata_override={
+                                "filename": f"Web: {url}"[:240],
+                                "type": "link_compile_url_fallback",
+                                "url": url,
+                                "fetch_status": fail_info['type'],
+                                "fetch_error": fail_info['error'][:500],
+                            },
+                        )
+                        _mark_source_live(source_id, num_chunks)
+                        chunks.append({
+                            "source_id": source_id, 
+                            "text": f"Fallback metadata for {url}",
+                            "fetch_failed": True,
+                            "error_type": fail_info['type']
+                        })
+                    except Exception as fallback_error:
+                        print(f"[ModeC] Fallback metadata creation failed for {url}: {fallback_error}")
 
         if not chunks:
-            raise ValueError("No processable content found in submitted sources")
+            raise ValueError(
+                "No processable content found in submitted sources. "
+                "All URLs failed to fetch. This can happen if:\n"
+                "- URLs require authentication (YouTube age-restricted videos, private pages)\n"
+                "- Sites block automated access (robots.txt, anti-bot protection)\n"
+                "- URLs are invalid or content is unavailable\n"
+                "Try uploading files directly or pasting content instead."
+            )
         
         # Update progress
         supabase.table("link_compile_jobs").update({
