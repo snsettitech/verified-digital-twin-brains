@@ -1685,44 +1685,49 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
     dumpling_success = False
 
     # -------------------------------------------------------------
-    # Strategy 0: Dumpling AI (Primary - Reliable extraction)
+    # Strategy 0: Dumpling AI LinkedIn Profile API (Primary)
     # -------------------------------------------------------------
     try:
-        from modules.dumplingai_client import scrape_webpage
-        print(f"[LinkedIn] Trying Dumpling AI scraping for {url}")
-        log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI LinkedIn extraction")
+        from modules.dumplingai_client import get_linkedin_profile, format_linkedin_profile_for_ingestion
+        print(f"[LinkedIn] Trying Dumpling AI LinkedIn Profile API for {url}")
+        log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI LinkedIn Profile API extraction")
         
-        result = await scrape_webpage(
-            url=url,
-            format="markdown",
-            cleaned=True,
-            render_js=True,
-        )
+        profile = await get_linkedin_profile(url=url)
         
-        if result and isinstance(result, dict):
-            # Extract content from Dumpling AI response
-            content = result.get("content", "") or result.get("markdown", "")
-            og_title = result.get("title", "")
+        if profile and profile.get("success"):
+            # Format the profile data into a structured document
+            doc = format_linkedin_profile_for_ingestion(profile, url)
+            profile_name = profile.get("name", "LinkedIn Profile")
             
-            if content and len(content) > 100:
-                html_text = content
+            if doc and len(doc) > 100:
                 dumpling_success = True
-                page_title = og_title
-                print(f"[LinkedIn] Dumpling AI scraping succeeded: {len(content)} characters")
-                log_ingestion_event(source_id, twin_id, "info", f"Dumpling AI LinkedIn scraping successful ({len(content)} chars)")
+                page_title = profile_name
+                print(f"[LinkedIn] Dumpling AI Profile API succeeded: {len(doc)} characters")
+                log_ingestion_event(
+                    source_id, twin_id, "info", 
+                    f"Dumpling AI LinkedIn Profile API successful ({len(doc)} chars). "
+                    f"Name: {profile_name}, Followers: {profile.get('followers', 'N/A')}"
+                )
                 
-                # Use the scraped content directly
-                title = og_title or "LinkedIn Profile"
-                doc = f"""LinkedIn Profile: {title}
-URL: {url}
-
-{content}
-"""
                 content_hash = calculate_content_hash(doc)
+                
+                # Build metadata about what was extracted
+                extraction_meta = {
+                    "method": "dumpling_linkedin_api",
+                    "text_len": len(doc),
+                    "profile_name": profile_name,
+                    "has_about": bool(profile.get("about")),
+                    "experience_count": len(profile.get("experience", [])),
+                    "education_count": len(profile.get("education", [])),
+                    "posts_count": len(profile.get("recentPosts", [])),
+                    "articles_count": len(profile.get("articles", [])),
+                    "projects_count": len(profile.get("projects", [])),
+                    "recommendations_count": len(profile.get("recommendations", [])),
+                }
                 
                 # Update source
                 supabase.table("sources").update({
-                    "filename": f"LinkedIn: {title}"[:240],
+                    "filename": f"LinkedIn: {profile_name}"[:240],
                     "file_size": len(doc),
                     "content_text": doc,
                     "content_hash": content_hash,
@@ -1740,7 +1745,7 @@ URL: {url}
                     step="fetching",
                     status="completed",
                     correlation_id=correlation_id,
-                    metadata={"method": "dumpling_ai", "text_len": len(doc)},
+                    metadata=extraction_meta,
                 )
                 
                 # Index and return
@@ -1748,7 +1753,13 @@ URL: {url}
                     source_id,
                     twin_id,
                     doc,
-                    metadata_override={"filename": f"LinkedIn: {title}"[:240], "type": "linkedin_profile", "url": url},
+                    metadata_override={
+                        "filename": f"LinkedIn: {profile_name}"[:240], 
+                        "type": "linkedin_profile", 
+                        "url": url,
+                        "profile_name": profile_name,
+                        "profile_location": profile.get("location", ""),
+                    },
                     provider=provider,
                     correlation_id=correlation_id,
                 )
@@ -1760,10 +1771,18 @@ URL: {url}
                 }).eq("id", source_id).execute()
                 
                 return num_chunks
+            else:
+                print(f"[LinkedIn] Dumpling AI Profile API returned empty content")
+                log_ingestion_event(source_id, twin_id, "warning", "Dumpling AI returned empty profile content")
                 
     except Exception as dumpling_error:
-        print(f"[LinkedIn] Dumpling AI scraping failed: {dumpling_error}")
-        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn scraping failed: {dumpling_error}")
+        error_msg = str(dumpling_error)
+        print(f"[LinkedIn] Dumpling AI Profile API failed: {error_msg}")
+        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn Profile API failed: {error_msg}")
+        
+        # Check for specific error types
+        if "502" in error_msg or "unavailable" in error_msg.lower():
+            print("[LinkedIn] Profile appears to be private or blocked")
         # Continue to fallback strategy
 
     # -------------------------------------------------------------
