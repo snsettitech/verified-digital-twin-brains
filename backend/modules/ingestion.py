@@ -607,7 +607,38 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
             print(f"[YouTube] Data API check failed (non-blocking): {e}")
 
     # -------------------------------------------------------------
-    # Strategy 1: youtube-transcript-api (Fast, No Download)
+    # Strategy 0: Dumpling AI (Primary - Reliable transcript service)
+    # -------------------------------------------------------------
+    if not text:
+        try:
+            from modules.dumplingai_client import get_youtube_transcript
+            print(f"[YouTube] Trying Dumpling AI transcript service for {video_id}")
+            log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI transcript extraction")
+            
+            result = await get_youtube_transcript(
+                video_url=url,
+                include_timestamps=True,
+                timestamps_to_combine=5,
+                preferred_language="en",
+            )
+            
+            text = result.get("transcript", "")
+            detected_language = result.get("language", "unknown")
+            
+            if text:
+                log_ingestion_event(
+                    source_id, twin_id, "info",
+                    f"Dumpling AI transcript extraction successful ({len(text)} chars, lang={detected_language})"
+                )
+                print(f"[YouTube] Dumpling AI succeeded: {len(text)} characters, language={detected_language}")
+        except Exception as dumpling_error:
+            error_msg = str(dumpling_error)
+            print(f"[YouTube] Dumpling AI failed: {error_msg}")
+            log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI failed: {error_msg}")
+            # Continue to fallback strategies
+
+    # -------------------------------------------------------------
+    # Strategy 1: youtube-transcript-api (Fast, No Download - Fallback)
     # -------------------------------------------------------------
     text, transcript_error, transcript_method = fetch_youtube_transcript_compat(video_id)
     if text:
@@ -1856,57 +1887,92 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
         metadata={"url": url},
     )
 
+    # -------------------------------------------------------------
+    # Strategy 0: Dumpling AI (Primary - Reliable web scraping)
+    # -------------------------------------------------------------
     html_text = ""
     http_status = None
+    dumpling_success = False
+    
     try:
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
-            resp = await client.get(url)
-            http_status = resp.status_code
-            resp.raise_for_status()
-            html_text = resp.text or ""
-
-        finish_step(
-            event_id=fetch_event_id,
-            source_id=source_id,
-            twin_id=twin_id,
-            provider=provider,
-            step="fetching",
-            status="completed",
-            correlation_id=correlation_id,
-            metadata={"http_status": http_status, "bytes": len(html_text)},
-        )
-    except Exception as e:
-        err = build_error(
-            code="WEB_FETCH_FAILED",
-            message=f"Failed to fetch URL: {str(e)}",
-            provider=provider,
-            step="fetching",
-            http_status=http_status,
-            correlation_id=correlation_id,
-            raw={"url": url},
-            exc=e,
-        )
-        finish_step(
-            event_id=fetch_event_id,
-            source_id=source_id,
-            twin_id=twin_id,
-            provider=provider,
-            step="fetching",
-            status="error",
-            correlation_id=correlation_id,
-            error=err,
-        )
-        # FALLBACK: Use metadata-only ingestion when fetch fails
-        print(f"[Web] Fetch failed for {url}, falling back to metadata-only ingestion")
-        return await ingest_url_metadata_fallback(
-            source_id=source_id,
-            twin_id=twin_id,
+        from modules.dumplingai_client import scrape_webpage
+        print(f"[Web] Trying Dumpling AI scraping for {url}")
+        log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI web scraping")
+        
+        result = await scrape_webpage(
             url=url,
-            provider=provider,
-            correlation_id=correlation_id,
-            error_message=str(e),
-            source_type="web_fetch_failed",
+            format="html",
+            cleaned=True,
+            render_js=True,
         )
+        
+        # Extract content from Dumpling AI response
+        if result and isinstance(result, dict):
+            # Dumpling AI returns various formats depending on the API
+            html_text = result.get("content", "") or result.get("html", "") or str(result)
+            if html_text and len(html_text) > 100:
+                dumpling_success = True
+                http_status = 200
+                print(f"[Web] Dumpling AI scraping succeeded: {len(html_text)} characters")
+                log_ingestion_event(source_id, twin_id, "info", f"Dumpling AI scraping successful ({len(html_text)} chars)")
+    except Exception as dumpling_error:
+        print(f"[Web] Dumpling AI scraping failed: {dumpling_error}")
+        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI scraping failed: {dumpling_error}")
+        # Continue to fallback strategy
+
+    # -------------------------------------------------------------
+    # Strategy 1: Direct HTTP fetch (Fallback)
+    # -------------------------------------------------------------
+    if not dumpling_success:
+        try:
+            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+                resp = await client.get(url)
+                http_status = resp.status_code
+                resp.raise_for_status()
+                html_text = resp.text or ""
+
+            finish_step(
+                event_id=fetch_event_id,
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="fetching",
+                status="completed",
+                correlation_id=correlation_id,
+                metadata={"http_status": http_status, "bytes": len(html_text)},
+            )
+        except Exception as e:
+            err = build_error(
+                code="WEB_FETCH_FAILED",
+                message=f"Failed to fetch URL: {str(e)}",
+                provider=provider,
+                step="fetching",
+                http_status=http_status,
+                correlation_id=correlation_id,
+                raw={"url": url},
+                exc=e,
+            )
+            finish_step(
+                event_id=fetch_event_id,
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="fetching",
+                status="error",
+                correlation_id=correlation_id,
+                error=err,
+            )
+            # FALLBACK: Use metadata-only ingestion when fetch fails
+            print(f"[Web] Fetch failed for {url}, falling back to metadata-only ingestion")
+            return await ingest_url_metadata_fallback(
+                source_id=source_id,
+                twin_id=twin_id,
+                url=url,
+                provider=provider,
+                correlation_id=correlation_id,
+                error_message=str(e),
+                source_type="web_fetch_failed",
+            )
 
     parsed_event_id = start_step(
         source_id=source_id,
