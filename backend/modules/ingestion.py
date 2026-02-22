@@ -1696,11 +1696,11 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
         log_ingestion_event(source_id, twin_id, "warning", "DUMPLING_API_KEY not configured")
     else:
         print(f"[LinkedIn] DUMPLING_API_KEY configured (length: {len(dumpling_api_key)})")
-    
-    try:
-        from modules.dumplingai_client import get_linkedin_profile, format_linkedin_profile_for_ingestion
-        print(f"[LinkedIn] Trying Dumpling AI LinkedIn Profile API for {url}")
-        log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI LinkedIn Profile API extraction")
+        
+        try:
+            from modules.dumplingai_client import get_linkedin_profile, format_linkedin_profile_for_ingestion
+            print(f"[LinkedIn] Trying Dumpling AI LinkedIn Profile API for {url}")
+            log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI LinkedIn Profile API extraction")
         
         profile = await get_linkedin_profile(url=url)
         
