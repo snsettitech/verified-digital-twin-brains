@@ -209,6 +209,6 @@ if __name__ == "__main__":
     score = asyncio.run(test_phase3_summarization())
     
     if score >= 6:
-        print("\n✅ PHASE 3: PASSED")
+        print("\n PHASE 3: PASSED")
     else:
-        print("\n❌ PHASE 3: NEEDS IMPROVEMENT")
+        print("\n PHASE 3: NEEDS IMPROVEMENT")
