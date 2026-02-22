@@ -253,41 +253,55 @@ async def get_knowledge_profile(twin_id: str):
     """
     Analyzes the twin's knowledge base to generate stats on facts vs opinions and tone.
     """
-    index = get_pinecone_index()
+    try:
+        index = get_pinecone_index()
+    except Exception as e:
+        print(f"[Knowledge Profile] Failed to get Pinecone index: {e}")
+        index = None
     
-    # Query Pinecone for a sample of vectors to analyze metadata
-    # We use a dummy non-zero vector for a broad search within the namespace
-    # Dimensions for text-embedding-3-large is 3072
-    from modules.delphi_namespace import get_namespace_candidates_for_twin
-
-    matches = []
-    for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
-        query_res = index.query(
-            vector=[0.1] * 3072,
-            top_k=1000, # Analyze up to 1000 chunks
-            include_metadata=True,
-            namespace=namespace
-        )
-        matches.extend(query_res.get("matches", []))
-    total_chunks = len(matches)
-    
+    total_chunks = 0
     fact_count = 0
     opinion_count = 0
     tone_distribution = {}
     
-    for match in matches:
-        metadata = match.get("metadata", {})
-        
-        # Category: FACT or OPINION
-        category = metadata.get("category", "FACT")
-        if category == "OPINION":
-            opinion_count += 1
-        else:
-            fact_count += 1
+    # Query Pinecone for a sample of vectors to analyze metadata
+    # We use a dummy non-zero vector for a broad search within the namespace
+    # Dimensions for text-embedding-3-large is 3072
+    if index:
+        try:
+            from modules.delphi_namespace import get_namespace_candidates_for_twin
+
+            matches = []
+            for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
+                try:
+                    query_res = index.query(
+                        vector=[0.1] * 3072,
+                        top_k=1000, # Analyze up to 1000 chunks
+                        include_metadata=True,
+                        namespace=namespace
+                    )
+                    matches.extend(query_res.get("matches", []))
+                except Exception as e:
+                    print(f"[Knowledge Profile] Error querying namespace {namespace}: {e}")
+                    continue
             
-        # Tone Distribution
-        tone = metadata.get("tone", "Neutral")
-        tone_distribution[tone] = tone_distribution.get(tone, 0) + 1
+            total_chunks = len(matches)
+            
+            for match in matches:
+                metadata = match.get("metadata", {})
+                
+                # Category: FACT or OPINION
+                category = metadata.get("category", "FACT")
+                if category == "OPINION":
+                    opinion_count += 1
+                else:
+                    fact_count += 1
+                    
+                # Tone Distribution
+                tone = metadata.get("tone", "Neutral")
+                tone_distribution[tone] = tone_distribution.get(tone, 0) + 1
+        except Exception as e:
+            print(f"[Knowledge Profile] Error querying Pinecone: {e}")
     
     # Get top tone
     top_tone = "Neutral"
@@ -295,8 +309,12 @@ async def get_knowledge_profile(twin_id: str):
         top_tone = max(tone_distribution, key=tone_distribution.get)
         
     # Get total sources from Supabase
-    sources_res = supabase.table("sources").select("id", count="exact").eq("twin_id", twin_id).execute()
-    total_sources = sources_res.count if hasattr(sources_res, 'count') else len(sources_res.data)
+    total_sources = 0
+    try:
+        sources_res = supabase.table("sources").select("id", count="exact").eq("twin_id", twin_id).execute()
+        total_sources = sources_res.count if hasattr(sources_res, 'count') else len(sources_res.data)
+    except Exception as e:
+        print(f"[Knowledge Profile] Error fetching sources count: {e}")
     
     return {
         "total_chunks": total_chunks,

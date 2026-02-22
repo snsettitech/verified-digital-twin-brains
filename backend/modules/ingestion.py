@@ -1642,9 +1642,10 @@ async def ingest_url_metadata_fallback(
 
 async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, correlation_id: Optional[str] = None) -> int:
     """
-    Compliance-first LinkedIn ingestion:
-    - Fetches only public OpenGraph/canonical metadata when available.
-    - If blocked/login wall, fails with a clear terminal error instructing export/PDF fallback.
+    LinkedIn ingestion with Dumpling AI as primary strategy:
+    - Tries Dumpling AI first for reliable extraction
+    - Falls back to OpenGraph metadata if Dumpling fails
+    - If blocked/login wall, creates metadata fallback
     """
     provider = "linkedin"
 
@@ -1669,7 +1670,7 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
         provider=provider,
         step="fetching",
         correlation_id=correlation_id,
-        message="Fetching LinkedIn OpenGraph metadata",
+        message="Fetching LinkedIn profile",
         metadata={"url": url},
     )
 
@@ -1680,7 +1681,94 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
     og_image = None
     canonical = None
     page_title = None
+    html_text = ""
+    dumpling_success = False
 
+    # -------------------------------------------------------------
+    # Strategy 0: Dumpling AI (Primary - Reliable extraction)
+    # -------------------------------------------------------------
+    try:
+        from modules.dumplingai_client import scrape_webpage
+        print(f"[LinkedIn] Trying Dumpling AI scraping for {url}")
+        log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI LinkedIn extraction")
+        
+        result = await scrape_webpage(
+            url=url,
+            format="markdown",
+            cleaned=True,
+            render_js=True,
+        )
+        
+        if result and isinstance(result, dict):
+            # Extract content from Dumpling AI response
+            content = result.get("content", "") or result.get("markdown", "")
+            og_title = result.get("title", "")
+            
+            if content and len(content) > 100:
+                html_text = content
+                dumpling_success = True
+                page_title = og_title
+                print(f"[LinkedIn] Dumpling AI scraping succeeded: {len(content)} characters")
+                log_ingestion_event(source_id, twin_id, "info", f"Dumpling AI LinkedIn scraping successful ({len(content)} chars)")
+                
+                # Use the scraped content directly
+                title = og_title or "LinkedIn Profile"
+                doc = f"""LinkedIn Profile: {title}
+URL: {url}
+
+{content}
+"""
+                content_hash = calculate_content_hash(doc)
+                
+                # Update source
+                supabase.table("sources").update({
+                    "filename": f"LinkedIn: {title}"[:240],
+                    "file_size": len(doc),
+                    "content_text": doc,
+                    "content_hash": content_hash,
+                    "status": "processing",
+                    "staging_status": "staged",
+                    "extracted_text_length": len(doc),
+                    "citation_url": url,
+                }).eq("id", source_id).eq("twin_id", twin_id).execute()
+                
+                finish_step(
+                    event_id=fetch_event_id,
+                    source_id=source_id,
+                    twin_id=twin_id,
+                    provider=provider,
+                    step="fetching",
+                    status="completed",
+                    correlation_id=correlation_id,
+                    metadata={"method": "dumpling_ai", "text_len": len(doc)},
+                )
+                
+                # Index and return
+                num_chunks = await process_and_index_text(
+                    source_id,
+                    twin_id,
+                    doc,
+                    metadata_override={"filename": f"LinkedIn: {title}"[:240], "type": "linkedin_profile", "url": url},
+                    provider=provider,
+                    correlation_id=correlation_id,
+                )
+                
+                supabase.table("sources").update({
+                    "status": "live",
+                    "staging_status": "live",
+                    "chunk_count": num_chunks,
+                }).eq("id", source_id).execute()
+                
+                return num_chunks
+                
+    except Exception as dumpling_error:
+        print(f"[LinkedIn] Dumpling AI scraping failed: {dumpling_error}")
+        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn scraping failed: {dumpling_error}")
+        # Continue to fallback strategy
+
+    # -------------------------------------------------------------
+    # Strategy 1: Direct HTTP fetch with OpenGraph (Fallback)
+    # -------------------------------------------------------------
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
