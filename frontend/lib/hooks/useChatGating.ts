@@ -1,100 +1,100 @@
-'use client';
+/**
+ * Chat Gating Hook
+ * 
+ * Ensures chat access is blocked for non-active twins.
+ * Redirects to onboarding resume if needed.
+ */
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTwin, Twin, getOnboardingResumeUrl } from '@/lib/context/TwinContext';
+
+export type TwinStatus = 'draft' | 'ingesting' | 'claims_ready' | 'clarification_pending' | 'persona_built' | 'active';
+
+export interface Twin {
+  id: string;
+  name: string;
+  status: TwinStatus;
+}
 
 export interface ChatGateResult {
   canChat: boolean;
   isLoading: boolean;
-  checkAndRedirect: (twinId?: string) => boolean;
-  getBlockReason: (twin?: Twin | null) => string | null;
+  checkAndRedirect: (twin?: Twin | null) => boolean;
+  getResumeUrl: (twinId: string) => string;
+  handle403Error: (response: Response) => boolean;
 }
 
 /**
- * Hook to gate chat access based on twin status.
- * Redirects to onboarding if twin is not active.
+ * Hook to gate chat access based on twin status
  */
 export function useChatGating(): ChatGateResult {
   const router = useRouter();
-  const { activeTwin, twins, isLoading } = useTwin();
 
-  const getBlockReason = useCallback((twin?: Twin | null): string | null => {
-    const targetTwin = twin || activeTwin;
-    
-    if (!targetTwin) {
-      return 'No twin selected';
-    }
+  const getResumeUrl = useCallback((twinId: string): string => {
+    return `/onboarding?twinId=${encodeURIComponent(twinId)}`;
+  }, []);
 
-    if (targetTwin.status === 'active' || targetTwin.is_active) {
-      return null;
-    }
-
-    // Map status to user-friendly message
-    switch (targetTwin.status) {
-      case 'draft':
-        return 'Your Digital Twin is in draft mode. Continue setup to activate it.';
-      case 'ingesting':
-        return 'Your content is being processed. Please wait for processing to complete.';
-      case 'claims_ready':
-        return 'Please review the extracted claims from your content.';
-      case 'clarification_pending':
-        return 'Please answer a few clarification questions to improve your persona.';
-      case 'persona_built':
-        return 'Your persona is ready. Activate it to start chatting.';
-      default:
-        return 'Your Digital Twin is not yet active. Continue setup to activate it.';
-    }
-  }, [activeTwin]);
-
-  const checkAndRedirect = useCallback((twinId?: string): boolean => {
-    const targetTwinId = twinId || activeTwin?.id;
-    
-    if (!targetTwinId) {
-      return false;
-    }
-
-    // Find the twin
-    const twin = twins.find(t => t.id === targetTwinId) || activeTwin;
-    
+  const checkAndRedirect = useCallback((twin?: Twin | null): boolean => {
     if (!twin) {
       return false;
     }
 
-    // Check if can chat
-    const canChat = twin.status === 'active' || twin.is_active;
+    const canChat = twin.status === 'active';
     
     if (!canChat) {
-      // Redirect to onboarding resume
-      router.push(getOnboardingResumeUrl(targetTwinId));
+      router.push(getResumeUrl(twin.id));
       return false;
     }
 
     return true;
-  }, [activeTwin, twins, router]);
+  }, [getResumeUrl, router]);
+
+  const handle403Error = useCallback((response: Response): boolean => {
+    if (response.status === 403) {
+      // Extract twin ID from URL if present
+      const url = response.url;
+      const match = url.match(/\/chat\/(\w+)/);
+      const twinId = match?.[1];
+      
+      if (twinId) {
+        router.push(getResumeUrl(twinId));
+        return true;
+      }
+    }
+    return false;
+  }, [getResumeUrl, router]);
 
   return {
-    canChat: !!activeTwin && (activeTwin.status === 'active' || activeTwin.is_active),
-    isLoading,
+    canChat: false, // Will be set by caller based on twin status
+    isLoading: false,
     checkAndRedirect,
-    getBlockReason,
+    getResumeUrl,
+    handle403Error,
   };
 }
 
 /**
- * Handle 403 errors from chat API (twin not active)
+ * Standalone function to handle chat API errors
  */
-export function handleChat403(error: Response, router: ReturnType<typeof useRouter>): boolean {
-  if (error.status === 403) {
-    // Extract twin ID from URL if present
-    const url = error.url;
-    const match = url.match(/\/chat\/(\w+)/);
-    const twinId = match?.[1];
+export async function handleChatError(
+  response: Response,
+  router: ReturnType<typeof useRouter>
+): Promise<{ handled: boolean; shouldRedirect: string | null }> {
+  if (response.status === 403) {
+    const data = await response.json().catch(() => ({}));
     
-    if (twinId) {
-      router.push(getOnboardingResumeUrl(twinId));
-      return true;
+    // Check if it's a twin not active error
+    if (data.detail?.includes('not active') || data.status) {
+      const url = response.url;
+      const match = url.match(/\/chat\/(\w+)/);
+      const twinId = match?.[1] || data.twin_id;
+      
+      if (twinId) {
+        const resumeUrl = `/onboarding?twinId=${encodeURIComponent(twinId)}`;
+        return { handled: true, shouldRedirect: resumeUrl };
+      }
     }
   }
-  return false;
+  
+  return { handled: false, shouldRedirect: null };
 }

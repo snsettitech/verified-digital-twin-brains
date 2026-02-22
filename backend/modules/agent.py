@@ -581,6 +581,120 @@ def _build_prompt_from_v2_persona(spec: Dict[str, Any], twin_name: str) -> str:
     return "\n".join(prompt_parts)
 
 
+# =============================================================================
+# POST-GENERATION VALIDATOR: Link-First Citation Compliance
+# =============================================================================
+
+CITATION_PATTERN = re.compile(r'\[claim_[a-f0-9]+\]', re.IGNORECASE)
+OWNER_FACT_PATTERN = re.compile(
+    r'\b(I|my|mine|me)\s+(?:prefer|like|believe|think|know|want|need|use|have|did|went|worked|founded|started|invested|advise)',
+    re.IGNORECASE
+)
+
+class PostGenValidationResult:
+    """Result of post-generation validation."""
+    def __init__(self, is_valid: bool, violations: List[str], action: str, corrected_response: Optional[str] = None):
+        self.is_valid = is_valid
+        self.violations = violations
+        self.action = action  # 'accept', 'reject_regenerate', 'clarify'
+        self.corrected_response = corrected_response
+
+async def validate_link_first_response(
+    response_text: str,
+    twin_id: str,
+    persona_spec: Dict[str, Any],
+    claim_store: Any = None,
+) -> PostGenValidationResult:
+    """
+    POST-GEN VALIDATOR: Ensure link-first responses cite claims for owner facts.
+    
+    Rules:
+    1. Every owner-specific factual claim MUST have [claim_id] citation
+    2. If citation missing: reject and regenerate with clarification request
+    3. No silent fallback to legacy persona
+    4. Emit telemetry on violations
+    
+    Returns:
+        PostGenValidationResult with validation outcome and action
+    """
+    # Check if this is link-first persona
+    source = persona_spec.get("source", "")
+    is_link_first = "link" in source.lower() or source == "link-compile"
+    
+    if not is_link_first:
+        # Non-link-first personas skip this validation
+        return PostGenValidationResult(True, [], 'accept')
+    
+    violations = []
+    
+    # Extract sentences with owner facts
+    sentences = re.split(r'(?<=[.!?])\s+', response_text)
+    
+    for sentence in sentences:
+        # Check if sentence contains owner facts
+        has_owner_fact = OWNER_FACT_PATTERN.search(sentence)
+        has_citation = CITATION_PATTERN.search(sentence)
+        
+        if has_owner_fact and not has_citation:
+            violations.append(f"Owner fact without citation: {sentence[:100]}...")
+    
+    # Also check for uncited specific assertions
+    # (e.g., "I invested $5M in Series A" without [claim_xxx])
+    SPECIFIC_CLAIM_PATTERN = re.compile(
+        r'\b(I|my)\s+\w+\s+(?:\$?[\d,]+(?:\.\d+)?\s*(?:million|billion|M|B|%|percent)|'
+        r'(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}|'
+        r'(?:founded|started|launched|invested|advised|worked at)\s+(?:[A-Z][\w\s&]+){1,3})',
+        re.IGNORECASE
+    )
+    
+    for match in SPECIFIC_CLAIM_PATTERN.finditer(response_text):
+        # Check if this specific claim has a citation nearby
+        start = max(0, match.start() - 100)
+        end = min(len(response_text), match.end() + 100)
+        context = response_text[start:end]
+        
+        if not CITATION_PATTERN.search(context):
+            violations.append(f"Specific claim without citation: {match.group()[:80]}...")
+    
+    # Determine action based on violations
+    if not violations:
+        return PostGenValidationResult(True, [], 'accept')
+    
+    # Violations found - need to reject and regenerate with clarification
+    # Build corrected response that asks for clarification
+    clarification_response = (
+        "I'd like to answer that, but I need to verify my information first. "
+        "Could you help me understand your perspective on this? "
+        "This will help me give you a more accurate response grounded in your actual views."
+    )
+    
+    # Emit telemetry (high severity)
+    try:
+        from modules.telemetry import emit_telemetry
+        emit_telemetry(
+            event="link_first_citation_violation",
+            twin_id=twin_id,
+            severity="high",
+            payload={
+                "violation_count": len(violations),
+                "violations": violations[:5],  # First 5 only
+                "response_preview": response_text[:500],
+                "action_taken": "reject_and_clarify",
+            }
+        )
+    except Exception as e:
+        print(f"[PostGenValidator] Telemetry error: {e}")
+    
+    return PostGenValidationResult(
+        is_valid=False,
+        violations=violations,
+        action='clarify',
+        corrected_response=clarification_response
+    )
+
+
+# =============================================================================
+
 def _twin_has_groundable_knowledge(twin_id: Optional[str]) -> bool:
     """
     Lightweight runtime signal for router policy.
@@ -3008,8 +3122,55 @@ async def run_agent_stream(
     try:
         # P1-A: Pass thread_id if checkpointer is enabled
         config = {"configurable": {"thread_id": thread_id}} if thread_id and get_checkpointer() else {}
+        
+        # Track final response for post-generation validation (link-first)
+        final_response_text = ""
+        final_event = None
+        
         async for event in agent.astream(state, stream_mode="updates", **config):
+            # Capture agent messages for validation
+            if event.get("agent") and event["agent"].get("messages"):
+                for msg in event["agent"]["messages"]:
+                    if hasattr(msg, 'content'):
+                        final_response_text = msg.content
+                    elif isinstance(msg, dict) and 'content' in msg:
+                        final_response_text = msg['content']
+                    final_event = event
+            
             yield event
+        
+        # POST-GENERATION VALIDATION: Link-First Citation Compliance
+        # Only validate if we have a response and it's link-first
+        if final_response_text and settings.get("persona_v2_source") == "link-compile":
+            try:
+                # Get persona spec for validation
+                from modules.persona_spec_store_v2 import get_active_persona_spec_v2
+                persona_row = get_active_persona_spec_v2(twin_id)
+                if persona_row and persona_row.get("spec"):
+                    validation_result = await validate_link_first_response(
+                        response_text=final_response_text,
+                        twin_id=twin_id,
+                        persona_spec=persona_row["spec"],
+                    )
+                    
+                    if not validation_result.is_valid and validation_result.corrected_response:
+                        # Yield corrected response as a new event
+                        from langchain_core.messages import AIMessage
+                        corrected_msg = AIMessage(content=validation_result.corrected_response)
+                        corrected_msg.additional_kwargs["post_gen_validated"] = True
+                        corrected_msg.additional_kwargs["validation_action"] = validation_result.action
+                        
+                        yield {
+                            "agent": {
+                                "messages": [corrected_msg]
+                            }
+                        }
+                        
+                        print(f"[PostGenValidator] Corrected response for twin {twin_id}: {validation_result.action}")
+            except Exception as e:
+                print(f"[PostGenValidator] Validation error: {e}")
+                # Don't block response on validation error
+    
     finally:
         # Record agent latency and flush metrics
         agent_latency = (time.time() - agent_start) * 1000
