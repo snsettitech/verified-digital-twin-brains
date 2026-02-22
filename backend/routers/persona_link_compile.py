@@ -746,14 +746,18 @@ async def transition_to_clarification_pending(
     """
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
+    tenant_id = user.get("tenant_id")
     
     _set_twin_status(twin_id, "clarification_pending")
     
     # Log transition
     AuditLogger.log(
+        tenant_id=tenant_id,
         event_type="twin_status_transition",
+        action="transition_to_clarification_pending",
         twin_id=twin_id,
-        details={"from_status": "claims_ready", "to_status": "clarification_pending"},
+        actor_id=user.get("user_id"),
+        metadata={"from_status": "claims_ready", "to_status": "clarification_pending"},
     )
     
     return {"twin_id": twin_id, "status": "clarification_pending"}
@@ -770,14 +774,18 @@ async def transition_to_persona_built(
     """
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
+    tenant_id = user.get("tenant_id")
     
     _set_twin_status(twin_id, "persona_built")
     
     # Log transition
     AuditLogger.log(
+        tenant_id=tenant_id,
         event_type="twin_status_transition",
+        action="transition_to_persona_built",
         twin_id=twin_id,
-        details={"from_status": "clarification_pending", "to_status": "persona_built"},
+        actor_id=user.get("user_id"),
+        metadata={"from_status": "clarification_pending", "to_status": "persona_built"},
     )
     
     return {"twin_id": twin_id, "status": "persona_built"}
@@ -794,6 +802,7 @@ async def transition_twin_state(
     """
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
+    tenant_id = user.get("tenant_id")
 
     state_map = {
         "clarification-pending": "clarification_pending",
@@ -809,9 +818,12 @@ async def transition_twin_state(
     _set_twin_status(twin_id, status)
 
     AuditLogger.log(
+        tenant_id=tenant_id,
         event_type="twin_status_transition",
+        action="transition_twin_state",
         twin_id=twin_id,
-        details={"to_status": status, "target_state": target_state},
+        actor_id=user.get("user_id"),
+        metadata={"to_status": status, "target_state": target_state},
     )
 
     return {"twin_id": twin_id, "status": status}
@@ -831,6 +843,7 @@ async def activate_twin(
     from modules.persona_spec_store_v2 import create_persona_spec_v2
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
+    tenant_id = user.get("tenant_id")
     resolved_final_name = request.final_name if request and request.final_name is not None else final_name
     
     # Get twin data
@@ -904,9 +917,12 @@ async def activate_twin(
     
     # Log activation
     AuditLogger.log(
+        tenant_id=tenant_id,
         event_type="twin_activated",
+        action="activate_twin",
         twin_id=twin_id,
-        details={"mode": "link_first", "final_name": resolved_final_name},
+        actor_id=user.get("user_id"),
+        metadata={"mode": "link_first", "final_name": resolved_final_name},
     )
     
     return {
