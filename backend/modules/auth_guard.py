@@ -29,6 +29,7 @@ from typing import Optional, Dict, Any, Tuple
 from functools import wraps
 from datetime import datetime, timedelta
 from pathlib import Path
+import requests
 
 # Import json for type hints
 import json
@@ -51,6 +52,10 @@ JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "authenticated")
 STRICT_MODE = os.getenv("AUTH_STRICT_MODE", "true").lower() == "true"
 MAX_TOKEN_AGE_SECONDS = int(os.getenv("MAX_TOKEN_AGE_SECONDS", "3600"))  # 1 hour default
 JWT_CLOCK_SKEW_SECONDS = int(os.getenv("JWT_CLOCK_SKEW_SECONDS", "600"))  # 10 min default
+SUPABASE_AUTH_FALLBACK_ENABLED = (
+    os.getenv("SUPABASE_AUTH_FALLBACK_ENABLED", "true").lower() == "true"
+)
+SUPABASE_AUTH_TIMEOUT_SECONDS = float(os.getenv("SUPABASE_AUTH_TIMEOUT_SECONDS", "5"))
 
 
 class AuthenticationError(Exception):
@@ -61,6 +66,59 @@ class AuthenticationError(Exception):
 class AuthorizationError(Exception):
     """Raised when authorization fails."""
     pass
+
+
+def authenticate_via_supabase(token: str) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Fallback token verification against Supabase Auth.
+
+    This protects production auth flows when JWT secrets drift across environments.
+    Supabase remains the source of truth for whether an access token is valid.
+    """
+    if not SUPABASE_AUTH_FALLBACK_ENABLED:
+        return False, {"error": "Supabase auth fallback disabled"}
+
+    supabase_url = (os.getenv("SUPABASE_URL") or "").rstrip("/")
+    supabase_api_key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+
+    if not supabase_url or not supabase_api_key:
+        return False, {"error": "Supabase auth fallback not configured"}
+
+    try:
+        response = requests.get(
+            f"{supabase_url}/auth/v1/user",
+            headers={
+                "apikey": supabase_api_key,
+                "Authorization": f"Bearer {token}",
+            },
+            timeout=SUPABASE_AUTH_TIMEOUT_SECONDS,
+        )
+    except Exception as e:
+        return False, {"error": f"Supabase auth lookup failed: {str(e)}"}
+
+    if response.status_code != 200:
+        return False, {"error": f"Supabase auth rejected token (status={response.status_code})"}
+
+    try:
+        user_data = response.json() or {}
+    except Exception as e:
+        return False, {"error": f"Supabase auth response parse failed: {str(e)}"}
+
+    user_id = user_data.get("id")
+    if not user_id:
+        return False, {"error": "Supabase auth response missing user id"}
+
+    auth_context = {
+        "user_id": user_id,
+        "email": user_data.get("email"),
+        "role": user_data.get("role", "authenticated"),
+        "authenticated_at": None,
+        "expires_at": None,
+        "session_id": None,
+        "verified": True,
+        "auth_source": "supabase_auth_api",
+    }
+    return True, auth_context
 
 
 def validate_jwt_structure(token: str) -> Tuple[bool, str]:
@@ -203,9 +261,23 @@ def authenticate_request(token: str) -> Dict[str, Any]:
     if not is_valid:
         raise AuthenticationError(error)
     
-    # Step 2: Signature verification
-    is_valid, result = verify_token_signature(token)
+    # Step 2: Signature verification (primary local path)
+    try:
+        is_valid, result = verify_token_signature(token)
+    except AuthenticationError as primary_error:
+        # Fallback to Supabase auth introspection when local secret is unavailable.
+        # This keeps auth available if JWT_SECRET is misconfigured in runtime env.
+        fallback_ok, fallback_result = authenticate_via_supabase(token)
+        if fallback_ok:
+            return fallback_result
+        raise primary_error
+
     if not is_valid:
+        # Local verification failed (e.g., signature mismatch). Ask Supabase.
+        fallback_ok, fallback_result = authenticate_via_supabase(token)
+        if fallback_ok:
+            return fallback_result
+
         error_msg = result.get("error", "Unknown verification error")
         raise AuthenticationError(error_msg)
     
