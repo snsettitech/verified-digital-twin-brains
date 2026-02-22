@@ -1160,6 +1160,10 @@ async def router_node(state: TwinState):
     # STEP 2: Apply grounding policy to effective query
     query_policy = get_grounding_policy(effective_query, interaction_context=interaction_context)
     is_smalltalk = bool(query_policy.get("is_smalltalk"))
+    
+    # DEBUG: Log smalltalk detection
+    print(f"[Router DEBUG] effective_query='{effective_query}', is_smalltalk={is_smalltalk}, query_policy={query_policy}")
+    
     deepagents_plan = (
         build_deepagents_plan(effective_query, interaction_context=interaction_context)
         if not is_smalltalk
@@ -2321,7 +2325,9 @@ async def planner_node(state: TwinState):
             used_5layer = False
     
     dialogue_mode = str(state.get("dialogue_mode") or "").strip().upper()
-    if dialogue_mode == "SMALLTALK" or _is_smalltalk_query(user_query):
+    is_smalltalk_check = dialogue_mode == "SMALLTALK" or _is_smalltalk_query(user_query)
+    print(f"[Planner DEBUG] dialogue_mode={dialogue_mode}, user_query='{user_query}', is_smalltalk_check={is_smalltalk_check}")
+    if is_smalltalk_check:
         answer_text = _smalltalk_response(user_query)
         smalltalk_confidence = 0.9
         smalltalk_answerability = {
@@ -2671,6 +2677,8 @@ async def realizer_node(state: TwinState):
     mode = state.get("dialogue_mode", "QA_FACT")
     render_strategy = str(plan.get("render_strategy", "")).strip().lower() if isinstance(plan, dict) else ""
 
+    print(f"[Realizer DEBUG] dialogue_mode={mode}, render_strategy={render_strategy}, plan_keys={list(plan.keys()) if isinstance(plan, dict) else 'N/A'}")
+    
     if render_strategy == "source_faithful":
         confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
         points = []
@@ -2686,8 +2694,10 @@ async def realizer_node(state: TwinState):
 
         # Source-faithful mode intentionally avoids LLM rewrite/paraphrase.
         realized_text = "\n".join(response_lines).strip()
+        print(f"[Realizer DEBUG] points={points}, realized_text='{realized_text[:50]}...' if realized_text else '(empty)'")
         if not realized_text:
             realized_text = UNCERTAINTY_RESPONSE
+            print(f"[Realizer DEBUG] Empty realized_text, using UNCERTAINTY_RESPONSE")
 
         res = AIMessage(content=realized_text)
         citations = plan.get("citations", []) if isinstance(plan, dict) else []
@@ -2913,11 +2923,11 @@ def create_twin_agent(
     workflow.set_entry_point("router")
     
     def route_after_router(state: TwinState):
-        if state.get("execution_lane"):
-            return "deepagents"
-        if state.get("requires_evidence"):
-            return "retrieve"
-        return "planner"
+        execution_lane = state.get("execution_lane")
+        requires_evidence = state.get("requires_evidence")
+        route = "deepagents" if execution_lane else ("retrieve" if requires_evidence else "planner")
+        print(f"[RouterRoute DEBUG] execution_lane={execution_lane}, requires_evidence={requires_evidence}, route={route}")
+        return route
 
     workflow.add_conditional_edges(
         "router",
