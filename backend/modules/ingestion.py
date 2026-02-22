@@ -347,6 +347,10 @@ def detect_url_provider(url: str) -> str:
         return "x"
     if "linkedin.com" in u:
         return "linkedin"
+    if "instagram.com" in u:
+        return "instagram"
+    if "facebook.com" in u or "fb.com" in u:
+        return "facebook"
     if u.endswith(".rss") or "feed" in u or "podcast" in u or "anchor.fm" in u or "podbean" in u:
         return "podcast"
     if u.startswith("http://") or u.startswith("https://"):
@@ -1701,121 +1705,121 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
             from modules.dumplingai_client import get_linkedin_profile, format_linkedin_profile_for_ingestion
             print(f"[LinkedIn] Trying Dumpling AI LinkedIn Profile API for {url}")
             log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI LinkedIn Profile API extraction")
-        
-        profile = await get_linkedin_profile(url=url)
-        
-        if profile and profile.get("success"):
-            # Format the profile data into a structured document
-            doc = format_linkedin_profile_for_ingestion(profile, url)
-            profile_name = profile.get("name", "LinkedIn Profile")
             
-            if doc and len(doc) > 100:
-                dumpling_success = True
-                page_title = profile_name
-                print(f"[LinkedIn] Dumpling AI Profile API succeeded: {len(doc)} characters")
-                log_ingestion_event(
-                    source_id, twin_id, "info", 
-                    f"Dumpling AI LinkedIn Profile API successful ({len(doc)} chars). "
-                    f"Name: {profile_name}, Followers: {profile.get('followers', 'N/A')}"
-                )
+            profile = await get_linkedin_profile(url=url)
+            
+            if profile and profile.get("success"):
+                # Format the profile data into a structured document
+                doc = format_linkedin_profile_for_ingestion(profile, url)
+                profile_name = profile.get("name", "LinkedIn Profile")
                 
-                content_hash = calculate_content_hash(doc)
-                
-                # Build metadata about what was extracted
-                extraction_meta = {
-                    "method": "dumpling_linkedin_api",
-                    "text_len": len(doc),
-                    "profile_name": profile_name,
-                    "has_about": bool(profile.get("about")),
-                    "experience_count": len(profile.get("experience", [])),
-                    "education_count": len(profile.get("education", [])),
-                    "posts_count": len(profile.get("recentPosts", [])),
-                    "articles_count": len(profile.get("articles", [])),
-                    "projects_count": len(profile.get("projects", [])),
-                    "recommendations_count": len(profile.get("recommendations", [])),
-                }
-                
-                # Update source
-                supabase.table("sources").update({
-                    "filename": f"LinkedIn: {profile_name}"[:240],
-                    "file_size": len(doc),
-                    "content_text": doc,
-                    "content_hash": content_hash,
-                    "status": "processing",
-                    "staging_status": "staged",
-                    "extracted_text_length": len(doc),
-                    "citation_url": url,
-                }).eq("id", source_id).eq("twin_id", twin_id).execute()
-                
-                finish_step(
-                    event_id=fetch_event_id,
-                    source_id=source_id,
-                    twin_id=twin_id,
-                    provider=provider,
-                    step="fetching",
-                    status="completed",
-                    correlation_id=correlation_id,
-                    metadata=extraction_meta,
-                )
-                
-                # Index and return
-                num_chunks = await process_and_index_text(
-                    source_id,
-                    twin_id,
-                    doc,
-                    metadata_override={
-                        "filename": f"LinkedIn: {profile_name}"[:240], 
-                        "type": "linkedin_profile", 
-                        "url": url,
+                if doc and len(doc) > 100:
+                    dumpling_success = True
+                    page_title = profile_name
+                    print(f"[LinkedIn] Dumpling AI Profile API succeeded: {len(doc)} characters")
+                    log_ingestion_event(
+                        source_id, twin_id, "info", 
+                        f"Dumpling AI LinkedIn Profile API successful ({len(doc)} chars). "
+                        f"Name: {profile_name}, Followers: {profile.get('followers', 'N/A')}"
+                    )
+                    
+                    content_hash = calculate_content_hash(doc)
+                    
+                    # Build metadata about what was extracted
+                    extraction_meta = {
+                        "method": "dumpling_linkedin_api",
+                        "text_len": len(doc),
                         "profile_name": profile_name,
-                        "profile_location": profile.get("location", ""),
-                    },
-                    provider=provider,
-                    correlation_id=correlation_id,
-                )
-                
-                supabase.table("sources").update({
-                    "status": "live",
-                    "staging_status": "live",
-                    "chunk_count": num_chunks,
-                }).eq("id", source_id).execute()
-                
-                return num_chunks
-            else:
-                print(f"[LinkedIn] Dumpling AI Profile API returned empty content")
-                log_ingestion_event(source_id, twin_id, "warning", "Dumpling AI returned empty profile content")
-                
-    except Exception as dumpling_error:
-        error_msg = str(dumpling_error)
-        error_type = type(dumpling_error).__name__
-        print(f"[LinkedIn] Dumpling AI Profile API failed: {error_type}: {error_msg}")
-        
-        # Try to extract more details from HTTP errors
-        import httpx
-        if isinstance(dumpling_error, httpx.HTTPStatusError):
-            try:
-                response = dumpling_error.response
-                status_code = response.status_code
-                response_body = response.text
-                print(f"[LinkedIn] Dumpling AI HTTP {status_code}: {response_body[:500]}")
-                log_ingestion_event(
-                    source_id, twin_id, "warning", 
-                    f"Dumpling AI LinkedIn API HTTP {status_code}: {response_body[:200]}"
-                )
-            except Exception as log_err:
-                print(f"[LinkedIn] Could not extract error details: {log_err}")
-        
-        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn Profile API failed: {error_type}: {error_msg[:200]}")
-        
-        # Check for specific error types
-        if "502" in error_msg or "unavailable" in error_msg.lower():
-            print("[LinkedIn] Profile appears to be private or blocked (502)")
-        elif "400" in error_msg:
-            print("[LinkedIn] Invalid URL format (400)")
-        elif "401" in error_msg or "403" in error_msg:
-            print("[LinkedIn] API authentication issue (401/403)")
-        elif "429" in error_msg:
-            print("[LinkedIn] Rate limited (429)")
+                        "has_about": bool(profile.get("about")),
+                        "experience_count": len(profile.get("experience", [])),
+                        "education_count": len(profile.get("education", [])),
+                        "posts_count": len(profile.get("recentPosts", [])),
+                        "articles_count": len(profile.get("articles", [])),
+                        "projects_count": len(profile.get("projects", [])),
+                        "recommendations_count": len(profile.get("recommendations", [])),
+                    }
+                    
+                    # Update source
+                    supabase.table("sources").update({
+                        "filename": f"LinkedIn: {profile_name}"[:240],
+                        "file_size": len(doc),
+                        "content_text": doc,
+                        "content_hash": content_hash,
+                        "status": "processing",
+                        "staging_status": "staged",
+                        "extracted_text_length": len(doc),
+                        "citation_url": url,
+                    }).eq("id", source_id).eq("twin_id", twin_id).execute()
+                    
+                    finish_step(
+                        event_id=fetch_event_id,
+                        source_id=source_id,
+                        twin_id=twin_id,
+                        provider=provider,
+                        step="fetching",
+                        status="completed",
+                        correlation_id=correlation_id,
+                        metadata=extraction_meta,
+                    )
+                    
+                    # Index and return
+                    num_chunks = await process_and_index_text(
+                        source_id,
+                        twin_id,
+                        doc,
+                        metadata_override={
+                            "filename": f"LinkedIn: {profile_name}"[:240], 
+                            "type": "linkedin_profile", 
+                            "url": url,
+                            "profile_name": profile_name,
+                            "profile_location": profile.get("location", ""),
+                        },
+                        provider=provider,
+                        correlation_id=correlation_id,
+                    )
+                    
+                    supabase.table("sources").update({
+                        "status": "live",
+                        "staging_status": "live",
+                        "chunk_count": num_chunks,
+                    }).eq("id", source_id).execute()
+                    
+                    return num_chunks
+                else:
+                    print(f"[LinkedIn] Dumpling AI Profile API returned empty content")
+                    log_ingestion_event(source_id, twin_id, "warning", "Dumpling AI returned empty profile content")
+                    
+        except Exception as dumpling_error:
+            error_msg = str(dumpling_error)
+            error_type = type(dumpling_error).__name__
+            print(f"[LinkedIn] Dumpling AI Profile API failed: {error_type}: {error_msg}")
+            
+            # Try to extract more details from HTTP errors
+            import httpx
+            if isinstance(dumpling_error, httpx.HTTPStatusError):
+                try:
+                    response = dumpling_error.response
+                    status_code = response.status_code
+                    response_body = response.text
+                    print(f"[LinkedIn] Dumpling AI HTTP {status_code}: {response_body[:500]}")
+                    log_ingestion_event(
+                        source_id, twin_id, "warning", 
+                        f"Dumpling AI LinkedIn API HTTP {status_code}: {response_body[:200]}"
+                    )
+                except Exception as log_err:
+                    print(f"[LinkedIn] Could not extract error details: {log_err}")
+            
+            log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn Profile API failed: {error_type}: {error_msg[:200]}")
+            
+            # Check for specific error types
+            if "502" in error_msg or "unavailable" in error_msg.lower():
+                print("[LinkedIn] Profile appears to be private or blocked (502)")
+            elif "400" in error_msg:
+                print("[LinkedIn] Invalid URL format (400)")
+            elif "401" in error_msg or "403" in error_msg:
+                print("[LinkedIn] API authentication issue (401/403)")
+            elif "429" in error_msg:
+                print("[LinkedIn] Rate limited (429)")
         # Continue to fallback strategy
 
     # -------------------------------------------------------------
@@ -2253,6 +2257,174 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
     return num_chunks
 
 
+async def ingest_instagram_profile(
+    source_id: str,
+    twin_id: str,
+    url: str,
+    correlation_id: Optional[str] = None
+) -> int:
+    """
+    Ingest Instagram profile or post using Dumpling AI.
+    Instagram is heavily JavaScript-based and blocks traditional scraping.
+    """
+    provider = "instagram"
+    
+    # Ensure source row exists
+    try:
+        supabase.table("sources").upsert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": "Instagram: processing",
+            "file_size": 0,
+            "content_text": "",
+            "status": "processing",
+            "staging_status": "staged",
+            "citation_url": url,
+        }).execute()
+    except Exception as e:
+        print(f"[Instagram] Warning: Failed to upsert source record: {e}")
+    
+    fetch_event_id = start_step(
+        source_id=source_id,
+        twin_id=twin_id,
+        provider=provider,
+        step="fetching",
+        correlation_id=correlation_id,
+        message="Fetching Instagram content",
+        metadata={"url": url},
+    )
+    
+    try:
+        # Use Dumpling AI's extract endpoint for Instagram
+        from modules.dumplingai_client import extract_webpage_data
+        
+        print(f"[Instagram] Using Dumpling AI extraction for {url}")
+        log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI Instagram extraction")
+        
+        # Extract profile/post data with AI
+        result = await extract_webpage_data(
+            url=url,
+            instructions="Extract the profile name, bio, follower count, post captions, and any visible text content from this Instagram page. Return as structured text.",
+            render_js=True,
+        )
+        
+        if result and isinstance(result, dict):
+            # The extract endpoint returns data in the response
+            extracted_data = result.get("data", {}) or result
+            
+            # Format the extracted data into text
+            lines = []
+            lines.append(f"Instagram Profile/Post: {url}")
+            lines.append("")
+            
+            # Try to extract various fields
+            if isinstance(extracted_data, dict):
+                if "name" in extracted_data or "profile_name" in extracted_data:
+                    lines.append(f"Name: {extracted_data.get('name') or extracted_data.get('profile_name')}")
+                if "bio" in extracted_data:
+                    lines.append(f"Bio: {extracted_data['bio']}")
+                if "followers" in extracted_data:
+                    lines.append(f"Followers: {extracted_data['followers']}")
+                if "posts" in extracted_data and isinstance(extracted_data["posts"], list):
+                    lines.append("\nRecent Posts:")
+                    for post in extracted_data["posts"][:10]:  # Limit to 10 posts
+                        if isinstance(post, dict):
+                            caption = post.get("caption", "")
+                            if caption:
+                                lines.append(f"- {caption}")
+                        elif isinstance(post, str):
+                            lines.append(f"- {post}")
+                
+                # Add any other text content
+                if "content" in extracted_data:
+                    lines.append(f"\nContent:\n{extracted_data['content']}")
+                if "text" in extracted_data:
+                    lines.append(f"\n{extracted_data['text']}")
+            else:
+                # If result is just text, use it directly
+                lines.append(str(extracted_data))
+            
+            doc = "\n".join(lines)
+            
+            if len(doc) > 100:
+                print(f"[Instagram] Extraction successful: {len(doc)} characters")
+                log_ingestion_event(source_id, twin_id, "info", f"Instagram extraction successful ({len(doc)} chars)")
+                
+                content_hash = calculate_content_hash(doc)
+                
+                supabase.table("sources").update({
+                    "filename": "Instagram: extracted"[:240],
+                    "file_size": len(doc),
+                    "content_text": doc,
+                    "content_hash": content_hash,
+                    "status": "processing",
+                    "staging_status": "staged",
+                    "extracted_text_length": len(doc),
+                }).eq("id", source_id).eq("twin_id", twin_id).execute()
+                
+                finish_step(
+                    event_id=fetch_event_id,
+                    source_id=source_id,
+                    twin_id=twin_id,
+                    provider=provider,
+                    step="fetching",
+                    status="completed",
+                    correlation_id=correlation_id,
+                    metadata={"text_len": len(doc)},
+                )
+                
+                # Index the content
+                num_chunks = await process_and_index_text(
+                    source_id,
+                    twin_id,
+                    doc,
+                    metadata_override={"filename": "Instagram: extracted", "type": "instagram", "url": url},
+                    provider=provider,
+                    correlation_id=correlation_id,
+                )
+                
+                supabase.table("sources").update({
+                    "status": "live",
+                    "staging_status": "live",
+                    "chunk_count": num_chunks,
+                }).eq("id", source_id).execute()
+                
+                return num_chunks
+            else:
+                print(f"[Instagram] Extraction returned insufficient content: {len(doc)} chars")
+                log_ingestion_event(source_id, twin_id, "warning", f"Instagram extraction returned only {len(doc)} chars")
+        
+        # If we get here, extraction failed or returned insufficient content
+        raise ValueError("Instagram extraction returned insufficient content")
+        
+    except Exception as e:
+        print(f"[Instagram] Extraction failed: {e}")
+        log_ingestion_event(source_id, twin_id, "error", f"Instagram extraction failed: {str(e)[:200]}")
+        
+        # Fall back to metadata-only
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="error",
+            correlation_id=correlation_id,
+            error={"message": str(e)},
+        )
+        
+        return await ingest_url_metadata_fallback(
+            source_id=source_id,
+            twin_id=twin_id,
+            url=url,
+            provider=provider,
+            correlation_id=correlation_id,
+            error_message=str(e),
+            source_type="instagram_fallback",
+            preferred_title="Instagram Profile",
+        )
+
+
 async def ingest_url_to_source(
     source_id: str,
     twin_id: str,
@@ -2270,6 +2442,11 @@ async def ingest_url_to_source(
         return await ingest_podcast_rss(source_id, twin_id, url)
     if detected == "linkedin":
         return await ingest_linkedin_open_graph(source_id, twin_id, url, correlation_id=correlation_id)
+    if detected == "instagram":
+        return await ingest_instagram_profile(source_id, twin_id, url, correlation_id=correlation_id)
+    if detected == "facebook":
+        # Facebook also blocks scraping, use web with Dumpling AI
+        return await ingest_web_url(source_id, twin_id, url, correlation_id=correlation_id)
     if detected == "web":
         return await ingest_web_url(source_id, twin_id, url, correlation_id=correlation_id)
     raise ValueError(f"Unsupported URL provider: {detected}")

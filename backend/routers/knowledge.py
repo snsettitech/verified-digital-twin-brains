@@ -14,6 +14,12 @@ VALID_VISIBILITY_VALUES = {"private", "shared", "public"}
 
 @router.get("/twins/{twin_id}/knowledge-profile", response_model=KnowledgeProfile)
 async def knowledge_profile(twin_id: str, user=Depends(get_current_user)):
+    # First verify the twin exists
+    from modules.observability import supabase
+    twin_check = supabase.table("twins").select("id").eq("id", twin_id).limit(1).execute()
+    if not twin_check.data:
+        raise HTTPException(status_code=404, detail=f"Twin {twin_id} not found")
+    
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
     
