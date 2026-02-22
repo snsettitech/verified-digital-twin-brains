@@ -1687,6 +1687,16 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
     # -------------------------------------------------------------
     # Strategy 0: Dumpling AI LinkedIn Profile API (Primary)
     # -------------------------------------------------------------
+    
+    # Check if API key is configured first
+    import os
+    dumpling_api_key = os.getenv("DUMPLING_API_KEY", "").strip()
+    if not dumpling_api_key:
+        print("[LinkedIn] WARNING: DUMPLING_API_KEY not configured, skipping LinkedIn API strategy")
+        log_ingestion_event(source_id, twin_id, "warning", "DUMPLING_API_KEY not configured")
+    else:
+        print(f"[LinkedIn] DUMPLING_API_KEY configured (length: {len(dumpling_api_key)})")
+    
     try:
         from modules.dumplingai_client import get_linkedin_profile, format_linkedin_profile_for_ingestion
         print(f"[LinkedIn] Trying Dumpling AI LinkedIn Profile API for {url}")
@@ -1777,12 +1787,35 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
                 
     except Exception as dumpling_error:
         error_msg = str(dumpling_error)
-        print(f"[LinkedIn] Dumpling AI Profile API failed: {error_msg}")
-        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn Profile API failed: {error_msg}")
+        error_type = type(dumpling_error).__name__
+        print(f"[LinkedIn] Dumpling AI Profile API failed: {error_type}: {error_msg}")
+        
+        # Try to extract more details from HTTP errors
+        import httpx
+        if isinstance(dumpling_error, httpx.HTTPStatusError):
+            try:
+                response = dumpling_error.response
+                status_code = response.status_code
+                response_body = response.text
+                print(f"[LinkedIn] Dumpling AI HTTP {status_code}: {response_body[:500]}")
+                log_ingestion_event(
+                    source_id, twin_id, "warning", 
+                    f"Dumpling AI LinkedIn API HTTP {status_code}: {response_body[:200]}"
+                )
+            except Exception as log_err:
+                print(f"[LinkedIn] Could not extract error details: {log_err}")
+        
+        log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI LinkedIn Profile API failed: {error_type}: {error_msg[:200]}")
         
         # Check for specific error types
         if "502" in error_msg or "unavailable" in error_msg.lower():
-            print("[LinkedIn] Profile appears to be private or blocked")
+            print("[LinkedIn] Profile appears to be private or blocked (502)")
+        elif "400" in error_msg:
+            print("[LinkedIn] Invalid URL format (400)")
+        elif "401" in error_msg or "403" in error_msg:
+            print("[LinkedIn] API authentication issue (401/403)")
+        elif "429" in error_msg:
+            print("[LinkedIn] Rate limited (429)")
         # Continue to fallback strategy
 
     # -------------------------------------------------------------
