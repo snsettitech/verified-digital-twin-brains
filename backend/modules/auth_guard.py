@@ -480,13 +480,13 @@ def get_current_user(
         auth_context = authenticate_request(token)
 
         # Best-effort tenant enrichment to reduce duplicate tenant lookups in
-        # downstream handlers. Keep this non-blocking for compatibility.
+        # downstream handlers. Auto-create tenant if missing to prevent 403 errors.
         if not auth_context.get("tenant_id"):
             try:
                 auth_context["tenant_id"] = resolve_tenant_id(
                     user_id=auth_context.get("user_id"),
                     email=auth_context.get("email"),
-                    create_if_missing=False,
+                    create_if_missing=True,
                 )
             except HTTPException:
                 pass
@@ -539,12 +539,13 @@ def verify_owner(
 
     # Enrich auth context with tenant_id for routes that enforce tenant
     # ownership but currently only depend on verify_owner.
+    # Auto-create tenant if missing to prevent 403 errors for new users.
     if not auth_context.get("tenant_id"):
         try:
             tenant_id = resolve_tenant_id(
                 user_id=auth_context.get("user_id"),
                 email=auth_context.get("email"),
-                create_if_missing=False,
+                create_if_missing=True,
             )
             auth_context["tenant_id"] = tenant_id
         except HTTPException as exc:
@@ -561,6 +562,7 @@ def verify_owner(
 def require_tenant(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     """
     Require an authenticated user with a resolvable tenant_id.
+    Auto-creates tenant if missing to prevent 403 errors for new users.
     """
     if not user or not user.get("user_id"):
         raise HTTPException(
@@ -571,10 +573,11 @@ def require_tenant(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str
     tenant_id = user.get("tenant_id")
     if not tenant_id:
         try:
+            # Auto-create tenant for new users to prevent 403 errors
             tenant_id = resolve_tenant_id(
                 user_id=user.get("user_id"),
                 email=user.get("email"),
-                create_if_missing=False,
+                create_if_missing=True,
             )
         except HTTPException as exc:
             if exc.status_code == status.HTTP_404_NOT_FOUND:
@@ -701,19 +704,26 @@ def verify_twin_ownership(twin_id: str, user: Dict[str, Any]) -> bool:
     tenant_id = user.get("tenant_id")
     if not tenant_id:
         try:
+            # Auto-create tenant for new users to prevent 403 errors
             tenant_id = resolve_tenant_id(
                 user_id=user_id,
                 email=user.get("email"),
-                create_if_missing=False,
+                create_if_missing=True,
             )
-        except HTTPException:
-            tenant_id = None
+        except HTTPException as exc:
+            # If tenant creation fails, propagate as 403
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User has no tenant association",
+                )
+            raise
     
     try:
         if not tenant_id:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Twin not found or access denied"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User has no tenant association"
             )
 
         result = (
@@ -769,10 +779,11 @@ def verify_source_ownership(source_id: str, user: Dict[str, Any]) -> bool:
     tenant_id = user.get("tenant_id")
     if not tenant_id:
         try:
+            # Auto-create tenant for new users to prevent 403 errors
             tenant_id = resolve_tenant_id(
                 user_id=user_id,
                 email=user.get("email"),
-                create_if_missing=False,
+                create_if_missing=True,
             )
         except HTTPException:
             tenant_id = None

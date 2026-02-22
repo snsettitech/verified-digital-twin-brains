@@ -351,9 +351,9 @@ async def get_my_twins(user=Depends(get_current_user)):
     user_id = user.get("user_id")
     email = user.get("email", "")
     
-    # Resolve tenant non-destructively. Avoid creating new tenants on read paths.
+    # Resolve tenant, auto-creating if necessary to prevent 403 for new users
     try:
-        tenant_id = resolve_tenant_id(user_id, email, create_if_missing=False)
+        tenant_id = resolve_tenant_id(user_id, email, create_if_missing=True)
     except HTTPException:
         raise
     except Exception as e:
