@@ -360,8 +360,8 @@ async def create_mode_c_job(
     """
     Mode C: Public Web Fetch (GitHub, Blogs).
     
-    Fetch publicly crawlable URLs. Enforces robots.txt and domain allowlist.
-    LinkedIn and X/Twitter are BLOCKED - use Mode A instead.
+    Fetch public URLs for ingestion.
+    URL preflight accepts all http(s) domains; final fetchability is determined during ingestion.
     """
     user = _require_authenticated_user(user)
     user_id = user.get("user_id")

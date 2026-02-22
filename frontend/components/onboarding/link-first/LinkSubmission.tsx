@@ -141,8 +141,8 @@ export function LinkSubmission({ twinId, onSubmit }: LinkSubmissionProps) {
 
         <div className="mt-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
           <p className="text-sm text-amber-400">
-            <span className="font-medium">Note:</span> LinkedIn and X/Twitter are blocked for direct fetching. 
-            Please upload exports instead.
+            <span className="font-medium">Note:</span> All public links are accepted.
+            Some sites may still fail during ingestion if they require login, cookies, or anti-bot checks.
           </p>
         </div>
       </Card>

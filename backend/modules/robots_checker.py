@@ -1,8 +1,8 @@
 """
 robots_checker.py
 
-Phase 1 Component: robots.txt compliance checker for Mode C web fetch.
-Ensures respectful crawling and enforces domain restrictions.
+Phase 1 Component: URL preflight checks for Mode C web fetch.
+Ensures basic URL validity and optional crawlability checks.
 """
 
 import os
@@ -20,6 +20,9 @@ from functools import lru_cache
 ROBOTS_TXT_CACHE_TTL_SECONDS = int(os.getenv("ROBOTS_TXT_CACHE_TTL", "3600"))  # 1 hour
 WEB_FETCH_RATE_LIMIT_SECONDS = float(os.getenv("WEB_FETCH_RATE_LIMIT", "2.0"))
 LINK_FIRST_ALLOWLIST = os.getenv("LINK_FIRST_ALLOWLIST", "")
+ALLOW_ALL_URLS = os.getenv("LINK_FIRST_ALLOW_ALL_URLS", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
 
 # Hard blocklist - these domains are NEVER crawled (use export upload instead)
 BLOCKED_DOMAINS = {
@@ -69,12 +72,18 @@ def get_allowlist() -> Set[str]:
 
 def is_domain_allowed(url: str) -> tuple[bool, str]:
     """
-    Check if a domain is in the allowlist.
-    
+    Check URL/domain validity.
+
     Returns:
         (allowed, reason)
     """
     parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False, "Invalid URL. Use an absolute http(s) URL."
+
+    if ALLOW_ALL_URLS:
+        return True, "Allow-all mode enabled"
+
     domain = parsed.netloc.lower()
     
     # Remove www. prefix for comparison
@@ -99,7 +108,7 @@ def is_domain_allowed(url: str) -> tuple[bool, str]:
             if domain.endswith(suffix):
                 return True, f"Domain matches allowlist pattern {allowed}"
     
-    return False, f"Domain {domain} not in allowlist. Add to LINK_FIRST_ALLOWLIST or use Mode A/B."
+    return False, f"Domain {domain} not in allowlist. Add to LINK_FIRST_ALLOWLIST."
 
 
 # =============================================================================
@@ -311,18 +320,24 @@ async def check_url_fetchable(url: str) -> dict:
             "crawl_delay": float,
         }
     """
-    # Check domain allowlist/blocklist
+    # Check basic URL/domain validity
     domain_allowed, domain_reason = is_domain_allowed(url)
     
     if not domain_allowed:
-        error_code = "LINK_LINKEDIN_BLOCKED" if "linkedin" in domain_reason.lower() else \
-                     "LINK_TWITTER_BLOCKED" if "twitter" in domain_reason.lower() or "x.com" in domain_reason.lower() else \
-                     "LINK_DOMAIN_NOT_ALLOWED"
-        
         return {
             "allowed": False,
             "reason": domain_reason,
-            "error_code": error_code,
+            "error_code": "LINK_INVALID_URL" if "invalid url" in domain_reason.lower() else "LINK_DOMAIN_NOT_ALLOWED",
+            "crawl_delay": 0.0,
+        }
+
+    # Allow-all policy: do not hard-block by domain, robots, or preflight rate limit.
+    # Real fetch/auth failures are handled by ingestion.
+    if ALLOW_ALL_URLS:
+        return {
+            "allowed": True,
+            "reason": "URL accepted (allow-all mode). Actual fetch may still fail at ingestion time.",
+            "error_code": None,
             "crawl_delay": 0.0,
         }
     

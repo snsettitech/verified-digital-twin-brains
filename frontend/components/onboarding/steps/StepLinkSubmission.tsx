@@ -101,7 +101,8 @@ export function StepLinkSubmission({ twinId, onSubmit }: StepLinkSubmissionProps
         <Card className="p-6 bg-slate-900 border-slate-700">
           <h3 className="font-semibold mb-4 text-white">Public Links</h3>
           <p className="text-sm text-slate-400 mb-4">
-            GitHub READMEs, blog posts, articles. <span className="text-amber-400">LinkedIn and Twitter are blocked for crawling.</span>
+            GitHub READMEs, blog posts, articles, and social URLs.
+            <span className="text-amber-400"> Links are accepted, but some sites can still fail during ingestion if they require auth/cookies.</span>
           </p>
           {urls.map((url, idx) => (
             <input
