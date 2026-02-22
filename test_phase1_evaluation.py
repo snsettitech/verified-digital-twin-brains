@@ -15,9 +15,15 @@ load_dotenv('backend/.env')
 sys.path.insert(0, 'backend')
 
 import httpx
-from modules.clients import get_gemini_client
-
 # Test configuration
+
+def get_gemini_client():
+    """Get Gemini client."""
+    from google import genai
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY not set")
+    return genai.Client(api_key=api_key)
 TWIN_ID = "88289f30-a068-4350-8c95-4c228f436fee"
 BASE_URL = "https://verified-digital-twin-brains.onrender.com"
 TEST_TOKEN = os.getenv("TEST_TOKEN", "")
@@ -102,8 +108,8 @@ async def chat_with_twin(message: str, conversation_id: str = None) -> dict:
             return None
 
 
-async def evaluate_with_gemini(conversation: list, twin_name: str) -> dict:
-    """Use Gemini to evaluate conversation quality."""
+def evaluate_with_gemini_sync(conversation: list, twin_name: str) -> dict:
+    """Use Gemini to evaluate conversation quality (synchronous)."""
     
     # Format conversation for evaluation
     convo_text = "\n\n".join([
@@ -148,12 +154,12 @@ Return your evaluation as JSON:
 
     try:
         client = get_gemini_client()
-        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        model = "gemini-2.0-flash"  # Latest fast model
         
-        response = await client.generate_content_async(
+        response = client.models.generate_content(
             model=model,
             contents=evaluation_prompt,
-            generation_config={
+            config={
                 "temperature": 0.2,
                 "response_mime_type": "application/json",
             }
@@ -178,6 +184,13 @@ Return your evaluation as JSON:
         }
 
 
+async def evaluate_with_gemini(conversation: list, twin_name: str) -> dict:
+    """Async wrapper for Gemini evaluation."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, evaluate_with_gemini_sync, conversation, twin_name)
+
+
 async def run_phase1_test():
     """Run complete Phase 1 test."""
     
@@ -186,25 +199,25 @@ async def run_phase1_test():
     print("=" * 70)
     
     # 1. Get twin info
-    print("\n📋 Fetching twin info...")
+    print("\n[+] Fetching twin info...")
     twin_info = await get_twin_info()
     if not twin_info:
-        print("❌ Failed to get twin info")
+        print("[FAIL] Failed to get twin info")
         return
     
     twin_name = twin_info.get("name", "Unknown")
-    print(f"✅ Twin: {twin_name}")
+    print(f"[OK] Twin: {twin_name}")
     
     # 2. Get sources
-    print("\n📚 Fetching knowledge sources...")
+    print("\n[+] Fetching knowledge sources...")
     sources = await get_twin_sources()
-    print(f"✅ Found {len(sources)} sources:")
+    print(f"[OK] Found {len(sources)} sources:")
     for src in sources[:5]:
         print(f"   - {src.get('filename', 'Unknown')} ({src.get('status', 'unknown')})")
     
     # 3. Run test conversations
     print("\n" + "=" * 70)
-    print("🗣️  TESTING CONVERSATIONS")
+    print("[*]  TESTING CONVERSATIONS")
     print("=" * 70)
     
     conversation = []
@@ -220,7 +233,7 @@ async def run_phase1_test():
         response = await chat_with_twin(test['query'], conversation_id)
         
         if not response:
-            print("❌ No response from twin")
+            print("[FAIL] No response from twin")
             continue
             
         # Extract response info
@@ -243,17 +256,17 @@ async def run_phase1_test():
     
     # 4. Evaluate with Gemini
     print("\n" + "=" * 70)
-    print("🤖 GEMINI EVALUATION")
+    print("[AI] GEMINI EVALUATION")
     print("=" * 70)
     
     evaluation = await evaluate_with_gemini(conversation, twin_name)
     
     # Print evaluation results
-    print("\n📊 EVALUATION RESULTS:")
+    print("\n[STATS] EVALUATION RESULTS:")
     print("-" * 50)
     
     if "error" in evaluation:
-        print(f"❌ Evaluation failed: {evaluation['error']}")
+        print(f"[FAIL] Evaluation failed: {evaluation['error']}")
         return
     
     # Print detailed scores
@@ -270,7 +283,7 @@ async def run_phase1_test():
     # Overall score
     overall = evaluation.get("overall_score", 0)
     print(f"\n{'='*50}")
-    print(f"🎯 OVERALL SCORE: {overall}/10")
+    print(f"[SCORE] OVERALL SCORE: {overall}/10")
     print(f"{'='*50}")
     
     # Success determination
@@ -278,19 +291,19 @@ async def run_phase1_test():
     proceed = evaluation.get("proceed_to_phase2", overall >= 7.0)
     
     if phase1_success:
-        print("\n✅ Phase 1: INTENT CLASSIFICATION - PASSED")
+        print("\n[OK] Phase 1: INTENT CLASSIFICATION - PASSED")
     else:
-        print("\n❌ Phase 1: INTENT CLASSIFICATION - NEEDS IMPROVEMENT")
+        print("\n[FAIL] Phase 1: INTENT CLASSIFICATION - NEEDS IMPROVEMENT")
     
     if proceed:
-        print("✅ Recommendation: PROCEED to Phase 2")
+        print("[OK] Recommendation: PROCEED to Phase 2")
     else:
-        print("⚠️  Recommendation: REFINE Phase 1 before proceeding")
+        print("[WARN]  Recommendation: REFINE Phase 1 before proceeding")
     
     # Recommendations
     recommendations = evaluation.get("recommendations", [])
     if recommendations:
-        print("\n💡 Recommendations:")
+        print("\n[TIP] Recommendations:")
         for rec in recommendations:
             print(f"   - {rec}")
     
@@ -310,4 +323,4 @@ if __name__ == "__main__":
     with open("phase1_evaluation_results.json", "w") as f:
         json.dump(result, f, indent=2)
     
-    print("\n\n📄 Results saved to phase1_evaluation_results.json")
+    print("\n\n[FILE] Results saved to phase1_evaluation_results.json")

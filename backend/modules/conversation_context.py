@@ -2,11 +2,12 @@
 conversation_context.py
 
 Phase 2: Conversation Context-Aware Retrieval
-Extracts themes and resolves coreferences from conversation history.
+Extracts themes, resolves coreferences, and maintains conversation continuity.
 """
 
 import json
 import asyncio
+import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
@@ -18,11 +19,12 @@ class ConversationContext:
     """Extracted context from conversation history."""
     themes: List[str]
     current_topic: str
-    resolved_entities: Dict[str, str]  # pronoun -> entity
+    resolved_entities: Dict[str, str]
     key_entities_mentioned: List[str]
     last_user_question: str
     last_assistant_response: str
     conversation_summary: str
+    pronoun_mappings: Dict[str, str]
 
 
 COREFERENCE_RESOLUTION_PROMPT = """You are a conversation context analyzer.
@@ -55,47 +57,120 @@ Return JSON:
 Examples:
 - "What is Python?" → "Tell me more about it" → resolved: "Tell me more about Python"
 - "I like Tesla cars" → "What do you think about them?" → resolved: "What do you think about Tesla cars?"
+- "Explain machine learning" → "What are the benefits of that?" → resolved: "What are the benefits of machine learning?"
 """
 
 
-CONVERSATION_SUMMARY_PROMPT = """Summarize the conversation in 2-3 sentences, focusing on:
-1. Main topics discussed
-2. Key entities mentioned
-3. What the user is looking for
+def format_history_for_prompt(history: List[Dict[str, Any]], max_messages: int = 5) -> str:
+    """Format conversation history for prompts."""
+    lines = []
+    recent = history[-max_messages:] if len(history) > max_messages else history
+    
+    for msg in recent:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")[:150]  # Truncate
+        lines.append(f"{role}: {content}")
+    
+    return "\n".join(lines)
 
-Conversation:
-{history}
 
-Summary:"""
+def extract_themes_heuristic(history: List[Dict[str, Any]]) -> List[str]:
+    """Fast heuristic theme extraction."""
+    themes = []
+    
+    # Extract from recent messages
+    for msg in history[-3:]:
+        content = msg.get("content", "")
+        
+        # Find capitalized phrases (potential proper nouns)
+        proper_nouns = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', content)
+        themes.extend(proper_nouns)
+        
+        # Find technical terms
+        tech_terms = re.findall(r'\b[A-Z]{2,}\b|\b[a-z]+_[a-z]+\b', content)
+        themes.extend(tech_terms)
+    
+    # Deduplicate and limit
+    seen = set()
+    unique_themes = []
+    for t in themes:
+        t_lower = t.lower()
+        if t_lower not in seen and len(t) > 2:
+            seen.add(t_lower)
+            unique_themes.append(t)
+    
+    return unique_themes[:5]
+
+
+def resolve_coreferences_heuristic(query: str, history: List[Dict[str, Any]]) -> str:
+    """Fast heuristic coreference resolution."""
+    if not history or not query:
+        return query
+    
+    pronouns = ["it", "that", "this", "they", "them", "those", "these"]
+    query_lower = query.lower()
+    
+    # Check if query contains standalone pronouns
+    has_pronoun = any(f" {p} " in f" {query_lower} " or f" {p}?" in f" {query_lower}" for p in pronouns)
+    if not has_pronoun:
+        return query
+    
+    # Extract key nouns from recent assistant response
+    last_topic = ""
+    for msg in reversed(history):
+        if msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            # Simple extraction: first sentence or key phrase
+            sentences = content.split('.')
+            if sentences:
+                last_topic = sentences[0][:100]
+            break
+    
+    # Also check for proper nouns in user messages
+    key_entities = []
+    for msg in history[-3:]:
+        content = msg.get("content", "")
+        # Find capitalized words
+        caps = re.findall(r'\b[A-Z][a-z]+\b', content)
+        key_entities.extend(caps)
+    
+    # Most common entity
+    if key_entities:
+        from collections import Counter
+        most_common = Counter(key_entities).most_common(1)
+        if most_common:
+            entity = most_common[0][0]
+            # Replace standalone pronouns
+            for pronoun in pronouns:
+                query = re.sub(rf'\b{pronoun}\b', entity, query, flags=re.IGNORECASE)
+            return query
+    
+    return query
 
 
 async def resolve_coreferences(
     query: str,
     history: List[Dict[str, Any]]
-) -> str:
+) -> tuple[str, Dict[str, str]]:
     """
     Resolve pronouns and ambiguous references in the query.
     
-    Args:
-        query: Current user query
-        history: Conversation history (last N messages)
-        
     Returns:
-        Resolved query string
+        Tuple of (resolved_query, pronoun_mappings)
     """
     if not history or not query:
-        return query
+        return query, {}
     
     # Quick check: does query contain pronouns?
     pronouns = ["it", "that", "this", "they", "them", "those", "these"]
     query_lower = query.lower()
     
-    has_pronoun = any(f" {p}" in f" {query_lower} " for p in pronouns)
+    has_pronoun = any(f" {p}" in f" {query_lower}" or f"{p}?" in query_lower for p in pronouns)
     if not has_pronoun:
-        return query
+        return query, {}
     
     # Format history
-    history_text = format_history_for_prompt(history[-5:])  # Last 5 messages
+    history_text = format_history_for_prompt(history[-5:])
     
     client = get_async_openai_client()
     
@@ -118,57 +193,25 @@ async def resolve_coreferences(
         
         result = json.loads(response.choices[0].message.content)
         resolved = result.get("resolved_query", query)
+        mappings = result.get("pronoun_mappings", {})
         
         if resolved and resolved != query:
-            print(f"[Coreference] Resolved '{query}' -> '{resolved}'")
-            return resolved
+            print(f"[Coreference] '{query}' -> '{resolved}'")
+            return resolved, mappings
             
     except asyncio.TimeoutError:
-        print("[Coreference] Timeout, using original query")
+        # Fall back to heuristic
+        resolved = resolve_coreferences_heuristic(query, history)
+        if resolved != query:
+            print(f"[Coreference] Heuristic: '{query}' -> '{resolved}'")
+        return resolved, {}
     except Exception as e:
         print(f"[Coreference] Error: {e}")
+        # Fall back to heuristic
+        resolved = resolve_coreferences_heuristic(query, history)
+        return resolved, {}
     
-    return query
-
-
-def format_history_for_prompt(history: List[Dict[str, Any]]) -> str:
-    """Format conversation history for prompts."""
-    lines = []
-    for msg in history:
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")[:200]  # Truncate
-        lines.append(f"{role}: {content}")
-    return "\n".join(lines)
-
-
-def extract_themes_heuristic(history: List[Dict[str, Any]]) -> List[str]:
-    """Fast heuristic theme extraction."""
-    themes = []
-    
-    # Extract nouns and proper nouns from recent messages
-    for msg in history[-3:]:  # Last 3 messages
-        content = msg.get("content", "")
-        # Simple extraction: capitalized words and technical terms
-        import re
-        
-        # Find capitalized phrases (potential proper nouns)
-        proper_nouns = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', content)
-        themes.extend(proper_nouns)
-        
-        # Find technical terms
-        tech_terms = re.findall(r'\b[A-Z]{2,}\b|\b[a-z]+_[a-z]+\b', content)
-        themes.extend(tech_terms)
-    
-    # Deduplicate and limit
-    seen = set()
-    unique_themes = []
-    for t in themes:
-        t_lower = t.lower()
-        if t_lower not in seen and len(t) > 2:
-            seen.add(t_lower)
-            unique_themes.append(t)
-    
-    return unique_themes[:5]
+    return query, {}
 
 
 async def extract_conversation_context(
@@ -191,7 +234,8 @@ async def extract_conversation_context(
             key_entities_mentioned=[],
             last_user_question="",
             last_assistant_response="",
-            conversation_summary=""
+            conversation_summary="",
+            pronoun_mappings={}
         )
     
     # Extract last user and assistant messages
@@ -217,18 +261,19 @@ async def extract_conversation_context(
     return ConversationContext(
         themes=themes,
         current_topic=current_topic,
-        resolved_entities={},  # Populated on-demand via resolve_coreferences
+        resolved_entities={},  # Populated on-demand
         key_entities_mentioned=themes,
         last_user_question=last_user,
         last_assistant_response=last_assistant,
-        conversation_summary=""  # Can be populated via LLM if needed
+        conversation_summary="",  # Can be populated via LLM if needed
+        pronoun_mappings={}
     )
 
 
 def boost_by_conversation_context(
     chunks: List[Dict[str, Any]],
     context: ConversationContext,
-    current_topic: str
+    boost_factor: float = 0.1
 ) -> List[Dict[str, Any]]:
     """
     Rerank chunks based on conversation context.
@@ -236,7 +281,7 @@ def boost_by_conversation_context(
     Args:
         chunks: Retrieved chunks
         context: Conversation context
-        current_topic: Current topic of conversation
+        boost_factor: How much to boost matching chunks
         
     Returns:
         Reranked chunks
@@ -249,46 +294,53 @@ def boost_by_conversation_context(
     
     for chunk in chunks:
         text = chunk.get("text", "").lower()
-        score = chunk.get("score", 0.5)  # Base score
+        base_score = chunk.get("score", 0.5)
         
         # Boost for theme matches
         theme_matches = sum(1 for theme in context.themes if theme.lower() in text)
-        theme_boost = min(0.1 * theme_matches, 0.3)  # Max 0.3 boost
+        theme_boost = min(boost_factor * theme_matches, 0.3)  # Max 0.3 boost
         
         # Boost for current topic match
-        topic_boost = 0.1 if current_topic and current_topic.lower() in text else 0
+        topic_boost = boost_factor / 2 if context.current_topic and context.current_topic.lower() in text else 0
         
         # Boost for recent mention in conversation
         recent_boost = 0
         if context.key_entities_mentioned:
             entity_matches = sum(1 for e in context.key_entities_mentioned if e.lower() in text)
-            recent_boost = min(0.05 * entity_matches, 0.15)
+            recent_boost = min(boost_factor / 2 * entity_matches, 0.15)
         
-        new_score = min(score + theme_boost + topic_boost + recent_boost, 1.0)
+        new_score = min(base_score + theme_boost + topic_boost + recent_boost, 1.0)
         
         scored_chunks.append((new_score, chunk))
     
     # Sort by new score
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     
-    # Return reranked chunks
-    return [chunk for score, chunk in scored_chunks]
+    # Return reranked chunks with updated scores
+    result = []
+    for new_score, chunk in scored_chunks:
+        chunk["score"] = new_score
+        chunk["context_boosted"] = True
+        result.append(chunk)
+    
+    return result
 
 
 async def get_contextualized_query(
     query: str,
     history: List[Dict[str, Any]]
-) -> tuple[str, ConversationContext]:
+) -> tuple[str, ConversationContext, Dict[str, str]]:
     """
     Get query with conversation context applied.
     
     Returns:
-        Tuple of (resolved_query, conversation_context)
+        Tuple of (resolved_query, conversation_context, pronoun_mappings)
     """
     # Extract conversation context
     conv_context = await extract_conversation_context(history)
     
     # Resolve coreferences
-    resolved_query = await resolve_coreferences(query, history)
+    resolved_query, mappings = await resolve_coreferences(query, history)
+    conv_context.pronoun_mappings = mappings
     
-    return resolved_query, conv_context
+    return resolved_query, conv_context, mappings

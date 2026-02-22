@@ -1,0 +1,127 @@
+{
+  "phase": "Phase 1 - Intent Classification",
+  "test_results": [
+    {
+      "query": "Hello!",
+      "expected": "greeting",
+      "classified": "greeting",
+      "match": true
+    },
+    {
+      "query": "Hi there, how are you?",
+      "expected": "greeting",
+      "classified": "greeting",
+      "match": true
+    },
+    {
+      "query": "What do you think about AI?",
+      "expected": "opinion",
+      "classified": "greeting",
+      "match": false
+    },
+    {
+      "query": "What's your view on remote work?",
+      "expected": "opinion",
+      "classified": "opinion",
+      "match": true
+    },
+    {
+      "query": "What is machine learning?",
+      "expected": "entity_lookup",
+      "classified": "greeting",
+      "match": false
+    },
+    {
+      "query": "Tell me about your experience at Google",
+      "expected": "entity_lookup",
+      "classified": "entity_lookup",
+      "match": true
+    },
+    {
+      "query": "Compare Python and JavaScript",
+      "expected": "comparison",
+      "classified": "comparison",
+      "match": true
+    },
+    {
+      "query": "What's the difference between REST and GraphQL?",
+      "expected": "comparison",
+      "classified": "comparison",
+      "match": true
+    },
+    {
+      "query": "How do you build a startup?",
+      "expected": "procedural",
+      "classified": "procedural",
+      "match": true
+    },
+    {
+      "query": "What are the steps to learn data science?",
+      "expected": "procedural",
+      "classified": "procedural",
+      "match": true
+    },
+    {
+      "query": "Summarize your career",
+      "expected": "summarization",
+      "classified": "summarization",
+      "match": true
+    },
+    {
+      "query": "Give me an overview of your expertise",
+      "expected": "summarization",
+      "classified": "summarization",
+      "match": true
+    },
+    {
+      "query": "What about that?",
+      "expected": "followup",
+      "classified": "followup",
+      "match": true
+    },
+    {
+      "query": "Tell me more",
+      "expected": "followup",
+      "classified": "followup",
+      "match": true
+    },
+    {
+      "query": "What did you do in 2023?",
+      "expected": "temporal",
+      "classified": "temporal",
+      "match": true
+    },
+    {
+      "query": "Why did you choose this career?",
+      "expected": "causal",
+      "classified": "opinion",
+      "match": false
+    }
+  ],
+  "accuracy_pct": 81.25,
+  "total_tests": 16,
+  "correct": 13,
+  "overall_score": 7.5,
+  "phase1_success": true,
+  "proceed_to_phase2": true,
+  "gemini_evaluation": {
+    "overall_score": 7.5,
+    "classification_accuracy_pct": 81.25,
+    "strengths": [
+      "Handles greetings correctly",
+      "Good comparison detection",
+      "Procedural queries detected well",
+      "Heuristic fallback resilience"
+    ],
+    "weaknesses": [
+      "LLM timeouts cause fallback",
+      "Some entity lookups misclassified",
+      "Causal vs opinion confusion"
+    ],
+    "recommendations": [
+      "Increase timeout from 2s to 3s",
+      "Improve entity lookup heuristics",
+      "More examples for causal vs opinion"
+    ]
+  }
+}

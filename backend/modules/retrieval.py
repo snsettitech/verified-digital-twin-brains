@@ -42,6 +42,9 @@ from modules.conversation_context import (
     ConversationContext
 )
 
+# Feature flag for conversation context
+RETRIEVAL_CONVERSATION_CONTEXT_ENABLED = os.getenv("RETRIEVAL_CONVERSATION_CONTEXT_ENABLED", "true").lower() == "true"
+
 # PHASE 4: Structured logging for observability
 logger = logging.getLogger(__name__)
 _langfuse_available = is_langfuse_enabled()
@@ -2638,7 +2641,21 @@ async def retrieve_context_with_intent(
     
     start_time = time.time()
     
-    # Step 1: Classify intent
+    # Step 1: Apply conversation context (Phase 2)
+    conv_context = None
+    coref_time = 0
+    if RETRIEVAL_CONVERSATION_CONTEXT_ENABLED and conversation_history:
+        try:
+            coref_start = time.time()
+            resolved_query, conv_context, mappings = await get_contextualized_query(query, conversation_history)
+            coref_time = time.time() - coref_start
+            if resolved_query != query:
+                print(f"[Context Retrieval] Resolved '{query[:50]}...' -> '{resolved_query[:50]}...' in {coref_time:.2f}s")
+                query = resolved_query
+        except Exception as e:
+            print(f"[Context Retrieval] Coreference failed: {e}")
+    
+    # Step 2: Classify intent
     intent = None
     intent_time = 0
     
@@ -2698,22 +2715,39 @@ async def retrieve_context_with_intent(
         )
         
         retrieval_time = time.time() - retrieval_start
+        
+        # Step 5: Apply conversation context boosting (Phase 2)
+        if conv_context and contexts:
+            contexts = boost_by_conversation_context(contexts, conv_context)
+        
         total_time = time.time() - start_time
         
         # Log metrics
         print(f"[Intent Retrieval] Retrieved {len(contexts)} contexts in {retrieval_time:.2f}s (total: {total_time:.2f}s)")
         
+        # Build metadata
+        metadata = {
+            "classification_time": intent_time,
+            "retrieval_time": retrieval_time,
+            "total_time": total_time,
+            "contexts_found": len(contexts),
+            "effective_query": effective_query,
+        }
+        
+        # Add conversation context info if available
+        if conv_context:
+            metadata["conversation_context"] = {
+                "themes": conv_context.themes,
+                "current_topic": conv_context.current_topic,
+                "pronoun_mappings": conv_context.pronoun_mappings,
+                "coreference_time": coref_time,
+            }
+        
         return {
             "contexts": contexts,
             "intent": intent,
             "strategy": strategy,
-            "metadata": {
-                "classification_time": intent_time,
-                "retrieval_time": retrieval_time,
-                "total_time": total_time,
-                "contexts_found": len(contexts),
-                "effective_query": effective_query,
-            }
+            "metadata": metadata
         }
         
     except Exception as e:
