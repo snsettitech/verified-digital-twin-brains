@@ -6,6 +6,7 @@ Phase 1-5 API Router: Link-First Persona Compiler endpoints.
 
 import os
 import tempfile
+import uuid
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -169,6 +170,46 @@ def _set_twin_status(twin_id: str, status: str) -> Dict[str, Any]:
         except Exception as fallback_error:
             if "updated_at" in fallback_payload and _is_missing_column_error(fallback_error, "updated_at"):
                 fallback_payload.pop("updated_at", None)
+                continue
+            raise
+
+
+def _create_link_compile_source(
+    *,
+    twin_id: str,
+    filename: str,
+    content: str,
+    citation_url: Optional[str] = None,
+) -> str:
+    """Create a source row and return a UUID source_id for chunk ingestion."""
+    source_id = str(uuid.uuid4())
+    payload: Dict[str, Any] = {
+        "id": source_id,
+        "twin_id": twin_id,
+        "filename": (filename or "Link-Compile Source")[:240],
+        "file_size": len(content or ""),
+        "content_text": content or "",
+        "status": "processing",
+    }
+    if citation_url:
+        payload["citation_url"] = citation_url
+
+    supabase.table("sources").upsert(payload).execute()
+    return source_id
+
+
+def _mark_source_live(source_id: str, chunk_count: Optional[int] = None) -> None:
+    update_payload: Dict[str, Any] = {"status": "live"}
+    if isinstance(chunk_count, int):
+        update_payload["chunk_count"] = chunk_count
+
+    while True:
+        try:
+            supabase.table("sources").update(update_payload).eq("id", source_id).execute()
+            return
+        except Exception as update_error:
+            if "chunk_count" in update_payload and _is_missing_column_error(update_error, "chunk_count"):
+                update_payload.pop("chunk_count", None)
                 continue
             raise
 
@@ -424,23 +465,57 @@ async def _process_job_impl(job_id: str):
                 content = str(source.get("content") or "").strip()
                 if not content:
                     continue
-                source_id = f"upload_{job_id}_{idx}"
-                await process_and_index_text(
+                filename = str(source.get("filename") or f"Upload {idx + 1}").strip() or f"Upload {idx + 1}"
+                source_id = _create_link_compile_source(
+                    twin_id=twin_id,
+                    filename=filename,
+                    content=content,
+                )
+
+                metadata_override: Dict[str, Any] = {
+                    "filename": filename[:240],
+                    "type": "link_compile_upload",
+                }
+                source_type = str(source.get("type") or "").strip()
+                if source_type:
+                    metadata_override["source_type"] = source_type
+
+                num_chunks = await process_and_index_text(
                     source_id=source_id,
                     twin_id=twin_id,
                     text=content,
+                    metadata_override=metadata_override,
                 )
+                _mark_source_live(source_id, num_chunks)
                 chunks.append({"text": content, "source_id": source_id})
         
         elif mode == "B":
-            source_id = f"paste_{job_id}"
-            content = str(job.get("source_files", [{}])[0].get("content", "")).strip()
+            source_files = job.get("source_files", []) or []
+            source_info = source_files[0] if source_files else {}
+            content = str(source_info.get("content") or "").strip()
             if content:
-                await process_and_index_text(
+                title = str(source_info.get("title") or "Pasted Content").strip() or "Pasted Content"
+                source_context = str(source_info.get("source_context") or "").strip()
+                source_id = _create_link_compile_source(
+                    twin_id=twin_id,
+                    filename=f"Pasted: {title}"[:240],
+                    content=content,
+                )
+
+                metadata_override: Dict[str, Any] = {
+                    "filename": f"Pasted: {title}"[:240],
+                    "type": "link_compile_paste",
+                }
+                if source_context:
+                    metadata_override["source_context"] = source_context
+
+                num_chunks = await process_and_index_text(
                     source_id=source_id,
                     twin_id=twin_id,
                     text=content,
+                    metadata_override=metadata_override,
                 )
+                _mark_source_live(source_id, num_chunks)
                 chunks = [{"text": content, "source_id": source_id}]
         
         elif mode == "C":
