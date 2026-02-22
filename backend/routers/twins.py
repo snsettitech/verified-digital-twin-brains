@@ -133,6 +133,44 @@ def _require_authenticated_user(user: Optional[Dict[str, Any]]) -> Dict[str, Any
     return user
 
 
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    """Detect Supabase/PostgREST schema-cache errors for missing columns."""
+    message = str(error).lower()
+    col = (column_name or "").lower()
+    return (
+        bool(col)
+        and col in message
+        and (
+            "pgrst204" in message
+            or "could not find" in message
+            or "column" in message
+            or "does not exist" in message
+        )
+    )
+
+
+def _normalize_twin_status_shape(twin: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure twin payloads always expose a status field, even on legacy schemas
+    where the physical `twins.status` column does not exist yet.
+    """
+    if not isinstance(twin, dict):
+        return twin
+
+    if twin.get("status"):
+        return twin
+
+    settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
+    derived_status = (
+        settings.get("link_first_state")
+        or ("active" if twin.get("is_active") is True else None)
+        or ("draft" if settings.get("creation_mode") == "link_first" else None)
+    )
+    if derived_status:
+        twin["status"] = derived_status
+    return twin
+
+
 # ============================================================================
 # Twin Create Schema (Updated for 5-Layer Persona)
 # ============================================================================
@@ -230,7 +268,7 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         existing = _find_existing_active_twin()
         if existing:
             print(f"[TWINS] Reusing existing twin {existing.get('id')} for tenant={tenant_id}, name='{requested_name}'")
-            return existing
+            return _normalize_twin_status_shape(existing)
         
         # ====================================================================
         # STEP 1: Create the twin with 5-Layer Persona enabled
@@ -238,12 +276,16 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         
         # Determine mode: link_first vs manual (default: manual)
         is_link_first = request.mode == "link_first"
+        creation_mode = "link_first" if is_link_first else "manual"
         
         # Enhanced settings with 5-Layer Persona configuration
         settings = request.settings or {}
         settings["use_5layer_persona"] = True  # NEW: Always true for new twins
         settings["persona_v2_version"] = "2.0.0"  # NEW: Track persona version
         
+        # Persist mode metadata in settings for compatibility with legacy schemas.
+        settings["creation_mode"] = creation_mode
+
         # Store links in settings for link-first mode
         if is_link_first and request.links:
             settings["link_first_urls"] = request.links[:10]  # Max 10 links
@@ -252,6 +294,7 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         # - manual: active (ready to chat immediately)
         # - link_first: draft (requires ingestion → claims → clarification → active)
         twin_status = "draft" if is_link_first else "active"
+        settings["link_first_state"] = twin_status
         
         data = {
             "name": requested_name,
@@ -262,26 +305,55 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
             "description": request.description or f"{requested_name}'s digital twin",
             "specialization": request.specialization,
             "settings": settings,
-            "status": twin_status,  # NEW: State machine for link-first
+            "status": twin_status,  # Preferred: lifecycle column when migrated.
+            "creation_mode": creation_mode,  # Preferred: explicit creation path.
+            "is_active": not is_link_first,  # Legacy-friendly readiness flag.
         }
 
         print(f"[TWINS] Creating twin '{requested_name}' for user={user_id}, tenant={tenant_id}")
-        try:
-            response = supabase.table("twins").insert(data).execute()
-        except Exception as insert_error:
-            insert_msg = str(insert_error).lower()
-            if "duplicate key" in insert_msg or "already exists" in insert_msg:
-                existing_after_race = _find_existing_active_twin()
-                if existing_after_race:
+        insert_payload = dict(data)
+        removed_legacy_columns: set[str] = set()
+
+        while True:
+            try:
+                response = supabase.table("twins").insert(insert_payload).execute()
+                break
+            except Exception as insert_error:
+                insert_msg = str(insert_error).lower()
+
+                removed_column = None
+                for column in ("status", "creation_mode", "is_active"):
+                    if column in insert_payload and _is_missing_column_error(insert_error, column):
+                        removed_column = column
+                        break
+
+                if removed_column:
+                    removed_legacy_columns.add(removed_column)
+                    insert_payload.pop(removed_column, None)
                     print(
-                        "[TWINS] Detected duplicate create race; returning existing twin "
-                        f"{existing_after_race.get('id')}"
+                        f"[TWINS] Legacy twins schema detected (missing `{removed_column}`); "
+                        "retrying insert without that column"
                     )
-                    return existing_after_race
-            raise
+                    continue
+
+                if "duplicate key" in insert_msg or "already exists" in insert_msg:
+                    existing_after_race = _find_existing_active_twin()
+                    if existing_after_race:
+                        print(
+                            "[TWINS] Detected duplicate create race; returning existing twin "
+                            f"{existing_after_race.get('id')}"
+                        )
+                        return _normalize_twin_status_shape(existing_after_race)
+                raise
         
         if response.data:
             twin = response.data[0]
+            if removed_legacy_columns:
+                # Keep API shape stable regardless of physical table schema.
+                twin.setdefault("status", twin_status)
+                twin.setdefault("creation_mode", creation_mode)
+                twin.setdefault("is_active", not is_link_first)
+            twin = _normalize_twin_status_shape(twin)
             twin_id = twin.get('id')
             print(f"[TWINS] Twin created: {twin_id}")
             
@@ -382,6 +454,7 @@ async def list_twins(user=Depends(get_current_user)):
         
         # Filter out archived twins (those with deleted_at in settings)
         twins_list = [t for t in twins_list if not (t.get("settings") or {}).get("deleted_at")]
+        twins_list = [_normalize_twin_status_shape(t) for t in twins_list]
         
         print(f"[TWINS] Listing twins for tenant {tenant_id}: found {len(twins_list)}")
         
@@ -404,7 +477,7 @@ async def get_twin(twin_id: str, user=Depends(get_current_user)):
     response = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Twin not found or access denied")
-    return response.data
+    return _normalize_twin_status_shape(response.data)
 
 
 @router.patch("/twins/{twin_id}")

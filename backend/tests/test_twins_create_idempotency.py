@@ -35,10 +35,13 @@ class _TwinsInsertQuery:
         self._payload = payload
 
     def execute(self):
+        call_idx = self._table.insert_calls
         self._table.insert_calls += 1
-        self._table.insert_payloads.append(self._payload)
-        if self._table.insert_error is not None:
-            raise self._table.insert_error
+        self._table.insert_payloads.append(dict(self._payload))
+        if call_idx < len(self._table.insert_errors):
+            error = self._table.insert_errors[call_idx]
+            if error is not None:
+                raise error
 
         twin = {
             "id": "twin-new",
@@ -48,9 +51,11 @@ class _TwinsInsertQuery:
 
 
 class _TwinsTable:
-    def __init__(self, select_responses=None, insert_error=None):
+    def __init__(self, select_responses=None, insert_error=None, insert_errors=None):
         self.select_responses = select_responses or []
-        self.insert_error = insert_error
+        self.insert_errors = list(insert_errors or [])
+        if insert_error is not None and not self.insert_errors:
+            self.insert_errors = [insert_error]
         self.select_calls = 0
         self.insert_calls = 0
         self.insert_payloads = []
@@ -126,3 +131,38 @@ async def test_create_twin_returns_existing_when_insert_hits_duplicate_race(monk
     assert result["id"] == "twin-existing-after-race"
     assert twins_table.insert_calls == 1
 
+
+@pytest.mark.asyncio
+async def test_create_twin_retries_without_legacy_missing_columns(monkeypatch):
+    from routers import twins as twins_router
+
+    missing_status_error = RuntimeError(
+        "{'message': \"Could not find the 'status' column of 'twins' in the schema cache\", 'code': 'PGRST204'}"
+    )
+    missing_creation_mode_error = RuntimeError(
+        "{'message': \"Could not find the 'creation_mode' column of 'twins' in the schema cache\", 'code': 'PGRST204'}"
+    )
+    twins_table = _TwinsTable(
+        select_responses=[[]],
+        insert_errors=[missing_status_error, missing_creation_mode_error],
+    )
+
+    monkeypatch.setattr(twins_router, "supabase", _Supabase(twins_table))
+    monkeypatch.setattr(twins_router, "resolve_tenant_id", lambda *_args, **_kwargs: "tenant-1")
+    monkeypatch.setattr(twins_router, "create_group", AsyncMock())
+
+    req = twins_router.TwinCreateRequest(name="Sai Twin", mode="link_first")
+    result = await twins_router.create_twin(
+        request=req,
+        user={"user_id": "user-1", "email": "user@example.com"},
+    )
+
+    assert twins_table.insert_calls == 3
+    assert "status" in twins_table.insert_payloads[0]
+    assert "creation_mode" in twins_table.insert_payloads[0]
+    assert "status" not in twins_table.insert_payloads[1]
+    assert "creation_mode" in twins_table.insert_payloads[1]
+    assert "status" not in twins_table.insert_payloads[2]
+    assert "creation_mode" not in twins_table.insert_payloads[2]
+    assert result.get("status") == "draft"
+    assert result.get("creation_mode") == "link_first"

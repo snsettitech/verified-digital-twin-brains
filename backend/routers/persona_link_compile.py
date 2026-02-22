@@ -89,11 +89,63 @@ def _require_authenticated_user(user: Optional[Dict[str, Any]]) -> Dict[str, Any
     return user
 
 
-def _set_twin_status(twin_id: str, status: str) -> None:
-    supabase.table("twins").update({
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    message = str(error).lower()
+    col = (column_name or "").lower()
+    return (
+        bool(col)
+        and col in message
+        and (
+            "pgrst204" in message
+            or "could not find" in message
+            or "column" in message
+            or "does not exist" in message
+        )
+    )
+
+
+def _set_twin_status(twin_id: str, status: str) -> Dict[str, Any]:
+    """
+    Update twin lifecycle status.
+    Primary path uses `twins.status`; fallback stores lifecycle in settings for
+    environments that have not applied the status-column migration yet.
+    """
+    now_iso = datetime.utcnow().isoformat()
+    update_payload = {
         "status": status,
-        "updated_at": datetime.utcnow().isoformat(),
-    }).eq("id", twin_id).execute()
+        "updated_at": now_iso,
+    }
+    try:
+        result = supabase.table("twins").update(update_payload).eq("id", twin_id).execute()
+        if result.data:
+            return result.data[0]
+        raise HTTPException(404, "Twin not found")
+    except Exception as update_error:
+        if not _is_missing_column_error(update_error, "status"):
+            raise
+
+        twin_result = supabase.table("twins").select("id, settings").eq("id", twin_id).single().execute()
+        twin_row = twin_result.data or {}
+        if not twin_row.get("id"):
+            raise HTTPException(404, "Twin not found")
+
+        settings = twin_row.get("settings") if isinstance(twin_row.get("settings"), dict) else {}
+        merged_settings = dict(settings)
+        merged_settings["link_first_state"] = status
+        merged_settings["creation_mode"] = merged_settings.get("creation_mode") or "link_first"
+
+        fallback_res = (
+            supabase.table("twins")
+            .update({"settings": merged_settings, "updated_at": now_iso})
+            .eq("id", twin_id)
+            .execute()
+        )
+        if not fallback_res.data:
+            raise HTTPException(404, "Twin not found")
+
+        twin = fallback_res.data[0]
+        twin["status"] = status
+        return twin
 
 
 # =============================================================================
@@ -670,16 +722,7 @@ async def transition_to_clarification_pending(
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
     
-    # Update twin status
-    result = (
-        supabase.table("twins")
-        .update({"status": "clarification_pending", "updated_at": datetime.utcnow().isoformat()})
-        .eq("id", twin_id)
-        .execute()
-    )
-    
-    if not result.data:
-        raise HTTPException(404, "Twin not found")
+    _set_twin_status(twin_id, "clarification_pending")
     
     # Log transition
     AuditLogger.log(
@@ -703,16 +746,7 @@ async def transition_to_persona_built(
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
     
-    # Update twin status
-    result = (
-        supabase.table("twins")
-        .update({"status": "persona_built", "updated_at": datetime.utcnow().isoformat()})
-        .eq("id", twin_id)
-        .execute()
-    )
-    
-    if not result.data:
-        raise HTTPException(404, "Twin not found")
+    _set_twin_status(twin_id, "persona_built")
     
     # Log transition
     AuditLogger.log(
@@ -747,14 +781,7 @@ async def transition_twin_state(
     if not status:
         raise HTTPException(400, f"Unsupported target_state: {target_state}")
 
-    result = (
-        supabase.table("twins")
-        .update({"status": status, "updated_at": datetime.utcnow().isoformat()})
-        .eq("id", twin_id)
-        .execute()
-    )
-    if not result.data:
-        raise HTTPException(404, "Twin not found")
+    _set_twin_status(twin_id, status)
 
     AuditLogger.log(
         event_type="twin_status_transition",
@@ -807,12 +834,18 @@ async def activate_twin(
     if not persona_spec:
         raise HTTPException(400, "Persona spec not yet compiled. Wait for job to complete.")
     
-    # Update twin name if provided
-    update_data = {"status": "active", "updated_at": datetime.utcnow().isoformat()}
+    # Update twin name if provided (separate from status for legacy-schema fallback).
     if resolved_final_name:
-        update_data["name"] = resolved_final_name
-    
-    result = supabase.table("twins").update(update_data).eq("id", twin_id).execute()
+        rename_result = (
+            supabase.table("twins")
+            .update({"name": resolved_final_name, "updated_at": datetime.utcnow().isoformat()})
+            .eq("id", twin_id)
+            .execute()
+        )
+        if not rename_result.data:
+            raise HTTPException(404, "Twin not found")
+
+    _set_twin_status(twin_id, "active")
     
     # Create active persona spec
     try:

@@ -43,6 +43,24 @@ def _model_to_dict(value: Any) -> Dict[str, Any]:
     return {}
 
 
+def _normalize_twin_status_shape(twin: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep API status field stable for legacy twins schemas without `status`."""
+    if not isinstance(twin, dict):
+        return twin
+    if twin.get("status"):
+        return twin
+
+    settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
+    derived_status = (
+        settings.get("link_first_state")
+        or ("active" if twin.get("is_active") is True else None)
+        or ("draft" if settings.get("creation_mode") == "link_first" else None)
+    )
+    if derived_status:
+        twin["status"] = derived_status
+    return twin
+
+
 def _get_anon_supabase_client():
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_anon_key = os.getenv("SUPABASE_KEY")
@@ -375,6 +393,7 @@ async def get_my_twins(user=Depends(get_current_user)):
     
     # Filter out archived/deleted twins (settings.deleted_at)
     twins = [t for t in twins if not (t.get("settings") or {}).get("deleted_at")]
+    twins = [_normalize_twin_status_shape(t) for t in twins]
 
     print(f"[MY-TWINS DEBUG] Returning {len(twins)} twins for tenant {tenant_id}")
     return twins
