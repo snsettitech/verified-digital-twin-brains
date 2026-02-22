@@ -830,6 +830,12 @@ async def delete_twin(
             # Delete from tables that might not have CASCADE set up correctly
             # Order matters - delete child tables before parents
             
+            # 0. Delete from escalations (does NOT have ON DELETE CASCADE)
+            try:
+                supabase.table("escalations").delete().eq("twin_id", twin_id).execute()
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete escalations: {e}")
+            
             # 1. Delete from persona_specs (has ON DELETE CASCADE, but be explicit)
             try:
                 supabase.table("persona_specs").delete().eq("twin_id", twin_id).execute()
@@ -893,6 +899,20 @@ async def delete_twin(
                 supabase.table("conversations").delete().eq("twin_id", twin_id).execute()
             except Exception as e:
                 print(f"[TWINS] Note: Could not delete conversations: {e}")
+            
+            # 11. Delete Pinecone vectors for this twin (external to Postgres)
+            try:
+                from modules.clients import get_pinecone_index
+                from modules.delphi_namespace import get_namespace_candidates_for_twin
+                index = get_pinecone_index()
+                for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
+                    try:
+                        index.delete(delete_all=True, namespace=namespace)
+                        print(f"[TWINS] Deleted Pinecone namespace: {namespace}")
+                    except Exception as ns_e:
+                        print(f"[TWINS] Note: Could not delete Pinecone namespace {namespace}: {ns_e}")
+            except Exception as e:
+                print(f"[TWINS] Note: Could not delete Pinecone vectors: {e}")
             
             # 11. Finally delete the twin
             delete_res = supabase.table("twins").delete().eq("id", twin_id).execute()
