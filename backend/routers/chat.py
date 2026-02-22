@@ -1704,6 +1704,75 @@ async def chat(
             # Log full query for debugging
             print(f"[Chat DEBUG] Full Query: {query}")
             
+            # SMALLTALK SHORT-CIRCUIT: Handle greetings/conversational turns immediately
+            from modules.grounding_policy import get_grounding_policy
+            query_policy = get_grounding_policy(query)
+            if query_policy.get("is_smalltalk"):
+                print(f"[Chat] Smalltalk detected, short-circuiting agent flow")
+                smalltalk_response = "Hi. How can I help?"
+                # Determine smalltalk response based on query type
+                q_lower = query.lower()
+                if any(marker in q_lower for marker in ("thank you", "thanks")):
+                    smalltalk_response = "You're welcome."
+                elif q_lower in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
+                    smalltalk_response = "Sounds good."
+                elif any(marker in q_lower for marker in ("how are you", "how's your day", "hows your day")):
+                    smalltalk_response = "Doing well. How can I help?"
+                
+                full_response = smalltalk_response
+                confidence_score = 0.9
+                dialogue_mode = "SMALLTALK"
+                citations = []
+                # Skip to final response
+                metadata = _normalize_json({
+                    "type": "metadata",
+                    "citations": [],
+                    "citation_details": [],
+                    "confidence_score": confidence_score,
+                    "conversation_id": conversation_id,
+                    "owner_memory_refs": [],
+                    "owner_memory_topics": [],
+                    "owner_memory_summaries": [],
+                    "teaching_questions": [],
+                    "planning_output": {"answer_points": [smalltalk_response], "render_strategy": "source_faithful"},
+                    "dialogue_mode": dialogue_mode,
+                    "intent_label": "smalltalk",
+                    "workflow_intent": "answer",
+                    "requires_evidence": False,
+                    "target_owner_scope": False,
+                    "router_reason": "smalltalk_shortcircuit",
+                    "router_knowledge_available": bool(graph_stats.get("node_count", 0) > 0),
+                    "routing_decision": {"intent": "answer", "action": "answer", "confidence": 0.9},
+                    "render_strategy": "source_faithful",
+                    "query_class": "smalltalk",
+                    "quote_intent": False,
+                    "answerability_state": "direct",
+                })
+                yield json.dumps(metadata) + "\n"
+                
+                content = _normalize_json({
+                    "type": "content",
+                    "content": full_response,
+                })
+                yield json.dumps(content) + "\n"
+                
+                # Log interaction
+                try:
+                    log_interaction(
+                        twin_id=twin_id,
+                        conversation_id=conversation_id,
+                        query=query,
+                        response=full_response,
+                        citations=[],
+                        confidence_score=confidence_score,
+                        actor_user_id=user.get("user_id") if user else None,
+                        actor_tenant_id=user.get("tenant_id") if user else None,
+                    )
+                except Exception as e:
+                    print(f"[Chat] Failed to log interaction: {e}")
+                
+                return
+            
             if not is_reasoning_query:
                 agent_iter = run_agent_stream(
                     twin_id=twin_id,
@@ -1837,11 +1906,27 @@ async def chat(
             # Safety override: if we ended with no evidence and no owner-memory refs,
             # force uncertainty response instead of a generic/hallucinated answer.
             strict_grounding = _query_requires_strict_grounding(query)
+            
+            # DEBUG: Log safety override check values
+            print(f"[Chat DEBUG] full_response='{full_response[:50] if full_response else '(empty)'}...'")
+            print(f"[Chat DEBUG] dialogue_mode={dialogue_mode}, strict_grounding={strict_grounding}")
+            print(f"[Chat DEBUG] citations={len(citations) if citations else 0}, owner_memory_refs={len(owner_memory_refs) if owner_memory_refs else 0}")
+            print(f"[Chat DEBUG] fallback_message='{fallback_message[:50]}...'")
+            
             if strict_grounding:
                 print(
                     f"[Chat] Strict grounding ON context={resolved_context.context.value} "
                     f"mode={dialogue_mode} query='{query[:120]}'"
                 )
+            override_conditions = {
+                "has_full_response": bool(full_response and full_response.strip()),
+                "not_fallback": full_response.strip() != fallback_message if full_response else False,
+                "no_citations": not citations,
+                "no_owner_memory": not owner_memory_refs,
+                "strict_grounding": strict_grounding,
+                "not_smalltalk": str(dialogue_mode).upper() != "SMALLTALK",
+            }
+            print(f"[Chat DEBUG] override_conditions={override_conditions}")
             if (
                 full_response
                 and full_response.strip()
