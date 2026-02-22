@@ -33,6 +33,15 @@ from modules.retrieval_intent import (
     RetrievalIntent
 )
 
+# Phase 2: Conversation context
+from modules.conversation_context import (
+    resolve_coreferences,
+    extract_conversation_context,
+    boost_by_conversation_context,
+    get_contextualized_query,
+    ConversationContext
+)
+
 # PHASE 4: Structured logging for observability
 logger = logging.getLogger(__name__)
 _langfuse_available = is_langfuse_enabled()

@@ -2020,6 +2020,29 @@ To add this profile's content:
             correlation_id=correlation_id,
             metadata={"http_status": http_status, "has_og_title": bool(og_title), "has_og_desc": bool(og_desc)},
         )
+    except Exception as e:
+        # Log error and create reference source as fallback
+        print(f"[LinkedIn] OpenGraph fetch failed: {e}")
+        err = build_error(
+            code="LINKEDIN_BLOCKED_OR_REQUIRES_AUTH",
+            message="LinkedIn profile content could not be fetched publicly.",
+            provider=provider,
+            step="fetching",
+            correlation_id=correlation_id,
+            raw={"url": url, "error": str(e)},
+            exc=e,
+        )
+        finish_step(
+            event_id=fetch_event_id,
+            source_id=source_id,
+            twin_id=twin_id,
+            provider=provider,
+            step="fetching",
+            status="error",
+            correlation_id=correlation_id,
+            error=err,
+        )
+        raise ValueError(err["message"])
 
     parsed_event_id = start_step(
         source_id=source_id,
