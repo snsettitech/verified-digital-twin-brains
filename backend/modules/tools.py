@@ -1,5 +1,5 @@
 from langchain.tools import tool
-from modules.retrieval import retrieve_context
+from modules.retrieval import retrieve_context, retrieve_context_with_intent
 from typing import List, Dict, Any, Optional
 import os
 import re
@@ -98,21 +98,32 @@ def get_retrieval_tool(
                     else:
                         expanded_query = " ".join(expanded_parts)
         
-        # Vector search (Pinecone)
-        retrieval_kwargs = {"group_id": group_id}
-        try:
-            sig = inspect.signature(retrieve_context)
-            if "resolve_default_group" in sig.parameters:
-                retrieval_kwargs["resolve_default_group"] = resolve_default_group
-        except (TypeError, ValueError):
-            # Fallback for mocked/non-inspectable callables used in tests.
-            pass
-
-        contexts = await retrieve_context(
-            expanded_query,
-            twin_id,
-            **retrieval_kwargs,
+        # Phase 1: Intent-aware retrieval
+        # Convert history to dict format for intent classification
+        history_dicts = []
+        if history:
+            for msg in history[-5:]:  # Last 5 messages
+                if hasattr(msg, 'content') and hasattr(msg, 'type'):
+                    history_dicts.append({
+                        "role": "user" if msg.type == "human" else "assistant",
+                        "content": str(msg.content)
+                    })
+        
+        # Use intent-aware retrieval
+        retrieval_result = await retrieve_context_with_intent(
+            query=expanded_query,
+            twin_id=twin_id,
+            group_id=group_id,
+            conversation_history=history_dicts,
+            resolve_default_group=resolve_default_group,
         )
+        
+        contexts = retrieval_result.get("contexts", [])
+        
+        # Log intent classification for debugging
+        intent = retrieval_result.get("intent")
+        if intent:
+            print(f"[Tool] Intent: {intent.intent_type.value}, contexts: {len(contexts)}")
         
         # Graph fallback (optional): disabled by default to avoid broad, low-precision matches.
         graph_results = []

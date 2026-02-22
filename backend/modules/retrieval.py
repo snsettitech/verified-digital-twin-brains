@@ -25,6 +25,14 @@ from modules.pinecone_adapter import PineconeIndexAdapter, get_pinecone_index_mo
 # Embedding generation moved to modules.embeddings
 from modules.embeddings import get_embedding, get_embeddings_async
 
+# Phase 1: Intent-aware retrieval
+from modules.retrieval_intent import (
+    classify_retrieval_intent,
+    get_strategy_config,
+    RetrievalIntentType,
+    RetrievalIntent
+)
+
 # PHASE 4: Structured logging for observability
 logger = logging.getLogger(__name__)
 _langfuse_available = is_langfuse_enabled()
@@ -2585,6 +2593,132 @@ async def retrieve_context(
         top_k=top_k,
         resolve_default_group=resolve_default_group,
     )
+
+
+# =============================================================================
+# PHASE 1: Intent-Aware Retrieval (Smart Retrieval)
+# =============================================================================
+
+# Feature flag for intent classification
+RETRIEVAL_INTENT_CLASSIFICATION_ENABLED = os.getenv("RETRIEVAL_INTENT_CLASSIFICATION_ENABLED", "true").lower() == "true"
+
+
+@observe(name="intent_aware_retrieval")
+async def retrieve_context_with_intent(
+    query: str,
+    twin_id: str,
+    creator_id: Optional[str] = None,
+    group_id: Optional[str] = None,
+    conversation_history: Optional[List[Dict[str, Any]]] = None,
+    top_k: int = 5,
+    resolve_default_group: bool = True,
+) -> Dict[str, Any]:
+    """
+    Intent-aware retrieval that adapts strategy based on query classification.
+    
+    Returns:
+        Dict with:
+        - contexts: List of retrieved contexts
+        - intent: Classification result
+        - strategy: Configuration used
+        - metadata: Timing and diagnostics
+    """
+    query = (query or "").strip()
+    if not query:
+        return {"contexts": [], "intent": None, "strategy": {}, "metadata": {"error": "empty_query"}}
+    
+    start_time = time.time()
+    
+    # Step 1: Classify intent
+    intent = None
+    intent_time = 0
+    
+    if RETRIEVAL_INTENT_CLASSIFICATION_ENABLED:
+        try:
+            intent_start = time.time()
+            intent = await classify_retrieval_intent(query, conversation_history)
+            intent_time = time.time() - intent_start
+            print(f"[Intent Retrieval] Classified as {intent.intent_type.value} (confidence: {intent.confidence:.2f}) in {intent_time:.2f}s")
+        except Exception as e:
+            print(f"[Intent Retrieval] Classification failed: {e}, using default")
+    
+    # Step 2: Get strategy configuration
+    if intent:
+        strategy = get_strategy_config(intent.intent_type)
+        
+        # Override with intent-specific settings
+        if intent.metadata_filters:
+            strategy["metadata_filter"] = intent.metadata_filters
+        
+        # Use implied question for followups
+        effective_query = intent.implied_question if intent.is_followup else query
+        
+        # Skip retrieval for greetings
+        if intent.intent_type == RetrievalIntentType.GREETING:
+            return {
+                "contexts": [],
+                "intent": intent,
+                "strategy": strategy,
+                "metadata": {
+                    "classification_time": intent_time,
+                    "skipped": True,
+                    "reason": "greeting"
+                }
+            }
+    else:
+        strategy = get_strategy_config(RetrievalIntentType.GENERAL)
+        effective_query = query
+    
+    # Step 3: Adjust retrieval parameters based on strategy
+    retrieval_top_k = strategy.get("top_k", top_k)
+    use_hyde = strategy.get("use_hyde", True)
+    use_expansion = strategy.get("use_expansion", True)
+    
+    # Step 4: Execute retrieval with adjusted parameters
+    retrieval_start = time.time()
+    
+    try:
+        # Use the existing verified-first retrieval
+        contexts = await retrieve_context_with_verified_first(
+            effective_query,
+            twin_id,
+            creator_id=creator_id,
+            group_id=group_id,
+            top_k=retrieval_top_k,
+            resolve_default_group=resolve_default_group,
+        )
+        
+        retrieval_time = time.time() - retrieval_start
+        total_time = time.time() - start_time
+        
+        # Log metrics
+        print(f"[Intent Retrieval] Retrieved {len(contexts)} contexts in {retrieval_time:.2f}s (total: {total_time:.2f}s)")
+        
+        return {
+            "contexts": contexts,
+            "intent": intent,
+            "strategy": strategy,
+            "metadata": {
+                "classification_time": intent_time,
+                "retrieval_time": retrieval_time,
+                "total_time": total_time,
+                "contexts_found": len(contexts),
+                "effective_query": effective_query,
+            }
+        }
+        
+    except Exception as e:
+        print(f"[Intent Retrieval] Retrieval failed: {e}")
+        return {
+            "contexts": [],
+            "intent": intent,
+            "strategy": strategy,
+            "metadata": {
+                "classification_time": intent_time,
+                "error": str(e),
+                "total_time": time.time() - start_time,
+            }
+        }
 
 
 # =============================================================================
