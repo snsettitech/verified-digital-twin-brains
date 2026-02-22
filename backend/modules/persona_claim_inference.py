@@ -78,6 +78,15 @@ class ClarificationInterviewGenerator:
         Returns list of questions with metadata.
         """
         questions = []
+
+        def _render_question(template: str, item_name: str) -> str:
+            # Some templates use {topic}, others use {value} or {value_a}/{value_b}.
+            return template.format(
+                topic=item_name,
+                value=item_name,
+                value_a=item_name,
+                value_b="other priorities",
+            )
         
         # Filter to low-confidence Layer 2 (Cognitive) items
         for item in cognitive_items:
@@ -87,7 +96,7 @@ class ClarificationInterviewGenerator:
                     questions.append({
                         "target_layer": "cognitive",
                         "target_item_id": item.item_id,
-                        "question": template.format(topic=item.name),
+                        "question": _render_question(template, item.name),
                         "current_confidence": item.confidence,
                         "purpose": "clarify_heuristic",
                     })
@@ -100,7 +109,7 @@ class ClarificationInterviewGenerator:
                     questions.append({
                         "target_layer": "values",
                         "target_item_id": item.item_id,
-                        "question": template.format(value=item.name),
+                        "question": _render_question(template, item.name),
                         "current_confidence": item.confidence,
                         "purpose": "clarify_value",
                     })

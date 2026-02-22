@@ -2,15 +2,22 @@
 
 import React from 'react';
 
-interface CardProps {
+type CardProps = React.HTMLAttributes<HTMLDivElement> & {
     children: React.ReactNode;
     className?: string;
     hover?: boolean;
     gradient?: boolean;
     glass?: boolean;
-}
+};
 
-export function Card({ children, className = '', hover = false, gradient = false, glass = false }: CardProps) {
+export function Card({
+    children,
+    className = '',
+    hover = false,
+    gradient = false,
+    glass = false,
+    ...props
+}: CardProps) {
     const baseStyles = 'rounded-2xl transition-all duration-200';
     const hoverStyles = hover ? 'hover:shadow-xl hover:-translate-y-1' : '';
     const gradientStyles = gradient
@@ -21,7 +28,10 @@ export function Card({ children, className = '', hover = false, gradient = false
         : '';
 
     return (
-        <div className={`${baseStyles} ${glass ? glassStyles : gradientStyles} ${hoverStyles} ${className}`}>
+        <div
+            className={`${baseStyles} ${glass ? glassStyles : gradientStyles} ${hoverStyles} ${className}`}
+            {...props}
+        >
             {children}
         </div>
     );

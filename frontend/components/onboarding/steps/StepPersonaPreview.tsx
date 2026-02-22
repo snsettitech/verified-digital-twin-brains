@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface BioVariant {
   bio_type: string;
@@ -27,14 +28,14 @@ export function StepPersonaPreview({ twinId, onActivate }: StepPersonaPreviewPro
     const fetchData = async () => {
       try {
         // Fetch bios
-        const biosRes = await fetch(`/api/persona/link-compile/twins/${twinId}/bios`);
+        const biosRes = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/bios`);
         if (biosRes.ok) {
           const data = await biosRes.json();
           setBios(data.variants || []);
         }
 
         // Fetch twin info for name
-        const twinRes = await fetch(`/api/twins/${twinId}`);
+        const twinRes = await authFetchStandalone(`/twins/${twinId}`);
         if (twinRes.ok) {
           const twin = await twinRes.json();
           setTwinName(twin.name);
@@ -57,9 +58,8 @@ export function StepPersonaPreview({ twinId, onActivate }: StepPersonaPreviewPro
     try {
       // Update twin name if changed
       if (twinName && twinId) {
-        await fetch(`/api/twins/${twinId}/activate`, {
+        await authFetchStandalone(`/twins/${twinId}/activate`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ final_name: twinName }),
         });
       }

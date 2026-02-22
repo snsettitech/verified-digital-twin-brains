@@ -16,7 +16,7 @@ import { Step3Values } from '@/components/onboarding/steps/Step3Values';
 import { Step4Communication } from '@/components/onboarding/steps/Step4Communication';
 import { Step5Memory } from '@/components/onboarding/steps/Step5Memory';
 import { Step6Review } from '@/components/onboarding/steps/Step6Review';
-import { getSupabaseClient } from '@/lib/supabase/client';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 // =============================================================================
 // Types
@@ -57,6 +57,47 @@ interface WelcomeData {
   manualMode?: boolean;
 }
 
+interface ThinkingStyleData {
+  decisionFramework: string;
+  heuristics: string[];
+  customHeuristics: string;
+  clarifyingBehavior: 'ask' | 'infer';
+  evidenceStandards: string[];
+}
+
+interface ValueItem {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface ValuesData {
+  prioritizedValues: ValueItem[];
+  tradeoffNotes: string;
+}
+
+interface PersonalityData {
+  tone: string;
+  responseLength: string;
+  firstPerson: boolean;
+  customInstructions: string;
+  signaturePhrases: string[];
+}
+
+interface MemoryAnchor {
+  id: string;
+  type: 'experience' | 'lesson' | 'pattern';
+  content: string;
+  context: string;
+  tags: string[];
+}
+
+interface MemoryData {
+  experiences: MemoryAnchor[];
+  lessons: MemoryAnchor[];
+  patterns: MemoryAnchor[];
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -90,6 +131,29 @@ function OnboardingContent() {
     uncertaintyPreference: 'ask',
   });
   const [specialization, setSpecialization] = useState('vanilla');
+  const [thinkingData, setThinkingData] = useState<ThinkingStyleData>({
+    decisionFramework: 'evidence_based',
+    heuristics: [],
+    customHeuristics: '',
+    clarifyingBehavior: 'ask',
+    evidenceStandards: [],
+  });
+  const [valuesData, setValuesData] = useState<ValuesData>({
+    prioritizedValues: [],
+    tradeoffNotes: '',
+  });
+  const [personalityData, setPersonalityData] = useState<PersonalityData>({
+    tone: 'friendly',
+    responseLength: 'balanced',
+    firstPerson: true,
+    customInstructions: '',
+    signaturePhrases: [],
+  });
+  const [memoryData, setMemoryData] = useState<MemoryData>({
+    experiences: [],
+    lessons: [],
+    patterns: [],
+  });
 
   // =============================================================================
   // Telemetry
@@ -101,6 +165,31 @@ function OnboardingContent() {
     }
     console.log(`[Telemetry] ${event}`, properties);
   }, []);
+
+  const manualStepOrder: OnboardingStep[] = [
+    'manual_identity',
+    'manual_thinking',
+    'manual_values',
+    'manual_communication',
+    'manual_memory',
+    'manual_review',
+  ];
+
+  const getManualStepIndex = (step: OnboardingStep) => manualStepOrder.indexOf(step);
+
+  const goToNextManualStep = () => {
+    const currentIndex = getManualStepIndex(currentStep);
+    if (currentIndex >= 0 && currentIndex < manualStepOrder.length - 1) {
+      setCurrentStep(manualStepOrder[currentIndex + 1]);
+    }
+  };
+
+  const goToPreviousManualStep = () => {
+    const currentIndex = getManualStepIndex(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(manualStepOrder[currentIndex - 1]);
+    }
+  };
 
   // =============================================================================
   // Resume onboarding if twinId provided
@@ -143,13 +232,7 @@ function OnboardingContent() {
   }, [resumeTwinId]);
 
   const fetchTwin = async (twinId: string): Promise<Twin | null> => {
-    const supabase = getSupabaseClient();
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-
-    const response = await fetch(`/api/twins/${twinId}`, {
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-    });
+    const response = await authFetchStandalone(`/twins/${twinId}`);
 
     if (!response.ok) return null;
     return response.json();
@@ -187,16 +270,8 @@ function OnboardingContent() {
 
   const createDraftTwin = async (name: string): Promise<Twin | null> => {
     try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      const response = await fetch('/api/twins', {
+      const response = await authFetchStandalone('/twins', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
         body: JSON.stringify({
           name: `${name} (Draft)`,
           mode: 'link_first',
@@ -249,10 +324,6 @@ function OnboardingContent() {
 
     // Submit sources to backend
     try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
       // Handle files (Mode A)
       const files = sources.filter(s => s.type === 'export' && s.file).map(s => s.file!);
       if (files.length > 0) {
@@ -260,45 +331,45 @@ function OnboardingContent() {
         formData.append('twin_id', twin.id);
         files.forEach(f => formData.append('files', f));
         
-        await fetch('/api/persona/link-compile/jobs/mode-a', {
+        const modeAResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-a', {
           method: 'POST',
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
           body: formData,
         });
+        if (!modeAResponse.ok) {
+          throw new Error('Failed to submit uploaded files');
+        }
       }
 
       // Handle paste (Mode B)
       const pasteSources = sources.filter(s => s.type === 'paste');
       for (const paste of pasteSources) {
-        await fetch('/api/persona/link-compile/jobs/mode-b', {
+        const modeBResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-b', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
           body: JSON.stringify({
             twin_id: twin.id,
             content: paste.value,
             title: paste.category || 'Pasted Content',
           }),
         });
+        if (!modeBResponse.ok) {
+          throw new Error('Failed to submit pasted content');
+        }
       }
 
       // Handle URLs (Mode C)
       const urls = sources.filter(s => s.type === 'link').map(s => s.value);
       const allUrls = [...suggestedUrls, ...urls];
       if (allUrls.length > 0) {
-        await fetch('/api/persona/link-compile/jobs/mode-c', {
+        const modeCResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
           method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
           body: JSON.stringify({
             twin_id: twin.id,
             urls: allUrls,
           }),
         });
+        if (!modeCResponse.ok) {
+          throw new Error('Failed to submit URLs');
+        }
       }
 
       setCurrentStep('building');
@@ -326,7 +397,12 @@ function OnboardingContent() {
   const handleProfileActivate = () => {
     trackEvent('persona_activated', { twin_id: twin?.id });
     if (twin?.id) {
-      router.push(returnTo || `/chat?twinId=${twin.id}`);
+      try {
+        localStorage.setItem('activeTwinId', twin.id);
+      } catch {
+        // Non-blocking storage write.
+      }
+      router.push(returnTo || '/dashboard/chat');
     }
   };
 
@@ -363,28 +439,38 @@ function OnboardingContent() {
     // Create manual twin
     setIsLoading(true);
     try {
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      const response = await fetch('/api/twins', {
+      const response = await authFetchStandalone('/twins', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
         body: JSON.stringify({
           name: identityData.twinName,
           mode: 'manual',
           specialization,
-          persona_v2_data: { /* ... */ },
+          settings: {
+            handle: identityData.handle || undefined,
+            tagline: identityData.tagline || undefined,
+          },
+          persona_v2_data: {
+            identity: {
+              ...identityData,
+              specialization,
+            },
+            thinking_style: thinkingData,
+            value_hierarchy: valuesData,
+            communication: personalityData,
+            memory_anchors: memoryData,
+          },
         }),
       });
 
       if (!response.ok) throw new Error('Failed to create twin');
       
-      const newTwin = await response.json();
-      router.push(returnTo || `/chat?twinId=${newTwin.id}`);
+      const newTwin: Twin = await response.json();
+      try {
+        localStorage.setItem('activeTwinId', newTwin.id);
+      } catch {
+        // Non-blocking storage write.
+      }
+      router.push(returnTo || '/dashboard/chat');
     } catch (error) {
       console.error('Failed to create manual twin:', error);
       alert('Failed to create twin. Please try again.');
@@ -392,6 +478,25 @@ function OnboardingContent() {
       setIsLoading(false);
     }
   };
+
+  const renderManualNavigation = (nextLabel = 'Next →', nextDisabled = false) => (
+    <div className="mt-8 flex items-center justify-between gap-3">
+      <button
+        onClick={goToPreviousManualStep}
+        disabled={currentStep === 'manual_identity'}
+        className="px-5 py-3 border border-slate-700 text-slate-300 rounded-xl hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        ← Back
+      </button>
+      <button
+        onClick={goToNextManualStep}
+        disabled={nextDisabled}
+        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {nextLabel}
+      </button>
+    </div>
+  );
 
   // =============================================================================
   // Render Current Step
@@ -461,10 +566,97 @@ function OnboardingContent() {
       // Manual flow steps
       case 'manual_identity':
         return (
-          <Step1Identity
-            data={identityData}
-            onChange={setIdentityData}
-            onSpecializationChange={setSpecialization}
+          <>
+            <Step1Identity
+              data={identityData}
+              onChange={setIdentityData}
+              onSpecializationChange={setSpecialization}
+            />
+            {renderManualNavigation('Next: Thinking Style →', !identityData.twinName.trim())}
+          </>
+        );
+
+      case 'manual_thinking':
+        return (
+          <>
+            <Step2ThinkingStyle
+              data={thinkingData}
+              onChange={setThinkingData}
+            />
+            {renderManualNavigation('Next: Values →')}
+          </>
+        );
+
+      case 'manual_values':
+        return (
+          <>
+            <Step3Values
+              data={valuesData}
+              onChange={setValuesData}
+              specialization={specialization}
+            />
+            {renderManualNavigation('Next: Communication →')}
+          </>
+        );
+
+      case 'manual_communication':
+        return (
+          <>
+            <Step4Communication
+              personality={personalityData}
+              onPersonalityChange={setPersonalityData}
+            />
+            {renderManualNavigation('Next: Memory Anchors →')}
+          </>
+        );
+
+      case 'manual_memory':
+        return (
+          <>
+            <Step5Memory
+              data={memoryData}
+              onChange={setMemoryData}
+            />
+            {renderManualNavigation('Review & Launch →')}
+          </>
+        );
+
+      case 'manual_review':
+        return (
+          <Step6Review
+            data={{
+              twinName: identityData.twinName,
+              tagline: identityData.tagline,
+              specialization,
+              expertise: [...identityData.expertise, ...identityData.customExpertise],
+              decisionFramework: thinkingData.decisionFramework,
+              heuristics: thinkingData.heuristics,
+              clarifyingBehavior: thinkingData.clarifyingBehavior,
+              prioritizedValues: valuesData.prioritizedValues,
+              personality: {
+                tone: personalityData.tone,
+                responseLength: personalityData.responseLength,
+                firstPerson: personalityData.firstPerson,
+              },
+              memoryCount:
+                memoryData.experiences.length +
+                memoryData.lessons.length +
+                memoryData.patterns.length,
+            }}
+            onTestChat={() => trackEvent('manual_review_test_chat_clicked')}
+            onEditStep={(stepNumber) => {
+              const manualStepMap: OnboardingStep[] = [
+                'manual_identity',
+                'manual_thinking',
+                'manual_values',
+                'manual_communication',
+                'manual_memory',
+              ];
+              const index = Math.max(0, Math.min(stepNumber - 1, manualStepMap.length - 1));
+              setCurrentStep(manualStepMap[index]);
+            }}
+            onLaunch={handleManualComplete}
+            isLaunching={isLoading}
           />
         );
 
@@ -527,6 +719,42 @@ function OnboardingContent() {
               const isActive = currentStep === step.key;
               const isPast = ['link_suggestions', 'add_sources', 'building', 'profile'].indexOf(currentStep) > 
                             ['link_suggestions', 'add_sources', 'building', 'profile'].indexOf(step.key);
+              return (
+                <React.Fragment key={step.key}>
+                  <div className={`flex flex-col items-center ${isActive ? 'text-indigo-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                      isActive ? 'bg-indigo-500/20 border-2 border-indigo-500' :
+                      isPast ? 'bg-green-500/20 border-2 border-green-500' :
+                      'bg-slate-800 border-2 border-slate-700'
+                    }`}>
+                      {isPast ? '✓' : idx + 1}
+                    </div>
+                    <span className="text-xs mt-1">{step.label}</span>
+                  </div>
+                  {idx < arr.length - 1 && (
+                    <div className={`flex-1 h-0.5 mx-2 ${isPast ? 'bg-green-500/50' : 'bg-slate-800'}`} />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Progress Indicator (Manual Flow) */}
+      {flowType === 'manual' && currentStep !== 'welcome' && (
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            {[
+              { key: 'manual_identity', label: 'Identity' },
+              { key: 'manual_thinking', label: 'Thinking' },
+              { key: 'manual_values', label: 'Values' },
+              { key: 'manual_communication', label: 'Voice' },
+              { key: 'manual_memory', label: 'Memory' },
+              { key: 'manual_review', label: 'Review' },
+            ].map((step, idx, arr) => {
+              const isActive = currentStep === step.key;
+              const isPast = getManualStepIndex(currentStep) > getManualStepIndex(step.key as OnboardingStep);
               return (
                 <React.Fragment key={step.key}>
                   <div className={`flex flex-col items-center ${isActive ? 'text-indigo-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>

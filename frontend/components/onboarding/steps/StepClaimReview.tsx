@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface Claim {
   id: string;
@@ -28,13 +29,13 @@ export function StepClaimReview({ twinId, onApprove }: StepClaimReviewProps) {
 
     const fetchClaims = async () => {
       try {
-        const response = await fetch(`/api/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
+        const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
         if (!response.ok) throw new Error('Failed to fetch claims');
         
         const data = await response.json();
         setClaims(data.claims || []);
         // Auto-approve high confidence claims
-        const autoApproved = new Set(
+        const autoApproved = new Set<string>(
           (data.claims || [])
             .filter((c: Claim) => c.confidence >= 0.7)
             .map((c: Claim) => c.id)
@@ -70,7 +71,7 @@ export function StepClaimReview({ twinId, onApprove }: StepClaimReviewProps) {
   const handleContinue = async () => {
     // Update claim statuses
     if (twinId) {
-      await fetch(`/api/twins/${twinId}/transition/clarification-pending`, {
+      await authFetchStandalone(`/twins/${twinId}/transition/clarification-pending`, {
         method: 'POST',
       });
     }

@@ -94,17 +94,17 @@ RULES:
 5. Keep sentences atomic (one idea per sentence)
 
 OUTPUT FORMAT:
-{
+{{
   "bio_text": "The generated bio text...",
   "sentences": [
-    {
+    {{
       "text": "Individual sentence",
       "supporting_claim_indices": [0, 2]  // Indices into claims list
-    }
+    }}
   ],
   "insufficient_data": false,
   "missing_claim_types": []
-}
+}}
 
 If you cannot write a complete bio due to missing claims, set insufficient_data=true and list what's needed.
 """

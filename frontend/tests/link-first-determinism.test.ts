@@ -81,13 +81,13 @@ test.describe('Link-First Determinism Harness (5 runs)', () => {
         await new Promise(r => setTimeout(r, 1000));
         
         const jobRes = await request.get(`${API_BASE_URL}/persona/link-compile/twins/${twinId}/job`);
-        if (jobRes.ok) {
+        if (jobRes.ok()) {
           const job = await jobRes.json();
           
           if (job.status === 'completed' || job.status === 'claims_ready') {
             // Fetch claims
             const claimsRes = await request.get(`${API_BASE_URL}/persona/link-compile/twins/${twinId}/claims`);
-            if (claimsRes.ok) {
+            if (claimsRes.ok()) {
               const data = await claimsRes.json();
               claims = data.claims || [];
             }
@@ -103,7 +103,7 @@ test.describe('Link-First Determinism Harness (5 runs)', () => {
       const biosRes = await request.get(`${API_BASE_URL}/persona/link-compile/twins/${twinId}/bios`);
       let bios: Array<{bio_type: string; bio_text: string}> = [];
       
-      if (biosRes.ok) {
+      if (biosRes.ok()) {
         const data = await biosRes.json();
         bios = data.variants || [];
       }

@@ -21,3 +21,25 @@ def test_invitation_acceptance_routes_exist():
 
 def test_cognitive_profile_approve_route_exists():
     assert _has_route("/cognitive/profiles/{twin_id}/approve", "POST")
+
+
+def test_access_groups_compat_routes_exist():
+    assert _has_route("/access-groups", "GET")
+    assert _has_route("/access-groups", "POST")
+    assert _has_route("/access-groups/{group_id}", "GET")
+    assert _has_route("/access-groups/{group_id}", "DELETE")
+    assert _has_route("/access-groups/{group_id}/members", "GET")
+    assert _has_route("/access-groups/{group_id}/permissions", "GET")
+    assert _has_route("/access-groups/{group_id}/permissions", "POST")
+    assert _has_route("/access-groups/{group_id}/permissions/{content_type}/{content_id}", "DELETE")
+    assert _has_route("/access-groups/{group_id}/limits", "GET")
+    assert _has_route("/access-groups/{group_id}/limits", "POST")
+    assert _has_route("/access-groups/{group_id}/overrides", "GET")
+    assert _has_route("/access-groups/{group_id}/overrides", "POST")
+    assert _has_route("/twins/{twin_id}/group-memberships", "POST")
+    assert _has_route("/group-memberships/{membership_id}", "DELETE")
+
+
+def test_link_compile_compat_routes_exist():
+    assert _has_route("/persona/link-compile/twins/{twin_id}/claims/{claim_id}/verify", "POST")
+    assert _has_route("/twins/{twin_id}/transition/{target_state}", "POST")

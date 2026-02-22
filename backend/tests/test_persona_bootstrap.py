@@ -452,9 +452,9 @@ class TestEndToEndBootstrap:
         # 3. Verify twin settings updated
         pass
     
-    def test_bootstrap_output_is_valid_json(self):
+    def test_bootstrap_output_is_valid_json(self, founder_onboarding_data):
         """Verify bootstrap output can be serialized to JSON."""
-        data = founder_onboarding_data()
+        data = founder_onboarding_data
         spec = bootstrap_persona_from_onboarding(data)
         
         # Should not raise
@@ -462,11 +462,11 @@ class TestEndToEndBootstrap:
         assert isinstance(json_output, str)
         assert len(json_output) > 0
     
-    def test_bootstrap_roundtrip(self):
+    def test_bootstrap_roundtrip(self, founder_onboarding_data):
         """Verify spec can be serialized and re-parsed."""
         from modules.persona_spec_v2 import PersonaSpecV2
         
-        data = founder_onboarding_data()
+        data = founder_onboarding_data
         spec = bootstrap_persona_from_onboarding(data)
         
         # Serialize

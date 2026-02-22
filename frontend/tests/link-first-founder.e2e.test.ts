@@ -94,7 +94,7 @@ test.describe('Founder E2E: Sainath Setti Link-First Flow', () => {
       }
     });
     
-    if (loginRes.ok) {
+    if (loginRes.ok()) {
       const data = await loginRes.json();
       authToken = data.access_token;
     }
@@ -172,7 +172,7 @@ test.describe('Founder E2E: Sainath Setti Link-First Flow', () => {
         headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
-      if (response.ok) {
+      if (response.ok()) {
         const data = await response.json();
         console.log(`[E2E] Poll ${attempts + 1}: status=${data.status}, claims=${data.extracted_claims}`);
         
@@ -288,7 +288,7 @@ test.describe('Founder E2E: Sainath Setti Link-First Flow', () => {
       headers: { 'Authorization': `Bearer ${authToken}` }
     });
     
-    if (personaRes.ok) {
+    if (personaRes.ok()) {
       const persona = await personaRes.json();
       expect(persona.source).toBe('link-compile');
     }
@@ -377,7 +377,7 @@ test.describe('Chat Gating: Non-active twin → 403', () => {
       }
     });
 
-    if (!createRes.ok) return; // Skip if auth fails
+    if (!createRes.ok()) return; // Skip if auth fails
     
     const { id: draftTwinId } = await createRes.json();
     

@@ -95,7 +95,13 @@ def _build_identity_frame(data: Dict[str, Any]) -> IdentityFrame:
         "technical": f"Technical expert and advisor - {twin_name}",
         "vanilla": f"Professional advisor - {twin_name}",
     }
-    role_definition = data.get("role_definition", role_map.get(specialization, f"Advisor - {twin_name}"))
+    if data.get("role_definition"):
+        role_definition = data["role_definition"]
+    elif "specialization" in data:
+        role_definition = role_map.get(specialization, f"Advisor - {twin_name}")
+    else:
+        # Minimal onboarding path: keep role plain and avoid over-prescribing identity.
+        role_definition = twin_name
     
     # Background/success outcomes
     background = data.get("background", "")
@@ -176,7 +182,7 @@ def _build_cognitive_heuristics(data: Dict[str, Any]) -> CognitiveHeuristics:
     })
     
     # Clarifying behavior
-    clarifying_behavior = data.get("clarifying_behavior", "ask")
+    clarifying_behavior = str(data.get("clarifying_behavior", "none")).lower()
     if clarifying_behavior == "ask":
         # Add clarify-first heuristic
         heuristics.append(CognitiveHeuristic(
@@ -602,7 +608,7 @@ def _build_memory_anchors(data: Dict[str, Any]) -> MemoryAnchors:
     for i, pattern in enumerate(patterns):
         anchors.append(MemoryAnchor(
             id=f"pattern_{i}",
-            type="pattern",
+            type="principle",
             content=pattern.get("content", ""),
             context=pattern.get("context", ""),
             applicable_intents=pattern.get("applicable_intents", []),

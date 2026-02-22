@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { WizardStep } from '../Wizard';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -46,25 +47,78 @@ export function PreviewTwinStep({
         setIsLoading(true);
 
         try {
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
-
-            // Try to get a real response if twin exists
             if (twinId) {
-                const response = await fetch(`${backendUrl}/chat/${twinId}`, {
+                const response = await authFetchStandalone(`/chat/${twinId}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: userMessage }),
+                    body: JSON.stringify({
+                        query: userMessage,
+                        mode: 'owner',
+                    }),
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    setMessages(prev => [...prev, {
-                        role: 'assistant',
-                        content: data.response || data.answer || "I'm still learning. Once you launch me, I'll be able to answer based on your knowledge!"
-                    }]);
-                } else {
-                    throw new Error('Response not OK');
+                if (!response.ok || !response.body) {
+                    throw new Error(`Chat request failed (${response.status})`);
                 }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let assistantContent = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() ?? '';
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.type === 'clarify') {
+                                assistantContent =
+                                    data.question || 'I need clarification before I can answer that confidently.';
+                                break;
+                            }
+                            if (data.type === 'content' || data.type === 'answer_token') {
+                                const token = typeof data.token === 'string'
+                                    ? data.token
+                                    : typeof data.content === 'string'
+                                        ? data.content
+                                        : '';
+                                assistantContent += token;
+                            }
+                        } catch {
+                            // Skip malformed NDJSON lines.
+                        }
+                    }
+                }
+
+                if (buffer.trim()) {
+                    try {
+                        const data = JSON.parse(buffer.trim());
+                        if (data.type === 'clarify') {
+                            assistantContent =
+                                data.question || 'I need clarification before I can answer that confidently.';
+                        } else if (data.type === 'content' || data.type === 'answer_token') {
+                            const token = typeof data.token === 'string'
+                                ? data.token
+                                : typeof data.content === 'string'
+                                    ? data.content
+                                    : '';
+                            assistantContent += token;
+                        }
+                    } catch {
+                        // Ignore trailing partial/invalid payload.
+                    }
+                }
+
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: assistantContent || "I'm still learning. Once you launch me, I'll be able to answer based on your knowledge!",
+                }]);
             } else {
                 // Simulated response for preview
                 await new Promise(resolve => setTimeout(resolve, 1000));

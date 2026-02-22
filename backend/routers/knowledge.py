@@ -6,10 +6,11 @@ from modules.schemas import (
 )
 from modules.observability import get_knowledge_profile, supabase
 from modules.verified_qna import (
-    list_verified_qna, get_verified_qna, edit_verified_qna
+    create_verified_qna, list_verified_qna, get_verified_qna, edit_verified_qna
 )
 
 router = APIRouter(tags=["knowledge"])
+VALID_VISIBILITY_VALUES = {"private", "shared", "public"}
 
 @router.get("/twins/{twin_id}/knowledge-profile", response_model=KnowledgeProfile)
 async def knowledge_profile(twin_id: str, user=Depends(get_current_user)):
@@ -49,6 +50,48 @@ async def list_twin_verified_qna(twin_id: str, visibility: Optional[str] = None,
     except Exception as e:
         import traceback
         print(f"Error listing verified QnA: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/twins/{twin_id}/verified-qna", response_model=VerifiedQnASchema)
+async def create_twin_verified_qna(
+    twin_id: str,
+    request: VerifiedQnACreateRequest,
+    user=Depends(verify_owner),
+):
+    """
+    Create a verified QnA entry for a twin.
+    """
+    verify_twin_ownership(twin_id, user)
+
+    visibility = (request.visibility or "private").strip().lower()
+    if visibility not in VALID_VISIBILITY_VALUES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid visibility. Allowed values: {', '.join(sorted(VALID_VISIBILITY_VALUES))}",
+        )
+
+    try:
+        qna_id = await create_verified_qna(
+            question=request.question,
+            answer=request.answer,
+            owner_id=user.get("user_id"),
+            citations=request.citations or [],
+            twin_id=twin_id,
+        )
+
+        # Create path defaults to private visibility; apply requested visibility explicitly.
+        if visibility != "private":
+            supabase.table("verified_qna").update({"visibility": visibility}).eq("id", qna_id).execute()
+
+        created_qna = await get_verified_qna(qna_id)
+        if not created_qna:
+            raise HTTPException(status_code=500, detail="Failed to load created verified QnA")
+        return created_qna
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/verified-qna/{qna_id}", response_model=VerifiedQnASchema)

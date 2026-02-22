@@ -20,7 +20,7 @@ from modules.clients import get_pinecone_index
 from modules.graph_context import get_graph_stats
 from modules.governance import AuditLogger
 from modules.tenant_guard import derive_creator_ids
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # =============================================================================
 # 5-Layer Persona Imports
@@ -52,6 +52,78 @@ def ensure_twin_owner_or_403(twin_id: str, user: dict) -> Dict[str, Any]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     return twin_res.data
+
+
+def get_twin_verification_status(twin_id: str) -> Dict[str, Any]:
+    """
+    Return coarse readiness from the latest verification run.
+
+    This is intentionally lightweight and separate from publish quality-gating,
+    which requires a full quality-suite record.
+    """
+    try:
+        result = (
+            supabase.table("twin_verifications")
+            .select("status, created_at, details")
+            .eq("twin_id", twin_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        latest = (result.data or [None])[0]
+        if not latest:
+            return {
+                "is_ready": False,
+                "issues": ["No verification record found. Run verification before publishing."],
+            }
+        return {
+            "is_ready": latest.get("status") == "PASS",
+            "issues": [],
+            "latest": latest,
+        }
+    except Exception as e:
+        return {
+            "is_ready": False,
+            "issues": [f"Verification status check failed: {e}"],
+        }
+
+
+def _is_recent_quality_suite_pass(verification: Dict[str, Any], max_age_days: int = 30) -> bool:
+    """Check whether a verification row is a PASS from the quality-suite format."""
+    if not isinstance(verification, dict):
+        return False
+    if verification.get("status") != "PASS":
+        return False
+
+    details = verification.get("details")
+    if not isinstance(details, dict):
+        return False
+
+    tests_run = details.get("tests_run")
+    tests_passed = details.get("tests_passed")
+    test_results = details.get("test_results")
+    if not isinstance(tests_run, int) or tests_run <= 0:
+        return False
+    if tests_passed != tests_run:
+        return False
+    if not isinstance(test_results, list) or len(test_results) != tests_run:
+        return False
+    if any(not bool((r or {}).get("passed")) for r in test_results):
+        return False
+
+    created_at = verification.get("created_at")
+    if created_at:
+        try:
+            created_dt = datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+            now_utc = datetime.now(timezone.utc)
+            if created_dt.tzinfo is None:
+                created_dt = created_dt.replace(tzinfo=timezone.utc)
+            if (now_utc - created_dt) > timedelta(days=max_age_days):
+                return False
+        except Exception:
+            return False
+
+    return True
 
 
 def _require_authenticated_user(user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -332,6 +404,109 @@ async def get_twin(twin_id: str, user=Depends(get_current_user)):
     response = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Twin not found or access denied")
+    return response.data
+
+
+@router.patch("/twins/{twin_id}")
+async def patch_twin(
+    twin_id: str,
+    update: TwinSettingsUpdate,
+    user=Depends(verify_owner),
+):
+    """
+    Partial update endpoint used by dashboard profile/settings/share pages.
+    Supports top-level name/description and merged settings updates.
+    """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
+    update_payload: Dict[str, Any] = {}
+    if update.name is not None:
+        normalized_name = update.name.strip()
+        if not normalized_name:
+            raise HTTPException(status_code=400, detail="Twin name cannot be empty")
+        update_payload["name"] = normalized_name
+
+    if update.description is not None:
+        update_payload["description"] = update.description
+
+    if update.specialization_id is not None:
+        update_payload["specialization"] = update.specialization_id
+
+    settings_changed = False
+    merged_settings: Dict[str, Any] = {}
+
+    if isinstance(update.settings, dict):
+        settings_changed = True
+
+    if update.is_public is not None:
+        settings_changed = True
+
+    if settings_changed:
+        if update.is_public:
+            verification_status = get_twin_verification_status(twin_id)
+            if not verification_status.get("is_ready", False):
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "Verification required before publishing. Run verify retrieval first.",
+                        "issues": verification_status.get("issues", []),
+                    },
+                )
+
+            verification_res = (
+                supabase.table("twin_verifications")
+                .select("status, created_at, details")
+                .eq("twin_id", twin_id)
+                .order("created_at", desc=True)
+                .limit(5)
+                .execute()
+            )
+            verification_rows = verification_res.data or []
+            has_quality_pass = any(_is_recent_quality_suite_pass(row) for row in verification_rows)
+            if not has_quality_pass:
+                raise HTTPException(
+                    status_code=400,
+                    detail={
+                        "message": "Quality verification required before publishing. Run /verify/twins/{twin_id}/quality-suite and pass all tests.",
+                    },
+                )
+
+        twin_res = (
+            supabase.table("twins")
+            .select("settings")
+            .eq("id", twin_id)
+            .single()
+            .execute()
+        )
+        if not twin_res.data:
+            raise HTTPException(status_code=404, detail="Twin not found")
+
+        merged_settings = dict(twin_res.data.get("settings") or {})
+
+        if isinstance(update.settings, dict):
+            merged_settings.update(update.settings)
+
+        if update.is_public is not None:
+            widget_settings = dict(merged_settings.get("widget_settings") or {})
+            widget_settings["public_share_enabled"] = bool(update.is_public)
+            merged_settings["widget_settings"] = widget_settings
+            merged_settings["is_public"] = bool(update.is_public)
+
+        update_payload["settings"] = merged_settings
+
+    if not update_payload:
+        twin_res = supabase.table("twins").select("*").eq("id", twin_id).single().execute()
+        if not twin_res.data:
+            raise HTTPException(status_code=404, detail="Twin not found")
+        return twin_res.data
+
+    update_payload["updated_at"] = datetime.utcnow().isoformat()
+    response = supabase.table("twins").update(update_payload).eq("id", twin_id).execute()
+
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Twin not found or update failed")
+
     return response.data
 
 

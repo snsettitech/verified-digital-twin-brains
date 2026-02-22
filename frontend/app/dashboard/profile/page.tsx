@@ -329,7 +329,6 @@ export default function ProfilePage() {
               <div className="flex flex-col gap-5">
                 <div className="h-36 w-36 overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-300 to-slate-100 shadow-lg shadow-slate-900/10">
                   {draft.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={draft.avatarUrl} alt={draft.displayName} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-800 to-slate-600 text-4xl font-bold text-white">

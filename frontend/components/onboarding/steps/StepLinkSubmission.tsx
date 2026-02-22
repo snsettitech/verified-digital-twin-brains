@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface StepLinkSubmissionProps {
   twinId: string | null;
@@ -23,9 +24,8 @@ export function StepLinkSubmission({ twinId, onSubmit }: StepLinkSubmissionProps
     try {
       if (mode === 'urls' && validUrls.length > 0) {
         // Mode C: Web fetch
-        const response = await fetch('/api/persona/link-compile/jobs/mode-c', {
+        const response = await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             twin_id: twinId, 
             urls: validUrls 
@@ -43,7 +43,7 @@ export function StepLinkSubmission({ twinId, onSubmit }: StepLinkSubmissionProps
         formData.append('twin_id', twinId);
         files.forEach(f => formData.append('files', f));
         
-        const response = await fetch('/api/persona/link-compile/jobs/mode-a', {
+        const response = await authFetchStandalone('/persona/link-compile/jobs/mode-a', {
           method: 'POST',
           body: formData,
         });

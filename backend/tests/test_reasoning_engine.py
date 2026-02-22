@@ -24,8 +24,10 @@ class TestReasoningEngine(unittest.TestCase):
     @patch('modules.reasoning_engine.get_openai_client')
     @patch('modules.graph_context._select_seeds')
     @patch('modules.graph_context._expand_one_hop')
-    async def test_find_relevant_cognitive_nodes(self, mock_expand, mock_seeds, mock_client):
+    def test_find_relevant_cognitive_nodes(self, mock_expand, mock_seeds, mock_client):
         """Test finding and filtering cognitive nodes."""
+        import asyncio
+
         # Mock seeds
         mock_seeds.return_value = [
             {"id": "1", "name": "Value 1", "type": "Value", "description": "Desc 1"},
@@ -35,7 +37,7 @@ class TestReasoningEngine(unittest.TestCase):
         mock_expand.return_value = ([], [])
         
         engine = ReasoningEngine("twin-123")
-        nodes = await engine._find_relevant_cognitive_nodes("test topic")
+        nodes = asyncio.run(engine._find_relevant_cognitive_nodes("test topic"))
         
         self.assertEqual(len(nodes), 2)
         # Check if type preserved

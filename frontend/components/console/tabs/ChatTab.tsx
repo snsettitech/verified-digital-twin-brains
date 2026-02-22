@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { resolveApiBaseUrl } from '@/lib/api';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -80,10 +80,8 @@ export function ChatTab({ twinId, twinName, onSendMessage }: ChatTabProps) {
         // Trigger Debug Retrieval if enabled
         if (showDebug) {
             setDebugLoading(true);
-            const backendUrl = resolveApiBaseUrl();
-            fetch(`${backendUrl}/debug/retrieval`, {
+            authFetchStandalone('/debug/retrieval', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     query: originalInput,
                     twin_id: twinId,
@@ -113,10 +111,8 @@ export function ChatTab({ twinId, twinName, onSendMessage }: ChatTabProps) {
                 });
             } else {
                 // Default: call backend chat API (streaming)
-                const backendUrl = resolveApiBaseUrl();
-                const res = await fetch(`${backendUrl}/chat/${twinId}`, {
+                const res = await authFetchStandalone(`/chat/${twinId}`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         query: originalInput,
                         mode: 'owner'
@@ -221,8 +217,7 @@ export function ChatTab({ twinId, twinName, onSendMessage }: ChatTabProps) {
         setIsVerifying(true);
         setVerificationResult(null);
         try {
-            const backendUrl = resolveApiBaseUrl();
-            const res = await fetch(`${backendUrl}/verify/twins/${twinId}/run`, {
+            const res = await authFetchStandalone(`/verify/twins/${twinId}/run`, {
                 method: 'POST',
             });
             const data = await res.json();

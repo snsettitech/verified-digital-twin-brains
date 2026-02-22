@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { validateLinkCompileJob, type LinkCompileJob } from '@/lib/types/api.contract';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface IngestionProgressProps {
   twinId: string | null;
@@ -17,7 +18,7 @@ export function IngestionProgress({ twinId, onComplete }: IngestionProgressProps
     if (!twinId) return;
 
     try {
-      const response = await fetch(`/api/persona/link-compile/twins/${twinId}/job`);
+      const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/job`);
       if (!response.ok) {
         if (response.status === 404) {
           // Job not found yet, keep polling
@@ -33,7 +34,7 @@ export function IngestionProgress({ twinId, onComplete }: IngestionProgressProps
         setJob(validatedJob);
         
         // Check completion
-        if (validatedJob.status === 'completed' || validatedJob.status === 'claims_ready') {
+        if (validatedJob.status === 'completed') {
           onComplete();
         } else if (validatedJob.status === 'failed') {
           setError(validatedJob.error_message || 'Processing failed');
@@ -67,7 +68,6 @@ export function IngestionProgress({ twinId, onComplete }: IngestionProgressProps
       case 'compiling_persona':
         return 'Building your persona...';
       case 'completed':
-      case 'claims_ready':
         return 'Processing complete!';
       case 'failed':
         return `Failed: ${job.error_message || 'Unknown error'}`;

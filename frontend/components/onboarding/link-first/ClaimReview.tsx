@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { validateClaimsResponse, type Claim } from '@/lib/types/api.contract';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface ClaimReviewProps {
   twinId: string | null;
@@ -20,7 +21,7 @@ export function ClaimReview({ twinId, onApprove }: ClaimReviewProps) {
 
     const fetchClaims = async () => {
       try {
-        const response = await fetch(`/api/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
+        const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
         if (!response.ok) throw new Error('Failed to fetch claims');
         
         const data = await response.json();
@@ -31,8 +32,8 @@ export function ClaimReview({ twinId, onApprove }: ClaimReviewProps) {
           // Auto-approve high confidence claims
           const autoApproved = new Set(
             validated.claims
-              .filter(c => c.confidence >= 0.7)
-              .map(c => c.id)
+              .filter((c: Claim) => c.confidence >= 0.7)
+              .map((c: Claim) => c.id)
           );
           setApprovedClaims(autoApproved);
         }
@@ -68,7 +69,7 @@ export function ClaimReview({ twinId, onApprove }: ClaimReviewProps) {
     
     // Update claim statuses in backend
     try {
-      await fetch(`/api/twins/${twinId}/transition/clarification-pending`, {
+      await authFetchStandalone(`/twins/${twinId}/transition/clarification-pending`, {
         method: 'POST',
       });
     } catch (e) {

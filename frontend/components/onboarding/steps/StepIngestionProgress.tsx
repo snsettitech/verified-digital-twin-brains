@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface StepIngestionProgressProps {
   twinId: string | null;
@@ -25,7 +26,7 @@ export function StepIngestionProgress({ twinId, onComplete }: StepIngestionProgr
     const fetchStatus = async () => {
       try {
         // Fetch the latest job for this twin
-        const response = await fetch(`/api/persona/link-compile/twins/${twinId}/job`);
+        const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/job`);
         if (!response.ok) return;
         
         const data = await response.json();

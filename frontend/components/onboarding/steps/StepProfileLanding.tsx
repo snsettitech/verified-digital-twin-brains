@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface BioVariant {
   bio_type: string;
@@ -49,14 +50,14 @@ export function StepProfileLanding({
     const fetchData = async () => {
       try {
         // Fetch bios
-        const biosRes = await fetch(`/api/persona/link-compile/twins/${twinId}/bios`);
+        const biosRes = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/bios`);
         if (biosRes.ok) {
           const data = await biosRes.json();
           setBios(data.variants || []);
         }
 
         // Fetch claims summary
-        const claimsRes = await fetch(`/api/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
+        const claimsRes = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
         if (claimsRes.ok) {
           const data = await claimsRes.json();
           const claims = data.claims || [];
@@ -69,21 +70,25 @@ export function StepProfileLanding({
         }
 
         // Fetch twin info
-        const twinRes = await fetch(`/api/twins/${twinId}`);
+        const twinRes = await authFetchStandalone(`/twins/${twinId}`);
         if (twinRes.ok) {
           const twin = await twinRes.json();
           setTwinName(twin.name);
         }
 
         // Fetch sources (from settings or job)
-        const jobRes = await fetch(`/api/persona/link-compile/twins/${twinId}/job`);
+        const jobRes = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/job`);
         if (jobRes.ok) {
           const job = await jobRes.json();
-          // Extract source URLs from job data if available
-          setSources(job.source_files?.map((s: {url?: string; title?: string}) => ({
+          const sourceFiles = (job.source_files || []).map((s: { url?: string; title?: string; filename?: string }) => ({
             url: s.url || '',
-            title: s.title || 'Source'
-          })) || []);
+            title: s.title || s.filename || 'Source',
+          }));
+          const sourceUrls = (job.source_urls || []).map((url: string) => ({
+            url,
+            title: url,
+          }));
+          setSources([...sourceFiles, ...sourceUrls]);
         }
       } catch (e) {
         console.error('Failed to load profile:', e);
@@ -101,9 +106,8 @@ export function StepProfileLanding({
   const handleActivate = async () => {
     setActivating(true);
     try {
-      const response = await fetch(`/api/twins/${twinId}/activate`, {
+      const response = await authFetchStandalone(`/twins/${twinId}/activate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ final_name: twinName }),
       });
       

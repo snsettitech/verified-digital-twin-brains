@@ -1,18 +1,14 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTwin } from '@/lib/context/TwinContext';
-import { createClient } from '@/lib/supabase/client';
-import { resolveApiBaseUrl } from '@/lib/api';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 export default function SharePage() {
   const { activeTwin, refreshTwins } = useTwin();
   const [isUpdating, setIsUpdating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrVisible, setQrVisible] = useState(false);
-
-  const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
-  const supabase = createClient();
 
   const settings = (activeTwin?.settings || {}) as any;
   const widgetSettings = settings.widget_settings || {};
@@ -42,11 +38,8 @@ export default function SharePage() {
       // We use the patch endpoint to update settings
       const newStatus = !isPublic;
 
-      const response = await fetch(`${apiBaseUrl}/twins/${activeTwin.id}`, {
+      const response = await authFetchStandalone(`/twins/${activeTwin.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           is_public: newStatus
         })

@@ -19,7 +19,7 @@ import time
 from typing import List, Dict, Any, Optional, Tuple
 from functools import lru_cache
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from modules.clients import get_openai_client
 from modules.langfuse_sdk import observe, langfuse_context
@@ -123,7 +123,7 @@ class QueryRewriteCache:
             result, timestamp = self._cache[key]
             if time.time() - timestamp < self.ttl_seconds:
                 # Return copy with cache flag
-                cached_result = result.copy()
+                cached_result = result.model_copy()
                 cached_result.from_cache = True
                 return cached_result
             else:
@@ -209,7 +209,7 @@ class ConversationalQueryRewriter:
         Returns:
             QueryRewriteResult with standalone query and metadata
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         if current_query is None:
             current_query = ""
         current_query = str(current_query)
@@ -223,7 +223,7 @@ class ConversationalQueryRewriter:
                 rewrite_applied=False,
                 rewrite_confidence=1.0,
                 reasoning="Empty query",
-                latency_ms=(datetime.utcnow() - start_time).total_seconds() * 1000,
+                latency_ms=(datetime.now(timezone.utc) - start_time).total_seconds() * 1000,
             )
         
         # Check cache first
@@ -245,7 +245,7 @@ class ConversationalQueryRewriter:
                 rewrite_applied=False,
                 rewrite_confidence=1.0,
                 reasoning="Query is already standalone",
-                latency_ms=(datetime.utcnow() - start_time).total_seconds() * 1000,
+                latency_ms=(datetime.now(timezone.utc) - start_time).total_seconds() * 1000,
             )
             self._log_metrics(result, cached=False)
             return result
@@ -277,15 +277,26 @@ class ConversationalQueryRewriter:
             )
         
         # Calculate latency
-        latency_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
+        latency_ms = (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
         llm_result.latency_ms = latency_ms
         
-        # Apply confidence threshold
+        # Apply confidence threshold. Keep deterministic pronoun resolution fallback
+        # if it materially changed the query, even when confidence is low.
         if llm_result.rewrite_confidence < self.min_confidence:
-            print(f"[QueryRewriter] Confidence {llm_result.rewrite_confidence:.2f} below threshold, using original")
-            llm_result.standalone_query = current_query
-            llm_result.rewrite_applied = False
-            llm_result.reasoning += " (confidence too low, using original)"
+            query_lower = current_query.lower()
+            pronoun_hits = sum(
+                1 for pattern in PRONOUN_PATTERNS.values() if re.search(pattern, query_lower)
+            )
+            has_plural_pronoun = bool(re.search(r"\b(they|them|their|these|those)\b", query_lower))
+            if rule_based != current_query and (pronoun_hits >= 2 or has_plural_pronoun):
+                llm_result.standalone_query = rule_based
+                llm_result.rewrite_applied = True
+                llm_result.reasoning += " (low confidence; kept rule-based pronoun resolution)"
+            else:
+                print(f"[QueryRewriter] Confidence {llm_result.rewrite_confidence:.2f} below threshold, using original")
+                llm_result.standalone_query = current_query
+                llm_result.rewrite_applied = False
+                llm_result.reasoning += " (confidence too low, using original)"
         
         # Cache the result
         if llm_result.rewrite_applied:
@@ -416,6 +427,14 @@ class ConversationalQueryRewriter:
                     flags=re.IGNORECASE,
                     count=1
                 )
+            # Plural pronouns map to a secondary entity if available, otherwise primary.
+            plural_entity = last_entities[1] if len(last_entities) > 1 else primary_entity
+            if re.search(r"\bthey\b", query_lower):
+                resolved = re.sub(r"\bthey\b", plural_entity, resolved, flags=re.IGNORECASE)
+            if re.search(r"\bthem\b", query_lower):
+                resolved = re.sub(r"\bthem\b", plural_entity, resolved, flags=re.IGNORECASE)
+            if re.search(r"\btheir\b", query_lower):
+                resolved = re.sub(r"\btheir\b", f"{plural_entity}'s", resolved, flags=re.IGNORECASE)
         
         return resolved
     

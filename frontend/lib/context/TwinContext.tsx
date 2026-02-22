@@ -589,6 +589,7 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
                 owner_id: 'e2e-user',
                 tenant_id: 'e2e-tenant',
                 specialization: 'vanilla',
+                status: 'active',
                 is_active: true,
                 settings: {},
                 created_at: new Date().toISOString(),

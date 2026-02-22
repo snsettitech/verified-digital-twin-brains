@@ -330,7 +330,7 @@ class CommunicationPatterns(BaseModel):
         ],
         description="Phrases this persona should NOT use"
     )
-    brevity_preference: Literal["concise", "moderate", "detailed"] = Field(
+    brevity_preference: Literal["concise", "moderate", "balanced", "detailed"] = Field(
         default="moderate",
         description="Default verbosity level"
     )

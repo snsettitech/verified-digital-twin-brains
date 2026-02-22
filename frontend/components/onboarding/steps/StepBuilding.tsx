@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface StepBuildingProps {
   twinId: string | null;
@@ -32,7 +33,7 @@ export function StepBuilding({ twinId, onComplete }: StepBuildingProps) {
 
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/persona/link-compile/twins/${twinId}/job`);
+        const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/job`);
         if (!response.ok) return;
         
         const data = await response.json();

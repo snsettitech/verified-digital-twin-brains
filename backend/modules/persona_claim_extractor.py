@@ -92,9 +92,9 @@ EXTRACTION CRITERIA:
 - uncertain: Low confidence or ambiguous
 
 Respond with JSON:
-{
+{{
   "claims": [
-    {
+    {{
       "claim_text": "Clean, standalone claim",
       "claim_type": "preference|belief|heuristic|value|experience|boundary|uncertain",
       "quote": "Exact text from source",
@@ -102,10 +102,10 @@ Respond with JSON:
       "span_end": 50,
       "confidence": 0.9,
       "time_scope": "2020-2022"  // Optional temporal reference
-    }
+    }}
   ],
   "rejected_fragments": ["text that couldn't be claimed"]
-}
+}}
 
 SOURCE CONTENT:
 {content}

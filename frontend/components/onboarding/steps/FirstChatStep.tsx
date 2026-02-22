@@ -139,7 +139,6 @@ Let's get started!`,
         }, 1500);
 
         return () => clearTimeout(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Scroll when messages change

@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request, Response
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
 
 # Import our dynamic CORS middleware
 from modules.cors_middleware import create_cors_middleware, get_allowed_origins
@@ -29,6 +30,7 @@ from routers import (
     jobs,
     til,
     feedback,
+    access_groups_compat,
     audio,
     enhanced_ingestion,
 
@@ -54,6 +56,7 @@ from routers import (
     cost_tracking,
     synthetic_monitoring,
     twin_runtime,
+    persona_link_compile,
 )
 from modules.specializations import get_specialization
 
@@ -83,7 +86,36 @@ def print_feature_flag_summary():
     print("-" * 60)
     sys.stdout.flush()
 
-app = FastAPI(title="Verified Digital Twin Brain API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("READY: Event loop running, accepting traffic.")
+    print(f"DEBUG: Listening for Probes on: http://0.0.0.0:{os.getenv('PORT', '8000')}")
+
+    # PHASE 1 FIX: Clear namespace cache on startup to prevent stale creator_id resolution
+    try:
+        from modules.delphi_namespace import clear_creator_namespace_cache
+        clear_creator_namespace_cache()
+        print("[Startup] Namespace cache cleared")
+    except Exception as e:
+        print(f"[Startup] Warning: Could not clear namespace cache: {e}")
+
+    # RERANKING IMPROVEMENTS: Warm up reranking models on startup
+    try:
+        from modules.retrieval import warmup_rerankers
+        warmup_rerankers()
+    except ValueError as e:
+        # Strict mode error - re-raise to fail startup
+        print(f"[Startup] CRITICAL: {e}")
+        raise
+    except Exception as e:
+        # Non-critical error - log but continue
+        print(f"[Startup] Warning: Reranker warmup failed: {e}")
+
+    sys.stdout.flush()
+    yield
+
+
+app = FastAPI(title="Verified Digital Twin Brain API", lifespan=lifespan)
 APP_STARTED_AT = time.time()
 
 # Add Dynamic CORS middleware with wildcard pattern support
@@ -123,6 +155,7 @@ else:
     print("[INFO] Realtime ingestion routes disabled (ENABLE_REALTIME_INGESTION=false)")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
+app.include_router(persona_link_compile.router)
 
 app.include_router(actions.router)
 app.include_router(knowledge.router)
@@ -137,6 +170,7 @@ app.include_router(metrics.router)
 app.include_router(jobs.router)
 app.include_router(til.router)
 app.include_router(feedback.router)
+app.include_router(access_groups_compat.router)
 app.include_router(audio.router)
 if ENHANCED_INGESTION_ENABLED:
     app.include_router(enhanced_ingestion.router)
@@ -411,33 +445,6 @@ print_startup_banner()
 validate_required_env_vars()
 print(f"FastAPI initialization complete. Bound to PORT: {os.getenv('PORT', '8000')}")
 sys.stdout.flush()
-
-@app.on_event("startup")
-async def startup_event():
-    print("READY: Event loop running, accepting traffic.")
-    print(f"DEBUG: Listening for Probes on: http://0.0.0.0:{os.getenv('PORT', '8000')}")
-    
-    # PHASE 1 FIX: Clear namespace cache on startup to prevent stale creator_id resolution
-    try:
-        from modules.delphi_namespace import clear_creator_namespace_cache
-        clear_creator_namespace_cache()
-        print("[Startup] Namespace cache cleared")
-    except Exception as e:
-        print(f"[Startup] Warning: Could not clear namespace cache: {e}")
-    
-    # RERANKING IMPROVEMENTS: Warm up reranking models on startup
-    try:
-        from modules.retrieval import warmup_rerankers
-        warmup_rerankers()
-    except ValueError as e:
-        # Strict mode error - re-raise to fail startup
-        print(f"[Startup] ❌ CRITICAL: {e}")
-        raise
-    except Exception as e:
-        # Non-critical error - log but continue
-        print(f"[Startup] Warning: Reranker warmup failed: {e}")
-    
-    sys.stdout.flush()
 
 
 # Startup Logic

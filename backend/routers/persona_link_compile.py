@@ -5,12 +5,13 @@ Phase 1-5 API Router: Link-First Persona Compiler endpoints.
 """
 
 import os
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+import tempfile
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-from modules.auth_guard import get_current_user
+from modules.auth_guard import get_current_user, verify_twin_ownership
 from modules.observability import supabase
 from modules.governance import AuditLogger
 
@@ -35,12 +36,14 @@ router = APIRouter(tags=["persona-link-compile"])
 
 class ModeCUrlRequest(BaseModel):
     """Mode C: Public web fetch request."""
-    urls: List[str] = Field(..., min_items=1, max_items=10)
+    twin_id: str
+    urls: List[str] = Field(..., min_length=1, max_length=10)
     allowlisted_domains: Optional[List[str]] = Field(default=None)
 
 
 class ModeBPasteRequest(BaseModel):
     """Mode B: Paste/import request."""
+    twin_id: str
     content: str = Field(..., max_length=100000)  # 100KB limit
     title: Optional[str] = "Pasted Content"
     source_context: Optional[str] = None  # e.g., "Private Slack"
@@ -72,13 +75,35 @@ class ClaimResponse(BaseModel):
     source_id: str
 
 
+class ActivateTwinRequest(BaseModel):
+    final_name: Optional[str] = None
+
+
+class ClaimVerifyRequest(BaseModel):
+    verified: bool = True
+
+
+def _require_authenticated_user(user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not isinstance(user, dict) or not user.get("user_id"):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+def _set_twin_status(twin_id: str, status: str) -> None:
+    supabase.table("twins").update({
+        "status": status,
+        "updated_at": datetime.utcnow().isoformat(),
+    }).eq("id", twin_id).execute()
+
+
 # =============================================================================
 # Phase 1: Ingestion Modes
 # =============================================================================
 
 @router.post("/persona/link-compile/jobs/mode-a")
 async def create_mode_a_job(
-    twin_id: str,
+    background_tasks: BackgroundTasks,
+    twin_id: str = Form(...),
     files: List[UploadFile] = File(...),
     user=Depends(get_current_user),
 ):
@@ -87,7 +112,9 @@ async def create_mode_a_job(
     
     Upload export files for processing. Max 50MB per file.
     """
+    user = _require_authenticated_user(user)
     user_id = user.get("user_id")
+    verify_twin_ownership(twin_id, user)
     
     # Validate files
     if not files:
@@ -96,24 +123,62 @@ async def create_mode_a_job(
     if len(files) > 10:
         raise HTTPException(400, "Max 10 files per upload")
     
+    # Parse uploaded files into text snippets for downstream processing.
+    source_files = []
+    for uploaded_file in files:
+        file_bytes = await uploaded_file.read()
+        size_bytes = len(file_bytes)
+        if size_bytes > 50 * 1024 * 1024:
+            raise HTTPException(400, f"File too large: {uploaded_file.filename} (max 50MB)")
+
+        extracted_text = ""
+        temp_path = None
+        try:
+            suffix = os.path.splitext(uploaded_file.filename or "")[1] or ".txt"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                temp_file.write(file_bytes)
+                temp_path = temp_file.name
+
+            parsed_items = parse_export_file(temp_path)
+            extracted_text = "\n\n".join(
+                str(item.get("content") or "").strip()
+                for item in parsed_items
+                if str(item.get("content") or "").strip()
+            )
+            if not extracted_text:
+                extracted_text = file_bytes.decode("utf-8", errors="ignore")
+        except Exception:
+            extracted_text = file_bytes.decode("utf-8", errors="ignore")
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
+
+        source_files.append({
+            "filename": uploaded_file.filename,
+            "size": size_bytes,
+            "type": uploaded_file.content_type,
+            # Keep payload bounded so row size doesn't explode.
+            "content": extracted_text[:20000],
+        })
+
     # Create job record
     job_data = {
         "twin_id": twin_id,
         "created_by": user_id,
         "mode": "A",
         "status": "pending",
-        "source_files": [
-            {"filename": f.filename, "size": f.size if hasattr(f, 'size') else 0, "type": f.content_type}
-            for f in files
-        ],
+        "source_files": source_files,
         "total_sources": len(files),
     }
     
     result = supabase.table("link_compile_jobs").insert(job_data).execute()
     job_id = result.data[0]["id"]
     
-    # Process files asynchronously (in production, use background tasks)
-    # For now, return job ID for polling
+    _set_twin_status(twin_id, "ingesting")
+    background_tasks.add_task(_run_job_background, job_id)
     
     return LinkCompileJobResponse(
         job_id=job_id,
@@ -125,7 +190,7 @@ async def create_mode_a_job(
 
 @router.post("/persona/link-compile/jobs/mode-b")
 async def create_mode_b_job(
-    twin_id: str,
+    background_tasks: BackgroundTasks,
     request: ModeBPasteRequest,
     user=Depends(get_current_user),
 ):
@@ -134,23 +199,31 @@ async def create_mode_b_job(
     
     Paste text or upload private documents.
     """
+    user = _require_authenticated_user(user)
     user_id = user.get("user_id")
+    twin_id = request.twin_id
+    verify_twin_ownership(twin_id, user)
     
     # Create job record
     job_data = {
         "twin_id": twin_id,
         "created_by": user_id,
         "mode": "B",
-        "status": "processing",
-        "source_files": [{"type": "pasted", "title": request.title}],
+        "status": "pending",
+        "source_files": [{
+            "type": "pasted",
+            "title": request.title,
+            "source_context": request.source_context,
+            "content": request.content,
+        }],
         "total_sources": 1,
     }
     
     result = supabase.table("link_compile_jobs").insert(job_data).execute()
     job_id = result.data[0]["id"]
     
-    # Process immediately (text is small)
-    # In production, this should be async
+    _set_twin_status(twin_id, "ingesting")
+    background_tasks.add_task(_run_job_background, job_id)
     
     return LinkCompileJobResponse(
         job_id=job_id,
@@ -162,7 +235,7 @@ async def create_mode_b_job(
 
 @router.post("/persona/link-compile/jobs/mode-c")
 async def create_mode_c_job(
-    twin_id: str,
+    background_tasks: BackgroundTasks,
     request: ModeCUrlRequest,
     user=Depends(get_current_user),
 ):
@@ -172,7 +245,10 @@ async def create_mode_c_job(
     Fetch publicly crawlable URLs. Enforces robots.txt and domain allowlist.
     LinkedIn and X/Twitter are BLOCKED - use Mode A instead.
     """
+    user = _require_authenticated_user(user)
     user_id = user.get("user_id")
+    twin_id = request.twin_id
+    verify_twin_ownership(twin_id, user)
     
     # Validate URLs
     allowed_urls = []
@@ -211,10 +287,12 @@ async def create_mode_c_job(
     
     result = supabase.table("link_compile_jobs").insert(job_data).execute()
     job_id = result.data[0]["id"]
+    _set_twin_status(twin_id, "ingesting")
+    background_tasks.add_task(_run_job_background, job_id)
     
     return LinkCompileJobResponse(
         job_id=job_id,
-        status="pending",
+        status="processing",
         mode="C",
         message=f"{len(allowed_urls)} URLs accepted. {len(blocked_urls)} blocked.",
     )
@@ -230,24 +308,19 @@ async def get_job_status(
     user=Depends(get_current_user),
 ):
     """Get status of a link compile job."""
+    user = _require_authenticated_user(user)
     result = supabase.table("link_compile_jobs").select("*").eq("id", job_id).single().execute()
     
     if not result.data:
         raise HTTPException(404, "Job not found")
+
+    verify_twin_ownership(result.data["twin_id"], user)
     
     return result.data
 
 
-@router.post("/persona/link-compile/jobs/{job_id}/process")
-async def process_job(
-    job_id: str,
-    user=Depends(get_current_user),
-):
-    """
-    Process a pending job (extract claims, compile persona).
-    
-    In production, this is triggered by background workers.
-    """
+async def _process_job_impl(job_id: str):
+    """Internal job processor used by both API endpoint and background tasks."""
     # Fetch job
     job_result = supabase.table("link_compile_jobs").select("*").eq("id", job_id).single().execute()
     
@@ -263,29 +336,37 @@ async def process_job(
         "status": "processing",
         "started_at": datetime.utcnow().isoformat(),
     }).eq("id", job_id).execute()
-    
+    _set_twin_status(twin_id, "ingesting")
+
     try:
-        # Phase 1: Ingest sources
         chunks = []
-        
+
         if mode == "A":
-            # Mode A: Process uploaded files
-            # In production, files are retrieved from storage
-            pass
+            source_files = job.get("source_files", []) or []
+            for idx, source in enumerate(source_files):
+                content = str(source.get("content") or "").strip()
+                if not content:
+                    continue
+                source_id = f"upload_{job_id}_{idx}"
+                await process_and_index_text(
+                    source_id=source_id,
+                    twin_id=twin_id,
+                    text=content,
+                )
+                chunks.append({"text": content, "source_id": source_id})
         
         elif mode == "B":
-            # Mode B: Process pasted content
             source_id = f"paste_{job_id}"
-            # Create source, chunk it
-            await process_and_index_text(
-                source_id=source_id,
-                twin_id=twin_id,
-                text=job.get("source_files", [{}])[0].get("content", ""),
-            )
-            chunks = [{"text": job.get("source_files", [{}])[0].get("content", ""), "source_id": source_id}]
+            content = str(job.get("source_files", [{}])[0].get("content", "")).strip()
+            if content:
+                await process_and_index_text(
+                    source_id=source_id,
+                    twin_id=twin_id,
+                    text=content,
+                )
+                chunks = [{"text": content, "source_id": source_id}]
         
         elif mode == "C":
-            # Mode C: Fetch URLs
             urls = job.get("source_urls", [])
             for url in urls:
                 try:
@@ -293,6 +374,9 @@ async def process_job(
                     chunks.append({"source_id": source_id, "text": f"Content from {url}"})
                 except Exception as e:
                     print(f"[ModeC] Failed to fetch {url}: {e}")
+
+        if not chunks:
+            raise ValueError("No processable content found in submitted sources")
         
         # Update progress
         supabase.table("link_compile_jobs").update({
@@ -329,6 +413,7 @@ async def process_job(
             "result_claim_ids": extraction_result["claim_ids"],
             "result_bio_variants": {k: v.bio_text for k, v in bio_result.get("variants", {}).items()},
         }).eq("id", job_id).execute()
+        _set_twin_status(twin_id, "claims_ready")
         
         return {
             "job_id": job_id,
@@ -348,6 +433,32 @@ async def process_job(
         raise HTTPException(500, f"Processing failed: {e}")
 
 
+async def _run_job_background(job_id: str) -> None:
+    try:
+        await _process_job_impl(job_id)
+    except Exception as exc:
+        print(f"[LinkCompile] Background processing failed for {job_id}: {exc}")
+
+
+@router.post("/persona/link-compile/jobs/{job_id}/process")
+async def process_job(
+    job_id: str,
+    user=Depends(get_current_user),
+):
+    """
+    Process a pending job (extract claims, compile persona).
+    
+    In production, this is triggered by background workers.
+    """
+    user = _require_authenticated_user(user)
+    job_result = supabase.table("link_compile_jobs").select("twin_id").eq("id", job_id).single().execute()
+    if not job_result.data:
+        raise HTTPException(404, "Job not found")
+    verify_twin_ownership(job_result.data["twin_id"], user)
+
+    return await _process_job_impl(job_id)
+
+
 # =============================================================================
 # Phase 3: Clarification Interview
 # =============================================================================
@@ -360,6 +471,9 @@ async def get_clarification_questions(
     """
     Get clarification questions for low-confidence Layer 2/3 items.
     """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
     compiler = PersonaFromClaimsCompiler(supabase)
     result = await compiler.compile_persona(twin_id)
     
@@ -380,6 +494,9 @@ async def submit_clarification_answer(
     Submit answer to a clarification question.
     Creates owner_direct claim and updates persona.
     """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
     result = await handle_clarification_answer(
         twin_id=twin_id,
         question=request.question,
@@ -400,6 +517,9 @@ async def get_bio_variants(
     user=Depends(get_current_user),
 ):
     """Get all generated bio variants for a twin."""
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
     result = supabase.table("persona_bio_variants").select("*").eq("twin_id", twin_id).execute()
     
     return {
@@ -416,6 +536,9 @@ async def get_claims(
     user=Depends(get_current_user),
 ):
     """Get persona claims for a twin."""
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
     query = (
         supabase.table("persona_claims")
         .select("*")
@@ -436,6 +559,48 @@ async def get_claims(
     }
 
 
+@router.post("/persona/link-compile/twins/{twin_id}/claims/{claim_id}/verify")
+async def verify_claim(
+    twin_id: str,
+    claim_id: str,
+    request: Optional[ClaimVerifyRequest] = None,
+    user=Depends(get_current_user),
+):
+    """
+    Compatibility endpoint for claim-level owner verification in claim-review UIs.
+    """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
+    is_verified = True if request is None else bool(request.verified)
+    verification_status = "confirmed" if is_verified else "rejected"
+    authority = "owner_direct" if is_verified else "extracted"
+
+    result = (
+        supabase.table("persona_claims")
+        .update(
+            {
+                "verification_status": verification_status,
+                "authority": authority,
+                "verified_at": datetime.utcnow().isoformat(),
+            }
+        )
+        .eq("id", claim_id)
+        .eq("twin_id", twin_id)
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(404, "Claim not found")
+
+    return {
+        "twin_id": twin_id,
+        "claim_id": claim_id,
+        "verification_status": verification_status,
+        "authority": authority,
+    }
+
+
 # =============================================================================
 # Twin Job Status (for polling)
 # =============================================================================
@@ -449,6 +614,9 @@ async def get_twin_link_compile_job(
     Get the latest link-compile job for a twin.
     Used by frontend for polling during ingestion.
     """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
     result = (
         supabase.table("link_compile_jobs")
         .select("*")
@@ -475,6 +643,8 @@ async def get_twin_link_compile_job(
         "job_id": job["id"],
         "status": job["status"],
         "mode": job["mode"],
+        "source_urls": job.get("source_urls", []),
+        "source_files": job.get("source_files", []),
         "total_sources": job.get("total_sources", 0),
         "processed_sources": job.get("processed_sources", 0),
         "extracted_claims": job.get("extracted_claims") or len(claims_result.data or []),
@@ -497,7 +667,7 @@ async def transition_to_clarification_pending(
     Transition twin from 'claims_ready' to 'clarification_pending'.
     Called after user reviews and approves claims.
     """
-    from modules.auth_guard import verify_twin_ownership
+    user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
     
     # Update twin status
@@ -530,7 +700,7 @@ async def transition_to_persona_built(
     Transition twin from 'clarification_pending' to 'persona_built'.
     Called after user completes clarification questions.
     """
-    from modules.auth_guard import verify_twin_ownership
+    user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
     
     # Update twin status
@@ -554,9 +724,51 @@ async def transition_to_persona_built(
     return {"twin_id": twin_id, "status": "persona_built"}
 
 
+@router.post("/twins/{twin_id}/transition/{target_state}")
+async def transition_twin_state(
+    twin_id: str,
+    target_state: str,
+    user=Depends(get_current_user),
+):
+    """
+    Compatibility endpoint for generic transition calls from older clients.
+    """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
+    state_map = {
+        "clarification-pending": "clarification_pending",
+        "clarification_pending": "clarification_pending",
+        "persona-built": "persona_built",
+        "persona_built": "persona_built",
+    }
+    normalized = (target_state or "").strip().lower()
+    status = state_map.get(normalized)
+    if not status:
+        raise HTTPException(400, f"Unsupported target_state: {target_state}")
+
+    result = (
+        supabase.table("twins")
+        .update({"status": status, "updated_at": datetime.utcnow().isoformat()})
+        .eq("id", twin_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(404, "Twin not found")
+
+    AuditLogger.log(
+        event_type="twin_status_transition",
+        twin_id=twin_id,
+        details={"to_status": status, "target_state": target_state},
+    )
+
+    return {"twin_id": twin_id, "status": status}
+
+
 @router.post("/twins/{twin_id}/activate")
 async def activate_twin(
     twin_id: str,
+    request: Optional[ActivateTwinRequest] = None,
     final_name: Optional[str] = None,
     user=Depends(get_current_user),
 ):
@@ -564,9 +776,10 @@ async def activate_twin(
     Activate a link-first twin by setting status to 'active'.
     Creates the active persona spec from compiled data.
     """
-    from modules.auth_guard import verify_twin_ownership
     from modules.persona_spec_store_v2 import create_persona_spec_v2
+    user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
+    resolved_final_name = request.final_name if request and request.final_name is not None else final_name
     
     # Get twin data
     twin_result = supabase.table("twins").select("*").eq("id", twin_id).single().execute()
@@ -596,8 +809,8 @@ async def activate_twin(
     
     # Update twin name if provided
     update_data = {"status": "active", "updated_at": datetime.utcnow().isoformat()}
-    if final_name:
-        update_data["name"] = final_name
+    if resolved_final_name:
+        update_data["name"] = resolved_final_name
     
     result = supabase.table("twins").update(update_data).eq("id", twin_id).execute()
     
@@ -623,13 +836,13 @@ async def activate_twin(
     AuditLogger.log(
         event_type="twin_activated",
         twin_id=twin_id,
-        details={"mode": "link_first", "final_name": final_name},
+        details={"mode": "link_first", "final_name": resolved_final_name},
     )
     
     return {
         "twin_id": twin_id,
         "status": "active",
-        "name": final_name or twin.get("name"),
+        "name": resolved_final_name or twin.get("name"),
         "persona_spec_id": persona_record.get("id") if persona_record else None,
     }
 
@@ -658,6 +871,7 @@ async def suggest_links(
     Returns ranked candidates with confidence scores and match signals.
     User must explicitly confirm which links are actually them.
     """
+    _require_authenticated_user(user)
     from modules.robots_checker import check_url_fetchable
     
     # Build search query
@@ -728,6 +942,7 @@ async def validate_url(
     Validate if a URL can be fetched (Mode C).
     Returns detailed reason if blocked.
     """
+    _require_authenticated_user(user)
     result = await check_url_fetchable(url)
     
     return {

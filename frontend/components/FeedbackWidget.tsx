@@ -7,6 +7,7 @@
  */
 
 import React, { useState } from 'react';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface FeedbackWidgetProps {
     traceId: string;
@@ -58,9 +59,8 @@ const FeedbackWidget: React.FC<FeedbackWidgetProps> = ({
 
         setIsSubmitting(true);
         try {
-            const response = await fetch(`/api/feedback/${traceId}`, {
+            const response = await authFetchStandalone(`/feedback/${encodeURIComponent(traceId)}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     score: selectedScore,
                     reason: selectedReason,

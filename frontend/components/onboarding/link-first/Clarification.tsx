@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface Question {
   target_item_id: string;
@@ -26,7 +27,7 @@ export function Clarification({ twinId, onComplete }: ClarificationProps) {
 
     const fetchQuestions = async () => {
       try {
-        const response = await fetch(`/api/persona/link-compile/twins/${twinId}/clarification-questions`);
+        const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/clarification-questions`);
         if (!response.ok) throw new Error('Failed to fetch questions');
         
         const data = await response.json();
@@ -54,9 +55,8 @@ export function Clarification({ twinId, onComplete }: ClarificationProps) {
       // Submit each answer
       for (const question of questions) {
         if (answers[question.target_item_id]?.trim()) {
-          await fetch(`/api/persona/link-compile/twins/${twinId}/clarification-answers`, {
+          await authFetchStandalone(`/persona/link-compile/twins/${twinId}/clarification-answers`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               question_id: question.target_item_id,
               question: question,
@@ -67,7 +67,7 @@ export function Clarification({ twinId, onComplete }: ClarificationProps) {
       }
 
       // Transition to persona_built
-      await fetch(`/api/twins/${twinId}/transition/persona-built`, {
+      await authFetchStandalone(`/twins/${twinId}/transition/persona-built`, {
         method: 'POST',
       });
 

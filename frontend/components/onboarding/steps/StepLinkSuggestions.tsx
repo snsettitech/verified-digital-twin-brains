@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface LinkCandidate {
   id: string;
@@ -47,7 +48,7 @@ export function StepLinkSuggestions({
           ...(role && { role })
         });
         
-        const response = await fetch(`/api/persona/link-compile/suggest?${params}`);
+        const response = await authFetchStandalone(`/persona/link-compile/suggest?${params}`);
         if (!response.ok) throw new Error('Failed to fetch suggestions');
         
         const data = await response.json();

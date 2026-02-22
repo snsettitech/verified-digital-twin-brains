@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface LinkSubmissionProps {
   twinId: string | null;
@@ -17,9 +18,8 @@ export function LinkSubmission({ twinId, onSubmit }: LinkSubmissionProps) {
     if (!url.trim() || !twinId) return;
     
     try {
-      const response = await fetch('/api/persona/link-compile/validate-url', {
+      const response = await authFetchStandalone('/persona/link-compile/validate-url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url }),
       });
       
@@ -65,9 +65,8 @@ export function LinkSubmission({ twinId, onSubmit }: LinkSubmissionProps) {
     setIsSubmitting(true);
     
     try {
-      const response = await fetch('/api/persona/link-compile/jobs/mode-c', {
+      const response = await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           twin_id: twinId,
           urls: validUrls,
