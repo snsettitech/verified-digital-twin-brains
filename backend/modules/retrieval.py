@@ -42,8 +42,16 @@ from modules.conversation_context import (
     ConversationContext
 )
 
-# Feature flag for conversation context
+# Phase 3: Abstractive summarization
+from modules.abstractive_summarizer import (
+    generate_abstractive_summary,
+    should_use_abstractive_summary,
+    SummaryResult
+)
+
+# Feature flags
 RETRIEVAL_CONVERSATION_CONTEXT_ENABLED = os.getenv("RETRIEVAL_CONVERSATION_CONTEXT_ENABLED", "true").lower() == "true"
+RETRIEVAL_ABSTRACTIVE_SUMMARY_ENABLED = os.getenv("RETRIEVAL_ABSTRACTIVE_SUMMARY_ENABLED", "true").lower() == "true"
 
 # PHASE 4: Structured logging for observability
 logger = logging.getLogger(__name__)
@@ -2720,6 +2728,25 @@ async def retrieve_context_with_intent(
         if conv_context and contexts:
             contexts = boost_by_conversation_context(contexts, conv_context)
         
+        # Step 6: Abstractive summarization (Phase 3)
+        summary_result = None
+        if (RETRIEVAL_ABSTRACTIVE_SUMMARY_ENABLED and 
+            contexts and 
+            await should_use_abstractive_summary(query, contexts, intent.intent_type.value if intent else None)):
+            
+            try:
+                summary_start = time.time()
+                summary_result = await generate_abstractive_summary(
+                    query=query,
+                    chunks=contexts,
+                    max_tokens=300,
+                    temperature=0.4
+                )
+                summary_time = time.time() - summary_start
+                print(f"[Abstractive Summary] Generated in {summary_time:.2f}s (quality: {summary_result.synthesis_quality:.2f})")
+            except Exception as e:
+                print(f"[Abstractive Summary] Failed: {e}, falling back to extractive")
+        
         total_time = time.time() - start_time
         
         # Log metrics
@@ -2742,6 +2769,24 @@ async def retrieve_context_with_intent(
                 "pronoun_mappings": conv_context.pronoun_mappings,
                 "coreference_time": coref_time,
             }
+        
+        # Add summary info if generated
+        if summary_result:
+            metadata["abstractive_summary"] = {
+                "summary": summary_result.summary,
+                "key_points": summary_result.key_points,
+                "citations": summary_result.citations,
+                "synthesis_quality": summary_result.synthesis_quality,
+            }
+            # Add summary to contexts for agent to use
+            contexts.append({
+                "text": summary_result.summary,
+                "source_id": "abstractive_summary",
+                "score": 1.0,
+                "is_synthesized": True,
+                "synthesis_quality": summary_result.synthesis_quality,
+                "key_points": summary_result.key_points,
+            })
         
         return {
             "contexts": contexts,
