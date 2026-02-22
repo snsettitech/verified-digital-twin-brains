@@ -215,47 +215,113 @@ ALTER TABLE persona_bio_variants ENABLE ROW LEVEL SECURITY;
 -- RLS Policies
 -- =============================================================================
 
--- Persona Claims: Users can only see claims for twins they own
+-- Re-runnable policy setup
+DROP POLICY IF EXISTS persona_claims_tenant_isolation ON persona_claims;
+DROP POLICY IF EXISTS persona_claim_links_tenant_isolation ON persona_claim_links;
+DROP POLICY IF EXISTS link_compile_jobs_tenant_isolation ON link_compile_jobs;
+DROP POLICY IF EXISTS persona_bio_variants_tenant_isolation ON persona_bio_variants;
+
+-- Persona Claims: users can only access claims for twins in their tenant
 CREATE POLICY persona_claims_tenant_isolation ON persona_claims
     FOR ALL
     USING (
-        twin_id IN (
-            SELECT id FROM twins WHERE tenant_id IN (
-                SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-            )
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = persona_claims.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = persona_claims.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
         )
     );
 
--- Claim Links: Same as claims
+-- Claim Links: same tenant guard as claims
 CREATE POLICY persona_claim_links_tenant_isolation ON persona_claim_links
     FOR ALL
     USING (
-        twin_id IN (
-            SELECT id FROM twins WHERE tenant_id IN (
-                SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-            )
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = persona_claim_links.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = persona_claim_links.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
         )
     );
 
--- Link Compile Jobs: Tenant isolation
+-- Link Compile Jobs: tenant isolation through twin ownership
 CREATE POLICY link_compile_jobs_tenant_isolation ON link_compile_jobs
     FOR ALL
     USING (
-        twin_id IN (
-            SELECT id FROM twins WHERE tenant_id IN (
-                SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-            )
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = link_compile_jobs.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = link_compile_jobs.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
         )
     );
 
--- Bio Variants: Tenant isolation
+-- Bio Variants: tenant isolation through twin ownership
 CREATE POLICY persona_bio_variants_tenant_isolation ON persona_bio_variants
     FOR ALL
     USING (
-        twin_id IN (
-            SELECT id FROM twins WHERE tenant_id IN (
-                SELECT tenant_id FROM tenant_members WHERE user_id = auth.uid()
-            )
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = persona_bio_variants.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
+        )
+    )
+    WITH CHECK (
+        EXISTS (
+            SELECT 1
+            FROM twins t
+            WHERE t.id = persona_bio_variants.twin_id
+              AND t.tenant_id = COALESCE(
+                  (SELECT u.tenant_id FROM users u WHERE u.id = auth.uid()),
+                  NULLIF(auth.jwt() ->> 'tenant_id', '')::uuid
+              )
         )
     );
 

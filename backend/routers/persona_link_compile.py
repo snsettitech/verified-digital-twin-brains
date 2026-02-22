@@ -1008,10 +1008,17 @@ async def suggest_links(
         if validation["allowed"]:
             valid_candidates.append(cand)
     
+    normalized_candidates = []
+    for cand in valid_candidates:
+        normalized = dict(cand)
+        if "matchSignals" not in normalized:
+            normalized["matchSignals"] = normalized.get("match_signals", [])
+        normalized_candidates.append(normalized)
+
     return LinkSuggestionResponse(
-        candidates=valid_candidates,
+        candidates=normalized_candidates,
         search_query=search_query,
-        total_found=len(valid_candidates),
+        total_found=len(normalized_candidates),
     )
 
 

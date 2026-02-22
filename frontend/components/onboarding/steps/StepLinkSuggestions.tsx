@@ -15,6 +15,17 @@ interface LinkCandidate {
   isSelected: boolean | null; // null = undecided, true = selected, false = rejected
 }
 
+interface RawLinkCandidate {
+  id?: string;
+  url?: string;
+  title?: string;
+  snippet?: string;
+  favicon?: string;
+  confidence?: 'high' | 'medium' | 'low' | string;
+  matchSignals?: string[];
+  match_signals?: string[];
+}
+
 interface StepLinkSuggestionsProps {
   twinId: string | null;
   fullName: string;
@@ -52,11 +63,34 @@ export function StepLinkSuggestions({
         if (!response.ok) throw new Error('Failed to fetch suggestions');
         
         const data = await response.json();
-        // Mark high confidence as pre-selected
-        const processed = (data.candidates || []).map((c: LinkCandidate) => ({
-          ...c,
-          isSelected: c.confidence === 'high' ? true : null
-        }));
+        // Normalize API payload across snake_case/camelCase variants.
+        const rawCandidates = Array.isArray(data?.candidates) ? data.candidates : [];
+        const processed = rawCandidates.map((raw: RawLinkCandidate, index: number): LinkCandidate => {
+          const normalizedConfidence =
+            raw.confidence === 'high' || raw.confidence === 'medium' || raw.confidence === 'low'
+              ? raw.confidence
+              : 'low';
+          const normalizedSignals = Array.isArray(raw.matchSignals)
+            ? raw.matchSignals
+            : Array.isArray(raw.match_signals)
+              ? raw.match_signals
+              : [];
+          const normalizedId = raw.id || `candidate_${index}`;
+          const normalizedUrl = raw.url || '';
+          const normalizedTitle = raw.title || normalizedUrl || 'Untitled source';
+          const normalizedSnippet = raw.snippet || '';
+
+          return {
+            id: normalizedId,
+            url: normalizedUrl,
+            title: normalizedTitle,
+            snippet: normalizedSnippet,
+            favicon: raw.favicon,
+            confidence: normalizedConfidence,
+            matchSignals: normalizedSignals,
+            isSelected: normalizedConfidence === 'high' ? true : null,
+          };
+        }).filter((c: LinkCandidate) => Boolean(c.url));
         setCandidates(processed);
       } catch (e) {
         console.error('Failed to load suggestions:', e);
