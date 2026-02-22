@@ -306,32 +306,46 @@ def _try_claim_job(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     try:
         from modules.observability import supabase
-        
+
         job_id = row.get("id")
         if not job_id:
             return None
-        
+
         now = datetime.utcnow().isoformat()
         worker_id = os.getenv("RENDER_INSTANCE_ID", f"worker-{os.getpid()}")
-        
-        # Atomic update
-        res = (
-            supabase.table("jobs")
-            .update({
+
+        def _claim(include_worker_id: bool):
+            payload = {
                 "status": "processing",
                 "updated_at": now,
-                "worker_id": worker_id  # Track which worker claimed
-            })
-            .eq("id", job_id)
-            .eq("status", "queued")
-            .execute()
-        )
-        
+            }
+            if include_worker_id:
+                payload["worker_id"] = worker_id
+            return (
+                supabase.table("jobs")
+                .update(payload)
+                .eq("id", job_id)
+                .eq("status", "queued")
+                .execute()
+            )
+
+        try:
+            # Preferred path: track claiming worker when schema supports worker_id.
+            res = _claim(include_worker_id=True)
+        except Exception as claim_err:
+            err_text = str(claim_err)
+            if "worker_id" in err_text or "PGRST204" in err_text:
+                # Backward-compatible fallback for older jobs schemas.
+                print("[JobQueue] worker_id column missing; claiming jobs without worker attribution")
+                res = _claim(include_worker_id=False)
+            else:
+                raise
+
         if res.data and len(res.data) > 0:
             return res.data[0]
-        
+
         return None
-        
+
     except Exception as e:
         print(f"[JobQueue] Job claim failed: {e}")
         return None
