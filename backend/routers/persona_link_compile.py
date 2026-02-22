@@ -540,14 +540,8 @@ async def _process_job_impl(job_id: str):
                     failed_urls.append({"url": url, "error": str(e), "type": error_type})
                     print(f"[ModeC] Failed to fetch {url}: {e}")
             
-            # Store failed URLs in job metadata for UI feedback
-            if failed_urls:
-                supabase.table("link_compile_jobs").update({
-                    "failed_sources": failed_urls,
-                }).eq("id", job_id).execute()
-            
-            # Partial success: if at least one URL succeeded, continue
-            # If all failed but we have metadata, create fallback chunks
+            # If all URLs failed, try to create fallback sources with metadata
+            # This ensures the job doesn't fail completely
             if not chunks and failed_urls:
                 # Create fallback chunks from metadata for failed URLs
                 for fail_info in failed_urls:
