@@ -1794,9 +1794,97 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
             error_type = type(dumpling_error).__name__
             print(f"[LinkedIn] Dumpling AI Profile API failed: {error_type}: {error_msg}")
             
+            # Check if it's a 502/JSON error (LinkedIn endpoint having issues)
+            # Fall back to extract API
+            error_msg_lower = error_msg.lower()
+            if "502" in error_msg or "bad gateway" in error_msg_lower or "jsondecodeerror" in error_type.lower():
+                print("[LinkedIn] Profile endpoint returned 502, trying fallback extract API...")
+                try:
+                    from modules.dumplingai_client import extract_webpage_data
+                    result = await extract_webpage_data(
+                        url=url,
+                        instructions="Extract the LinkedIn profile information including: full name, headline, location, number of followers, about/summary section, current position, experience history, education, skills, and recent posts or activity.",
+                        render_js=True
+                    )
+                    
+                    if result:
+                        # Format the extracted data into a document
+                        # Extract API returns results array, not data object
+                        profile_data = result.get("data") or result.get("results") or {}
+                        name = profile_data.get("name", profile_data.get("fullName", "LinkedIn Profile"))
+                        
+                        # Build document from extracted fields
+                        doc_lines = [f"# LinkedIn Profile: {name}", f"URL: {url}"]
+                        
+                        if profile_data.get("headline"):
+                            doc_lines.append(f"\n## Headline\n{profile_data['headline']}")
+                        if profile_data.get("location"):
+                            doc_lines.append(f"\n## Location\n{profile_data['location']}")
+                        if profile_data.get("followers"):
+                            doc_lines.append(f"\n## Followers\n{profile_data['followers']}")
+                        if profile_data.get("about"):
+                            doc_lines.append(f"\n## About\n{profile_data['about']}")
+                        if profile_data.get("experience"):
+                            doc_lines.append(f"\n## Experience\n{profile_data['experience']}")
+                        if profile_data.get("education"):
+                            doc_lines.append(f"\n## Education\n{profile_data['education']}")
+                        if profile_data.get("skills"):
+                            doc_lines.append(f"\n## Skills\n{profile_data['skills']}")
+                        
+                        doc = "\n".join(doc_lines)
+                        
+                        if doc and len(doc) > 100:
+                            print(f"[LinkedIn] Extract API fallback succeeded: {len(doc)} characters")
+                            content_hash = calculate_content_hash(doc)
+                            
+                            supabase.table("sources").update({
+                                "filename": f"LinkedIn: {name}"[:240],
+                                "file_size": len(doc),
+                                "content_text": doc,
+                                "content_hash": content_hash,
+                                "status": "processing",
+                                "staging_status": "staged",
+                                "extracted_text_length": len(doc),
+                                "citation_url": url,
+                            }).eq("id", source_id).eq("twin_id", twin_id).execute()
+                            
+                            finish_step(
+                                event_id=fetch_event_id,
+                                source_id=source_id,
+                                twin_id=twin_id,
+                                provider=provider,
+                                step="fetching",
+                                status="completed",
+                                correlation_id=correlation_id,
+                                metadata={"method": "dumpling_extract_api_fallback"},
+                            )
+                            
+                            num_chunks = await process_and_index_text(
+                                source_id,
+                                twin_id,
+                                doc,
+                                metadata_override={
+                                    "filename": f"LinkedIn: {name}"[:240],
+                                    "type": "linkedin_profile",
+                                    "url": url,
+                                },
+                                provider=provider,
+                                correlation_id=correlation_id,
+                            )
+                            
+                            supabase.table("sources").update({
+                                "status": "live",
+                                "staging_status": "live",
+                                "chunk_count": num_chunks,
+                            }).eq("id", source_id).execute()
+                            
+                            return num_chunks
+                            
+                except Exception as fallback_error:
+                    print(f"[LinkedIn] Extract API fallback also failed: {fallback_error}")
+            
             # Try to extract more details from HTTP errors
-            import httpx
-            if isinstance(dumpling_error, httpx.HTTPStatusError):
+            if hasattr(dumpling_error, 'response'):
                 try:
                     response = dumpling_error.response
                     status_code = response.status_code
@@ -1825,6 +1913,8 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
     # -------------------------------------------------------------
     # Strategy 1: Direct HTTP fetch with OpenGraph (Fallback)
     # -------------------------------------------------------------
+    # Note: LinkedIn aggressively blocks scrapers with HTTP 999
+    # Create a reference source that user can manually update with content
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1837,10 +1927,71 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
             final_url = str(resp.url)
             html_text = resp.text or ""
 
+        # If blocked, create a reference source that user can manually fill
         if http_status in (401, 403, 429, 999) or _linkedin_login_wall(html_text, final_url):
-            # LinkedIn commonly returns HTTP 999 for bot detection.
-            raise ValueError("LinkedIn blocked access or requires authentication.")
+            print(f"[LinkedIn] HTTP {http_status} - creating reference source for manual content")
+            
+            # Extract profile name from URL
+            profile_name = url.split("/in/")[-1].rstrip("/").replace("-", " ").title() if "/in/" in url else "LinkedIn Profile"
+            
+            doc = f"""# LinkedIn Profile: {profile_name}
+URL: {url}
 
+## Note
+This LinkedIn profile could not be automatically extracted due to LinkedIn's bot protection (HTTP {http_status}).
+To add this profile's content:
+1. Visit your LinkedIn profile while logged in
+2. Copy the About section, Experience, and other relevant information
+3. Paste it as a text source or edit this source
+
+## Placeholder
+[Content pending manual addition]
+"""
+            
+            supabase.table("sources").update({
+                "filename": f"LinkedIn: {profile_name} (manual upload needed)"[:240],
+                "file_size": len(doc),
+                "content_text": doc,
+                "status": "live",  # Mark as live so user can see it
+                "staging_status": "staged",
+                "extracted_text_length": len(doc),
+                "citation_url": url,
+            }).eq("id", source_id).eq("twin_id", twin_id).execute()
+            
+            finish_step(
+                event_id=fetch_event_id,
+                source_id=source_id,
+                twin_id=twin_id,
+                provider=provider,
+                step="fetching",
+                status="completed",
+                correlation_id=correlation_id,
+                metadata={"http_status": http_status, "manual_upload_needed": True},
+            )
+            
+            # Index the reference document
+            num_chunks = await process_and_index_text(
+                source_id,
+                twin_id,
+                doc,
+                metadata_override={
+                    "filename": f"LinkedIn: {profile_name}"[:240],
+                    "type": "linkedin_profile",
+                    "url": url,
+                    "profile_name": profile_name,
+                    "manual_upload_needed": True,
+                },
+                provider=provider,
+                correlation_id=correlation_id,
+            )
+            
+            supabase.table("sources").update({
+                "chunk_count": num_chunks,
+            }).eq("id", source_id).execute()
+            
+            return num_chunks
+
+        # If we got here, we have actual HTML content to parse
         soup = BeautifulSoup(html_text, "html.parser")
         og_title = _extract_og(soup, "og:title")
         og_desc = _extract_og(soup, "og:description")
@@ -1869,31 +2020,6 @@ async def ingest_linkedin_open_graph(source_id: str, twin_id: str, url: str, cor
             correlation_id=correlation_id,
             metadata={"http_status": http_status, "has_og_title": bool(og_title), "has_og_desc": bool(og_desc)},
         )
-    except Exception as e:
-        err = build_error(
-            code="LINKEDIN_BLOCKED_OR_REQUIRES_AUTH",
-            message=(
-                "LinkedIn profile content could not be fetched publicly (blocked/login wall). "
-                "Upload your LinkedIn profile PDF export or paste profile text for full ingestion."
-            ),
-            provider=provider,
-            step="fetching",
-            http_status=http_status,
-            correlation_id=correlation_id,
-            raw={"url": url, "final_url": final_url},
-            exc=e,
-        )
-        finish_step(
-            event_id=fetch_event_id,
-            source_id=source_id,
-            twin_id=twin_id,
-            provider=provider,
-            step="fetching",
-            status="error",
-            correlation_id=correlation_id,
-            error=err,
-        )
-        raise ValueError(err["message"])
 
     parsed_event_id = start_step(
         source_id=source_id,
