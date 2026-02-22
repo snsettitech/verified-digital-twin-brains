@@ -111,41 +111,66 @@ def _set_twin_status(twin_id: str, status: str) -> Dict[str, Any]:
     environments that have not applied the status-column migration yet.
     """
     now_iso = datetime.utcnow().isoformat()
-    update_payload = {
+    update_payload: Dict[str, Any] = {
         "status": status,
         "updated_at": now_iso,
     }
-    try:
-        result = supabase.table("twins").update(update_payload).eq("id", twin_id).execute()
-        if result.data:
-            return result.data[0]
-        raise HTTPException(404, "Twin not found")
-    except Exception as update_error:
-        if not _is_missing_column_error(update_error, "status"):
+
+    # First attempt: native twins.status lifecycle column.
+    while True:
+        try:
+            result = supabase.table("twins").update(update_payload).eq("id", twin_id).execute()
+            if result.data:
+                return result.data[0]
+            raise HTTPException(404, "Twin not found")
+        except Exception as update_error:
+            removed_column = None
+            for column in ("status", "updated_at"):
+                if column in update_payload and _is_missing_column_error(update_error, column):
+                    removed_column = column
+                    break
+
+            if removed_column:
+                update_payload.pop(removed_column, None)
+                # If status still exists, retry native path without the missing column.
+                if "status" in update_payload:
+                    continue
+                # status itself is missing - switch to settings fallback path below.
+                break
+
             raise
 
-        twin_result = supabase.table("twins").select("id, settings").eq("id", twin_id).single().execute()
-        twin_row = twin_result.data or {}
-        if not twin_row.get("id"):
-            raise HTTPException(404, "Twin not found")
+    # Fallback: encode lifecycle in settings.link_first_state when status column is absent.
+    twin_result = supabase.table("twins").select("id, settings").eq("id", twin_id).single().execute()
+    twin_row = twin_result.data or {}
+    if not twin_row.get("id"):
+        raise HTTPException(404, "Twin not found")
 
-        settings = twin_row.get("settings") if isinstance(twin_row.get("settings"), dict) else {}
-        merged_settings = dict(settings)
-        merged_settings["link_first_state"] = status
-        merged_settings["creation_mode"] = merged_settings.get("creation_mode") or "link_first"
+    settings = twin_row.get("settings") if isinstance(twin_row.get("settings"), dict) else {}
+    merged_settings = dict(settings)
+    merged_settings["link_first_state"] = status
+    merged_settings["creation_mode"] = merged_settings.get("creation_mode") or "link_first"
 
-        fallback_res = (
-            supabase.table("twins")
-            .update({"settings": merged_settings, "updated_at": now_iso})
-            .eq("id", twin_id)
-            .execute()
-        )
-        if not fallback_res.data:
-            raise HTTPException(404, "Twin not found")
+    fallback_payload: Dict[str, Any] = {"settings": merged_settings, "updated_at": now_iso}
+    while True:
+        try:
+            fallback_res = (
+                supabase.table("twins")
+                .update(fallback_payload)
+                .eq("id", twin_id)
+                .execute()
+            )
+            if not fallback_res.data:
+                raise HTTPException(404, "Twin not found")
 
-        twin = fallback_res.data[0]
-        twin["status"] = status
-        return twin
+            twin = fallback_res.data[0]
+            twin["status"] = status
+            return twin
+        except Exception as fallback_error:
+            if "updated_at" in fallback_payload and _is_missing_column_error(fallback_error, "updated_at"):
+                fallback_payload.pop("updated_at", None)
+                continue
+            raise
 
 
 # =============================================================================
@@ -836,14 +861,26 @@ async def activate_twin(
     
     # Update twin name if provided (separate from status for legacy-schema fallback).
     if resolved_final_name:
-        rename_result = (
-            supabase.table("twins")
-            .update({"name": resolved_final_name, "updated_at": datetime.utcnow().isoformat()})
-            .eq("id", twin_id)
-            .execute()
-        )
-        if not rename_result.data:
-            raise HTTPException(404, "Twin not found")
+        rename_payload: Dict[str, Any] = {
+            "name": resolved_final_name,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        while True:
+            try:
+                rename_result = (
+                    supabase.table("twins")
+                    .update(rename_payload)
+                    .eq("id", twin_id)
+                    .execute()
+                )
+                if not rename_result.data:
+                    raise HTTPException(404, "Twin not found")
+                break
+            except Exception as rename_error:
+                if "updated_at" in rename_payload and _is_missing_column_error(rename_error, "updated_at"):
+                    rename_payload.pop("updated_at", None)
+                    continue
+                raise
 
     _set_twin_status(twin_id, "active")
     
