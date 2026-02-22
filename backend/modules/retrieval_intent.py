@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
 
-from modules.inference_router import get_openai_client
+from modules.clients import get_async_openai_client
 
 
 class RetrievalIntentType(str, Enum):
@@ -129,7 +129,7 @@ async def classify_retrieval_intent(
             history_lines.append(f"{role}: {content}")
         history_str = "\n".join(history_lines) if history_lines else "None"
     
-    client = get_openai_client()
+    client = get_async_openai_client()
     
     try:
         prompt = INTENT_CLASSIFICATION_PROMPT.format(
@@ -138,8 +138,7 @@ async def classify_retrieval_intent(
         )
         
         response = await asyncio.wait_for(
-            asyncio.to_thread(
-                client.chat.completions.create,
+            client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
