@@ -1998,6 +1998,7 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
     # Strategy 0: Dumpling AI (Primary - Reliable web scraping)
     # -------------------------------------------------------------
     html_text = ""
+    extracted_text = ""
     http_status = None
     dumpling_success = False
     
@@ -2006,22 +2007,37 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
         print(f"[Web] Trying Dumpling AI scraping for {url}")
         log_ingestion_event(source_id, twin_id, "info", "Attempting Dumpling AI web scraping")
         
+        # Use markdown format for better content extraction from social media
         result = await scrape_webpage(
             url=url,
-            format="html",
+            format="markdown",
             cleaned=True,
             render_js=True,
         )
         
         # Extract content from Dumpling AI response
+        # Dumpling AI returns: {"content": "...", "title": "...", "url": "..."}
         if result and isinstance(result, dict):
-            # Dumpling AI returns various formats depending on the API
-            html_text = result.get("content", "") or result.get("html", "") or str(result)
-            if html_text and len(html_text) > 100:
+            extracted_text = result.get("content", "") or result.get("markdown", "") or result.get("text", "") or ""
+            title = result.get("title", "") or url
+            
+            if extracted_text and len(extracted_text) > 50:
                 dumpling_success = True
                 http_status = 200
-                print(f"[Web] Dumpling AI scraping succeeded: {len(html_text)} characters")
-                log_ingestion_event(source_id, twin_id, "info", f"Dumpling AI scraping successful ({len(html_text)} chars)")
+                html_text = extracted_text  # Use the text directly
+                print(f"[Web] Dumpling AI scraping succeeded: {len(extracted_text)} characters")
+                log_ingestion_event(source_id, twin_id, "info", f"Dumpling AI scraping successful ({len(extracted_text)} chars)")
+                
+                # Update source with title early
+                if title and title != url:
+                    try:
+                        supabase.table("sources").update({
+                            "filename": f"Web: {title}"[:240],
+                        }).eq("id", source_id).eq("twin_id", twin_id).execute()
+                    except Exception as title_e:
+                        print(f"[Web] Warning: Could not update title: {title_e}")
+            else:
+                print(f"[Web] Dumpling AI returned insufficient content: {len(extracted_text)} chars")
     except Exception as dumpling_error:
         print(f"[Web] Dumpling AI scraping failed: {dumpling_error}")
         log_ingestion_event(source_id, twin_id, "warning", f"Dumpling AI scraping failed: {dumpling_error}")
@@ -2087,16 +2103,30 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
         provider=provider,
         step="parsed",
         correlation_id=correlation_id,
-        message="Extracting text from HTML",
+        message="Extracting text from content",
     )
+    
+    title = url  # Default title
     try:
-        soup = BeautifulSoup(html_text, "html.parser")
-        title = soup.title.string.strip() if soup.title and soup.title.string else url
-
-        text = soup.get_text(separator="\n", strip=True)
-        text = re.sub(r"\n{3,}", "\n\n", text).strip()
-        if not text:
-            raise ValueError("No text extracted from HTML")
+        # If Dumpling AI succeeded, we already have clean text
+        if dumpling_success and extracted_text:
+            text = extracted_text
+            # Try to extract title from first markdown heading if available
+            lines = text.split('\n')
+            for line in lines[:10]:  # Check first 10 lines
+                if line.startswith('# '):
+                    title = line.replace('# ', '').strip()
+                    break
+        else:
+            # Parse HTML from fallback HTTP fetch
+            soup = BeautifulSoup(html_text, "html.parser")
+            title = soup.title.string.strip() if soup.title and soup.title.string else url
+            
+            text = soup.get_text(separator="\n", strip=True)
+            text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        
+        if not text or len(text) < 50:
+            raise ValueError(f"Insufficient text extracted from page: {len(text)} chars")
 
         content_hash = calculate_content_hash(text)
         supabase.table("sources").update({

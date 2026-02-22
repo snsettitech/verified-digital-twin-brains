@@ -21,8 +21,21 @@ async def knowledge_profile(twin_id: str, user=Depends(get_current_user)):
         profile = await get_knowledge_profile(twin_id)
         return profile
     except Exception as e:
-        print(f"Error fetching knowledge profile: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"[Knowledge Profile] Error fetching knowledge profile for twin {twin_id}: {e}")
+        print(f"[Knowledge Profile] Traceback: {error_traceback}")
+        
+        # Return a safe fallback response instead of 500
+        # This ensures the UI doesn't break
+        return {
+            "total_chunks": 0,
+            "total_sources": 0,
+            "fact_count": 0,
+            "opinion_count": 0,
+            "tone_distribution": {},
+            "top_tone": "Neutral"
+        }
 
 @router.get("/twins/{twin_id}/verified-qna")
 async def list_twin_verified_qna(twin_id: str, visibility: Optional[str] = None, user=Depends(get_current_user)):
