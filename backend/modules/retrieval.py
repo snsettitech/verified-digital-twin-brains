@@ -1684,6 +1684,18 @@ async def _execute_pinecone_queries(
                     filters.append({"twin_id": {"$eq": target_twin_id}})
                 if is_verified:
                     filters.append({"is_verified": {"$eq": True}})
+                
+                # Phase 2.3: Default tombstone exclusion filter
+                # Exclude chunks where is_current=False (tombstoned)
+                # Chunks without is_current field are treated as current (backward compatible)
+                tombstone_filter = {
+                    "$or": [
+                        {"is_current": {"$eq": True}},
+                        {"is_current": {"$exists": False}}  # Legacy chunks
+                    ]
+                }
+                filters.append(tombstone_filter)
+                
                 if len(filters) == 1:
                     metadata_filter: Optional[Dict[str, Any]] = filters[0]
                 elif len(filters) > 1:
@@ -1774,6 +1786,16 @@ async def _execute_pinecone_queries(
                         filters.append({"twin_id": {"$eq": target_twin_id}})
                     if is_verified:
                         filters.append({"is_verified": {"$eq": True}})
+                    
+                    # Phase 2.3: Default tombstone exclusion filter (retry path)
+                    tombstone_filter = {
+                        "$or": [
+                            {"is_current": {"$eq": True}},
+                            {"is_current": {"$exists": False}}  # Legacy chunks
+                        ]
+                    }
+                    filters.append(tombstone_filter)
+                    
                     if len(filters) == 1:
                         metadata_filter: Optional[Dict[str, Any]] = filters[0]
                     elif len(filters) > 1:

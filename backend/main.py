@@ -57,6 +57,9 @@ from routers import (
     synthetic_monitoring,
     twin_runtime,
     persona_link_compile,
+    
+    # Phase 1A.6: Deep Research crawl management
+    crawl,
 )
 from modules.specializations import get_specialization
 
@@ -74,6 +77,8 @@ ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").low
 DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
+# Deep Research is opt-in for Phase 1
+DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 
 def print_feature_flag_summary():
     """Print enabled/disabled feature summary for observability."""
@@ -83,6 +88,7 @@ def print_feature_flag_summary():
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
+    print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
     sys.stdout.flush()
 
@@ -206,6 +212,12 @@ app.include_router(cost_tracking.router)
 app.include_router(synthetic_monitoring.router)
 print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare, playground, ab-testing, costs, monitoring)")
 
+# Phase 1A.6: Deep Research crawl management (feature-gated)
+if DEEP_RESEARCH_ENABLED:
+    app.include_router(crawl.router)
+    print("[INFO] Deep Research crawl routes enabled (DEEP_RESEARCH_ENABLED=true)")
+else:
+    print("[INFO] Deep Research crawl routes disabled (DEEP_RESEARCH_ENABLED=false)")
 
 # Print feature flag summary after all routers loaded
 print_feature_flag_summary()

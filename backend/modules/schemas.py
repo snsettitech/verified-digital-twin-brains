@@ -548,3 +548,139 @@ class TwinVerificationRequest(BaseModel):
 
 class DeepScrubRequest(BaseModel):
     reason: Optional[str] = None
+
+
+# =============================================================================
+# Training Metrics Schemas (Delphi-style Profile Metrics)
+# =============================================================================
+
+class TrainingMetricsSchema(BaseModel):
+    """
+    Delphi-style training metrics for twin/profile display.
+    
+    V1 Heuristic Implementation:
+    - words_processed: Total words from successfully ingested sources
+    - questions_answerable_est: Estimated coverage based on content volume
+    - mind_score: 0-100 training completeness score
+    
+    NOTE: This is an ESTIMATE, not a literal count of validated questions.
+    See docs/training_metrics_v1.md for formula details.
+    """
+    words_processed: int = 0
+    words_processed_display: str = "0"
+    questions_answerable_est: int = 0
+    questions_answerable_display: str = "0"
+    mind_score: int = 0
+    mind_score_label: str = "Early"
+    method_version: str = "v1_heuristic"
+    last_computed_at: Optional[str] = None
+    notes: str = "Estimated metrics based on ingested content volume, diversity, and extraction quality."
+
+
+class TwinWithTrainingMetricsSchema(BaseModel):
+    """Twin response including training metrics."""
+    id: str
+    name: str
+    tenant_id: str
+    description: Optional[str] = None
+    specialization: Optional[str] = None
+    status: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
+    training_metrics: TrainingMetricsSchema = Field(default_factory=TrainingMetricsSchema)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+# ============================================================================
+# Deep Research Schemas (Phase 1A+)
+# ============================================================================
+
+class CrawlRunCreateRequest(BaseModel):
+    """Request to create a new crawl run."""
+    seed_urls: List[str]
+    max_pages: int = 50
+    max_depth: int = 2
+    include_patterns: Optional[List[str]] = None
+    exclude_patterns: Optional[List[str]] = None
+    url_canonicalization_rules: Optional[Dict[str, Any]] = None
+    safety_config: Optional[Dict[str, Any]] = None
+
+
+class CrawlRunSchema(BaseModel):
+    """Crawl run response schema."""
+    id: str
+    twin_id: str
+    status: str
+    pages_found: int
+    pages_ingested: int
+    pages_failed: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    created_at: datetime
+
+
+class CrawlPageSchema(BaseModel):
+    """Crawl page response schema."""
+    id: str
+    crawl_id: str
+    url: str
+    canonical_url: str
+    status: str
+    content_length: Optional[int]
+    snippet: Optional[str]
+    error_category: Optional[str]
+    fetched_at: Optional[datetime]
+
+
+class CrawlChangesResponse(BaseModel):
+    """Response for crawl changes endpoint."""
+    unchanged_pages: int
+    changed_pages: int
+    new_pages: int
+    removed_pages: int
+    changes: List[Dict[str, Any]]
+
+
+class ResearchRunCreateRequest(BaseModel):
+    """Request to create a new research run."""
+    query: str
+    max_depth: int = 2
+    claim_classes: Optional[List[str]] = None
+    web_verify_policy: str = "eligible_only"
+    force_new: bool = False
+
+
+class ResearchRunSchema(BaseModel):
+    """Research run response schema."""
+    id: str
+    twin_id: str
+    status: str
+    original_query: str
+    planned_subquestions: int
+    completed_subquestions: int
+    failed_subquestions: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    created_at: datetime
+
+
+class ResearchSubquestionSchema(BaseModel):
+    """Research subquestion response schema."""
+    id: str
+    research_run_id: str
+    sequence_number: int
+    status: str
+    question_text: str
+    query_used: Optional[str]
+    claims_extracted: int
+    claims_verified_locally: int
+    claims_verified_web: int
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+
+
+class ResearchProgressEvent(BaseModel):
+    """Streaming event for research progress."""
+    type: str  # research_created, plan_ready, progress, verification_complete, etc.
+    payload: Dict[str, Any]
+    timestamp: datetime = Field(default_factory=datetime.utcnow)

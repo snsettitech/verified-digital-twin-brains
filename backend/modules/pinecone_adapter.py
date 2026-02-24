@@ -9,6 +9,7 @@ ALLOWED_INDEX_MODES = {"vector", "integrated"}
 DEFAULT_INDEX_MODE = "vector"
 DEFAULT_TEXT_FIELD = "chunk_text"
 DEFAULT_METADATA_FIELDS = [
+    # Core content fields
     "text",
     "source_id",
     "twin_id",
@@ -35,6 +36,14 @@ DEFAULT_METADATA_FIELDS = [
     "citation_url",
     "url",
     "type",
+    # Phase 2: Versioning fields (crawl-based sources)
+    "crawl_id",
+    "crawl_page_id",
+    "canonical_url",
+    "content_hash",
+    "chunk_version",
+    "is_current",
+    "tombstoned_at",
 ]
 
 

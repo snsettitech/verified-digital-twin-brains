@@ -6,7 +6,8 @@ from modules.schemas import (
     TwinSettingsUpdate, GroupCreateRequest, GroupUpdateRequest,
     AssignUserRequest, ContentPermissionRequest,
     AccessGroupSchema, GroupMembershipSchema, ContentPermissionSchema,
-    GroupLimitSchema, GroupOverrideSchema
+    GroupLimitSchema, GroupOverrideSchema,
+    TrainingMetricsSchema
 )
 from modules.access_groups import (
     get_user_group, get_default_group, create_group, assign_user_to_group,
@@ -27,6 +28,15 @@ from datetime import datetime, timezone, timedelta
 # =============================================================================
 from modules.persona_bootstrap import bootstrap_persona_from_onboarding
 from modules.persona_spec_store_v2 import create_persona_spec_v2
+
+# =============================================================================
+# Training Metrics Imports
+# =============================================================================
+from modules.training_metrics import (
+    get_training_metrics_for_api,
+    is_training_metrics_enabled,
+    update_twin_training_metrics
+)
 
 
 
@@ -467,8 +477,14 @@ async def list_twins(user=Depends(get_current_user)):
 
 
 @router.get("/twins/{twin_id}")
-async def get_twin(twin_id: str, user=Depends(get_current_user)):
-    """Get a specific twin. Verifies ownership."""
+async def get_twin(twin_id: str, include_metrics: bool = True, user=Depends(get_current_user)):
+    """
+    Get a specific twin. Verifies ownership.
+    
+    Args:
+        twin_id: Twin ID
+        include_metrics: If True, include training metrics in response (default: True)
+    """
     user = _require_authenticated_user(user)
     # Verify user has access to this twin
     verify_twin_ownership(twin_id, user)
@@ -477,7 +493,168 @@ async def get_twin(twin_id: str, user=Depends(get_current_user)):
     response = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Twin not found or access denied")
-    return _normalize_twin_status_shape(response.data)
+    
+    twin = _normalize_twin_status_shape(response.data)
+    
+    # Add training metrics if enabled
+    if include_metrics and is_training_metrics_enabled():
+        try:
+            # Check if cached metrics exist in settings
+            settings = twin.get("settings") or {}
+            cached_metrics = settings.get("training_metrics")
+            
+            # Use cached metrics if available and recent (within 1 hour)
+            use_cached = False
+            if cached_metrics and cached_metrics.get("last_computed_at"):
+                try:
+                    last_computed = datetime.fromisoformat(cached_metrics["last_computed_at"].replace("Z", "+00:00"))
+                    now = datetime.now(timezone.utc)
+                    if last_computed.tzinfo is None:
+                        last_computed = last_computed.replace(tzinfo=timezone.utc)
+                    # Cache valid for 1 hour
+                    if (now - last_computed).total_seconds() < 3600:
+                        use_cached = True
+                        twin["training_metrics"] = {
+                            "words_processed": cached_metrics.get("words_processed", 0),
+                            "words_processed_display": cached_metrics.get("words_processed_display", "0"),
+                            "questions_answerable_est": cached_metrics.get("questions_answerable_est", 0),
+                            "questions_answerable_display": cached_metrics.get("questions_answerable_display", "0"),
+                            "mind_score": cached_metrics.get("mind_score", 0),
+                            "mind_score_label": cached_metrics.get("mind_score_label", "Early"),
+                            "method_version": cached_metrics.get("method_version", "v1_heuristic"),
+                            "last_computed_at": cached_metrics.get("last_computed_at"),
+                            "notes": cached_metrics.get("notes", ""),
+                        }
+                except Exception:
+                    use_cached = False
+            
+            if not use_cached:
+                # Compute fresh metrics
+                metrics = get_training_metrics_for_api(twin_id)
+                twin["training_metrics"] = metrics["training_metrics"]
+                
+                # Cache metrics in background (don't await)
+                try:
+                    update_twin_training_metrics(twin_id)
+                except Exception as cache_err:
+                    print(f"[TWINS] Non-critical error caching metrics: {cache_err}")
+                    
+        except Exception as metrics_err:
+            # Don't fail the request if metrics computation fails
+            print(f"[TWINS] Error computing metrics for twin {twin_id}: {metrics_err}")
+            twin["training_metrics"] = TrainingMetricsSchema().model_dump()
+    
+    return twin
+
+
+@router.get("/twins/{twin_id}/metrics/debug")
+async def get_twin_metrics_debug(twin_id: str, user=Depends(get_current_user)):
+    """
+    Get detailed training metrics breakdown for debugging/explainability.
+    
+    Returns component scores and internal calculations for the Mind Score.
+    This endpoint is for debugging purposes and may expose internal details.
+    
+    Args:
+        twin_id: Twin ID to get metrics for
+        
+    Returns:
+        Detailed metrics breakdown including:
+        - Component scores (volume, diversity, quality, etc.)
+        - Source counts and statistics
+        - Calculation metadata
+    """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+    
+    if not is_training_metrics_enabled():
+        raise HTTPException(status_code=403, detail="Training metrics feature is disabled")
+    
+    try:
+        from modules.training_metrics import compute_training_metrics
+        
+        metrics = compute_training_metrics(twin_id)
+        
+        return {
+            "twin_id": twin_id,
+            "public_metrics": {
+                "words_processed": metrics.words_processed,
+                "words_processed_display": metrics.words_processed_display,
+                "questions_answerable_est": metrics.questions_answerable_est,
+                "questions_answerable_display": metrics.questions_answerable_display,
+                "mind_score": metrics.mind_score,
+                "mind_score_label": metrics.mind_score_label,
+                "method_version": metrics.method_version,
+                "last_computed_at": metrics.last_computed_at,
+            },
+            "debug": {
+                "component_scores": metrics.component_scores,
+                "source_count": metrics.source_count,
+                "failed_source_count": metrics.failed_source_count,
+                "source_type_diversity": metrics.source_type_diversity,
+                "calculation_notes": metrics.notes,
+            },
+            "formulas": {
+                "mind_score": "0.25*volume + 0.20*diversity + 0.20*quality + 0.10*freshness + 0.15*structure + 0.10*verification",
+                "volume_score": "logarithmic tiers (0-100)",
+                "diversity_score": "unique_source_types * 20 (max 100)",
+                "quality_score": "extraction_success_rate * 100",
+                "questions_estimate": "(words/90) * quality * diversity * 0.85",
+            }
+        }
+    except Exception as e:
+        print(f"[TWINS] Error getting debug metrics for twin {twin_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to compute metrics: {str(e)}")
+
+
+@router.post("/twins/{twin_id}/metrics/recompute")
+async def recompute_twin_metrics(twin_id: str, user=Depends(verify_owner)):
+    """
+    Manually trigger metrics recomputation for a twin.
+    
+    This is useful for:
+    - Debugging metrics issues
+    - Forcing refresh after data corrections
+    - Admin maintenance
+    
+    Args:
+        twin_id: Twin ID to recompute metrics for
+        
+    Returns:
+        Updated training metrics
+    """
+    user = _require_authenticated_user(user)
+    ensure_twin_owner_or_403(twin_id, user)
+    
+    if not is_training_metrics_enabled():
+        raise HTTPException(status_code=403, detail="Training metrics feature is disabled")
+    
+    try:
+        from modules.training_metrics import (
+            update_twin_training_metrics,
+            get_training_metrics_for_api
+        )
+        
+        # Force recompute by updating stored metrics
+        success = update_twin_training_metrics(twin_id)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update metrics")
+        
+        # Return fresh metrics
+        metrics = get_training_metrics_for_api(twin_id)
+        
+        return {
+            "status": "success",
+            "message": "Metrics recomputed successfully",
+            "training_metrics": metrics["training_metrics"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[TWINS] Error recomputing metrics for twin {twin_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to recompute metrics: {str(e)}")
 
 
 @router.patch("/twins/{twin_id}")

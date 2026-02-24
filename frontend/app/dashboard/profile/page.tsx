@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useTwin } from '@/lib/context/TwinContext';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
-import { useToast } from '@/components/ui';
+import { useToast, TrainingMetrics } from '@/components/ui';
+import type { TrainingMetricsData } from '@/components/ui/TrainingMetrics';
 
 type ProfileDraft = {
   displayName: string;
@@ -122,6 +123,31 @@ export default function ProfilePage() {
   const { showToast } = useToast();
   const router = useRouter();
 
+  // Extract training metrics from twin data
+  const trainingMetrics = useMemo<TrainingMetricsData | null>(() => {
+    if (!activeTwin?.settings) return null;
+    
+    const settings = isRecord(activeTwin.settings) ? activeTwin.settings : {};
+    
+    // Check for training_metrics in settings (from API)
+    const metrics = settings.training_metrics;
+    if (isRecord(metrics)) {
+      return {
+        words_processed: typeof metrics.words_processed === 'number' ? metrics.words_processed : 0,
+        words_processed_display: typeof metrics.words_processed_display === 'string' ? metrics.words_processed_display : '0',
+        questions_answerable_est: typeof metrics.questions_answerable_est === 'number' ? metrics.questions_answerable_est : 0,
+        questions_answerable_display: typeof metrics.questions_answerable_display === 'string' ? metrics.questions_answerable_display : '0',
+        mind_score: typeof metrics.mind_score === 'number' ? metrics.mind_score : 0,
+        mind_score_label: typeof metrics.mind_score_label === 'string' ? metrics.mind_score_label : 'Early',
+        method_version: typeof metrics.method_version === 'string' ? metrics.method_version : 'v1_heuristic',
+        last_computed_at: typeof metrics.last_computed_at === 'string' ? metrics.last_computed_at : undefined,
+        notes: typeof metrics.notes === 'string' ? metrics.notes : undefined,
+      };
+    }
+    
+    return null;
+  }, [activeTwin?.settings]);
+
   const derivedProfile = useMemo<ProfileDraft>(() => {
     const settings = isRecord(activeTwin?.settings) ? activeTwin.settings : {};
     const profile = isRecord(settings.public_profile) ? settings.public_profile : {};
@@ -150,9 +176,14 @@ export default function ProfilePage() {
       (typeof profile.avatar_url === 'string' && profile.avatar_url.trim()) ||
       user?.avatar_url ||
       '';
-    const mindLabel =
-      (typeof profile.mind_label === 'string' && profile.mind_label.trim()) ||
-      '16.5K Mind';
+    
+    // Use training metrics for mind label if available
+    const metricsLabel = trainingMetrics?.mind_score_label;
+    const metricsWords = trainingMetrics?.words_processed_display;
+    const mindLabel = metricsLabel && metricsWords
+      ? `${metricsWords} ${metricsLabel}`
+      : (typeof profile.mind_label === 'string' && profile.mind_label.trim()) ||
+        '16.5K Mind';
 
     return {
       displayName,
@@ -166,7 +197,7 @@ export default function ProfilePage() {
       avatarUrl,
       mindLabel,
     };
-  }, [activeTwin?.name, activeTwin?.settings, user?.avatar_url, user?.full_name]);
+  }, [activeTwin?.name, activeTwin?.settings, user?.avatar_url, user?.full_name, trainingMetrics]);
 
   const [draft, setDraft] = useState<ProfileDraft>(derivedProfile);
   const [isEditing, setIsEditing] = useState(false);
@@ -343,8 +374,6 @@ export default function ProfilePage() {
                       <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-500" />
                       {draft.headline || 'Add a headline in edit mode'}
                     </span>
-                    <span className="text-sm font-semibold text-slate-500">|</span>
-                    <span className="text-sm font-semibold text-slate-600">{draft.mindLabel}</span>
                   </div>
                 </div>
               </div>
@@ -388,6 +417,22 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+
+            {/* Training Metrics - Delphi-style Stats */}
+            {!isEditing && (
+              <div className="mt-4">
+                <TrainingMetrics 
+                  metrics={trainingMetrics} 
+                  isLoading={isLoading}
+                  size="md"
+                  className="max-w-2xl"
+                />
+                <p className="mt-2 text-xs text-slate-400">
+                  Higher mind scores indicate more trained and accurate profiles. 
+                  Metrics are estimates and improve as more high-quality sources are added.
+                </p>
+              </div>
+            )}
 
             {!isEditing && (
               <div className="relative flex flex-col gap-6 xl:pr-72">

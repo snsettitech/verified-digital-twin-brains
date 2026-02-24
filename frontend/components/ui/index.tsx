@@ -15,3 +15,5 @@ export { ApiStatus } from './ApiStatus';
 export { ApiConnectivityBanner } from './ApiConnectivityBanner';
 export { EnvironmentBadge } from './EnvironmentBadge';
 export { DebugPanel } from './DebugPanel';
+export { TrainingMetrics, TrainingMetricsCompact, MetricCard } from './TrainingMetrics';
+export type { TrainingMetricsData } from './TrainingMetrics';

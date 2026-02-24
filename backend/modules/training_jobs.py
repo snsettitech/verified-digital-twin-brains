@@ -3,12 +3,35 @@ Training Jobs Module
 Manages training job lifecycle and processing.
 """
 import uuid
+import asyncio
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from modules.observability import supabase
 from modules.job_queue import enqueue_job
 from modules.delphi_namespace import get_namespace_candidates_for_twin
 # Note: process_and_index_text is imported inside process_training_job to avoid circular import
+
+
+def _schedule_metrics_update(twin_id: str) -> None:
+    """
+    Schedule training metrics update as a background task.
+    
+    This fire-and-forget approach ensures metrics recomputation doesn't
+    block the job processing pipeline.
+    """
+    async def _update():
+        try:
+            from modules.training_metrics import update_twin_training_metrics, is_training_metrics_enabled
+            if is_training_metrics_enabled():
+                await asyncio.to_thread(update_twin_training_metrics, twin_id)
+        except Exception as e:
+            print(f"[TrainingJobs] Background metrics update failed for twin {twin_id}: {e}")
+    
+    # Create and schedule the background task
+    try:
+        asyncio.create_task(_update())
+    except Exception as e:
+        print(f"[TrainingJobs] Failed to schedule metrics update: {e}")
 
 
 def create_training_job(source_id: str, twin_id: str, job_type: str = 'ingestion',
@@ -285,6 +308,9 @@ async def process_training_job(job_id: str) -> bool:
 
             # Update job metadata
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
+            
+            # Trigger training metrics recompute in background (fire-and-forget)
+            _schedule_metrics_update(twin_id)
 
         elif job_type == "reindex":
             # Reindex existing content (delete old vectors and re-index)
@@ -300,6 +326,9 @@ async def process_training_job(job_id: str) -> bool:
             }).eq("id", source_id).execute()
 
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
+            
+            # Trigger training metrics recompute in background (fire-and-forget)
+            _schedule_metrics_update(twin_id)
 
         elif job_type == "health_check":
             # Run health checks (already done during ingestion, but can be re-run)
