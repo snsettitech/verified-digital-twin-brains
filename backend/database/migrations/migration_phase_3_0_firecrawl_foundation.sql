@@ -154,12 +154,13 @@ ALTER TABLE research_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE research_subquestions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE source_confirmations ENABLE ROW LEVEL SECURITY;
 
--- Policy: Users can only see research runs for twins they own
+-- Policy: Tenant isolation via twins.tenant_id (matches existing project pattern)
 CREATE POLICY research_runs_tenant_isolation ON research_runs
     FOR ALL
     USING (
         twin_id IN (
-            SELECT id FROM twins WHERE owner_id = auth.uid()
+            SELECT id FROM twins
+            WHERE tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid)
         )
     );
 
@@ -170,16 +171,17 @@ CREATE POLICY research_subquestions_tenant_isolation ON research_subquestions
         research_run_id IN (
             SELECT rr.id FROM research_runs rr
             JOIN twins t ON rr.twin_id = t.id
-            WHERE t.owner_id = auth.uid()
+            WHERE t.tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid)
         )
     );
 
--- Policy: Users can only see confirmations for their twins
+-- Policy: Tenant isolation via twins.tenant_id (matches existing project pattern)
 CREATE POLICY source_confirmations_tenant_isolation ON source_confirmations
     FOR ALL
     USING (
         twin_id IN (
-            SELECT id FROM twins WHERE owner_id = auth.uid()
+            SELECT id FROM twins
+            WHERE tenant_id = ((auth.jwt() ->> 'tenant_id')::uuid)
         )
     );
 
