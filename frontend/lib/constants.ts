@@ -1,14 +1,15 @@
 /**
  * Centralized API Configuration
- * 
+ *
  * This is the SINGLE SOURCE OF TRUTH for API configuration.
- * Do NOT define API_BASE_URL in individual files.
+ * Use getApiBaseUrl() from @/lib/api for the backend URL.
  */
+
+import { resolveApiBaseUrl } from '@/lib/api';
 
 // Default values for Vercel deployments (when env vars not set in dashboard)
 const DEFAULT_SUPABASE_URL = 'https://jvtffdbuwyhmcynauety.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2dGZmZGJ1d3lobWN5bmF1ZXR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMTY1MzksImV4cCI6MjA4MTU5MjUzOX0.tRpBHBhL2GM9s6sSncrVrNnmtwxrzED01SzwjKRb37E';
-const DEFAULT_BACKEND_URL = 'https://verified-digital-twin-brains.onrender.com';
 
 function getEnvVar(name: string, defaultValue?: string): string {
   const value = process.env[name] || defaultValue;
@@ -21,9 +22,10 @@ function getEnvVar(name: string, defaultValue?: string): string {
 
 /**
  * The base URL for all API requests.
- * Uses default backend URL if environment variable not set.
+ * Delegates to resolveApiBaseUrl() for unified resolution (env, localhost, production).
+ * @deprecated Prefer getApiBaseUrl() or resolveApiBaseUrl() from @/lib/api for new code.
  */
-export const API_BASE_URL = getEnvVar('NEXT_PUBLIC_BACKEND_URL', DEFAULT_BACKEND_URL) || DEFAULT_BACKEND_URL;
+export const API_BASE_URL = resolveApiBaseUrl();
 
 /**
  * Supabase configuration
@@ -59,6 +61,7 @@ export const API_ENDPOINTS = {
   
   // Chat
   CHAT: (twinId: string) => `/chat/${twinId}`,
+  CHAT_WIDGET: (twinId: string) => `/chat-widget/${twinId}`,
   CONVERSATIONS: (twinId: string) => `/conversations/${twinId}`,
   MESSAGES: (conversationId: string) => `/conversations/${conversationId}/messages`,
   

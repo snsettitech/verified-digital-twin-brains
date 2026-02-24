@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { getSupabaseClient } from '@/lib/supabase/client';
 import MessageList, { Message } from './MessageList';
 import SuggestedQuestions from './SuggestedQuestions';
 import { useTwin } from '@/lib/context/TwinContext';
-import { resolveApiBaseUrl } from '@/lib/api';
+import { resolveApiBaseUrl, getChatAuthToken } from '@/lib/api';
 import { API_ENDPOINTS } from '@/lib/constants';
+import { parseChatStream } from '@/lib/chat/streamParser';
 
 const STREAM_IDLE_TIMEOUT_MS = 60000;
 
@@ -77,7 +77,6 @@ export default function ChatInterface({
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const supabase = getSupabaseClient();
   const contextStorageKey = mode === 'training'
     ? `training_${trainingSessionId || 'none'}`
     : mode;
@@ -101,10 +100,6 @@ export default function ChatInterface({
     setEffectiveConversationId(conversationId || null);
   }, [conversationId]);
 
-  const getAuthToken = useCallback(async (): Promise<string | null> => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token || null;
-  }, [supabase]);
 
   const persistMessages = useCallback((nextMessages: Message[]) => {
     try {
@@ -139,7 +134,7 @@ export default function ChatInterface({
     stance?: string;
     intensity?: number;
   }) => {
-    const token = await getAuthToken();
+    const token = await getChatAuthToken();
     if (!token && !isE2EBypass) throw new Error('Not authenticated');
 
     const headers: Record<string, string> = {
@@ -166,14 +161,14 @@ export default function ChatInterface({
 
     onMemoryUpdated?.();
     setMessages((prev) => [...prev, { role: 'assistant', content: 'Saved to memory.', timestamp: Date.now() }]);
-  }, [apiBaseUrl, getAuthToken, onMemoryUpdated, twinId, isE2EBypass]);
+  }, [apiBaseUrl, onMemoryUpdated, twinId, isE2EBypass]);
 
   const submitFeedback = useCallback(async (payload: {
     messageIndex: number;
     score: 1 | -1;
     reason: string;
   }) => {
-    const token = await getAuthToken();
+    const token = await getChatAuthToken();
     if (!token && !isE2EBypass) throw new Error('Not authenticated');
 
     const headers: Record<string, string> = {
@@ -207,7 +202,7 @@ export default function ChatInterface({
     if (!res.ok) {
       throw new Error(`Failed to submit feedback (${res.status})`);
     }
-  }, [apiBaseUrl, effectiveConversationId, getAuthToken, isE2EBypass, mode, twinId]);
+  }, [apiBaseUrl, effectiveConversationId, isE2EBypass, mode, twinId]);
 
   const submitCorrection = useCallback(async (payload: {
     messageIndex: number;
@@ -216,7 +211,7 @@ export default function ChatInterface({
     topicNormalized?: string;
     memoryType?: string;
   }) => {
-    const token = await getAuthToken();
+    const token = await getChatAuthToken();
     if (!token && !isE2EBypass) throw new Error('Not authenticated');
 
     const headers: Record<string, string> = {
@@ -243,7 +238,7 @@ export default function ChatInterface({
     }
 
     onMemoryUpdated?.();
-  }, [apiBaseUrl, getAuthToken, isE2EBypass, onMemoryUpdated, twinId]);
+  }, [apiBaseUrl, isE2EBypass, onMemoryUpdated, twinId]);
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -273,7 +268,7 @@ export default function ChatInterface({
       }
 
       try {
-        const token = await getAuthToken();
+        const token = await getChatAuthToken();
         if (!token) return;
 
         const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/messages`, {
@@ -298,7 +293,7 @@ export default function ChatInterface({
       }
     };
     loadHistory();
-  }, [conversationId, getAuthToken, storageKey]);
+  }, [conversationId, storageKey]);
 
   useEffect(() => {
     persistMessages(messages);
@@ -436,8 +431,20 @@ export default function ChatInterface({
         return;
       }
 
-      const token = await getAuthToken();
-      if (!token && !isE2EBypass) throw new Error('Not authenticated');
+      const token = await getChatAuthToken();
+      if (!token && !isE2EBypass) {
+        setLastError('Please sign in to chat.');
+        setMessages((prev) => {
+          const last = [...prev];
+          last[last.length - 1] = {
+            role: 'assistant',
+            content: 'Please sign in to chat with your digital twin.',
+            timestamp: Date.now(),
+          };
+          return last;
+        });
+        return;
+      }
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -465,227 +472,96 @@ export default function ChatInterface({
       }
       if (!response.body) throw new Error('No response body');
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let hasReceivedBytes = false;
-      let buffer = '';
+      const handleClarify = (data: Record<string, unknown>) => {
+        setIsSearching(false);
+        setLoading(false);
+        setClarification(data);
+        emitStreamEvent('clarify', data);
+        const proposedTopic = (data?.memory_write_proposal as { topic?: string })?.topic;
+        setLastDebug({
+          decision: 'CLARIFY',
+          used_owner_memory: false,
+          owner_memory_refs: [],
+          owner_memory_topics: proposedTopic ? [proposedTopic] : [],
+          clarification_id: (data.clarification_id as string) || null,
+          requires_evidence: null,
+          target_owner_scope: null,
+          router_reason: null,
+          router_knowledge_available: null
+        });
+        setMessages((prev) => {
+          const last = [...prev];
+          const lastMsg = { ...last[last.length - 1] };
+          lastMsg.content = (data.question as string) || 'I need clarification.';
+          last[last.length - 1] = lastMsg;
+          return last;
+        });
+      };
 
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          if (!hasReceivedBytes) {
-            hasReceivedBytes = true;
-          }
-          resetWatchdog();
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const data = JSON.parse(line);
-              if (data.type === 'clarify') {
-                setIsSearching(false);
-                setLoading(false);
-                setClarification(data);
-                emitStreamEvent('clarify', data);
-                const proposedTopic = data?.memory_write_proposal?.topic;
-                setLastDebug({
-                  decision: 'CLARIFY',
-                  used_owner_memory: false,
-                  owner_memory_refs: [],
-                  owner_memory_topics: proposedTopic ? [proposedTopic] : [],
-                  clarification_id: data.clarification_id || null,
-                  requires_evidence: null,
-                  target_owner_scope: null,
-                  router_reason: null,
-                  router_knowledge_available: null
-                });
-                setMessages((prev) => {
-                  const last = [...prev];
-                  const lastMsg = { ...last[last.length - 1] };
-                  lastMsg.content = data.question || 'I need clarification.';
-                  last[last.length - 1] = lastMsg;
-                  return last;
-                });
-              } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
-                setIsSearching(false); // Found context, now generating
-                emitStreamEvent('metadata', data);
-                if (
-                  data.conversation_id &&
-                  onConversationStarted &&
-                  data.conversation_id !== conversationId
-                ) {
-                  onConversationStarted(data.conversation_id);
-                }
-                if (data.conversation_id) {
-                  setEffectiveConversationId(data.conversation_id);
-                }
-                const summaries = Array.isArray(data.owner_memory_summaries)
-                  ? data.owner_memory_summaries
-                  : [];
-                const ownerMemoryTopics = Array.isArray(data.owner_memory_topics)
-                  ? data.owner_memory_topics
-                  : summaries.map((summary: any) => summary?.topic).filter(Boolean);
-                const ownerMemoryRefs = Array.isArray(data.owner_memory_refs)
-                  ? data.owner_memory_refs
-                  : summaries.map((summary: any) => summary?.id).filter(Boolean);
-
-                setLastDebug({
-                  decision: data.dialogue_mode || 'ANSWER',
-                  used_owner_memory: ownerMemoryRefs.length > 0,
-                  owner_memory_refs: ownerMemoryRefs,
-                  owner_memory_topics: ownerMemoryTopics,
-                  clarification_id: null,
-                  planning_output: data.planning_output,
-                  requires_evidence: typeof data.requires_evidence === 'boolean' ? data.requires_evidence : null,
-                  target_owner_scope: typeof data.target_owner_scope === 'boolean' ? data.target_owner_scope : null,
-                  router_reason: typeof data.router_reason === 'string' ? data.router_reason : null,
-                  router_knowledge_available: typeof data.router_knowledge_available === 'boolean'
-                    ? data.router_knowledge_available
-                    : null
-                });
-
-                // Extract graph_used from metadata
-                const graphUsed = data.graph_context?.graph_used || false;
-                setMessages((prev) => {
-                  const last = [...prev];
-                  const lastMsg = { ...last[last.length - 1] };
-                  lastMsg.confidence_score = data.confidence_score;
-                  lastMsg.citations = data.citations;
-                  lastMsg.citation_details = data.citation_details;
-                  lastMsg.graph_used = graphUsed;
-                  lastMsg.owner_memory_refs = ownerMemoryRefs;
-                  lastMsg.owner_memory_topics = ownerMemoryTopics;
-                  lastMsg.used_owner_memory = ownerMemoryRefs.length > 0;
-
-                  // Phase 4 Metadata
-                  lastMsg.teaching_questions = data.teaching_questions;
-                  lastMsg.dialogue_mode = data.dialogue_mode;
-                  lastMsg.planning_output = data.planning_output;
-
-                  last[last.length - 1] = lastMsg;
-                  return last;
-                });
-              } else if (data.type === 'answer_token' || data.type === 'content') {
-                emitStreamEvent('content', data);
-                setMessages((prev) => {
-                  const last = [...prev];
-                  const lastMsg = { ...last[last.length - 1] };
-                  lastMsg.content += data.content;
-                  last[last.length - 1] = lastMsg;
-                  return last;
-                });
-              } else if (data.type === 'done') {
-                emitStreamEvent('done', data);
-              }
-            } catch (e) {
-              console.error('Error parsing stream line:', e);
-            }
-          }
+      const handleMetadata = (data: Record<string, unknown>) => {
+        setIsSearching(false);
+        emitStreamEvent('metadata', data);
+        const convId = data.conversation_id as string | undefined;
+        if (convId && onConversationStarted && convId !== conversationId) {
+          onConversationStarted(convId);
         }
-      }
-      const tail = buffer.trim();
-      if (tail) {
-        try {
-          const data = JSON.parse(tail);
-          if (data.type === 'clarify') {
-            setIsSearching(false);
-            setLoading(false);
-            setClarification(data);
-            emitStreamEvent('clarify', data);
-            const proposedTopic = data?.memory_write_proposal?.topic;
-            setLastDebug({
-              decision: 'CLARIFY',
-              used_owner_memory: false,
-              owner_memory_refs: [],
-              owner_memory_topics: proposedTopic ? [proposedTopic] : [],
-              clarification_id: data.clarification_id || null,
-              requires_evidence: null,
-              target_owner_scope: null,
-              router_reason: null,
-              router_knowledge_available: null
-            });
-            setMessages((prev) => {
-              const last = [...prev];
-              const lastMsg = { ...last[last.length - 1] };
-              lastMsg.content = data.question || 'I need clarification.';
-              last[last.length - 1] = lastMsg;
-              return last;
-            });
-          } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
-            setIsSearching(false);
-            emitStreamEvent('metadata', data);
-            if (
-              data.conversation_id &&
-              onConversationStarted &&
-              data.conversation_id !== conversationId
-            ) {
-              onConversationStarted(data.conversation_id);
-            }
-            if (data.conversation_id) {
-              setEffectiveConversationId(data.conversation_id);
-            }
-            const summaries = Array.isArray(data.owner_memory_summaries)
-              ? data.owner_memory_summaries
-              : [];
-            const ownerMemoryTopics = Array.isArray(data.owner_memory_topics)
-              ? data.owner_memory_topics
-              : summaries.map((summary: any) => summary?.topic).filter(Boolean);
-            const ownerMemoryRefs = Array.isArray(data.owner_memory_refs)
-              ? data.owner_memory_refs
-              : summaries.map((summary: any) => summary?.id).filter(Boolean);
+        if (convId) setEffectiveConversationId(convId);
+        const summaries = Array.isArray(data.owner_memory_summaries) ? data.owner_memory_summaries : [];
+        const ownerMemoryTopics = Array.isArray(data.owner_memory_topics)
+          ? data.owner_memory_topics
+          : summaries.map((s: { topic?: string }) => s?.topic).filter(Boolean);
+        const ownerMemoryRefs = Array.isArray(data.owner_memory_refs)
+          ? data.owner_memory_refs
+          : summaries.map((s: { id?: string }) => s?.id).filter(Boolean);
+        setLastDebug({
+          decision: (data.dialogue_mode as string) || 'ANSWER',
+          used_owner_memory: ownerMemoryRefs.length > 0,
+          owner_memory_refs: ownerMemoryRefs,
+          owner_memory_topics: ownerMemoryTopics,
+          clarification_id: null,
+          planning_output: data.planning_output,
+          requires_evidence: typeof data.requires_evidence === 'boolean' ? data.requires_evidence : null,
+          target_owner_scope: typeof data.target_owner_scope === 'boolean' ? data.target_owner_scope : null,
+          router_reason: typeof data.router_reason === 'string' ? data.router_reason : null,
+          router_knowledge_available: typeof data.router_knowledge_available === 'boolean'
+            ? data.router_knowledge_available
+            : null
+        });
+        const graphUsed = (data.graph_context as { graph_used?: boolean })?.graph_used || false;
+        setMessages((prev) => {
+          const last = [...prev];
+          const lastMsg = { ...last[last.length - 1] };
+          lastMsg.confidence_score = data.confidence_score as number | undefined;
+          lastMsg.citations = data.citations as string[] | undefined;
+          lastMsg.citation_details = data.citation_details as Message['citation_details'];
+          lastMsg.graph_used = graphUsed;
+          lastMsg.owner_memory_refs = ownerMemoryRefs;
+          lastMsg.owner_memory_topics = ownerMemoryTopics;
+          lastMsg.used_owner_memory = ownerMemoryRefs.length > 0;
+          lastMsg.teaching_questions = data.teaching_questions as Message['teaching_questions'];
+          lastMsg.dialogue_mode = data.dialogue_mode as string | undefined;
+          lastMsg.planning_output = data.planning_output;
+          last[last.length - 1] = lastMsg;
+          return last;
+        });
+      };
 
-            setLastDebug({
-              decision: data.dialogue_mode || 'ANSWER',
-              used_owner_memory: ownerMemoryRefs.length > 0,
-              owner_memory_refs: ownerMemoryRefs,
-              owner_memory_topics: ownerMemoryTopics,
-              clarification_id: null,
-              planning_output: data.planning_output,
-              requires_evidence: typeof data.requires_evidence === 'boolean' ? data.requires_evidence : null,
-              target_owner_scope: typeof data.target_owner_scope === 'boolean' ? data.target_owner_scope : null,
-              router_reason: typeof data.router_reason === 'string' ? data.router_reason : null,
-              router_knowledge_available: typeof data.router_knowledge_available === 'boolean'
-                ? data.router_knowledge_available
-                : null
-            });
-
-            const graphUsed = data.graph_context?.graph_used || false;
-            setMessages((prev) => {
-              const last = [...prev];
-              const lastMsg = { ...last[last.length - 1] };
-              lastMsg.confidence_score = data.confidence_score;
-              lastMsg.citations = data.citations;
-              lastMsg.citation_details = data.citation_details;
-              lastMsg.graph_used = graphUsed;
-              lastMsg.owner_memory_refs = ownerMemoryRefs;
-              lastMsg.owner_memory_topics = ownerMemoryTopics;
-              lastMsg.used_owner_memory = ownerMemoryRefs.length > 0;
-              lastMsg.teaching_questions = data.teaching_questions;
-              lastMsg.dialogue_mode = data.dialogue_mode;
-              lastMsg.planning_output = data.planning_output;
-              last[last.length - 1] = lastMsg;
-              return last;
-            });
-          } else if (data.type === 'answer_token' || data.type === 'content') {
-            emitStreamEvent('content', data);
-            setMessages((prev) => {
-              const last = [...prev];
-              const lastMsg = { ...last[last.length - 1] };
-              lastMsg.content += data.content;
-              last[last.length - 1] = lastMsg;
-              return last;
-            });
-          }
-        } catch (e) {
-          console.error('Error parsing stream tail:', e);
-        }
-      }
+      await parseChatStream(response.body, {
+        onBytesReceived: resetWatchdog,
+        onClarify: handleClarify,
+        onMetadata: handleMetadata,
+        onContent: (data) => {
+          emitStreamEvent('content', data);
+          setMessages((prev) => {
+            const last = [...prev];
+            const lastMsg = { ...last[last.length - 1] };
+            lastMsg.content += data.content ?? '';
+            last[last.length - 1] = lastMsg;
+            return last;
+          });
+        },
+        onDone: (data) => emitStreamEvent('done', data ?? {}),
+      }, { signal: abortRef.current?.signal });
     } catch (error: any) {
       console.error('Error sending message:', error);
       emitStreamEvent('error', {
@@ -814,7 +690,7 @@ export default function ChatInterface({
             <button
               onClick={async () => {
                 try {
-                  const token = await getAuthToken();
+                  const token = await getChatAuthToken();
                   if (!token && !isE2EBypass) throw new Error('Not authenticated');
                   const headers: Record<string, string> = {
                     'Content-Type': 'application/json'

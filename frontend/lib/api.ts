@@ -1,4 +1,11 @@
-export const resolveApiBaseUrl = () => {
+const DEFAULT_BACKEND_URL = 'https://verified-digital-twin-brains.onrender.com';
+
+/**
+ * Single source of truth for API base URL.
+ * Works in both SSR (no window) and client.
+ * Priority: env vars > localhost detection (client only) > production default.
+ */
+export const resolveApiBaseUrl = (): string => {
   const explicit =
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
@@ -15,8 +22,14 @@ export const resolveApiBaseUrl = () => {
     }
   }
 
-  return 'https://verified-digital-twin-brains.onrender.com';
+  return DEFAULT_BACKEND_URL;
 };
+
+/**
+ * Alias for resolveApiBaseUrl - use for components that need a stable reference.
+ * Call this at use-time (not module load) so SSR and client resolve correctly.
+ */
+export const getApiBaseUrl = resolveApiBaseUrl;
 
 export const resolveApiHostLabel = () => {
   const base = resolveApiBaseUrl();
@@ -111,20 +124,23 @@ export const ingestionJobsApi = {
   }
 };
 
-// Helper to get auth token - handles various auth methods
+// Helper to get auth token - Supabase session is source of truth
 async function getAuthToken(): Promise<string> {
-  // Try to get token from various sources
-  if (typeof window !== 'undefined') {
-    // Check for Supabase session
-    const supabaseToken = localStorage.getItem('supabase.auth.token');
-    if (supabaseToken) {
-      try {
-        const parsed = JSON.parse(supabaseToken);
-        return parsed.access_token || '';
-      } catch {
-        // Fall through
-      }
-    }
+  const token = await getChatAuthToken();
+  return token ?? '';
+}
+
+/**
+ * Get auth token from Supabase session. Use for chat and other authenticated API calls.
+ * Returns null if not authenticated.
+ */
+export async function getChatAuthToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const { getSupabaseClient } = await import('@/lib/supabase/client');
+    const { data: { session } } = await getSupabaseClient().auth.getSession();
+    return session?.access_token || null;
+  } catch {
+    return null;
   }
-  return '';
 }

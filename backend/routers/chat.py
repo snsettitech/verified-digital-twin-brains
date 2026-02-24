@@ -1711,21 +1711,25 @@ async def chat(
                 print(f"[Chat] Smalltalk detected, short-circuiting agent flow")
                 smalltalk_response = "Hi. How can I help?"
                 # Determine smalltalk response based on query type
-                q_lower = query.lower()
+                q_lower = query.lower().strip()
                 if any(marker in q_lower for marker in ("thank you", "thanks")):
                     smalltalk_response = "You're welcome."
                 elif q_lower in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
                     smalltalk_response = "Sounds good."
                 elif any(marker in q_lower for marker in ("how are you", "how's your day", "hows your day")):
                     smalltalk_response = "Doing well. How can I help?"
+                elif q_lower in {"hi", "hello", "hey", "hi!", "hello!"}:
+                    smalltalk_response = "Hey! Great to chat with you."
                 
                 full_response = smalltalk_response
                 confidence_score = 0.9
                 dialogue_mode = "SMALLTALK"
                 citations = []
-                # Skip to final response
+                # Skip to final response - include same metadata shape as agent path for consistency
                 metadata = _normalize_json({
                     "type": "metadata",
+                    "interaction_context": resolved_context.context.value,
+                    "origin_endpoint": resolved_context.origin_endpoint,
                     "citations": [],
                     "citation_details": [],
                     "confidence_score": confidence_score,
@@ -1736,7 +1740,15 @@ async def chat(
                     "teaching_questions": [],
                     "planning_output": {"answer_points": [smalltalk_response], "render_strategy": "source_faithful"},
                     "dialogue_mode": dialogue_mode,
-                    "intent_label": "smalltalk",
+                    "intent_label": "meta_or_system",
+                    "module_ids": ["procedural.style.smalltalk"],
+                    "persona_spec_version": context_trace.get("persona_spec_version"),
+                    "deterministic_gate_passed": None,
+                    "structure_policy_score": None,
+                    "voice_score": None,
+                    "draft_persona_score": None,
+                    "final_persona_score": None,
+                    "rewrite_applied": False,
                     "workflow_intent": "answer",
                     "requires_evidence": False,
                     "target_owner_scope": False,

@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { getSupabaseClient } from '@/lib/supabase/client';
-import { resolveApiBaseUrl } from '@/lib/api';
+import React, { useState, useRef, useEffect } from 'react';
+import { resolveApiBaseUrl, getChatAuthToken } from '@/lib/api';
+import { API_ENDPOINTS } from '@/lib/constants';
+import { parseChatStream } from '@/lib/chat/streamParser';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -78,18 +79,6 @@ export default function ChatWidget({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Get auth token for internal dashboard use (when no API key is provided)
-  const getAuthToken = useCallback(async (): Promise<string | null> => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.access_token || null;
-    } catch (error) {
-      console.error('Failed to get auth token:', error);
-      return null;
-    }
-  }, []);
-
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
 
@@ -106,28 +95,33 @@ export default function ChatWidget({
         'Content-Type': 'application/json',
       };
 
-      // Use X-Twin-API-Key header if API key provided, otherwise use Supabase session
-      if (apiKey) {
-        headers['X-Twin-API-Key'] = apiKey;
-        // Add Origin header for domain validation
+      const useWidgetEndpoint = Boolean(apiKey);
+
+      if (useWidgetEndpoint) {
+        // chat-widget endpoint: API key auth, api_key in body
         if (typeof window !== 'undefined') {
           headers['Origin'] = window.location.origin;
         }
       } else {
-        // Get Supabase session token for internal dashboard use
-        const token = await getAuthToken();
+        // chat endpoint: JWT auth for internal dashboard
+        const token = await getChatAuthToken();
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
       }
 
-      const response = await fetch(`${baseUrl}/chat/${twinId}`, {
+      const chatUrl = useWidgetEndpoint
+        ? `${baseUrl}${API_ENDPOINTS.CHAT_WIDGET(twinId)}`
+        : `${baseUrl}${API_ENDPOINTS.CHAT(twinId)}`;
+
+      const body = useWidgetEndpoint
+        ? { query: input, api_key: apiKey!, session_id: conversationId ?? undefined }
+        : { query: input, conversation_id: conversationId };
+
+      const response = await fetch(chatUrl, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          query: input,
-          conversation_id: conversationId,
-        }),
+        body: JSON.stringify(body),
       });
 
       // Handle rate limit error
@@ -149,98 +143,39 @@ export default function ChatWidget({
 
       if (!response.body) throw new Error('No response body');
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-      let buffer = '';
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const data = JSON.parse(line);
-              if (data.type === 'clarify') {
-                setLoading(false);
-                setMessages((prev) => {
-                  const last = [...prev];
-                  last[last.length - 1].content = `${data.question || 'Clarification needed.'} (Queued for owner confirmation.)`;
-                  return last;
-                });
-              } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
-                if (data.conversation_id && !conversationId) {
-                  setConversationId(data.conversation_id);
-                }
-                setMessages((prev) => {
-                  const last = [...prev];
-                  const lastMsg = { ...last[last.length - 1] };
-                  lastMsg.confidence_score = data.confidence_score;
-                  lastMsg.citations = data.citations;
-                  lastMsg.citation_details = data.citation_details;
-                  lastMsg.owner_memory_refs = data.owner_memory_refs || [];
-                  last[last.length - 1] = lastMsg;
-                  return last;
-                });
-              } else if (data.type === 'answer_token' || data.type === 'content') {
-                setMessages((prev) => {
-                  const last = [...prev];
-                  const lastMsg = { ...last[last.length - 1] };
-                  lastMsg.content += data.content;
-                  last[last.length - 1] = lastMsg;
-                  return last;
-                });
-              }
-            } catch (e) {
-              console.error('Error parsing stream line:', e);
-            }
-          }
-        }
-      }
-      const tail = buffer.trim();
-      if (tail) {
-        try {
-          const data = JSON.parse(tail);
-          if (data.type === 'clarify') {
-            setLoading(false);
-            setMessages((prev) => {
-              const last = [...prev];
-              last[last.length - 1].content = `${data.question || 'Clarification needed.'} (Queued for owner confirmation.)`;
-              return last;
-            });
-          } else if (data.type === 'answer_metadata' || data.type === 'metadata') {
-            if (data.conversation_id && !conversationId) {
-              setConversationId(data.conversation_id);
-            }
-            setMessages((prev) => {
-              const last = [...prev];
-              const lastMsg = { ...last[last.length - 1] };
-              lastMsg.confidence_score = data.confidence_score;
-              lastMsg.citations = data.citations;
-              lastMsg.citation_details = data.citation_details;
-              lastMsg.owner_memory_refs = data.owner_memory_refs || [];
-              last[last.length - 1] = lastMsg;
-              return last;
-            });
-          } else if (data.type === 'answer_token' || data.type === 'content') {
-            setMessages((prev) => {
-              const last = [...prev];
-              const lastMsg = { ...last[last.length - 1] };
-              lastMsg.content += data.content;
-              last[last.length - 1] = lastMsg;
-              return last;
-            });
-          }
-        } catch (e) {
-          console.error('Error parsing stream tail:', e);
-        }
-      }
+      await parseChatStream(response.body, {
+        onClarify: (data) => {
+          setLoading(false);
+          setMessages((prev) => {
+            const last = [...prev];
+            last[last.length - 1].content = `${(data.question as string) || 'Clarification needed.'} (Queued for owner confirmation.)`;
+            return last;
+          });
+        },
+        onMetadata: (data) => {
+          const convId = data.conversation_id as string | undefined;
+          if (convId && !conversationId) setConversationId(convId);
+          setMessages((prev) => {
+            const last = [...prev];
+            const lastMsg = { ...last[last.length - 1] };
+            lastMsg.confidence_score = data.confidence_score as number | undefined;
+            lastMsg.citations = data.citations as string[] | undefined;
+            lastMsg.citation_details = data.citation_details as Message['citation_details'];
+            lastMsg.owner_memory_refs = (data.owner_memory_refs as string[]) || [];
+            last[last.length - 1] = lastMsg;
+            return last;
+          });
+        },
+        onContent: (data) => {
+          setMessages((prev) => {
+            const last = [...prev];
+            const lastMsg = { ...last[last.length - 1] };
+            lastMsg.content += data.content ?? '';
+            last[last.length - 1] = lastMsg;
+            return last;
+          });
+        },
+      });
     } catch (error) {
       console.error('Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';

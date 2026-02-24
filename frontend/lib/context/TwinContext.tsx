@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabaseClient } from '@/lib/supabase/client';
+import { resolveApiBaseUrl } from '@/lib/api';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 // ============================================================================
@@ -94,7 +95,7 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
     const sessionUserIdRef = useRef<string | null>(null);
 
     const supabase = getSupabaseClient();
-    const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const API_URL = resolveApiBaseUrl();
     const isE2EBypass =
         process.env.NODE_ENV !== 'production' &&
         process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';

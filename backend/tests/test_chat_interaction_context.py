@@ -82,6 +82,8 @@ def test_owner_chat_ignores_client_mode_spoof():
             "routers.chat.run_agent_stream", _fake_agent_stream
         ), patch(
             "modules.graph_context.get_graph_stats", return_value={"has_graph": False, "node_count": 0}
+        ), patch(
+            "routers.chat.get_active_persona_spec", return_value={"version": "9.9.9"}
         ):
             resp = client.post(
                 "/chat/twin-1",
