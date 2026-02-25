@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { nameDeepResearchApi, type NameDeepResearchStatus } from '@/lib/api/nameDeepResearch';
+import {
+  nameDeepResearchApi,
+  type NameDeepResearchResult,
+  type NameDeepResearchStatus,
+} from '@/lib/api/nameDeepResearch';
 
 const ORDERED_STAGES: NameDeepResearchStatus[] = [
   'searching',
@@ -40,6 +44,8 @@ export default function NameOnlyDeepResearchPage() {
     words_extracted: number;
   } | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined);
+  const [resultPreview, setResultPreview] = useState<NameDeepResearchResult | null>(null);
+  const [resultLoadedForRunId, setResultLoadedForRunId] = useState<string | null>(null);
 
   const canStart = useMemo(() => name.trim().length > 0 && !busy, [name, busy]);
 
@@ -47,6 +53,9 @@ export default function NameOnlyDeepResearchPage() {
     if (!canStart) return;
     setBusy(true);
     setError(null);
+    setResultPreview(null);
+    setResultLoadedForRunId(null);
+
     try {
       const response = await nameDeepResearchApi.createRun({
         name: name.trim(),
@@ -68,6 +77,7 @@ export default function NameOnlyDeepResearchPage() {
 
   useEffect(() => {
     if (!runId || isTerminal(status)) return;
+
     const timer = setInterval(async () => {
       try {
         const current = await nameDeepResearchApi.getRun(runId);
@@ -81,14 +91,40 @@ export default function NameOnlyDeepResearchPage() {
         setError(err instanceof Error ? err.message : 'Polling failed');
       }
     }, 2500);
+
     return () => clearInterval(timer);
   }, [runId, status]);
 
+  useEffect(() => {
+    if (!runId || status !== 'completed' || resultLoadedForRunId === runId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const result = await nameDeepResearchApi.downloadResult(runId);
+        if (cancelled) return;
+        setResultPreview(result);
+        setResultLoadedForRunId(runId);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load completed result preview');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, status, resultLoadedForRunId]);
+
   const downloadJson = async () => {
     if (!runId) return;
+
     setBusy(true);
     try {
-      const result = await nameDeepResearchApi.downloadResult(runId);
+      const result = resultPreview ?? (await nameDeepResearchApi.downloadResult(runId));
       const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -110,9 +146,9 @@ export default function NameOnlyDeepResearchPage() {
   return (
     <div className="mx-auto max-w-4xl p-6 md:p-8">
       <div className="rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-xl">
-        <h1 className="text-2xl font-bold text-white">Name → Deep Research JSON</h1>
+        <h1 className="text-2xl font-bold text-white">Name to Deep Research JSON</h1>
         <p className="mt-2 text-sm text-slate-300">
-          Enter a public person’s name. The system will search, crawl, extract, synthesize, and produce grounded JSON with citations.
+          Enter a public person's name. The system will search, crawl, extract, synthesize, and produce grounded JSON with citations.
         </p>
 
         <div className="mt-6 grid gap-4">
@@ -131,7 +167,7 @@ export default function NameOnlyDeepResearchPage() {
             className="w-fit rounded-md border border-slate-600 px-3 py-1 text-sm text-slate-200 hover:bg-slate-800"
             type="button"
           >
-            Advanced {showAdvanced ? '▲' : '▼'}
+            Advanced {showAdvanced ? '^' : 'v'}
           </button>
 
           {showAdvanced && (
@@ -178,7 +214,7 @@ export default function NameOnlyDeepResearchPage() {
                 return (
                   <div key={stage} className="flex items-center gap-2 text-sm">
                     <span className={done ? 'text-emerald-400' : active ? 'text-cyan-400' : 'text-slate-500'}>
-                      {done ? '●' : active ? '◐' : '○'}
+                      {done ? '[x]' : active ? '[~]' : '[ ]'}
                     </span>
                     <span className={done ? 'text-emerald-300' : active ? 'text-cyan-300' : 'text-slate-400'}>
                       {stage}
@@ -217,6 +253,57 @@ export default function NameOnlyDeepResearchPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {resultPreview?.training_metrics && (
+          <div className="mt-6 rounded-xl border border-slate-700 bg-slate-950 p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Training Readiness</h2>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+                <div className="text-xs text-slate-400">Words Processed</div>
+                <div className="mt-1 text-2xl font-semibold text-white">
+                  {resultPreview.training_metrics.words_processed_display}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+                <div className="text-xs text-slate-400">Questions Answerable</div>
+                <div className="mt-1 text-2xl font-semibold text-white">
+                  {resultPreview.training_metrics.questions_answerable_display}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+                <div className="text-xs text-slate-400">Mind Score</div>
+                <div className="mt-1 text-2xl font-semibold text-white">
+                  {resultPreview.training_metrics.mind_score}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {resultPreview.training_metrics.mind_score_label}
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-400">
+              {resultPreview.training_metrics.notes}
+            </p>
+          </div>
+        )}
+
+        {resultPreview?.prepared_question_answers && resultPreview.prepared_question_answers.length > 0 && (
+          <div className="mt-6 rounded-xl border border-slate-700 bg-slate-950 p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+              Prepared Questions and Answers
+            </h2>
+            <div className="mt-3 space-y-3">
+              {resultPreview.prepared_question_answers.map((qa, index) => (
+                <div key={`${qa.question}-${index}`} className="rounded-lg border border-slate-700 bg-slate-900 p-3">
+                  <div className="text-sm font-medium text-cyan-300">{qa.question}</div>
+                  <div className="mt-1 text-sm text-slate-200">{qa.answer}</div>
+                  <div className="mt-2 text-xs text-slate-400">
+                    Confidence {Math.round(qa.confidence * 100)}% | Citations {qa.citations.join(', ')}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

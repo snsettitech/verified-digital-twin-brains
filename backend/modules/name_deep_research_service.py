@@ -26,8 +26,22 @@ from modules.clients import get_async_openai_client
 from modules.deep_research_config import get_config as get_dr_config
 from modules.firecrawl_client import ContentQuality, FirecrawlResult, get_firecrawl_client
 from modules.identity_confidence_scorer import IdentityConfidenceScorer
+from modules.name_deep_research_synthesis import (
+    NameDeepResearchDraftModel,
+    normalize_name_deep_research_synthesis_payload,
+)
 from modules.observability import supabase
+from modules.research_claim_web_search import create_search_provider_with_fallback
 from modules.robots_checker import RobotsChecker
+from modules.training_metrics import (
+    SourceMetrics,
+    calculate_diversity_score,
+    calculate_mind_score,
+    calculate_volume_score,
+    estimate_questions_answerable,
+    format_number_compact,
+    get_mind_score_label,
+)
 from modules.url_canonicalizer import canonicalize_url
 
 logger = logging.getLogger(__name__)
@@ -259,6 +273,26 @@ class SourceItemModel(BaseModel):
     used_in_final: bool
 
 
+class TrainingMetricsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    words_processed: int = Field(ge=0)
+    words_processed_display: str
+    questions_answerable_est: int = Field(ge=0)
+    questions_answerable_display: str
+    mind_score: int = Field(ge=0, le=100)
+    mind_score_label: str
+    method_version: str
+    notes: str
+
+
+class PreparedQuestionAnswerModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str
+    answer: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    citations: List[str]
+
+
 class NameDeepResearchResultModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     run_id: str
@@ -273,6 +307,8 @@ class NameDeepResearchResultModel(BaseModel):
     crawl_stats: CrawlStatsModel
     quality: QualityModel
     sources: List[SourceItemModel]
+    training_metrics: Optional[TrainingMetricsModel] = None
+    prepared_question_answers: List[PreparedQuestionAnswerModel] = Field(default_factory=list)
 
 
 def _validate_citations(result_doc: Dict[str, Any]) -> None:
@@ -290,6 +326,8 @@ def _validate_citations(result_doc: Dict[str, Any]) -> None:
         _check(item.get("citations", []), f"timeline[{idx}]")
     for idx, item in enumerate(result_doc.get("claims", [])):
         _check(item.get("citations", []), f"claims[{idx}]")
+    for idx, item in enumerate(result_doc.get("prepared_question_answers", [])):
+        _check(item.get("citations", []), f"prepared_question_answers[{idx}]")
 
 
 @dataclass
@@ -304,6 +342,14 @@ class RankedEvidence:
     content_quality: str
     identity_match_confidence: float
     excerpt: str
+
+
+@dataclass
+class SourceSelectionDecision:
+    source_id: str
+    selected: bool
+    selection_score: float
+    reason_codes: List[str]
 
 
 class NameDeepResearchService:
@@ -335,7 +381,17 @@ class NameDeepResearchService:
         self.max_urls = int(os.getenv("NAME_RESEARCH_MAX_URLS", "30"))
         self.max_sources_for_synthesis = int(os.getenv("NAME_RESEARCH_MAX_SOURCES", "12"))
         self.max_excerpt_chars = int(os.getenv("NAME_RESEARCH_MAX_EXCERPT_CHARS", "3500"))
+        self.identity_gating_enabled = os.getenv("NAME_RESEARCH_IDENTITY_GATING_ENABLED", "true").lower() == "true"
+        self.synthesis_hardening_enabled = (
+            os.getenv("NAME_RESEARCH_SYNTHESIS_HARDENING_ENABLED", "true").lower() == "true"
+        )
+        self.synthesis_repair_retry_enabled = (
+            os.getenv("NAME_RESEARCH_SYNTHESIS_REPAIR_RETRY_ENABLED", "true").lower() == "true"
+        )
+        self.metrics_and_qa_enabled = os.getenv("NAME_RESEARCH_METRICS_QA_ENABLED", "true").lower() == "true"
         self._models_cache: Optional[List[str]] = None
+        preferred_provider = (os.getenv("SEARCH_PROVIDER", "exa") or "exa").lower()
+        self.search_provider = create_search_provider_with_fallback(preferred=preferred_provider)
 
     async def create_run(
         self,
@@ -487,6 +543,16 @@ class NameDeepResearchService:
         _validate_citations(parsed.model_dump())
         return parsed
 
+    def _log_metric(self, *, run_id: str, metric: str, value: int = 1, **fields: Any) -> None:
+        payload = {"metric": metric, "value": value, **fields}
+        logger.info("name-research metric run_id=%s %s", run_id, json.dumps(payload, default=str))
+
+    def _log_fallback_reason(self, *, run_id: str, reason: str, detail: Optional[str] = None) -> None:
+        payload = {"fallback_reason": reason}
+        if detail:
+            payload["detail"] = detail[:1200]
+        logger.warning("name-research fallback run_id=%s %s", run_id, json.dumps(payload, default=str))
+
     async def _execute_pipeline(self, *, run_id: str, tenant_id: str, user_id: str) -> None:
         try:
             run = await self.get_run(run_id=run_id, tenant_id=tenant_id)
@@ -529,11 +595,21 @@ class NameDeepResearchService:
             )
 
             ranked_evidence = self._rank_evidence(source_rows, page_rows)
-            used_source_ids = [e.source_id for e in ranked_evidence[: self.max_sources_for_synthesis]]
-            for source_id in used_source_ids:
-                self.db.table("name_deep_research_sources").update(
-                    {"used_in_final": True}
-                ).eq("id", source_id).eq("run_id", run_id).execute()
+            gated_candidates, source_decisions = self._select_synthesis_candidates(
+                run_id=run_id,
+                name=run.get("input_name", ""),
+                hints=hints,
+                ranked_evidence=ranked_evidence,
+                source_rows=source_rows,
+            )
+            selected_evidence = gated_candidates[: self.max_sources_for_synthesis]
+            used_source_ids = [item.source_id for item in selected_evidence]
+            self._persist_source_selection_decisions(
+                run_id=run_id,
+                source_rows=source_rows,
+                selected_source_ids=used_source_ids,
+                decisions=source_decisions,
+            )
 
             await self._update_run(run_id, status="synthesizing", updated_at=_utcnow_iso())
 
@@ -543,7 +619,9 @@ class NameDeepResearchService:
                 hints=hints,
                 queries=queries,
                 source_rows=source_rows,
-                ranked_evidence=ranked_evidence[: self.max_sources_for_synthesis],
+                ranked_evidence=selected_evidence,
+                urls_considered=len(deduped_urls),
+                words_extracted=words_extracted,
                 run_started_at=run.get("run_started_at") or _utcnow_iso(),
             )
 
@@ -580,13 +658,21 @@ class NameDeepResearchService:
     async def _discover_urls(self, queries: List[str]) -> List[str]:
         if not queries:
             return []
-        if not self.firecrawl:
-            raise RuntimeError("Firecrawl is not configured for name-only deep research")
+        if not self.firecrawl and not self.search_provider:
+            raise RuntimeError("No web search provider configured for name-only deep research")
 
         urls: List[str] = []
         for query in queries:
-            batch = await self.firecrawl.search(query=query, limit=8)
-            urls.extend(batch or [])
+            try:
+                if self.search_provider:
+                    provider_results = await self.search_provider.search(query=query, num_results=8)
+                    urls.extend([r.url for r in provider_results if getattr(r, "url", "")])
+            except Exception as exc:
+                logger.warning("Search provider failed for query '%s': %s", query[:80], exc)
+
+            if self.firecrawl:
+                batch = await self.firecrawl.search(query=query, limit=8)
+                urls.extend(batch or [])
         return urls
 
     async def _crawl_and_extract(
@@ -666,10 +752,16 @@ class NameDeepResearchService:
             if quality in {"blocked", "manual_needed"}:
                 blocked += 1
             title = str(metadata.get("title") or metadata.get("ogTitle") or "").strip()
+            score_metadata: Dict[str, Any] = {"title": title, "url": canonical_url, **metadata}
+            author_value = score_metadata.get("author")
+            if isinstance(author_value, list):
+                score_metadata["author"] = ", ".join(str(x) for x in author_value if x is not None)
+            elif author_value is not None and not isinstance(author_value, str):
+                score_metadata["author"] = str(author_value)
 
             identity = self.identity_scorer.score_page(
                 page_content=content,
-                page_metadata={"title": title, "url": canonical_url, **metadata},
+                page_metadata=score_metadata,
                 claimed_identity=claimed_identity,
                 content_quality=quality,
             )
@@ -746,48 +838,619 @@ class NameDeepResearchService:
         ranked.sort(key=lambda r: r.rank_score, reverse=True)
         return ranked
 
-    async def _synthesize_result(
+    def _hint_tokens(self, value: Optional[str]) -> List[str]:
+        raw = (value or "").strip().lower()
+        if not raw:
+            return []
+        tokens = [token for token in re.split(r"[^a-z0-9]+", raw) if len(token) >= 3]
+        return tokens
+
+    def _compute_source_selection_decision(
+        self,
+        *,
+        name: str,
+        hints: Dict[str, Optional[str]],
+        evidence: RankedEvidence,
+        source_row: Dict[str, Any],
+    ) -> SourceSelectionDecision:
+        reason_codes: List[str] = []
+        score = float(evidence.rank_score)
+
+        company_tokens = self._hint_tokens(hints.get("company"))
+        location_tokens = self._hint_tokens(hints.get("location"))
+        website_hint = (hints.get("website") or "").strip().lower()
+        website_domain = (
+            website_hint.replace("https://", "").replace("http://", "").split("/")[0]
+            if website_hint
+            else ""
+        )
+
+        metadata = source_row.get("metadata") if isinstance(source_row.get("metadata"), dict) else {}
+        blob_parts = [
+            str(evidence.url or ""),
+            str(evidence.title or ""),
+            str(evidence.excerpt or ""),
+            str((metadata or {}).get("match_reasons") or ""),
+        ]
+        blob = " ".join(blob_parts).lower()
+
+        if website_domain and website_domain in blob:
+            score += 0.24
+            reason_codes.append("HANDLE_MATCH")
+
+        if company_tokens:
+            company_match = any(token in blob for token in company_tokens)
+            # Schulich/York should be strongly preferred for this style of person-research disambiguation.
+            if any(token in company_tokens for token in ("schulich", "york")) and (
+                "schulich" in blob or "york" in blob
+            ):
+                company_match = True
+            if company_match:
+                score += 0.22
+                reason_codes.append("HINT_MATCH")
+            else:
+                score -= 0.20
+                reason_codes.append("HINT_MISMATCH")
+
+        if location_tokens and any(token in blob for token in location_tokens):
+            score += 0.08
+            reason_codes.append("LOCATION_MATCH")
+
+        unrelated_markers = [
+            "photography",
+            "photographer",
+            "musician",
+            "album",
+            "song",
+            "hockey",
+            "ice hockey",
+            "attorney",
+            "law firm",
+            "real estate",
+            "office broker",
+        ]
+        if company_tokens and any(marker in blob for marker in unrelated_markers):
+            score -= 0.30
+            reason_codes.append("TOPIC_MISMATCH_PENALTY")
+
+        normalized_name = _normalize_name(name).lower()
+        name_parts = [part for part in normalized_name.split(" ") if part]
+        first_name = name_parts[0] if name_parts else ""
+        last_name = name_parts[-1] if len(name_parts) >= 2 else ""
+        allowed_first_names = {first_name}
+        if first_name == "chris":
+            allowed_first_names.add("christopher")
+        if first_name == "christopher":
+            allowed_first_names.add("chris")
+
+        if last_name:
+            first_name_mentions = re.findall(rf"\b([a-z]+)\s+{re.escape(last_name)}\b", blob)
+            if any(first and first not in allowed_first_names for first in first_name_mentions):
+                reason_codes.append("EXCLUDED_DIFFERENT_PERSON")
+                return SourceSelectionDecision(
+                    source_id=evidence.source_id,
+                    selected=False,
+                    selection_score=max(0.0, min(1.0, score)),
+                    reason_codes=reason_codes,
+                )
+
+        if not company_tokens and evidence.identity_match_confidence < 0.45:
+            score -= 0.06
+            reason_codes.append("NAME_ONLY_LOW_CONF")
+
+        threshold = 0.52 if company_tokens else 0.42
+        selected = score >= threshold
+        if selected:
+            reason_codes.append("SELECTED")
+        else:
+            reason_codes.append("EXCLUDED_BELOW_THRESHOLD")
+
+        return SourceSelectionDecision(
+            source_id=evidence.source_id,
+            selected=selected,
+            selection_score=max(0.0, min(1.0, score)),
+            reason_codes=reason_codes,
+        )
+
+    def _select_synthesis_candidates(
+        self,
+        *,
+        run_id: str,
+        name: str,
+        hints: Dict[str, Optional[str]],
+        ranked_evidence: List[RankedEvidence],
+        source_rows: List[Dict[str, Any]],
+    ) -> Tuple[List[RankedEvidence], Dict[str, SourceSelectionDecision]]:
+        source_by_id = {str(row.get("id")): row for row in source_rows}
+        if not self.identity_gating_enabled:
+            passthrough = {
+                e.source_id: SourceSelectionDecision(
+                    source_id=e.source_id,
+                    selected=True,
+                    selection_score=e.rank_score,
+                    reason_codes=["IDENTITY_GATING_DISABLED", "SELECTED"],
+                )
+                for e in ranked_evidence
+            }
+            self._log_metric(
+                run_id=run_id,
+                metric="source_identity_filtered_count",
+                value=len(ranked_evidence),
+            )
+            self._log_metric(
+                run_id=run_id,
+                metric="source_identity_excluded_count",
+                value=0,
+            )
+            return ranked_evidence, passthrough
+
+        selected: List[RankedEvidence] = []
+        decisions: Dict[str, SourceSelectionDecision] = {}
+        for evidence in ranked_evidence:
+            source_row = source_by_id.get(evidence.source_id) or {}
+            decision = self._compute_source_selection_decision(
+                name=name,
+                hints=hints,
+                evidence=evidence,
+                source_row=source_row,
+            )
+            decisions[evidence.source_id] = decision
+            if not decision.selected:
+                continue
+            selected.append(
+                RankedEvidence(
+                    source_id=evidence.source_id,
+                    rank_score=decision.selection_score,
+                    url=evidence.url,
+                    title=evidence.title,
+                    source_type=evidence.source_type,
+                    published_at=evidence.published_at,
+                    retrieved_at=evidence.retrieved_at,
+                    content_quality=evidence.content_quality,
+                    identity_match_confidence=evidence.identity_match_confidence,
+                    excerpt=evidence.excerpt,
+                )
+            )
+
+        selected.sort(key=lambda item: item.rank_score, reverse=True)
+        self._log_metric(
+            run_id=run_id,
+            metric="source_identity_filtered_count",
+            value=len(selected),
+        )
+        self._log_metric(
+            run_id=run_id,
+            metric="source_identity_excluded_count",
+            value=max(0, len(ranked_evidence) - len(selected)),
+        )
+        return selected, decisions
+
+    def _persist_source_selection_decisions(
+        self,
+        *,
+        run_id: str,
+        source_rows: List[Dict[str, Any]],
+        selected_source_ids: List[str],
+        decisions: Dict[str, SourceSelectionDecision],
+    ) -> None:
+        selected_set = set(selected_source_ids)
+        for source in source_rows:
+            source_id = str(source.get("id"))
+            decision = decisions.get(source_id)
+            metadata = dict(source.get("metadata") or {})
+            if decision:
+                metadata["selection_reason_codes"] = decision.reason_codes
+                metadata["selection_score"] = round(float(decision.selection_score), 4)
+                metadata["selection_selected"] = bool(source_id in selected_set)
+
+            used_in_final = source_id in selected_set
+            source["used_in_final"] = used_in_final
+            source["metadata"] = metadata
+            self.db.table("name_deep_research_sources").update(
+                {"used_in_final": used_in_final, "metadata": metadata}
+            ).eq("id", source_id).eq("run_id", run_id).execute()
+
+    def _conservative_bios(self) -> Dict[str, str]:
+        return {
+            "short": "Unknown. Needs additional evidence.",
+            "medium": "Unknown. Needs additional evidence from reliable public sources.",
+            "long": "Insufficient verified public evidence for a grounded long biography.",
+        }
+
+    def _build_stage_a_repair_prompt(self, error_text: str) -> str:
+        lines = [line.strip() for line in str(error_text).splitlines() if line.strip()]
+        top_lines = lines[:12]
+        return (
+            "Your previous JSON failed validation.\n"
+            f"Validation issues:\n- " + "\n- ".join(top_lines) + "\n\n"
+            "Repair requirements:\n"
+            "1) timeline items MUST use {date_or_range,event,confidence,citations}.\n"
+            "2) claim items MUST use {claim_id,text,claim_type,status,confidence,citations,notes}.\n"
+            "3) citations MUST be list[str] and use existing source_id values only.\n"
+            "4) bio.short|medium|long MUST be plain strings.\n"
+            "5) profile_summary.what_they_do/organizations/locations/public_roles/disambiguation_notes MUST be lists.\n"
+            "6) Remove unsupported keys.\n\n"
+            "Valid timeline example:\n"
+            "{\"date_or_range\":\"2024\",\"event\":\"Joined X\",\"confidence\":0.7,\"citations\":[\"src-1\"]}\n"
+            "Valid claim example:\n"
+            "{\"claim_id\":\"claim_1\",\"text\":\"Joined X\",\"claim_type\":\"role\",\"status\":\"partially_verified\","
+            "\"confidence\":0.7,\"citations\":[\"src-1\"],\"notes\":\"\"}\n"
+        )
+
+    def _normalize_stage_a_payload(
+        self,
+        *,
+        run_id: str,
+        raw_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        try:
+            logger.debug(
+                "name-research stage_a raw_payload run_id=%s payload=%s",
+                run_id,
+                json.dumps(raw_payload, default=str)[:8000],
+            )
+        except Exception:
+            logger.debug("name-research stage_a raw_payload run_id=%s (unserializable payload)", run_id)
+        draft = NameDeepResearchDraftModel.model_validate(raw_payload)
+        draft_dict = draft.model_dump(exclude_none=True)
+        normalized = normalize_name_deep_research_synthesis_payload(draft_dict)
+        if normalized != draft_dict:
+            self._log_metric(
+                run_id=run_id,
+                metric="synthesis_normalization_applied_count",
+                value=1,
+            )
+        return normalized
+
+    def _apply_identity_safety_constraints(
+        self,
+        *,
+        result_doc: Dict[str, Any],
+        hints: Dict[str, Optional[str]],
+    ) -> Dict[str, Any]:
+        doc = dict(result_doc)
+        claimed_identity = dict(doc.get("claimed_identity") or {})
+        sources = doc.get("sources") or []
+        used_sources = [s for s in sources if bool((s or {}).get("used_in_final"))]
+        best_conf = max([float((s or {}).get("identity_match_confidence") or 0.0) for s in used_sources] + [0.0])
+
+        company_tokens = self._hint_tokens(hints.get("company"))
+        if company_tokens:
+            company_match_count = 0
+            for src in used_sources:
+                text_blob = f"{src.get('url','')} {src.get('title','')}".lower()
+                if any(token in text_blob for token in company_tokens):
+                    company_match_count += 1
+            if used_sources and company_match_count == 0:
+                best_conf = min(best_conf, 0.65)
+                notes = list(claimed_identity.get("disambiguation_notes") or [])
+                notes.append("Company hint mismatch across selected sources; manual review recommended.")
+                claimed_identity["disambiguation_notes"] = list(dict.fromkeys(notes))
+                known_unknowns = list(doc.get("known_unknowns") or [])
+                known_unknowns.append(
+                    {
+                        "question": "Do selected sources refer to the same person as the company hint?",
+                        "why_missing": "Selected sources did not consistently match the company hint.",
+                    }
+                )
+                doc["known_unknowns"] = known_unknowns
+
+        if len(used_sources) <= 1:
+            best_conf = min(best_conf, 0.70)
+        claimed_identity["is_match_confidence"] = round(float(best_conf), 3)
+        doc["claimed_identity"] = claimed_identity
+        return doc
+
+    def _coerce_bio_strings(self, raw_bio: Any) -> Dict[str, str]:
+        conservative = self._conservative_bios()
+        raw = raw_bio if isinstance(raw_bio, dict) else {}
+
+        def _extract(value: Any) -> str:
+            if isinstance(value, str):
+                return value.strip()
+            if isinstance(value, dict):
+                for key in ("text", "value", "content", "summary"):
+                    if value.get(key):
+                        return str(value.get(key)).strip()
+            if value is None:
+                return ""
+            return str(value).strip()
+
+        short = _extract(raw.get("short")) or conservative["short"]
+        medium = _extract(raw.get("medium")) or conservative["medium"]
+        long = _extract(raw.get("long")) or conservative["long"]
+        return {"short": short, "medium": medium, "long": long}
+
+    def _compute_training_metrics_summary(self, result_doc: Dict[str, Any]) -> Dict[str, Any]:
+        words_processed = int(((result_doc.get("crawl_stats") or {}).get("words_extracted") or 0))
+        sources = list(result_doc.get("sources") or [])
+        claims = list(result_doc.get("claims") or [])
+        timeline = list(result_doc.get("timeline") or [])
+
+        source_metrics: List[SourceMetrics] = []
+        for source in sources:
+            quality = str(source.get("content_quality") or "partial")
+            has_content = quality in {"full", "partial"}
+            source_metrics.append(
+                SourceMetrics(
+                    source_id=str(source.get("source_id") or ""),
+                    source_type=str(source.get("source_type") or "unknown"),
+                    status="processed" if has_content else "failed",
+                    word_count=max(1, int(words_processed / max(1, len(sources)))) if has_content and words_processed > 0 else 0,
+                    extracted_at=str(source.get("retrieved_at") or ""),
+                    has_content=has_content,
+                )
+            )
+
+        processed_sources = [s for s in source_metrics if s.has_content]
+        success_rate = (len(processed_sources) / len(source_metrics)) if source_metrics else 0.0
+        diversity_score, unique_types = calculate_diversity_score(processed_sources)
+        volume_score = calculate_volume_score(words_processed)
+        quality_score = round(success_rate * 100.0, 3)
+
+        recency_scores = [
+            _recency_score((source or {}).get("published_at"))
+            for source in sources
+            if (source or {}).get("content_quality") in {"full", "partial"}
+        ]
+        freshness_score = round((sum(recency_scores) / len(recency_scores) if recency_scores else 0.5) * 100.0, 3)
+
+        structured_signals = len(claims) + len(timeline)
+        structure_score = round(min(100.0, (structured_signals / max(1.0, float(len(processed_sources) or 1))) * 18.0), 3)
+
+        verified_weight = 0.0
+        for claim in claims:
+            status = str((claim or {}).get("status") or "unknown").lower()
+            if status == "verified":
+                verified_weight += 1.0
+            elif status == "partially_verified":
+                verified_weight += 0.6
+        verification_score = round(
+            min(100.0, 100.0 * (verified_weight / max(1.0, float(len(claims) or 1)))),
+            3,
+        )
+
+        mind_score = calculate_mind_score(
+            volume_score=volume_score,
+            diversity_score=diversity_score,
+            quality_score=quality_score,
+            freshness_score=freshness_score,
+            structure_score=structure_score,
+            verification_score=verification_score,
+        )
+        diversity_factor = 1.0 + (max(0, unique_types - 1) * 0.2)
+        questions_est = estimate_questions_answerable(
+            words_processed=words_processed,
+            sources=processed_sources,
+            quality_factor=max(0.1, success_rate),
+            diversity_factor=diversity_factor,
+        )
+
+        return {
+            "words_processed": words_processed,
+            "words_processed_display": format_number_compact(words_processed),
+            "questions_answerable_est": questions_est,
+            "questions_answerable_display": format_number_compact(questions_est),
+            "mind_score": mind_score,
+            "mind_score_label": get_mind_score_label(mind_score),
+            "method_version": "v1_heuristic_name_research",
+            "notes": "Estimated metrics from extracted public-web evidence volume, diversity, and verification density.",
+        }
+
+    def _build_prepared_question_answers(self, *, name: str, result_doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+        qas: List[Dict[str, Any]] = []
+        seen: set[Tuple[str, Tuple[str, ...]]] = set()
+
+        claims = sorted(
+            [c for c in (result_doc.get("claims") or []) if (c or {}).get("citations")],
+            key=lambda item: float((item or {}).get("confidence") or 0.0),
+            reverse=True,
+        )
+        timeline = sorted(
+            [t for t in (result_doc.get("timeline") or []) if (t or {}).get("citations")],
+            key=lambda item: float((item or {}).get("confidence") or 0.0),
+            reverse=True,
+        )
+
+        claim_type_to_question = {
+            "role": f"What public role is {name} associated with?",
+            "experience": f"What experience is documented for {name}?",
+            "project": f"What project work is publicly linked to {name}?",
+            "credential": f"What credentials are publicly evidenced for {name}?",
+            "opinion": f"What public viewpoints are evidenced for {name}?",
+        }
+
+        for claim in claims:
+            citations = [str(c) for c in list((claim or {}).get("citations") or []) if str(c)]
+            if not citations:
+                continue
+            claim_type = str((claim or {}).get("claim_type") or "other").lower()
+            question = claim_type_to_question.get(claim_type, f"What is a key documented fact about {name}?")
+            status = str((claim or {}).get("status") or "unknown").lower()
+            answer = str((claim or {}).get("text") or "").strip()
+            if not answer:
+                continue
+            if status in {"unknown", "unverified", "disputed"}:
+                answer = f"{answer} (evidence is incomplete; treat as {status})."
+            key = (question.lower(), tuple(sorted(citations)))
+            if key in seen:
+                continue
+            seen.add(key)
+            qas.append(
+                {
+                    "question": question,
+                    "answer": answer,
+                    "confidence": round(float((claim or {}).get("confidence") or 0.5), 3),
+                    "citations": citations,
+                }
+            )
+
+        for item in timeline:
+            citations = [str(c) for c in list((item or {}).get("citations") or []) if str(c)]
+            if not citations:
+                continue
+            date_or_range = str((item or {}).get("date_or_range") or "unknown")
+            event = str((item or {}).get("event") or "").strip()
+            if not event:
+                continue
+            question = f"What timeline event is documented for {name} around {date_or_range}?"
+            answer = f"{event} (time reference: {date_or_range})."
+            key = (question.lower(), tuple(sorted(citations)))
+            if key in seen:
+                continue
+            seen.add(key)
+            qas.append(
+                {
+                    "question": question,
+                    "answer": answer,
+                    "confidence": round(float((item or {}).get("confidence") or 0.5), 3),
+                    "citations": citations,
+                }
+            )
+
+        if not qas:
+            best_source = next(
+                (src for src in (result_doc.get("sources") or []) if (src or {}).get("source_id")),
+                None,
+            )
+            if best_source:
+                source_id = str(best_source.get("source_id"))
+                qas.append(
+                    {
+                        "question": f"Can we confidently identify {name} from current public evidence?",
+                        "answer": "Unknown. The currently available public sources remain ambiguous and need manual review.",
+                        "confidence": 0.35,
+                        "citations": [source_id],
+                    }
+                )
+
+        return qas[:8]
+
+    def _augment_result_with_metrics_and_qa(self, *, name: str, result_doc: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.metrics_and_qa_enabled:
+            return result_doc
+
+        doc = dict(result_doc)
+        doc["training_metrics"] = self._compute_training_metrics_summary(doc)
+        doc["prepared_question_answers"] = self._build_prepared_question_answers(name=name, result_doc=doc)
+        return doc
+
+    def _build_stage_a_document(
         self,
         *,
         run_id: str,
         name: str,
         hints: Dict[str, Optional[str]],
         queries: List[str],
-        source_rows: List[Dict[str, Any]],
-        ranked_evidence: List[RankedEvidence],
+        source_items: List[Dict[str, Any]],
+        normalized_payload: Dict[str, Any],
+        urls_considered: int,
+        words_extracted: int,
         run_started_at: str,
-    ) -> Tuple[Dict[str, Any], str]:
-        source_items = [
-            {
-                "source_id": str(s.get("id")),
-                "url": s.get("canonical_url") or s.get("url") or "",
-                "title": s.get("title") or "",
-                "source_type": s.get("source_type") or "other",
-                "published_at": s.get("published_at"),
-                "retrieved_at": s.get("retrieved_at") or _utcnow_iso(),
-                "content_quality": s.get("content_quality") or "partial",
-                "identity_match_confidence": float(s.get("identity_match_confidence") or 0.0),
-                "used_in_final": bool(s.get("used_in_final")),
-            }
-            for s in source_rows
-        ]
-        now_iso = _utcnow_iso()
-        if not ranked_evidence:
-            fallback = self._build_fallback_result(
-                run_id=run_id,
-                name=name,
-                hints=hints,
-                queries=queries,
-                source_items=source_items,
-                run_started_at=run_started_at,
-                run_completed_at=now_iso,
-                warning="No usable public content extracted from discovered sources.",
-            )
-            parsed = self.validate_result_schema(fallback)
-            return parsed.model_dump(), "none"
+        run_completed_at: str,
+    ) -> Dict[str, Any]:
+        source_ids = {str(item.get("source_id")) for item in source_items}
 
-        selected_model = await self._resolve_reasoning_model()
-        prompt_payload = {
+        timeline: List[Dict[str, Any]] = []
+        for item in normalized_payload.get("timeline") or []:
+            citations = [str(c) for c in (item.get("citations") or []) if str(c) in source_ids]
+            if not citations:
+                continue
+            timeline.append(
+                {
+                    "date_or_range": str(item.get("date_or_range") or "unknown"),
+                    "event": str(item.get("event") or "").strip(),
+                    "confidence": float(item.get("confidence") or 0.5),
+                    "citations": citations,
+                }
+            )
+        timeline = [item for item in timeline if item["event"]]
+
+        claims: List[Dict[str, Any]] = []
+        for idx, item in enumerate(normalized_payload.get("claims") or [], start=1):
+            citations = [str(c) for c in (item.get("citations") or []) if str(c) in source_ids]
+            if not citations:
+                continue
+            claim_type = str(item.get("claim_type") or "other").lower()
+            if claim_type not in {"credential", "experience", "role", "preference", "opinion", "project", "contact", "other"}:
+                claim_type = "other"
+            status = str(item.get("status") or "unknown").lower()
+            if status not in {"verified", "partially_verified", "unverified", "disputed", "unknown"}:
+                status = "unknown"
+            if status == "verified" and not citations:
+                status = "unknown"
+            claims.append(
+                {
+                    "claim_id": str(item.get("claim_id") or f"claim_{idx}"),
+                    "text": str(item.get("text") or "").strip(),
+                    "claim_type": claim_type,
+                    "status": status,
+                    "confidence": float(item.get("confidence") or 0.5),
+                    "citations": citations,
+                    "notes": str(item.get("notes") or ""),
+                }
+            )
+        claims = [item for item in claims if item["text"]]
+
+        payload_warnings = list((normalized_payload.get("quality") or {}).get("warnings") or [])
+        crawl_stats = {
+            "queries_used": queries,
+            "urls_considered": urls_considered,
+            "urls_crawled": len([s for s in source_items if s.get("content_quality") in {"full", "partial"}]),
+            "urls_blocked": len([s for s in source_items if s.get("content_quality") in {"blocked", "manual_needed"}]),
+            "sources_used_in_final": len([s for s in source_items if s.get("used_in_final")]),
+            "words_extracted": words_extracted,
+            "run_started_at": run_started_at,
+            "run_completed_at": run_completed_at,
+        }
+        quality_raw = normalized_payload.get("quality") or {}
+        used_sources = [item for item in source_items if item.get("used_in_final")]
+        max_identity = max([float((item or {}).get("identity_match_confidence") or 0.0) for item in used_sources] + [0.0])
+        avg_freshness = 0.0
+        if used_sources:
+            avg_freshness = sum(_recency_score(item.get("published_at")) for item in used_sources) / len(used_sources)
+        coverage_heuristic = 0.0
+        if source_items:
+            coverage_heuristic = min(
+                1.0,
+                (len(claims) + len(timeline) + len(used_sources)) / max(1.0, float(len(source_items) + 2)),
+            )
+        heuristic_overall = min(1.0, (0.60 * max_identity) + (0.40 * coverage_heuristic))
+        explicit_overall = float(quality_raw.get("overall_confidence") or 0.0)
+        explicit_freshness = float(quality_raw.get("freshness_score") or 0.0)
+        explicit_coverage = float(quality_raw.get("coverage_score") or 0.0)
+        overall_confidence = explicit_overall if explicit_overall > 0 else heuristic_overall
+        freshness_score = explicit_freshness if explicit_freshness > 0 else avg_freshness
+        coverage_score = explicit_coverage if explicit_coverage > 0 else coverage_heuristic
+
+        hallucination_risk = str(quality_raw.get("hallucination_risk") or "").strip().lower()
+        if hallucination_risk not in {"low", "medium", "high"}:
+            if overall_confidence >= 0.75 and coverage_score >= 0.5:
+                hallucination_risk = "low"
+            elif overall_confidence >= 0.5:
+                hallucination_risk = "medium"
+            else:
+                hallucination_risk = "high"
+        quality = {
+            "overall_confidence": round(overall_confidence, 3),
+            "freshness_score": round(max(0.0, min(1.0, freshness_score)), 3),
+            "coverage_score": round(max(0.0, min(1.0, coverage_score)), 3),
+            "hallucination_risk": hallucination_risk,
+            "warnings": [w for w in payload_warnings if isinstance(w, str) and w.strip()],
+        }
+
+        profile_summary = normalized_payload.get("profile_summary") or {}
+        claimed_identity = normalized_payload.get("claimed_identity") or {}
+        known_unknowns = normalized_payload.get("known_unknowns") or []
+        if not known_unknowns:
+            known_unknowns = [
+                {
+                    "question": f"Is all discovered content about {name} the same person?",
+                    "why_missing": "Identity signals were mixed or incomplete.",
+                }
+            ]
+
+        doc = {
             "run_id": run_id,
             "input": {
                 "name": name,
@@ -797,6 +1460,53 @@ class NameDeepResearchService:
                     "website": hints.get("website"),
                 },
             },
+            "claimed_identity": {
+                "canonical_name": str(claimed_identity.get("canonical_name") or name),
+                "is_match_confidence": float(claimed_identity.get("is_match_confidence") or 0.0),
+                "disambiguation_notes": list(claimed_identity.get("disambiguation_notes") or ["Requires manual review."]),
+                "possible_duplicates": list(claimed_identity.get("possible_duplicates") or []),
+            },
+            "bio": self._conservative_bios(),
+            "profile_summary": {
+                "what_they_do": list(profile_summary.get("what_they_do") or []),
+                "expertise_topics": list(profile_summary.get("expertise_topics") or []),
+                "organizations": list(profile_summary.get("organizations") or []),
+                "locations": list(profile_summary.get("locations") or []),
+                "public_roles": list(profile_summary.get("public_roles") or []),
+            },
+            "timeline": timeline,
+            "claims": claims,
+            "known_unknowns": known_unknowns,
+            "suggested_followup_questions": list(
+                normalized_payload.get("suggested_followup_questions")
+                or ["What official profile best disambiguates this person?"]
+            ),
+            "crawl_stats": crawl_stats,
+            "quality": quality,
+            "sources": source_items,
+        }
+        safe_doc = self._apply_identity_safety_constraints(result_doc=doc, hints=hints)
+        return self._augment_result_with_metrics_and_qa(name=name, result_doc=safe_doc)
+
+    async def _run_stage_a_synthesis(
+        self,
+        *,
+        model: str,
+        run_id: str,
+        name: str,
+        hints: Dict[str, Optional[str]],
+        queries: List[str],
+        source_items: List[Dict[str, Any]],
+        ranked_evidence: List[RankedEvidence],
+        urls_considered: int,
+        words_extracted: int,
+        run_started_at: str,
+        validation_error: Optional[str],
+    ) -> Dict[str, Any]:
+        now_iso = _utcnow_iso()
+        payload = {
+            "run_id": run_id,
+            "input": {"name": name, "hints": hints},
             "sources": source_items,
             "ranked_evidence": [
                 {
@@ -813,97 +1523,233 @@ class NameDeepResearchService:
                 }
                 for e in ranked_evidence
             ],
-            "requirements": {
-                "public_web_only": True,
-                "no_uncited_facts": True,
-                "unknown_if_weak_evidence": True,
-                "statuses": [
-                    "verified",
-                    "partially_verified",
-                    "unverified",
-                    "disputed",
-                    "unknown",
-                ],
-            },
         }
-
-        system_prompt = (
-            "You are an evidence-grounded research synthesizer. "
-            "Output only one JSON object. Never guess. "
-            "Every timeline and claim item must include citations source_id[] that exist in sources. "
-            "If evidence is weak or ambiguous, use unknown/unverified/needs_review wording."
+        response_doc = await self._invoke_reasoning_model(
+            model=model,
+            system_prompt=(
+                "You are an evidence-grounded person research synthesizer. Return JSON only. "
+                "Generate STRUCTURED fields only; do not generate verbose prose bios. "
+                "Never invent facts. If weak evidence, mark unknown/unverified."
+            ),
+            user_payload=payload,
+            schema_instruction=(
+                "Return keys: claimed_identity,profile_summary,timeline,claims,known_unknowns,"
+                "suggested_followup_questions,quality. "
+                "timeline items use date_or_range,event,confidence,citations. "
+                "claims use claim_id,text,claim_type,status,confidence,citations,notes."
+            ),
+            validation_error=validation_error,
         )
-
-        schema_instruction = (
-            "Return JSON with EXACT keys: run_id,input,claimed_identity,bio,profile_summary,timeline,claims,"
-            "known_unknowns,suggested_followup_questions,crawl_stats,quality,sources. "
-            "Do not include additional top-level keys."
-        )
-
-        model_candidates = [selected_model] + [m for m in await self._reasoning_model_candidates() if m != selected_model]
-        errors: List[str] = []
-        for model in model_candidates:
-            for attempt in range(3):
-                try:
-                    response_doc = await self._invoke_reasoning_model(
-                        model=model,
-                        system_prompt=system_prompt,
-                        user_payload=prompt_payload,
-                        schema_instruction=schema_instruction,
-                        validation_error=None if attempt == 0 else errors[-1],
-                    )
-                    response_doc["run_id"] = run_id
-                    response_doc["input"] = {
-                        "name": name,
-                        "hints": {
-                            "location": hints.get("location"),
-                            "company": hints.get("company"),
-                            "website": hints.get("website"),
-                        },
-                    }
-                    response_doc["sources"] = source_items
-
-                    crawl_stats = dict(response_doc.get("crawl_stats") or {})
-                    crawl_stats["queries_used"] = queries
-                    crawl_stats["urls_considered"] = len(source_items)
-                    crawl_stats["urls_crawled"] = len(
-                        [s for s in source_items if s.get("content_quality") in {"full", "partial"}]
-                    )
-                    crawl_stats["urls_blocked"] = len(
-                        [s for s in source_items if s.get("content_quality") in {"blocked", "manual_needed"}]
-                    )
-                    crawl_stats["sources_used_in_final"] = len([s for s in source_items if s.get("used_in_final")])
-                    crawl_stats["words_extracted"] = sum(
-                        _word_count(e.excerpt) for e in ranked_evidence
-                    )
-                    crawl_stats["run_started_at"] = run_started_at
-                    crawl_stats["run_completed_at"] = now_iso
-                    response_doc["crawl_stats"] = crawl_stats
-
-                    parsed = self.validate_result_schema(response_doc)
-                    return parsed.model_dump(), model
-                except Exception as exc:
-                    errors.append(str(exc))
-                    logger.warning(
-                        "name-research synth attempt failed model=%s attempt=%s run_id=%s err=%s",
-                        model,
-                        attempt + 1,
-                        run_id,
-                        exc,
-                    )
-
-        fallback = self._build_fallback_result(
+        normalized = self._normalize_stage_a_payload(run_id=run_id, raw_payload=response_doc)
+        stage_doc = self._build_stage_a_document(
             run_id=run_id,
             name=name,
             hints=hints,
             queries=queries,
             source_items=source_items,
+            normalized_payload=normalized,
+            urls_considered=urls_considered,
+            words_extracted=words_extracted,
             run_started_at=run_started_at,
             run_completed_at=now_iso,
-            warning=f"Synthesis validation failed after retries: {errors[-1] if errors else 'unknown error'}",
         )
-        parsed = self.validate_result_schema(fallback)
-        return parsed.model_dump(), model_candidates[0] if model_candidates else "none"
+        parsed = self.validate_result_schema(stage_doc)
+        return parsed.model_dump()
+
+    async def _run_stage_b_bio_generation(
+        self,
+        *,
+        model: str,
+        run_id: str,
+        name: str,
+        structured_doc: Dict[str, Any],
+    ) -> Dict[str, str]:
+        payload = {
+            "name": name,
+            "claimed_identity": structured_doc.get("claimed_identity"),
+            "profile_summary": structured_doc.get("profile_summary"),
+            "timeline": structured_doc.get("timeline"),
+            "claims": structured_doc.get("claims"),
+            "known_unknowns": structured_doc.get("known_unknowns"),
+            "sources": [s for s in (structured_doc.get("sources") or []) if s.get("used_in_final")],
+            "instructions": {
+                "style": "concise evidence-grounded",
+                "citations_inline": True,
+                "no_uncited_factual_claims": True,
+                "unknown_if_weak": True,
+            },
+        }
+        response_doc = await self._invoke_reasoning_model(
+            model=model,
+            system_prompt=(
+                "Generate bio strings only from provided structured evidence. "
+                "Return JSON with keys short,medium,long. "
+                "If evidence weak, use unknown wording. Do not fabricate."
+            ),
+            user_payload=payload,
+            schema_instruction="Return JSON with exactly keys short,medium,long as strings.",
+            validation_error=None,
+        )
+        bio_payload = response_doc.get("bio") if isinstance(response_doc.get("bio"), dict) else response_doc
+        bio = self._coerce_bio_strings(bio_payload)
+        if not bio["short"] or not bio["medium"] or not bio["long"]:
+            raise ValueError("Bio stage returned empty fields")
+        logger.info("name-research stage_b generated run_id=%s", run_id)
+        return bio
+
+    async def _synthesize_result(
+        self,
+        *,
+        run_id: str,
+        name: str,
+        hints: Dict[str, Optional[str]],
+        queries: List[str],
+        source_rows: List[Dict[str, Any]],
+        ranked_evidence: List[RankedEvidence],
+        urls_considered: Optional[int] = None,
+        words_extracted: int = 0,
+        run_started_at: str,
+    ) -> Tuple[Dict[str, Any], str]:
+        source_items = [
+            {
+                "source_id": str(s.get("id")),
+                "url": s.get("canonical_url") or s.get("url") or "",
+                "title": s.get("title") or "",
+                "source_type": s.get("source_type") or "other",
+                "published_at": s.get("published_at"),
+                "retrieved_at": s.get("retrieved_at") or _utcnow_iso(),
+                "content_quality": s.get("content_quality") or "partial",
+                "identity_match_confidence": float(s.get("identity_match_confidence") or 0.0),
+                "used_in_final": bool(s.get("used_in_final")),
+            }
+            for s in source_rows
+        ]
+        urls_considered = urls_considered if urls_considered is not None else len(source_items)
+        now_iso = _utcnow_iso()
+        if not ranked_evidence:
+            self._log_fallback_reason(run_id=run_id, reason="no_ranked_evidence")
+            fallback = self._build_fallback_result(
+                run_id=run_id,
+                name=name,
+                hints=hints,
+                queries=queries,
+                source_items=source_items,
+                urls_considered=urls_considered,
+                words_extracted=words_extracted,
+                run_started_at=run_started_at,
+                run_completed_at=now_iso,
+                warning="No usable public content extracted from discovered sources.",
+            )
+            parsed = self.validate_result_schema(fallback)
+            return parsed.model_dump(), "none"
+
+        selected_model = await self._resolve_reasoning_model()
+        model_candidates = [selected_model] + [m for m in await self._reasoning_model_candidates() if m != selected_model]
+        stage_a_result: Optional[Dict[str, Any]] = None
+        stage_a_model = selected_model
+        errors: List[str] = []
+
+        for model in model_candidates:
+            try:
+                stage_a_result = await self._run_stage_a_synthesis(
+                    model=model,
+                    run_id=run_id,
+                    name=name,
+                    hints=hints,
+                    queries=queries,
+                    source_items=source_items,
+                    ranked_evidence=ranked_evidence,
+                    urls_considered=urls_considered,
+                    words_extracted=words_extracted,
+                    run_started_at=run_started_at,
+                    validation_error=None,
+                )
+                stage_a_model = model
+                self._log_metric(run_id=run_id, metric="synthesis_stage_a_success", value=1, model=model)
+                break
+            except Exception as exc:
+                errors.append(str(exc))
+                self._log_metric(
+                    run_id=run_id,
+                    metric="synthesis_raw_validation_failures_count",
+                    value=1,
+                    model=model,
+                )
+                logger.warning("name-research stage_a failed model=%s run_id=%s err=%s", model, run_id, exc)
+                if not self.synthesis_hardening_enabled or not self.synthesis_repair_retry_enabled:
+                    continue
+                try:
+                    self._log_metric(run_id=run_id, metric="synthesis_repair_retry_count", value=1, model=model)
+                    stage_a_result = await self._run_stage_a_synthesis(
+                        model=model,
+                        run_id=run_id,
+                        name=name,
+                        hints=hints,
+                        queries=queries,
+                        source_items=source_items,
+                        ranked_evidence=ranked_evidence,
+                        urls_considered=urls_considered,
+                        words_extracted=words_extracted,
+                        run_started_at=run_started_at,
+                        validation_error=self._build_stage_a_repair_prompt(str(exc)),
+                    )
+                    stage_a_model = model
+                    self._log_metric(run_id=run_id, metric="synthesis_repair_success_count", value=1, model=model)
+                    self._log_metric(run_id=run_id, metric="synthesis_stage_a_success", value=1, model=model)
+                    logger.info("name-research stage_a repair success model=%s run_id=%s", model, run_id)
+                    break
+                except Exception as repair_exc:
+                    errors.append(str(repair_exc))
+                    self._log_metric(
+                        run_id=run_id,
+                        metric="synthesis_raw_validation_failures_count",
+                        value=1,
+                        model=model,
+                    )
+                    logger.warning(
+                        "name-research stage_a repair failed model=%s run_id=%s err=%s",
+                        model,
+                        run_id,
+                        repair_exc,
+                    )
+
+        if not stage_a_result:
+            self._log_fallback_reason(run_id=run_id, reason="stage_a_validation_failed", detail=errors[-1] if errors else "")
+            fallback = self._build_fallback_result(
+                run_id=run_id,
+                name=name,
+                hints=hints,
+                queries=queries,
+                source_items=source_items,
+                urls_considered=urls_considered,
+                words_extracted=words_extracted,
+                run_started_at=run_started_at,
+                run_completed_at=now_iso,
+                warning=f"Synthesis validation failed after retries: {errors[-1] if errors else 'unknown error'}",
+            )
+            parsed = self.validate_result_schema(fallback)
+            return parsed.model_dump(), model_candidates[0] if model_candidates else "none"
+
+        final_doc = dict(stage_a_result)
+        try:
+            bio = await self._run_stage_b_bio_generation(
+                model=stage_a_model,
+                run_id=run_id,
+                name=name,
+                structured_doc=stage_a_result,
+            )
+            final_doc["bio"] = bio
+            parsed = self.validate_result_schema(final_doc)
+            self._log_metric(run_id=run_id, metric="synthesis_stage_b_success", value=1, model=stage_a_model)
+            return parsed.model_dump(), stage_a_model
+        except Exception as exc:
+            logger.warning("name-research stage_b failed run_id=%s model=%s err=%s", run_id, stage_a_model, exc)
+            warnings = list(((final_doc.get("quality") or {}).get("warnings") or []))
+            warnings.append(f"Bio generation fallback applied: {str(exc)[:500]}")
+            final_doc.setdefault("quality", {})["warnings"] = warnings
+            final_doc["bio"] = self._conservative_bios()
+            parsed = self.validate_result_schema(final_doc)
+            return parsed.model_dump(), stage_a_model
 
     async def _invoke_reasoning_model(
         self,
@@ -979,10 +1825,13 @@ class NameDeepResearchService:
         hints: Dict[str, Optional[str]],
         queries: List[str],
         source_items: List[Dict[str, Any]],
+        urls_considered: Optional[int] = None,
+        words_extracted: int = 0,
         run_started_at: str,
         run_completed_at: str,
         warning: str,
     ) -> Dict[str, Any]:
+        urls_considered = urls_considered if urls_considered is not None else len(source_items)
         best_source = next(
             (s for s in sorted(source_items, key=lambda x: float(x.get("identity_match_confidence") or 0.0), reverse=True)
              if s.get("content_quality") in {"full", "partial"}),
@@ -1013,7 +1862,7 @@ class NameDeepResearchService:
                 }
             )
 
-        return {
+        fallback_doc = {
             "run_id": run_id,
             "input": {
                 "name": name,
@@ -1057,11 +1906,11 @@ class NameDeepResearchService:
             ],
             "crawl_stats": {
                 "queries_used": queries,
-                "urls_considered": len(source_items),
+                "urls_considered": urls_considered,
                 "urls_crawled": len([s for s in source_items if s.get("content_quality") in {"full", "partial"}]),
                 "urls_blocked": len([s for s in source_items if s.get("content_quality") in {"blocked", "manual_needed"}]),
                 "sources_used_in_final": len([s for s in source_items if s.get("used_in_final")]),
-                "words_extracted": 0,
+                "words_extracted": words_extracted,
                 "run_started_at": run_started_at,
                 "run_completed_at": run_completed_at,
             },
@@ -1074,6 +1923,7 @@ class NameDeepResearchService:
             },
             "sources": source_items,
         }
+        return self._augment_result_with_metrics_and_qa(name=name, result_doc=fallback_doc)
 
     async def _update_run(self, run_id: str, **fields: Any) -> None:
         self.db.table("name_deep_research_runs").update(fields).eq("id", run_id).execute()

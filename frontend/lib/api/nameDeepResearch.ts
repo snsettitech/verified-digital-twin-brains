@@ -54,6 +54,58 @@ export interface NameDeepResearchRunStatusResponse {
   run_completed_at?: string;
 }
 
+export interface NameDeepResearchTrainingMetrics {
+  words_processed: number;
+  words_processed_display: string;
+  questions_answerable_est: number;
+  questions_answerable_display: string;
+  mind_score: number;
+  mind_score_label: string;
+  method_version: string;
+  notes: string;
+}
+
+export interface NameDeepResearchPreparedQA {
+  question: string;
+  answer: string;
+  confidence: number;
+  citations: string[];
+}
+
+export interface NameDeepResearchResult {
+  run_id: string;
+  input: {
+    name: string;
+    hints: NameDeepResearchHints;
+  };
+  suggested_followup_questions: string[];
+  claims: Array<{
+    claim_id: string;
+    text: string;
+    claim_type: string;
+    status: string;
+    confidence: number;
+    citations: string[];
+    notes: string;
+  }>;
+  timeline: Array<{
+    date_or_range: string;
+    event: string;
+    confidence: number;
+    citations: string[];
+  }>;
+  quality: {
+    overall_confidence: number;
+    freshness_score: number;
+    coverage_score: number;
+    hallucination_risk: 'low' | 'medium' | 'high';
+    warnings: string[];
+  };
+  training_metrics?: NameDeepResearchTrainingMetrics;
+  prepared_question_answers?: NameDeepResearchPreparedQA[];
+  [key: string]: unknown;
+}
+
 const BASE_URL = resolveApiBaseUrl();
 
 async function readError(response: Response): Promise<Error> {
@@ -80,7 +132,7 @@ export const nameDeepResearchApi = {
     return response.json();
   },
 
-  async downloadResult(runId: string): Promise<Record<string, unknown>> {
+  async downloadResult(runId: string): Promise<NameDeepResearchResult> {
     const response = await authFetchStandalone(`${BASE_URL}/deep-research/runs/${runId}/result.json`);
     if (!response.ok) throw await readError(response);
     return response.json();

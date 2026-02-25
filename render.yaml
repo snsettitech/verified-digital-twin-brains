@@ -44,6 +44,10 @@ services:
         value: https://cloud.langfuse.com
       - key: OPENAI_API_KEY
         sync: false
+      - key: EXA_API_KEY
+        sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY
@@ -94,7 +98,17 @@ services:
         value: "0"  # Gradually increase: 10, 25, 50, 100
       # Deep Research Runtime Controls
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
-        value: "false"
+        value: "true"
+      - key: NAME_RESEARCH_METRICS_QA_ENABLED
+        value: "true"
+      - key: NAME_RESEARCH_SYNTHESIS_HARDENING_ENABLED
+        value: "true"
+      - key: NAME_RESEARCH_SYNTHESIS_REPAIR_RETRY_ENABLED
+        value: "true"
+      - key: NAME_RESEARCH_IDENTITY_GATING_ENABLED
+        value: "true"
+      - key: SEARCH_PROVIDER
+        value: "exa"
       - key: DR_PHASE_12_SUPPRESS_UNRESOLVED
         value: "true"
       - key: DR_PHASE_12_AUTO_PUBLISH
@@ -140,6 +154,10 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: EXA_API_KEY
+        sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
       - key: PINECONE_API_KEY
         sync: false
       - key: PINECONE_INDEX_NAME
@@ -171,6 +189,16 @@ services:
       - key: QUERY_REWRITING_MIN_CONFIDENCE
         value: "0.7"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
-        value: "false"
+        value: "true"
+      - key: NAME_RESEARCH_METRICS_QA_ENABLED
+        value: "true"
+      - key: NAME_RESEARCH_SYNTHESIS_HARDENING_ENABLED
+        value: "true"
+      - key: NAME_RESEARCH_SYNTHESIS_REPAIR_RETRY_ENABLED
+        value: "true"
+      - key: NAME_RESEARCH_IDENTITY_GATING_ENABLED
+        value: "true"
+      - key: SEARCH_PROVIDER
+        value: "exa"
       - key: OPENAI_DEEP_RESEARCH_MODEL
         value: "o3"
