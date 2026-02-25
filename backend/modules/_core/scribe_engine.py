@@ -701,10 +701,10 @@ async def process_content_extraction_job(job_id: str) -> bool:
         fail_job(job_id, "Missing source_id or twin_id")
         return False
 
-    start_job(job_id)
-    append_log(job_id, f"Starting content extraction for source {source_id}", LogLevel.INFO)
-
     try:
+        start_job(job_id)
+        append_log(job_id, f"Starting content extraction for source {source_id}", LogLevel.INFO)
+
         source_res = supabase.table("sources").select(
             "id, content_text, filename"
         ).eq("id", source_id).single().execute()

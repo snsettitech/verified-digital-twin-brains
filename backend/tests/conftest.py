@@ -80,6 +80,7 @@ def pytest_runtest_makereport(item, call):
 
 
 def pytest_sessionfinish(session, exitstatus):
+    _ = exitstatus
     if not _STRICT_GATE_ENABLED:
         return
 

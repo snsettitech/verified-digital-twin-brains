@@ -43,6 +43,10 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
         escalations: stats?.escalations ?? 0,
         satisfaction: stats?.satisfaction ?? 0,
     };
+    const otherSources = Math.max(
+        0,
+        defaultStats.totalSources - defaultStats.indexedSources - defaultStats.processingSources
+    );
 
     // Fetch recent conversations on mount
     useEffect(() => {
@@ -275,7 +279,7 @@ export function OverviewTab({ twinId, stats }: OverviewTabProps) {
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="w-3 h-3 rounded-full bg-slate-500" />
-                                <span className="text-sm text-slate-300">{defaultStats.totalSources - defaultStats.indexedSources - defaultStats.processingSources} Other</span>
+                                <span className="text-sm text-slate-300">{otherSources} Other</span>
                             </div>
                         </div>
                     </div>

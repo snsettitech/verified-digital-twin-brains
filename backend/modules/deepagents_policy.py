@@ -32,6 +32,16 @@ _DURATION_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _MESSAGE_PATTERN = re.compile(r"\b(?:notify|alert|inform|escalate)\b\s*(?:me|owner)?\s*(?:that)?\s*(.+)$", re.IGNORECASE)
+_APPROVE_CONTROL_PATTERN = re.compile(r"\b(approve|accept|confirm)\b", re.IGNORECASE)
+_CANCEL_CONTROL_PATTERN = re.compile(r"\b(cancel|reject|deny)\b", re.IGNORECASE)
+_NEGATED_APPROVE_PATTERN = re.compile(
+    r"\b(?:do not|don't|dont|not)\s+(?:approve|accept|confirm)\b",
+    re.IGNORECASE,
+)
+_NEGATED_CANCEL_PATTERN = re.compile(
+    r"\b(?:do not|don't|dont|not)\s+(?:cancel|reject|deny)\b",
+    re.IGNORECASE,
+)
 
 
 def _normalize_query(query: str) -> str:
@@ -129,6 +139,14 @@ def _detect_action_type(query: str) -> Optional[str]:
     return None
 
 
+def _is_explicit_approval_command(query: str) -> bool:
+    return bool(_APPROVE_CONTROL_PATTERN.search(query)) and not bool(_NEGATED_APPROVE_PATTERN.search(query))
+
+
+def _is_explicit_cancel_command(query: str) -> bool:
+    return bool(_CANCEL_CONTROL_PATTERN.search(query)) and not bool(_NEGATED_CANCEL_PATTERN.search(query))
+
+
 def _required_params_for_action(action_type: str) -> List[str]:
     if action_type == "draft_email":
         return ["to", "subject", "body"]
@@ -200,7 +218,6 @@ def _summary_for_action(action_type: str, missing_params: List[str]) -> str:
 
 def classify_deepagents_intent(query: str) -> Dict[str, Any]:
     normalized = _normalize_query(query)
-    lowered = normalized.lower()
     result: Dict[str, Any] = {
         "query": normalized,
         "is_action_or_control": False,
@@ -215,11 +232,11 @@ def classify_deepagents_intent(query: str) -> Dict[str, Any]:
         "summary": "",
         "reason": "",
     }
-    if not lowered:
+    if not normalized:
         return result
 
     target_action_id = _extract_action_id(normalized)
-    if "approve" in lowered and target_action_id:
+    if _is_explicit_approval_command(normalized) and target_action_id:
         result.update(
             {
                 "is_action_or_control": True,
@@ -236,7 +253,7 @@ def classify_deepagents_intent(query: str) -> Dict[str, Any]:
         )
         return result
 
-    if any(k in lowered for k in ("cancel", "reject", "deny")) and target_action_id:
+    if _is_explicit_cancel_command(normalized) and target_action_id:
         result.update(
             {
                 "is_action_or_control": True,

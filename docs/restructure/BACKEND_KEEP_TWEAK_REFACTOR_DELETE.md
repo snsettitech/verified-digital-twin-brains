@@ -7,6 +7,7 @@
 - Delete or defer: Out-of-scope for web-only clone-for-experts.
 
 ## Mapping Table (Subsystems + Routes)
+
 | Subsystem | Bucket | Evidence (Files / Routes) | Notes |
 | --- | --- | --- | --- |
 | Auth + tenant identity | Keep with small tweaks | `backend/modules/auth_guard.py`, routes in `backend/routers/auth.py` | Keep tenant resolution and JWT auth. Add missing invitation accept endpoints (see `frontend/app/auth/accept-invitation/[token]/page.tsx`). |

@@ -14,7 +14,7 @@
 - Implemented in `backend/routers/chat.py`.
 - SSE events are JSON lines with `type` values:
   - `metadata`: includes `conversation_id`, `citations`, `confidence_score`, `owner_memory_refs`, `owner_memory_topics`.
-  - `content`: includes `content` (full text chunk).
+  - `content`: includes `content` (full-text chunk).
   - `done`: indicates end of stream.
   - `clarify`: emitted when identity gate needs owner confirmation.
   - `error`: emitted on exception.

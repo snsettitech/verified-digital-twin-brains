@@ -60,6 +60,9 @@ from routers import (
     
     # Phase 1A.6: Deep Research crawl management
     crawl,
+    
+    # Phase 8: Research claims enrichment
+    research_claims,
 )
 from modules.specializations import get_specialization
 
@@ -216,6 +219,10 @@ print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare
 if DEEP_RESEARCH_ENABLED:
     app.include_router(crawl.router)
     print("[INFO] Deep Research crawl routes enabled (DEEP_RESEARCH_ENABLED=true)")
+    
+    # Phase 8: Research claims enrichment (nested under Deep Research)
+    app.include_router(research_claims.router)
+    print("[INFO] Deep Research claims routes enabled (DEEP_RESEARCH_ENABLED=true)")
 else:
     print("[INFO] Deep Research crawl routes disabled (DEEP_RESEARCH_ENABLED=false)")
 

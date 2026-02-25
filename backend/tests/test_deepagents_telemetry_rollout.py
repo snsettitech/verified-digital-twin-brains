@@ -29,7 +29,7 @@ def _parse_sse_blocks(raw_text: str):
             continue
         try:
             blocks.append(json.loads(line))
-        except Exception:
+        except json.JSONDecodeError:
             continue
     return blocks
 

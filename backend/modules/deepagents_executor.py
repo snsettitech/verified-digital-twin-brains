@@ -63,6 +63,17 @@ def _clean_preview(value: Any, *, max_len: int = 300) -> str:
     return cleaned[:max_len]
 
 
+def _draft_belongs_to_twin(*, draft_id: str, twin_id: str) -> bool:
+    """Ensure control actions cannot target drafts from other twins."""
+    try:
+        draft = ActionDraftManager.get_draft(draft_id)
+    except Exception:
+        return False
+    if not draft:
+        return False
+    return str(draft.get("twin_id") or "").strip() == str(twin_id or "").strip()
+
+
 def _audit(
     *,
     tenant_id: Optional[str],
@@ -153,6 +164,27 @@ async def execute_deepagents_plan(
                 "status": "missing_params",
                 "missing_params": ["target_action_id"],
                 "clarification_question": "Please share the action ID you want to approve or cancel.",
+                "config": config,
+            }
+        if not _draft_belongs_to_twin(draft_id=target_action_id, twin_id=twin_id):
+            _audit(
+                tenant_id=tenant_id,
+                twin_id=twin_id,
+                actor_id=actor_user_id,
+                action="DEEPAGENTS_DRAFT_SCOPE_FORBIDDEN",
+                metadata={
+                    "action_id": target_action_id,
+                    "conversation_id": conversation_id,
+                    "control_action": control_action,
+                },
+            )
+            return {
+                "status": "forbidden",
+                "http_status": 403,
+                "error": {
+                    "code": "DEEPAGENTS_DRAFT_SCOPE_FORBIDDEN",
+                    "message": "Action draft is not accessible for this twin.",
+                },
                 "config": config,
             }
         if control_action == "approve":

@@ -192,7 +192,7 @@ Defined in `backend/main.py`:
 | POST | `/twins/{twin_id}/governance/verify` | `TwinVerificationRequest` | `{status}` | `Depends(require_tenant)` |
 | DELETE | `/twins/{twin_id}/sources/{source_id}/deep-scrub` | `DeepScrubRequest` | `{status}` | `Depends(require_tenant)` |
 
-### `backend/routers/actions.py`
+### `backend/routers/actions.py` (legacy; excluded from API Contract V1)
 | Method | Path | Request | Response | Auth/Deps |
 | --- | --- | --- | --- | --- |
 | GET | `/twins/{twin_id}/events` | query `event_type?`, `limit?` | `List[EventSchema]` | `Depends(verify_owner)` |
@@ -214,7 +214,7 @@ Defined in `backend/main.py`:
 | DELETE | `/twins/{twin_id}/connectors/{connector_id}` | none | `{status}` | `Depends(verify_owner)` |
 | POST | `/twins/{twin_id}/connectors/{connector_id}/test` | none | `ConnectorTestResponse` | `Depends(verify_owner)` |
 
-### `backend/routers/escalations.py`
+### `backend/routers/escalations.py` (legacy; excluded from API Contract V1)
 | Method | Path | Request | Response | Auth/Deps |
 | --- | --- | --- | --- | --- |
 | GET | `/twins/{twin_id}/escalations` | none | list | `Depends(require_tenant)` |

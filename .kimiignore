@@ -1,0 +1,11 @@
+.git/
+**/node_modules/
+**/.next/
+**/.vercel/
+**/playwright-report/
+**/test-results*/
+**/__pycache__/
+**/.pytest_cache/
+**/.model_cache/
+artifacts/
+tmp/

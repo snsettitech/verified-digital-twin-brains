@@ -4,7 +4,7 @@
 This runbook covers DeepAgents telemetry counters and rollout gating for owner, widget, and public chat surfaces.
 
 Counter model:
-- Every counter is emitted as per-turn `0|1`.
+- Every counter is emitted as per-turn `0\|1`.
 - "Rate" means `sum(counter) / total_turns` in the selected window.
 
 Code references:
@@ -17,13 +17,13 @@ Code references:
 ## Field Dictionary
 | Field | Type | Emits `1` when | Route Scope | Code Reference |
 |---|---|---|---|---|
-| `deepagents_route_rate` | int (`0|1`) | Query ran through DeepAgents execution lane | owner, widget | `backend/modules/agent.py:907` |
-| `deepagents_forbidden_context_rate` | int (`0|1`) | DeepAgents denied due to public/anonymous context | owner, widget (from planner telemetry) | `backend/modules/agent.py:909` |
-| `deepagents_missing_params_rate` | int (`0|1`) | DeepAgents returned missing params | owner, widget | `backend/modules/agent.py:912` |
-| `deepagents_needs_approval_rate` | int (`0|1`) | DeepAgents produced pending approval plan | owner, widget | `backend/modules/agent.py:913` |
-| `deepagents_executed_rate` | int (`0|1`) | DeepAgents executed action directly | owner, widget | `backend/modules/agent.py:914` |
-| `public_action_query_guarded_rate` | int (`0|1`) | Public action-like query was guard-blocked from action lane | public | `backend/routers/chat.py:3028` |
-| `selection_recovery_failure_rate` | int (`0|1`) | Selection reply detected but prior intent could not be recovered | owner, widget | `backend/modules/agent.py:1478`, `backend/modules/agent.py:1708` |
+| `deepagents_route_rate` | int (`0\|1`) | Query ran through DeepAgents execution lane | owner, widget | `backend/modules/agent.py:907` |
+| `deepagents_forbidden_context_rate` | int (`0\|1`) | DeepAgents denied due to public/anonymous context | owner, widget (from planner telemetry) | `backend/modules/agent.py:909` |
+| `deepagents_missing_params_rate` | int (`0\|1`) | DeepAgents returned missing params | owner, widget | `backend/modules/agent.py:912` |
+| `deepagents_needs_approval_rate` | int (`0\|1`) | DeepAgents produced pending approval plan | owner, widget | `backend/modules/agent.py:913` |
+| `deepagents_executed_rate` | int (`0\|1`) | DeepAgents executed action directly | owner, widget | `backend/modules/agent.py:914` |
+| `public_action_query_guarded_rate` | int (`0\|1`) | Public action-like query was guard-blocked from action lane | public | `backend/routers/chat.py:3028` |
+| `selection_recovery_failure_rate` | int (`0\|1`) | Selection reply detected but prior intent could not be recovered | owner, widget | `backend/modules/agent.py:1478`, `backend/modules/agent.py:1708` |
 
 Notes:
 - `deepagents_forbidden_context_rate` tracks context-forbidden only (`DEEPAGENTS_FORBIDDEN_CONTEXT`) and does not include allowlist-forbidden (`DEEPAGENTS_NOT_ALLOWLISTED`).

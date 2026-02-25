@@ -1315,9 +1315,10 @@ async def deepagents_node(state: TwinState):
             interaction_context=str(state.get("interaction_context") or ""),
         )
     except Exception as exc:
+        print(f"[DeepAgents] Execution lane exception: {exc}")
         result = {
             "status": "failed",
-            "message": f"Action lane failed: {exc}",
+            "message": "Action lane failed due to an internal error.",
         }
 
     status = str(result.get("status") or "").strip().lower()

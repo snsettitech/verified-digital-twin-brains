@@ -347,7 +347,7 @@ test('complete expert creation and launch flow', async ({ page }) => {
 
 ```typescript
 // playwright.config.ts
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',

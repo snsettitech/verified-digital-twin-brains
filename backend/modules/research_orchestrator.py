@@ -104,8 +104,29 @@ class ResearchRunStatus(str, Enum):
     GENERATING_BIO = "generating_bio"  # Phase 4: Bio generation in progress
     BIO_GENERATED = "bio_generated"    # Phase 4 terminal
     FINALIZING = "finalizing"       # Phase 5: Mind score + readiness evaluation
-    COMPLETED = "completed"         # Phase 5 terminal
-    FAILED = "failed"               # Error state
+    COMPLETED = "completed"         # Phase 5 terminal (non-terminal if Phase 8 enabled)
+    
+    # Phase 8: Claims Enrichment
+    CLAIMS_ENRICHMENT = "claims_enrichment"
+    CLAIMS_COMPLETED = "claims_completed"  # Phase 8 terminal (non-terminal if Phase 9 enabled)
+    
+    # Phase 9: Web Verification
+    WEB_VERIFICATION = "web_verification"
+    WEB_VERIFIED = "web_verified"   # Phase 9 terminal (non-terminal if Phase 10 enabled)
+    
+    # Phase 10: Claim Finalization
+    CLAIMS_FINALIZATION = "claims_finalization"
+    CLAIMS_FINALIZED = "claims_finalized"  # Phase 10 terminal (non-terminal if Phase 11 enabled)
+    
+    # Phase 11: Human Adjudication + Canonical Claim Review
+    ADJUDICATION = "adjudication"
+    ADJUDICATED = "adjudicated"  # Phase 11 terminal (non-terminal if Phase 12 enabled)
+    
+    # Phase 12: Runtime Publication + Deployment Readiness
+    RUNTIME_PUBLICATION = "runtime_publication"
+    RUNTIME_PUBLISHED = "runtime_published"  # Phase 12 terminal (pipeline complete)
+    
+    FAILED = "failed"               # Error state (terminal)
 
 
 # Valid state transitions map
@@ -157,7 +178,64 @@ VALID_TRANSITIONS: Dict[ResearchRunStatus, Set[ResearchRunStatus]] = {
         ResearchRunStatus.COMPLETED,  # Phase 5
         ResearchRunStatus.FAILED,
     },
-    ResearchRunStatus.COMPLETED: set(),  # Phase 5 terminal
+    # Phase 8: Claims Enrichment transitions
+    ResearchRunStatus.COMPLETED: {
+        ResearchRunStatus.CLAIMS_ENRICHMENT,  # Optional Phase 8
+    },
+    ResearchRunStatus.CLAIMS_ENRICHMENT: {
+        ResearchRunStatus.CLAIMS_COMPLETED,
+        ResearchRunStatus.FAILED,
+        ResearchRunStatus.CLAIMS_ENRICHMENT,  # Self for idempotency
+    },
+    ResearchRunStatus.CLAIMS_COMPLETED: {
+        ResearchRunStatus.WEB_VERIFICATION,  # Optional Phase 9
+        ResearchRunStatus.CLAIMS_COMPLETED,   # Self for idempotency
+    },
+    
+    # Phase 9: Web Verification transitions
+    ResearchRunStatus.WEB_VERIFICATION: {
+        ResearchRunStatus.WEB_VERIFIED,
+        ResearchRunStatus.FAILED,
+        ResearchRunStatus.WEB_VERIFICATION,  # Self for idempotency
+    },
+    ResearchRunStatus.WEB_VERIFIED: {
+        ResearchRunStatus.CLAIMS_FINALIZATION,  # Optional Phase 10
+        ResearchRunStatus.WEB_VERIFIED,  # Self for idempotency
+    },
+    
+    # Phase 10: Claim Finalization transitions
+    ResearchRunStatus.CLAIMS_FINALIZATION: {
+        ResearchRunStatus.CLAIMS_FINALIZED,
+        ResearchRunStatus.FAILED,
+        ResearchRunStatus.CLAIMS_FINALIZATION,  # Self for idempotency
+    },
+    ResearchRunStatus.CLAIMS_FINALIZED: {
+        ResearchRunStatus.ADJUDICATION,  # Optional Phase 11
+        ResearchRunStatus.RUNTIME_PUBLICATION,  # Direct to Phase 12 if Phase 11 disabled
+        ResearchRunStatus.CLAIMS_FINALIZED,  # Self for idempotency
+    },
+    
+    # Phase 11: Human Adjudication transitions
+    ResearchRunStatus.ADJUDICATION: {
+        ResearchRunStatus.ADJUDICATED,
+        ResearchRunStatus.FAILED,
+        ResearchRunStatus.ADJUDICATION,  # Self for idempotency
+    },
+    ResearchRunStatus.ADJUDICATED: {
+        ResearchRunStatus.RUNTIME_PUBLICATION,  # Optional Phase 12
+        ResearchRunStatus.ADJUDICATED,  # Self for idempotency
+    },
+    
+    # Phase 12: Runtime Publication transitions
+    ResearchRunStatus.RUNTIME_PUBLICATION: {
+        ResearchRunStatus.RUNTIME_PUBLISHED,
+        ResearchRunStatus.FAILED,
+        ResearchRunStatus.RUNTIME_PUBLICATION,  # Self for idempotency
+    },
+    ResearchRunStatus.RUNTIME_PUBLISHED: {
+        ResearchRunStatus.RUNTIME_PUBLISHED,  # Self for idempotency (terminal)
+    },
+    
     ResearchRunStatus.FAILED: set(),     # Terminal
 }
 

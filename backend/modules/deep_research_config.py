@@ -189,6 +189,19 @@ class DeepResearchConfig(BaseModel):
     crawl_safety_enabled: bool = Field(default=True, description="Enable crawl safety controls")
     global_disable: bool = Field(default=False, description="Global kill switch for Deep Research")
     
+    # Phase-specific flags
+    phase_8_claims_disabled: bool = Field(default=False, description="Disable Phase 8 claims enrichment")
+    phase_9_web_verification_disabled: bool = Field(default=False, description="Disable Phase 9 web verification")
+    phase_10_claim_finalization_disabled: bool = Field(default=False, description="Disable Phase 10 claim finalization")
+    
+    # Phase 11: Human Adjudication + Canonical Claim Review
+    phase_11_human_adjudication_disabled: bool = Field(default=False, description="Disable Phase 11 human adjudication")
+    
+    # Phase 12: Runtime Publication + Deployment Readiness
+    phase_12_runtime_publication_disabled: bool = Field(default=False, description="Disable Phase 12 runtime publication")
+    phase_12_suppress_unresolved_by_default: bool = Field(default=True, description="Suppress unresolved claims from runtime")
+    phase_12_auto_publish: bool = Field(default=False, description="Auto-publish without manual review")
+    
     # Sub-configs
     safety: FetchSafetyConfig = Field(default_factory=FetchSafetyConfig.from_env)
     limits: ResearchLimitsConfig = Field(default_factory=ResearchLimitsConfig.from_env)
@@ -203,6 +216,15 @@ class DeepResearchConfig(BaseModel):
             enabled=os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true",
             crawl_safety_enabled=os.getenv("CRAWL_SAFETY_ENABLED", "true").lower() == "true",
             global_disable=os.getenv("DEEP_RESEARCH_GLOBAL_DISABLE", "false").lower() == "true",
+            phase_8_claims_disabled=os.getenv("DR_PHASE_8_CLAIMS_DISABLED", "false").lower() == "true",
+            phase_9_web_verification_disabled=os.getenv("DR_PHASE_9_WEB_VERIFICATION_DISABLED", "false").lower() == "true",
+            phase_10_claim_finalization_disabled=os.getenv("DR_PHASE_10_CLAIM_FINALIZATION_DISABLED", "false").lower() == "true",
+            # Phase 11
+            phase_11_human_adjudication_disabled=os.getenv("DR_PHASE_11_HUMAN_ADJUDICATION_DISABLED", "false").lower() == "true",
+            # Phase 12
+            phase_12_runtime_publication_disabled=os.getenv("DR_PHASE_12_RUNTIME_PUBLICATION_DISABLED", "false").lower() == "true",
+            phase_12_suppress_unresolved_by_default=os.getenv("DR_PHASE_12_SUPPRESS_UNRESOLVED", "true").lower() == "true",
+            phase_12_auto_publish=os.getenv("DR_PHASE_12_AUTO_PUBLISH", "false").lower() == "true",
         )
     
     def is_enabled(self) -> bool:

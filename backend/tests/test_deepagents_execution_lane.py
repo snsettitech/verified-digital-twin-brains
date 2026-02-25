@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 
 from modules.agent import deepagents_node, router_node
 from modules.deepagents_executor import execute_deepagents_plan
+from modules.deepagents_policy import classify_deepagents_intent
 from modules.deepagents_router import build_deepagents_plan
 
 
@@ -170,3 +171,72 @@ async def test_deepagents_disabled_returns_deterministic_501_gated_result(monkey
     assert result["status"] == "disabled"
     assert result["http_status"] == 501
     assert result["error"]["code"] == "DEEPAGENTS_DISABLED"
+
+
+@pytest.mark.asyncio
+async def test_control_action_forbids_cross_twin_draft_access(monkeypatch):
+    monkeypatch.setenv("DEEPAGENTS_ENABLED", "true")
+    monkeypatch.setenv("DEEPAGENTS_REQUIRE_APPROVAL", "true")
+
+    draft_id = "123e4567-e89b-12d3-a456-426614174000"
+
+    monkeypatch.setattr(
+        "modules.deepagents_executor.ActionDraftManager.get_draft",
+        lambda _draft_id: {"id": _draft_id, "twin_id": "different-twin", "status": "pending"},
+    )
+
+    result = await execute_deepagents_plan(
+        twin_id="twin-1",
+        plan=build_deepagents_plan(f"approve {draft_id}"),
+        actor_user_id="user-1",
+        tenant_id="tenant-1",
+        conversation_id="conv-1",
+        interaction_context="owner_chat",
+    )
+
+    assert result["status"] == "forbidden"
+    assert result["http_status"] == 403
+    assert result["error"]["code"] == "DEEPAGENTS_DRAFT_SCOPE_FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_control_action_approve_allowed_for_same_twin(monkeypatch):
+    monkeypatch.setenv("DEEPAGENTS_ENABLED", "true")
+    monkeypatch.setenv("DEEPAGENTS_REQUIRE_APPROVAL", "true")
+
+    draft_id = "123e4567-e89b-12d3-a456-426614174000"
+
+    monkeypatch.setattr(
+        "modules.deepagents_executor.ActionDraftManager.get_draft",
+        lambda _draft_id: {"id": _draft_id, "twin_id": "twin-1", "status": "pending"},
+    )
+    monkeypatch.setattr(
+        "modules.deepagents_executor.ActionDraftManager.approve_draft",
+        lambda *_args, **_kwargs: True,
+    )
+
+    result = await execute_deepagents_plan(
+        twin_id="twin-1",
+        plan=build_deepagents_plan(f"approve {draft_id}"),
+        actor_user_id="user-1",
+        tenant_id="tenant-1",
+        conversation_id="conv-1",
+        interaction_context="owner_chat",
+    )
+
+    assert result["status"] == "approved"
+    assert result["action_id"] == draft_id
+
+
+def test_policy_ignores_substring_false_positive_for_approval():
+    draft_id = "123e4567-e89b-12d3-a456-426614174000"
+    plan = classify_deepagents_intent(f"I disapprove this behavior for draft {draft_id}")
+    assert plan["control_action"] is None
+    assert plan["target_action_id"] is None
+
+
+def test_policy_ignores_negated_cancel_command():
+    draft_id = "123e4567-e89b-12d3-a456-426614174000"
+    plan = classify_deepagents_intent(f"do not cancel {draft_id}")
+    assert plan["control_action"] is None
+    assert plan["target_action_id"] is None

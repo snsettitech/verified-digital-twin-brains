@@ -92,6 +92,25 @@ services:
         value: "false"
       - key: QUERY_REWRITE_ROLLOUT_PERCENT
         value: "0"  # Gradually increase: 10, 25, 50, 100
+      # Deep Research Feature Flags
+      - key: DEEP_RESEARCH_ENABLED
+        value: "true"
+      - key: DR_PHASE_8_CLAIMS_DISABLED
+        value: "false"
+      - key: DR_PHASE_9_WEB_VERIFICATION_DISABLED
+        value: "false"
+      - key: DR_PHASE_10_CLAIM_FINALIZATION_DISABLED
+        value: "false"
+      # Phase 11: Human Adjudication (default disabled for gradual rollout)
+      - key: DR_PHASE_11_HUMAN_ADJUDICATION_DISABLED
+        value: "true"
+      # Phase 12: Runtime Publication (default disabled for gradual rollout)
+      - key: DR_PHASE_12_RUNTIME_PUBLICATION_DISABLED
+        value: "true"
+      - key: DR_PHASE_12_SUPPRESS_UNRESOLVED
+        value: "true"
+      - key: DR_PHASE_12_AUTO_PUBLISH
+        value: "false"
 
     # Ephemeral disk for temp files
     disk:

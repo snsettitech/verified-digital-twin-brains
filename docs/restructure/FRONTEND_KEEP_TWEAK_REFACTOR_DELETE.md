@@ -104,7 +104,7 @@ This document categorizes every frontend file according to its fate in the Clone
 | File | Reason |
 |------|--------|
 | `PremiumModal.tsx` | Out of scope (Stripe gating) |
-| `DeleteTwinModal.tsx` | KEEP - needed for settings |
+| `DeleteTwinModal.tsx` | DEFER - currently needed for settings until replacement flow lands |
 
 ---
 

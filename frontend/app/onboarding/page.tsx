@@ -10,6 +10,7 @@ import { StepBuilding } from '@/components/onboarding/steps/StepBuilding';
 import { StepProfileLanding } from '@/components/onboarding/steps/StepProfileLanding';
 import { StepClaimReview } from '@/components/onboarding/steps/StepClaimReview';
 import { StepClarification } from '@/components/onboarding/steps/StepClarification';
+import { StepResearch } from '@/components/onboarding/steps/StepResearch';
 import { Step1Identity, IdentityFormData } from '@/components/onboarding/steps/Step1Identity';
 import { Step2ThinkingStyle } from '@/components/onboarding/steps/Step2ThinkingStyle';
 import { Step3Values } from '@/components/onboarding/steps/Step3Values';
@@ -27,6 +28,7 @@ type OnboardingStep =
   | 'welcome'
   | 'link_suggestions'
   | 'add_sources'
+  | 'research'  // Phase 7: Deep Research flow
   | 'building'
   | 'profile'
   | 'claim_review'
@@ -372,7 +374,8 @@ function OnboardingContent() {
         }
       }
 
-      setCurrentStep('building');
+      // Phase 7: Route to Deep Research flow instead of legacy building
+      setCurrentStep('research');
     } catch (error) {
       console.error('Failed to submit sources:', error);
       alert('Failed to submit sources. Please try again.');
@@ -528,6 +531,21 @@ function OnboardingContent() {
             onBack={() => setCurrentStep(flowType === 'link_first' ? 'link_suggestions' : 'welcome')}
           />
         );
+
+      case 'research':
+        return welcomeData ? (
+          <StepResearch
+            twinId={twin?.id || null}
+            claimedIdentity={{
+              fullName: welcomeData.fullName,
+              location: welcomeData.location,
+              role: welcomeData.role,
+            }}
+            seedUrls={suggestedUrls}
+            onComplete={() => setCurrentStep('profile')}
+            onBack={() => setCurrentStep('add_sources')}
+          />
+        ) : null;
 
       case 'building':
         return (
@@ -713,12 +731,12 @@ function OnboardingContent() {
             {[
               { key: 'link_suggestions', label: 'Find' },
               { key: 'add_sources', label: 'Add' },
-              { key: 'building', label: 'Build' },
+              { key: 'research', label: 'Research' },
               { key: 'profile', label: 'Review' },
             ].map((step, idx, arr) => {
               const isActive = currentStep === step.key;
-              const isPast = ['link_suggestions', 'add_sources', 'building', 'profile'].indexOf(currentStep) > 
-                            ['link_suggestions', 'add_sources', 'building', 'profile'].indexOf(step.key);
+              const isPast = ['link_suggestions', 'add_sources', 'research', 'building', 'profile'].indexOf(currentStep) > 
+                            ['link_suggestions', 'add_sources', 'research', 'building', 'profile'].indexOf(step.key);
               return (
                 <React.Fragment key={step.key}>
                   <div className={`flex flex-col items-center ${isActive ? 'text-indigo-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>
