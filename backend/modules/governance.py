@@ -2,7 +2,6 @@
 Governance Module
 Manages audit logging, twin verification, and governance policies.
 """
-import uuid
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from modules.observability import supabase

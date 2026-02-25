@@ -6,7 +6,6 @@ Implements URL canonicalization rules for web crawling.
 """
 
 import hashlib
-import re
 from typing import Dict, List, Optional, Any
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 

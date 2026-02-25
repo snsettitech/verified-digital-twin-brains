@@ -2,7 +2,7 @@
 Safety Module
 Implements guardrails, prompt injection detection, and policy enforcement.
 """
-from typing import List, Dict, Any, Optional
+from typing import Dict, Any, Optional
 import re
 from modules.governance import get_governance_policies, AuditLogger
 

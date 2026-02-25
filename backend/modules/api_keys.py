@@ -6,10 +6,9 @@ Handles creation, validation, and management of API keys for widget authenticati
 import secrets
 import bcrypt
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime
 from modules.observability import supabase
 from modules.governance import AuditLogger
-import re
 
 
 def generate_api_key(twin_id: str) -> tuple[str, str, str]:

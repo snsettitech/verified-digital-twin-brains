@@ -5,9 +5,8 @@ Monitors metrics and sends alerts when thresholds are breached.
 """
 
 import os
-import json
 import logging
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
