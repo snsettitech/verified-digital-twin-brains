@@ -15,9 +15,6 @@ import shutil
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
-# Set up mock environment before imports
-os.environ["DEEP_RESEARCH_ENABLED"] = "true"
-
 from modules.web_crawler import (
     crawl_website_v2,
     CrawlV2Result,
@@ -52,28 +49,20 @@ def mock_supabase():
 
 
 class TestCrawlV2FeatureFlag:
-    """Test feature flag behavior."""
+    """Test always-on Deep Research behavior."""
     
     @pytest.mark.asyncio
-    @patch("backend.modules.web_crawler.get_dr_config")
-    async def test_disabled_when_feature_flag_off(self, mock_get_config, temp_artifact_dir):
-        """Should fail when Deep Research is disabled."""
-        mock_config = MagicMock()
-        mock_config.is_enabled.return_value = False
-        mock_get_config.return_value = mock_config
-        
-        result = await crawl_website_v2("https://example.com", "twin_123")
-        assert result.success is False
-        assert "not enabled" in result.error.lower()
-    
-    @pytest.mark.asyncio
-    async def test_enabled_when_feature_flag_on(self, temp_artifact_dir, mock_supabase):
-        """Should proceed when Deep Research is enabled."""
-        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "true"}):
-            # This will fail at fetch (skeleton), but should pass feature flag check
+    async def test_remains_enabled_when_legacy_flag_false(self, temp_artifact_dir, mock_supabase):
+        """Legacy DEEP_RESEARCH_ENABLED should not disable v2 crawl."""
+        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "false"}):
             result = await crawl_website_v2("https://example.com", "twin_123")
-            # Should create crawl run and attempt crawl
             assert result.crawl_id is not None
+    
+    @pytest.mark.asyncio
+    async def test_enabled_crawl_flow(self, temp_artifact_dir, mock_supabase):
+        """Crawl should proceed through setup path."""
+        result = await crawl_website_v2("https://example.com", "twin_123")
+        assert result.crawl_id is not None
 
 
 class TestURLCanonicalization:
@@ -109,24 +98,21 @@ class TestSafetyIntegration:
     @pytest.mark.asyncio
     async def test_private_ip_blocked(self, temp_artifact_dir, mock_supabase):
         """Private IP URLs should be blocked."""
-        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "true"}):
-            result = await crawl_website_v2("http://10.0.0.1/page", "twin_123")
-            assert result.success is False
-            assert "blocked" in result.error.lower() or result.crawl_id is not None
+        result = await crawl_website_v2("http://10.0.0.1/page", "twin_123")
+        assert result.success is False
+        assert "blocked" in result.error.lower() or result.crawl_id is not None
     
     @pytest.mark.asyncio
     async def test_localhost_blocked(self, temp_artifact_dir, mock_supabase):
         """localhost should be blocked."""
-        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "true"}):
-            result = await crawl_website_v2("http://localhost/page", "twin_123")
-            assert result.success is False or "blocked" in str(result.error).lower()
+        result = await crawl_website_v2("http://localhost/page", "twin_123")
+        assert result.success is False or "blocked" in str(result.error).lower()
     
     @pytest.mark.asyncio
     async def test_file_scheme_blocked(self, temp_artifact_dir, mock_supabase):
         """file:// URLs should be blocked at seed validation."""
-        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "true"}):
-            result = await crawl_website_v2("file:///etc/passwd", "twin_123")
-            assert result.success is False
+        result = await crawl_website_v2("file:///etc/passwd", "twin_123")
+        assert result.success is False
 
 
 class TestCrawlPageV2:

@@ -8,16 +8,11 @@ Tests the REST API endpoints for crawl management:
 - DELETE /twins/{twin_id}/crawls/{crawl_id}
 """
 
-import os
 import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
-# Set environment before imports
-os.environ["DEEP_RESEARCH_ENABLED"] = "true"
-
 from main import app
-from modules.deep_research_config import get_config as get_dr_config
 
 client = TestClient(app)
 
@@ -85,16 +80,13 @@ class TestCreateCrawl:
         # But we can verify the endpoint is wired correctly
         assert response.status_code in [200, 201, 401, 403]  # Auth required
     
-    def test_create_crawl_feature_disabled(self):
-        """Should return 503 when feature is disabled."""
-        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "false"}):
-            # Need to reimport or reload config
-            response = client.post(
-                "/twins/twin_123/crawls",
-                json={"seed_urls": ["https://example.com"]},
-            )
-            # Router won't be included when disabled, so this should be 404
-            assert response.status_code in [401, 404]  # Auth first, or not found if disabled
+    def test_create_crawl_endpoint_registered(self):
+        """Route should remain registered regardless of legacy env flags."""
+        response = client.post(
+            "/twins/twin_123/crawls",
+            json={"seed_urls": ["https://example.com"]},
+        )
+        assert response.status_code in [200, 201, 401, 403, 422]
     
     def test_create_crawl_invalid_payload(self):
         """Should reject invalid payload."""
@@ -159,20 +151,19 @@ class TestCancelCrawl:
 
 
 class TestFeatureFlagGating:
-    """Test feature flag behavior."""
+    """Route registration behavior."""
     
-    def test_router_included_when_enabled(self):
-        """Router should be in app routes when enabled."""
+    def test_router_included(self):
+        """Router should be in app routes."""
         # Check if routes are registered
         routes = [r.path for r in app.routes]
         crawl_routes = [r for r in routes if "crawl" in r.lower()]
-        # Should have crawl routes when DEEP_RESEARCH_ENABLED=true at import time
-        # Note: This depends on test import order
+        assert len(crawl_routes) > 0
     
-    def test_crawl_not_found_when_disabled(self):
-        """Should get 404 when feature disabled and router not included."""
-        # This test would need a fresh app instance with disabled flag
-        pass
+    def test_crawl_route_not_404(self):
+        """A representative crawl endpoint should not return 404."""
+        response = client.get("/twins/twin_123/crawls")
+        assert response.status_code != 404
 
 
 class TestResponseSchemas:

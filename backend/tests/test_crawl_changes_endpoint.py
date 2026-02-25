@@ -120,7 +120,7 @@ class TestChangesEndpoint:
     
     def test_endpoint_path_pattern(self):
         """Endpoint path should follow correct pattern."""
-        # The endpoint is registered when DEEP_RESEARCH_ENABLED=true
+        # The endpoint is always registered.
         # Path pattern should be: /twins/{twin_id}/crawls/{crawl_id}/changes
         # This test documents the expected path
         expected_pattern = "/twins/{twin_id}/crawls/{crawl_id}/changes"

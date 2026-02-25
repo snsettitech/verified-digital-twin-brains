@@ -4,9 +4,9 @@ Smoke Test Script for Phases 11 and 12
 
 Validates that the deployment is working correctly:
 1. Database migrations applied
-2. Feature flags are respected
-3. Existing Phase 8/9/10 functionality still works
-4. Phase 11/12 endpoints return expected responses
+2. Existing Phase 8-12 routes are registered
+3. Runtime controls are configured
+4. API health and contracts are valid
 
 Usage:
     python scripts/smoke_test_phases_11_12.py
@@ -146,31 +146,41 @@ class SmokeTestRunner:
             return False
     
     # ========================================================================
-    # Feature Flag Tests
+    # Route Registration Tests
     # ========================================================================
     
-    def test_phase_11_disabled_by_default(self):
-        """Verify Phase 11 endpoints return 503 when disabled."""
+    def test_phase_11_endpoint_registered(self):
+        """Verify Phase 11 endpoint is present (not 404)."""
         try:
-            # This test requires authentication - we'll just verify the endpoint exists
-            # In real scenario, use a test token
-            print_info("Phase 11 should be disabled by default (DR_PHASE_11_HUMAN_ADJUDICATION_DISABLED=true)")
-            print_info("Endpoint: GET /twins/{twin}/research/{run}/review-queue")
-            print_warning("Manual verification needed: Should return 503 when disabled")
-            return None
-            
+            response = requests.get(
+                f"{self.base_url}/twins/test-twin/research/test-run/review-queue",
+                timeout=TIMEOUT
+            )
+            if response.status_code == 404:
+                print_error("Phase 11 route not registered (404)")
+                return False
+            print_info(f"Phase 11 route status: {response.status_code}")
+            print_success("Phase 11 endpoint registered")
+            return True
+             
         except Exception as e:
             print_error(f"Test failed: {e}")
             return False
     
-    def test_phase_12_disabled_by_default(self):
-        """Verify Phase 12 endpoints return 503 when disabled."""
+    def test_phase_12_endpoint_registered(self):
+        """Verify Phase 12 endpoint is present (not 404)."""
         try:
-            print_info("Phase 12 should be disabled by default (DR_PHASE_12_RUNTIME_PUBLICATION_DISABLED=true)")
-            print_info("Endpoint: GET /twins/{twin}/runtime-claims")
-            print_warning("Manual verification needed: Should return 503 when disabled")
-            return None
-            
+            response = requests.get(
+                f"{self.base_url}/twins/test-twin/runtime-claims",
+                timeout=TIMEOUT
+            )
+            if response.status_code == 404:
+                print_error("Phase 12 route not registered (404)")
+                return False
+            print_info(f"Phase 12 route status: {response.status_code}")
+            print_success("Phase 12 endpoint registered")
+            return True
+             
         except Exception as e:
             print_error(f"Test failed: {e}")
             return False
@@ -203,13 +213,11 @@ class SmokeTestRunner:
     # ========================================================================
     
     def test_feature_flag_configuration(self):
-        """Verify feature flags are properly configured."""
+        """Verify runtime control env vars are visible."""
         try:
-            print_info("Checking feature flag configuration...")
-            
+            print_info("Checking runtime control configuration...")
+             
             flags = [
-                "DR_PHASE_11_HUMAN_ADJUDICATION_DISABLED",
-                "DR_PHASE_12_RUNTIME_PUBLICATION_DISABLED",
                 "DR_PHASE_12_SUPPRESS_UNRESOLVED",
                 "DR_PHASE_12_AUTO_PUBLISH",
             ]
@@ -218,7 +226,7 @@ class SmokeTestRunner:
                 value = os.getenv(flag, "NOT_SET")
                 print_info(f"  {flag}: {value}")
             
-            print_success("Feature flags configured")
+            print_success("Runtime controls configured")
             return True
             
         except Exception as e:
@@ -230,16 +238,25 @@ class SmokeTestRunner:
     # ========================================================================
     
     def test_existing_endpoints(self):
-        """Verify existing Phase 8/9/10 endpoints still work."""
+        """Verify existing Phase 8/9/10 endpoints are registered (not 404)."""
         try:
             print_info("Checking existing endpoints...")
-            print_warning("Requires valid authentication token")
-            print_warning("Endpoints to verify:")
-            print_info("  - GET /twins/{twin}/research/{run}/claims")
-            print_info("  - GET /twins/{twin}/research/{run}/finalized-claims")
-            print_info("  - GET /twins/{twin}/research/{run}/consistency-issues")
-            return None
-            
+            endpoints = [
+                "/twins/test-twin/research/test-run/claims",
+                "/twins/test-twin/research/test-run/finalized-claims",
+                "/twins/test-twin/research/test-run/consistency-issues",
+            ]
+
+            for endpoint in endpoints:
+                response = requests.get(f"{self.base_url}{endpoint}", timeout=TIMEOUT)
+                if response.status_code == 404:
+                    print_error(f"Missing endpoint: {endpoint}")
+                    return False
+                print_info(f"{endpoint} -> {response.status_code}")
+
+            print_success("Existing endpoints registered")
+            return True
+             
         except Exception as e:
             print_error(f"Test failed: {e}")
             return False
@@ -283,11 +300,11 @@ def main():
     runner.run_test("Database Migrations - Phase 11", runner.test_phase_11_tables_exist)
     runner.run_test("Database Migrations - Phase 12", runner.test_phase_12_tables_exist)
     runner.run_test("Health Endpoint", runner.test_health_endpoint)
-    runner.run_test("Feature Flags - Phase 11 Disabled", runner.test_phase_11_disabled_by_default)
-    runner.run_test("Feature Flags - Phase 12 Disabled", runner.test_phase_12_disabled_by_default)
+    runner.run_test("Phase 11 Route Registration", runner.test_phase_11_endpoint_registered)
+    runner.run_test("Phase 12 Route Registration", runner.test_phase_12_endpoint_registered)
     runner.run_test("API Contracts", runner.test_api_contracts)
-    runner.run_test("Feature Flag Configuration", runner.test_feature_flag_configuration)
-    runner.run_test("Existing Endpoints (manual)", runner.test_existing_endpoints)
+    runner.run_test("Runtime Control Configuration", runner.test_feature_flag_configuration)
+    runner.run_test("Existing Endpoints", runner.test_existing_endpoints)
     
     # Print summary
     success = runner.print_summary()

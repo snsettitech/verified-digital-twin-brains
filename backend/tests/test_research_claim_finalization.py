@@ -508,11 +508,11 @@ class TestAPIContracts:
 # =============================================================================
 
 class TestFeatureFlags:
-    """Test Phase 10 feature flags."""
+    """Test Deep Research configuration behavior."""
     
     @patch("os.getenv")
-    def test_phase_10_disabled_flag(self, mock_getenv):
-        """Test DR_PHASE_10_CLAIM_FINALIZATION_DISABLED flag is respected."""
+    def test_phase_10_disabled_flag_ignored(self, mock_getenv):
+        """Deprecated Phase 10 disable flag should be ignored."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
@@ -523,22 +523,22 @@ class TestFeatureFlags:
         mock_getenv.side_effect = mock_env
         config = DeepResearchConfig.from_env()
         
-        assert config.phase_10_claim_finalization_disabled == True
+        assert config.phase_10_claim_finalization_disabled is False
     
     @patch("os.getenv")
-    def test_phase_10_enabled_by_default(self, mock_getenv):
-        """Test Phase 10 is enabled by default."""
+    def test_deep_research_always_enabled(self, mock_getenv):
+        """Deep Research should remain enabled regardless of legacy env flags."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
-            if key == "DR_PHASE_10_CLAIM_FINALIZATION_DISABLED":
+            if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
                 return "false"
             return default
         
         mock_getenv.side_effect = mock_env
         config = DeepResearchConfig.from_env()
         
-        assert config.phase_10_claim_finalization_disabled == False
+        assert config.is_enabled() is True
 
 
 # =============================================================================

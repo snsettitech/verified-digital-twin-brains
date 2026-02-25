@@ -326,20 +326,16 @@ class TestAuthOwnershipE2E:
 # =============================================================================
 
 class TestFeatureFlagE2E:
-    """Feature flags: disabling Phase 6/phase endpoints returns expected guarded errors"""
+    """Configuration contract checks for Deep Research runtime controls."""
     
-    def test_phase_6_feature_flags_documented(self):
-        """E2E: Document all Phase 6 feature flags."""
+    def test_deep_research_runtime_controls_documented(self):
+        """E2E: Document active Deep Research runtime controls."""
         expected_flags = {
-            "DEEP_RESEARCH_ENABLED": "Master feature flag",
-            "DEEP_RESEARCH_GLOBAL_DISABLE": "Global kill switch",
-            "DR_PHASE_3_5_DISABLED": "Phase 3.5 ingestion disable",
-            "DR_PHASE_4_BIO_DISABLED": "Phase 4 bio generation disable",
-            "DR_PHASE_5_FINALIZE_DISABLED": "Phase 5 finalization disable",
+            "DR_PHASE_12_SUPPRESS_UNRESOLVED": "Suppress unresolved claims from runtime publication",
+            "DR_PHASE_12_AUTO_PUBLISH": "Auto-publish runtime claims without manual review",
         }
         
-        # Documented flags for deployment runbook
-        assert len(expected_flags) == 5
+        assert len(expected_flags) == 2
         
     def test_next_actions_canonical_field(self):
         """E2E: next_actions (plural) is canonical field name."""

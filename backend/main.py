@@ -40,6 +40,7 @@ from routers import (
     debug_retrieval, # New debug router
     verify,
     owner_memory,
+    products,
     retrieval_delphi,
     
     # P2: Langfuse observability enhancements
@@ -80,8 +81,8 @@ ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").low
 DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
-# Deep Research is opt-in for Phase 1
-DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
+# Deep Research routes are always enabled.
+DEEP_RESEARCH_ENABLED = True
 
 def print_feature_flag_summary():
     """Print enabled/disabled feature summary for observability."""
@@ -91,7 +92,7 @@ def print_feature_flag_summary():
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
-    print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
+    print("  Deep Research:      ENABLED")
     print("-" * 60)
     sys.stdout.flush()
 
@@ -192,6 +193,7 @@ app.include_router(api_keys.router)
 app.include_router(debug_retrieval.router)
 app.include_router(verify.router)
 app.include_router(owner_memory.router)
+app.include_router(products.router)
 
 if DELPHI_RETRIEVAL_ENABLED:
     app.include_router(retrieval_delphi.router)
@@ -215,16 +217,11 @@ app.include_router(cost_tracking.router)
 app.include_router(synthetic_monitoring.router)
 print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare, playground, ab-testing, costs, monitoring)")
 
-# Phase 1A.6: Deep Research crawl management (feature-gated)
-if DEEP_RESEARCH_ENABLED:
-    app.include_router(crawl.router)
-    print("[INFO] Deep Research crawl routes enabled (DEEP_RESEARCH_ENABLED=true)")
-    
-    # Phase 8: Research claims enrichment (nested under Deep Research)
-    app.include_router(research_claims.router)
-    print("[INFO] Deep Research claims routes enabled (DEEP_RESEARCH_ENABLED=true)")
-else:
-    print("[INFO] Deep Research crawl routes disabled (DEEP_RESEARCH_ENABLED=false)")
+# Deep Research crawl + claims routes (always enabled)
+app.include_router(crawl.router)
+print("[INFO] Deep Research crawl routes enabled")
+app.include_router(research_claims.router)
+print("[INFO] Deep Research claims routes enabled")
 
 # Print feature flag summary after all routers loaded
 print_feature_flag_summary()

@@ -6,7 +6,7 @@ API endpoints for claim enrichment workflow:
 - Phase 9: Web verification enrichment  
 - Phase 10: Claim finalization + consistency review
 
-Feature-gated by phase-specific environment variables.
+Deep Research claim phases are always enabled.
 """
 
 import logging
@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
 from modules.auth_guard import get_current_user, verify_twin_ownership
-from modules.deep_research_config import get_config as get_dr_config
 from modules.research_claim_service import (
     ResearchClaimService,
     EnrichmentStatus,
@@ -43,110 +42,22 @@ router = APIRouter(tags=["research-claims"])
 
 
 # =============================================================================
-# Feature Flag Check
+# Compatibility phase-check hooks (always enabled)
 # =============================================================================
 
 def _check_phase_8_enabled():
-    """Check if Phase 8 claims enrichment is enabled."""
-    config = get_dr_config()
-    
-    # Check master switch first
-    if not config.is_enabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Deep Research feature is not enabled",
-                "code": "FEATURE_DISABLED",
-                "message": "Set DEEP_RESEARCH_ENABLED=true to enable this feature"
-            }
-        )
-    
-    # Check Phase 8 specific flag
-    if config.phase_8_claims_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 8 claims enrichment is disabled",
-                "code": "PHASE_8_DISABLED",
-                "message": "Set DR_PHASE_8_CLAIMS_DISABLED=false to enable"
-            }
-        )
+    """No-op: Phase 8 is always enabled."""
+    return None
 
 
 def _check_phase_9_enabled():
-    """Check if Phase 9 web verification is enabled."""
-    config = get_dr_config()
-    
-    # Check master switch first
-    if not config.is_enabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Deep Research feature is not enabled",
-                "code": "FEATURE_DISABLED",
-                "message": "Set DEEP_RESEARCH_ENABLED=true to enable this feature"
-            }
-        )
-    
-    # Check Phase 9 specific flag
-    if config.phase_9_web_verification_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 9 web verification is disabled",
-                "code": "PHASE_9_DISABLED",
-                "message": "Set DR_PHASE_9_WEB_VERIFICATION_DISABLED=false to enable"
-            }
-        )
-    
-    # Phase 8 must also be enabled (dependency)
-    if config.phase_8_claims_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 8 claims enrichment is required for Phase 9",
-                "code": "PHASE_8_REQUIRED",
-                "message": "Enable Phase 8 before using Phase 9"
-            }
-        )
+    """No-op: Phase 9 is always enabled."""
+    return None
 
 
 def _check_phase_10_enabled():
-    """Check if Phase 10 claim finalization is enabled."""
-    config = get_dr_config()
-    
-    # Check master switch first
-    if not config.is_enabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Deep Research feature is not enabled",
-                "code": "FEATURE_DISABLED",
-                "message": "Set DEEP_RESEARCH_ENABLED=true to enable this feature"
-            }
-        )
-    
-    # Check Phase 10 specific flag
-    if config.phase_10_claim_finalization_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 10 claim finalization is disabled",
-                "code": "PHASE_10_DISABLED",
-                "message": "Set DR_PHASE_10_CLAIM_FINALIZATION_DISABLED=false to enable"
-            }
-        )
-    
-    # Phase 8 must be enabled (dependency)
-    if config.phase_8_claims_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 8 claims enrichment is required for Phase 10",
-                "code": "PHASE_8_REQUIRED",
-                "message": "Enable Phase 8 before using Phase 10"
-            }
-        )
+    """No-op: Phase 10 is always enabled."""
+    return None
 
 
 # =============================================================================
@@ -876,18 +787,6 @@ async def list_claims_with_web_verification_endpoint(
     Filters:
     - web_status: pending, supported, conflicting, insufficient_evidence, needs_review
     """
-    # Check feature flags (Phase 8 required, Phase 9 optional for viewing)
-    config = get_dr_config()
-    if not config.is_enabled() or config.phase_8_claims_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Claims enrichment is disabled",
-                "code": "PHASE_8_DISABLED",
-                "message": "Enable Phase 8 to view claims"
-            }
-        )
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1726,30 +1625,8 @@ from datetime import datetime  # Import at end to avoid circular issues
 # =============================================================================
 
 def _check_phase_11_enabled():
-    """Check if Phase 11 human adjudication is enabled."""
-    config = get_dr_config()
-    
-    # Check master switch first
-    if not config.is_enabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Deep Research feature is not enabled",
-                "code": "FEATURE_DISABLED",
-                "message": "Set DEEP_RESEARCH_ENABLED=true to enable this feature"
-            }
-        )
-    
-    # Check Phase 11 specific flag
-    if config.phase_11_human_adjudication_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 11 human adjudication is disabled",
-                "code": "PHASE_11_DISABLED",
-                "message": "Set DR_PHASE_11_HUMAN_ADJUDICATION_DISABLED=false to enable"
-            }
-        )
+    """No-op: Phase 11 is always enabled."""
+    return None
 
 
 # Phase 11 schemas
@@ -2393,30 +2270,8 @@ async def apply_issue_action_endpoint(
 # =============================================================================
 
 def _check_phase_12_enabled():
-    """Check if Phase 12 runtime publication is enabled."""
-    config = get_dr_config()
-    
-    # Check master switch first
-    if not config.is_enabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Deep Research feature is not enabled",
-                "code": "FEATURE_DISABLED",
-                "message": "Set DEEP_RESEARCH_ENABLED=true to enable this feature"
-            }
-        )
-    
-    # Check Phase 12 specific flag
-    if config.phase_12_runtime_publication_disabled:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 12 runtime publication is disabled",
-                "code": "PHASE_12_DISABLED",
-                "message": "Set DR_PHASE_12_RUNTIME_PUBLICATION_DISABLED=false to enable"
-            }
-        )
+    """No-op: Phase 12 is always enabled."""
+    return None
 
 
 # Phase 12 schemas

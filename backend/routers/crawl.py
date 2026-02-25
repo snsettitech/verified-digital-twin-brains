@@ -3,11 +3,10 @@ Crawl Router (Phase 1A.6)
 
 REST API endpoints for Deep Research crawl management.
 
-Feature-gated by DEEP_RESEARCH_ENABLED environment variable.
+Deep Research routes are always enabled.
 """
 
 import logging
-import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -16,26 +15,16 @@ from pydantic import BaseModel, Field, field_validator
 
 from modules.auth_guard import get_current_user, verify_twin_ownership, require_admin
 from modules.observability import supabase
-from modules.deep_research_config import get_config as get_dr_config
 from modules.schemas import CrawlRunSchema
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["crawl"])
 
-# Feature flag check
+# Deep Research is always enabled. Keep helper for backward compatibility.
 def _check_feature_enabled():
-    """Check if Deep Research feature is enabled."""
-    config = get_dr_config()
-    if not config.is_enabled():
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Deep Research feature is not enabled",
-                "code": "FEATURE_DISABLED",
-                "message": "Set DEEP_RESEARCH_ENABLED=true to enable this feature"
-            }
-        )
+    """No-op compatibility check."""
+    return None
 
 
 # ============================================================================
@@ -190,7 +179,7 @@ async def create_crawl(
     The crawl will be queued and processed asynchronously.
     Use GET /twins/{twin_id}/crawls/{crawl_id} to check status.
     
-    Requires DEEP_RESEARCH_ENABLED=true.
+    Deep Research routes are always enabled.
     """
     # Check feature flag
     _check_feature_enabled()
@@ -1162,18 +1151,6 @@ async def continue_ingestion_endpoint(
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
-    # Phase 3.5 feature flag check
-    import os
-    if os.getenv("DR_PHASE_3_5_DISABLED", "false").lower() == "true":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 3.5 ingestion is disabled",
-                "code": "PHASE_3_5_DISABLED",
-                "message": "Set DR_PHASE_3_5_DISABLED=false to enable"
-            }
-        )
-    
     try:
         from modules.research_orchestrator import ResearchOrchestrator, ResearchRunStatus
         
@@ -1311,18 +1288,6 @@ async def continue_bio_endpoint(
     
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
-    
-    # Phase 4 feature flag check
-    import os
-    if os.getenv("DR_PHASE_4_BIO_DISABLED", "false").lower() == "true":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 4 bio generation is disabled",
-                "code": "PHASE_4_DISABLED",
-                "message": "Set DR_PHASE_4_BIO_DISABLED=false to enable"
-            }
-        )
     
     try:
         from modules.research_orchestrator import ResearchOrchestrator, ResearchRunStatus
@@ -1462,18 +1427,6 @@ async def continue_finalize_endpoint(
     
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
-    
-    # Phase 5 feature flag check
-    import os
-    if os.getenv("DR_PHASE_5_FINALIZE_DISABLED", "false").lower() == "true":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "error": "Phase 5 finalization is disabled",
-                "code": "PHASE_5_DISABLED",
-                "message": "Set DR_PHASE_5_FINALIZE_DISABLED=false to enable"
-            }
-        )
     
     try:
         from modules.research_orchestrator import ResearchOrchestrator, ResearchRunStatus
