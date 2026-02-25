@@ -19,6 +19,7 @@ import {
   type ResearchRunStatus,
   type ContentQuality,
 } from '@/lib/api/research';
+import type { NameDeepResearchStatus } from '@/lib/api/nameDeepResearch';
 
 // =============================================================================
 // Contract Parsing Tests (next_actions vs next_action)
@@ -218,5 +219,13 @@ test.describe('Research API E2E', () => {
     
     // Should be 401 or 404 - endpoint exists
     expect([401, 403, 404]).toContain(response.status());
+  });
+});
+
+test.describe('Name-Only Deep Research status contract', () => {
+  test('terminal states include completed and failed', () => {
+    const terminal: NameDeepResearchStatus[] = ['completed', 'failed'];
+    expect(terminal).toContain('completed');
+    expect(terminal).toContain('failed');
   });
 });

@@ -3,14 +3,26 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 
+export interface WelcomeData {
+  fullName: string;
+  location?: string;
+  role?: string;
+  headline?: string;
+  preferredTwinName?: string;
+  consent: boolean;
+  manualMode?: boolean;
+}
+
 interface StepWelcomeProps {
-  onSubmit: (data: { fullName: string; location?: string; role?: string; consent: boolean }) => void;
+  onSubmit: (data: WelcomeData) => void;
 }
 
 export function StepWelcome({ onSubmit }: StepWelcomeProps) {
   const [fullName, setFullName] = useState('');
   const [location, setLocation] = useState('');
   const [role, setRole] = useState('');
+  const [headline, setHeadline] = useState('');
+  const [preferredTwinName, setPreferredTwinName] = useState('');
   const [consent, setConsent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -22,6 +34,8 @@ export function StepWelcome({ onSubmit }: StepWelcomeProps) {
       fullName: fullName.trim(), 
       location: location.trim() || undefined,
       role: role.trim() || undefined,
+      headline: headline.trim() || undefined,
+      preferredTwinName: preferredTwinName.trim() || undefined,
       consent 
     });
     setIsSubmitting(false);
@@ -34,11 +48,10 @@ export function StepWelcome({ onSubmit }: StepWelcomeProps) {
       {/* Header */}
       <div className="text-center">
         <h2 className="text-3xl font-bold text-white mb-3">
-          Create Your Digital Twin
+          Welcome to Digital Brains
         </h2>
         <p className="text-slate-400 max-w-md mx-auto">
-          We'll search for your public content and build a verified, citable persona.
-          Setup takes about 2 minutes.
+          Let&apos;s set up your knowledge profile. We&apos;ll search for your public content and build a verified, citable persona.
         </p>
       </div>
 
@@ -93,6 +106,37 @@ export function StepWelcome({ onSubmit }: StepWelcomeProps) {
             />
           </div>
 
+          {/* Headline - Optional */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Headline / Title <span className="text-slate-500">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={headline}
+              onChange={(e) => setHeadline(e.target.value)}
+              placeholder="e.g., Wine Educator & Sommelier"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+
+          {/* Preferred Twin Name - Optional */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Preferred Twin Name <span className="text-slate-500">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={preferredTwinName}
+              onChange={(e) => setPreferredTwinName(e.target.value)}
+              placeholder="e.g., Renee's Digital Brain"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Custom name for your digital brain
+            </p>
+          </div>
+
           {/* Consent Checkbox */}
           <div className="pt-4 border-t border-slate-800">
             <label className="flex items-start gap-3 cursor-pointer group">
@@ -141,7 +185,7 @@ export function StepWelcome({ onSubmit }: StepWelcomeProps) {
       {/* Manual Option */}
       <div className="text-center">
         <button
-          onClick={() => onSubmit({ fullName: fullName.trim() || 'Anonymous', consent: true, manualMode: true } as any)}
+          onClick={() => onSubmit({ fullName: fullName.trim() || 'Anonymous', consent: true, manualMode: true })}
           className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
         >
           Prefer to answer questions manually? →

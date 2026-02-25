@@ -3,7 +3,7 @@
 import React, { useState, Suspense, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { StepWelcome } from '@/components/onboarding/steps/StepWelcome';
+import { StepWelcome, type WelcomeData } from '@/components/onboarding/steps/StepWelcome';
 import { StepLinkSuggestions } from '@/components/onboarding/steps/StepLinkSuggestions';
 import { StepAddSources } from '@/components/onboarding/steps/StepAddSources';
 import { StepBuilding } from '@/components/onboarding/steps/StepBuilding';
@@ -11,6 +11,7 @@ import { StepProfileLanding } from '@/components/onboarding/steps/StepProfileLan
 import { StepClaimReview } from '@/components/onboarding/steps/StepClaimReview';
 import { StepClarification } from '@/components/onboarding/steps/StepClarification';
 import { StepResearch } from '@/components/onboarding/steps/StepResearch';
+import { StepSourceReview } from '@/components/onboarding/steps/StepSourceReview';
 import { Step1Identity, IdentityFormData } from '@/components/onboarding/steps/Step1Identity';
 import { Step2ThinkingStyle } from '@/components/onboarding/steps/Step2ThinkingStyle';
 import { Step3Values } from '@/components/onboarding/steps/Step3Values';
@@ -28,6 +29,7 @@ type OnboardingStep =
   | 'welcome'
   | 'link_suggestions'
   | 'add_sources'
+  | 'source_review'
   | 'research'  // Phase 7: Deep Research flow
   | 'building'
   | 'profile'
@@ -51,13 +53,6 @@ interface Twin {
   settings?: Record<string, unknown>;
 }
 
-interface WelcomeData {
-  fullName: string;
-  location?: string;
-  role?: string;
-  consent: boolean;
-  manualMode?: boolean;
-}
 
 interface ThinkingStyleData {
   decisionFramework: string;
@@ -117,6 +112,9 @@ function OnboardingContent() {
   // Data state
   const [welcomeData, setWelcomeData] = useState<WelcomeData | null>(null);
   const [suggestedUrls, setSuggestedUrls] = useState<string[]>([]);
+  const [lastSubmittedSources, setLastSubmittedSources] = useState<Array<{ type: string; value: string; status?: string }>>([]);
+  const [submittedUrls, setSubmittedUrls] = useState<string[]>([]);
+  const [researchRunId, setResearchRunId] = useState<string | null>(null);
   const [twin, setTwin] = useState<Twin | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -260,7 +258,7 @@ function OnboardingContent() {
     } else {
       // Create draft twin and go to link suggestions
       setIsLoading(true);
-      const twinData = await createDraftTwin(data.fullName);
+      const twinData = await createDraftTwin(data);
       if (twinData) {
         setTwin(twinData);
         setFlowType('link_first');
@@ -270,14 +268,21 @@ function OnboardingContent() {
     }
   };
 
-  const createDraftTwin = async (name: string): Promise<Twin | null> => {
+  const createDraftTwin = async (data: WelcomeData): Promise<Twin | null> => {
     try {
+      const displayName = data.preferredTwinName?.trim()
+        ? `${data.preferredTwinName.trim()} (Draft)`
+        : `${data.fullName} (Draft)`;
+      const settings: Record<string, unknown> = {};
+      if (data.headline) settings.headline = data.headline;
+      if (data.preferredTwinName) settings.preferred_twin_name = data.preferredTwinName;
       const response = await authFetchStandalone('/twins', {
         method: 'POST',
         body: JSON.stringify({
-          name: `${name} (Draft)`,
+          name: displayName,
           mode: 'link_first',
           specialization: 'vanilla',
+          settings: Object.keys(settings).length > 0 ? settings : undefined,
         }),
       });
 
@@ -360,7 +365,8 @@ function OnboardingContent() {
 
       // Handle URLs (Mode C)
       const urls = sources.filter(s => s.type === 'link').map(s => s.value);
-      const allUrls = [...suggestedUrls, ...urls];
+      const allUrls = [...new Set([...suggestedUrls, ...urls])].filter(Boolean);
+      setSubmittedUrls(allUrls);
       if (allUrls.length > 0) {
         const modeCResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
           method: 'POST',
@@ -374,14 +380,38 @@ function OnboardingContent() {
         }
       }
 
-      // Phase 7: Route to Deep Research flow instead of legacy building
-      setCurrentStep('research');
+      // Store sources for review step (suggested URLs + form sources, deduped)
+      const seen = new Set<string>();
+      const reviewSources: Array<{ type: string; value: string; status?: string }> = [];
+      for (const url of suggestedUrls) {
+        if (url && !seen.has(url)) {
+          seen.add(url);
+          reviewSources.push({ type: 'link', value: url, status: 'Ready' });
+        }
+      }
+      for (const s of sources) {
+        const val =
+          s.type === 'link' ? s.value : s.type === 'paste' ? (s.category || 'Pasted Content') : s.value;
+        if (s.type === 'link' && seen.has(val)) continue;
+        if (s.type === 'link') seen.add(val);
+        reviewSources.push({ type: s.type, value: val, status: 'Ready' });
+      }
+      setLastSubmittedSources(reviewSources);
+      setCurrentStep('source_review');
     } catch (error) {
       console.error('Failed to submit sources:', error);
       alert('Failed to submit sources. Please try again.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // =============================================================================
+  // Source Review Handler
+  // =============================================================================
+
+  const handleSourceReviewComplete = () => {
+    setCurrentStep('research');
   };
 
   // =============================================================================
@@ -532,6 +562,15 @@ function OnboardingContent() {
           />
         );
 
+      case 'source_review':
+        return (
+          <StepSourceReview
+            sources={lastSubmittedSources}
+            onSubmit={handleSourceReviewComplete}
+            onBack={() => setCurrentStep('add_sources')}
+          />
+        );
+
       case 'research':
         return welcomeData ? (
           <StepResearch
@@ -540,10 +579,15 @@ function OnboardingContent() {
               fullName: welcomeData.fullName,
               location: welcomeData.location,
               role: welcomeData.role,
+              headline: welcomeData.headline,
+              preferredTwinName: welcomeData.preferredTwinName,
             }}
-            seedUrls={suggestedUrls}
-            onComplete={() => setCurrentStep('profile')}
-            onBack={() => setCurrentStep('add_sources')}
+            seedUrls={submittedUrls.length > 0 ? submittedUrls : suggestedUrls}
+            onComplete={(runId) => {
+              if (runId) setResearchRunId(runId);
+              setCurrentStep('profile');
+            }}
+            onBack={() => setCurrentStep('source_review')}
           />
         ) : null;
 
@@ -569,6 +613,7 @@ function OnboardingContent() {
         return (
           <StepClaimReview
             twinId={twin?.id || null}
+            researchRunId={researchRunId}
             onApprove={handleClaimReviewComplete}
           />
         );
@@ -731,12 +776,13 @@ function OnboardingContent() {
             {[
               { key: 'link_suggestions', label: 'Find' },
               { key: 'add_sources', label: 'Add' },
+              { key: 'source_review', label: 'Review' },
               { key: 'research', label: 'Research' },
-              { key: 'profile', label: 'Review' },
+              { key: 'profile', label: 'Profile' },
             ].map((step, idx, arr) => {
+              const stepOrder = ['link_suggestions', 'add_sources', 'source_review', 'research', 'building', 'profile'];
               const isActive = currentStep === step.key;
-              const isPast = ['link_suggestions', 'add_sources', 'research', 'building', 'profile'].indexOf(currentStep) > 
-                            ['link_suggestions', 'add_sources', 'research', 'building', 'profile'].indexOf(step.key);
+              const isPast = stepOrder.indexOf(currentStep) > stepOrder.indexOf(step.key);
               return (
                 <React.Fragment key={step.key}>
                   <div className={`flex flex-col items-center ${isActive ? 'text-indigo-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>

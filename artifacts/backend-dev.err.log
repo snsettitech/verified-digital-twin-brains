@@ -1,0 +1,163 @@
+INFO:     Started server process [30388]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:modules.firecrawl_client:Firecrawl client initialized
+INFO:modules.firecrawl_client:Firecrawl search '"Sainath Setti"...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti biography...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti interviews podcast talks...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti profile linkedin...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti 2026...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti 2025...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search '"Sainath "Setti""...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" biography...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" interviews podcast talks...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" profile linkedin...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" 2026...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" 2025...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search '"Sainath Setti" "Toronto, Ontario, Canada"...' returned 3 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti Toronto, Ontario, Canada profile...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search '"Sainath Setti" "Schulich School of Business"...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti Schulich School of Business leadersh...' returned 8 URLs
+INFO:modules.firecrawl_client:Successfully scraped https://salesflow.io/contact/sainath-setti-director-of-student-affairs in 11237ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.schulichgbc.com/gbc-team in 10000ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.researchgate.net/profile/sainath-setti in 15998ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://github.com/sainathsetti in 8831ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://stg.com/who-we-are in 10771ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://graduation.asu.edu/sites/g/files/litvpz3431/files/2024-12/asu_fall2024_dayofweb_links.pdf in 13504ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://en.wikipedia.org/wiki/devi_shetty in 16926ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.kscst.org.in/spp/46_series/07_46s_spp_sanctioned_projects.pdf in 5399ms (attempt 1)
+WARNING:modules.firecrawl_client:Scrape attempt 1 failed for https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf: . Retrying in 1.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 2 failed for https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf: . Retrying in 2.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 3 failed for https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf: . Retrying in 4.0s...
+ERROR:modules.firecrawl_client:Failed to scrape https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf after 4 attempts: 
+INFO:modules.firecrawl_client:Successfully scraped https://escholarship.org/uc/item/4qc0x3mw in 59888ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://podcastrepublic.net/podcast/1462533307 in 6739ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.thehindu.com/books/books-authors/the-hindus-top-10-non-fiction-books-of-2022/article66281319.ece in 5889ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped http://arxiv.org/list/cs/2021-04?show=2000&skip=1190 in 7084ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://eprints.qut.edu.au/view/series/null/2024.html in 13566ms (attempt 1)
+WARNING:modules.firecrawl_client:Circuit breaker OPEN after 5 failures
+WARNING:modules.firecrawl_client:Scrape attempt 1 failed for https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf: . Retrying in 1.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 2 failed for https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf: Circuit breaker is OPEN. Retrying in 2.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 3 failed for https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf: Circuit breaker is OPEN. Retrying in 4.0s...
+ERROR:modules.firecrawl_client:Failed to scrape https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf after 4 attempts: Circuit breaker is OPEN
+WARNING:modules.firecrawl_client:Scrape attempt 1 failed for https://www.schulichgbc.com/gbc-executive-campaign-25-26: Circuit breaker is OPEN. Retrying in 1.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 2 failed for https://www.schulichgbc.com/gbc-executive-campaign-25-26: Circuit breaker is OPEN. Retrying in 2.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 3 failed for https://www.schulichgbc.com/gbc-executive-campaign-25-26: Circuit breaker is OPEN. Retrying in 4.0s...
+ERROR:modules.firecrawl_client:Failed to scrape https://www.schulichgbc.com/gbc-executive-campaign-25-26 after 4 attempts: Circuit breaker is OPEN
+INFO:openai._base_client:Retrying request to /chat/completions in 0.458756 seconds
+INFO:openai._base_client:Retrying request to /chat/completions in 0.999824 seconds
+WARNING:modules.name_deep_research_service:name-research synth attempt failed model=o3 attempt=1 run_id=bd334c79-eea4-4209-9ffa-e5e8850a116a err=Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+INFO:openai._base_client:Retrying request to /chat/completions in 0.439023 seconds
+INFO:openai._base_client:Retrying request to /chat/completions in 0.795178 seconds
+WARNING:modules.name_deep_research_service:name-research synth attempt failed model=o3 attempt=2 run_id=bd334c79-eea4-4209-9ffa-e5e8850a116a err=Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+INFO:openai._base_client:Retrying request to /chat/completions in 0.393200 seconds
+INFO:openai._base_client:Retrying request to /chat/completions in 0.765599 seconds
+WARNING:modules.name_deep_research_service:name-research synth attempt failed model=o3 attempt=3 run_id=bd334c79-eea4-4209-9ffa-e5e8850a116a err=Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+INFO:modules.name_deep_research_service:name-research run completed: run_id=bd334c79-eea4-4209-9ffa-e5e8850a116a
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+INFO:modules.firecrawl_client:Firecrawl search '"Sainath Setti"...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti biography...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti interviews podcast talks...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti profile linkedin...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti 2026...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath Setti 2025...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search '"Sainath "Setti""...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" biography...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" interviews podcast talks...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" profile linkedin...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" 2026...' returned 8 URLs
+INFO:modules.firecrawl_client:Firecrawl search 'Sainath "Setti" 2025...' returned 8 URLs
+INFO:modules.firecrawl_client:Circuit breaker entering HALF_OPEN state
+INFO:modules.firecrawl_client:Circuit breaker CLOSED (recovered)
+INFO:modules.firecrawl_client:Successfully scraped https://salesflow.io/contact/sainath-setti-director-of-student-affairs in 2815ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.schulichgbc.com/gbc-team in 5437ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.researchgate.net/profile/sainath-setti in 7012ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://github.com/sainathsetti in 20786ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://stg.com/who-we-are in 17363ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://graduation.asu.edu/sites/g/files/litvpz3431/files/2024-12/asu_fall2024_dayofweb_links.pdf in 17420ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://en.wikipedia.org/wiki/devi_shetty in 19035ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.kscst.org.in/spp/46_series/07_46s_spp_sanctioned_projects.pdf in 14887ms (attempt 1)
+WARNING:modules.firecrawl_client:Scrape attempt 1 failed for https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf: . Retrying in 1.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 2 failed for https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf: . Retrying in 2.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 3 failed for https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf: . Retrying in 4.0s...
+ERROR:modules.firecrawl_client:Failed to scrape https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf after 4 attempts: 
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+ERROR:asyncio:Exception in callback _ProactorBasePipeTransport._call_connection_lost(None)
+handle: <Handle _ProactorBasePipeTransport._call_connection_lost(None)>
+Traceback (most recent call last):
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\ADMIN\AppData\Local\Programs\Python\Python312\Lib\asyncio\proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+INFO:modules.firecrawl_client:Successfully scraped https://escholarship.org/uc/item/4qc0x3mw in 23328ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://podcastrepublic.net/podcast/1462533307 in 2852ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://www.thehindu.com/books/books-authors/the-hindus-top-10-non-fiction-books-of-2022/article66281319.ece in 4344ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped http://arxiv.org/list/cs/2021-04?show=2000&skip=1190 in 6130ms (attempt 1)
+INFO:modules.firecrawl_client:Successfully scraped https://eprints.qut.edu.au/view/series/null/2024.html in 8020ms (attempt 1)
+WARNING:modules.firecrawl_client:Circuit breaker OPEN after 5 failures
+WARNING:modules.firecrawl_client:Scrape attempt 1 failed for https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf: . Retrying in 1.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 2 failed for https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf: Circuit breaker is OPEN. Retrying in 2.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 3 failed for https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf: Circuit breaker is OPEN. Retrying in 4.0s...
+ERROR:modules.firecrawl_client:Failed to scrape https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf after 4 attempts: Circuit breaker is OPEN
+WARNING:modules.firecrawl_client:Scrape attempt 1 failed for https://www.schulichgbc.com/gbc-executive-campaign-25-26: Circuit breaker is OPEN. Retrying in 1.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 2 failed for https://www.schulichgbc.com/gbc-executive-campaign-25-26: Circuit breaker is OPEN. Retrying in 2.0s...
+WARNING:modules.firecrawl_client:Scrape attempt 3 failed for https://www.schulichgbc.com/gbc-executive-campaign-25-26: Circuit breaker is OPEN. Retrying in 4.0s...
+ERROR:modules.firecrawl_client:Failed to scrape https://www.schulichgbc.com/gbc-executive-campaign-25-26 after 4 attempts: Circuit breaker is OPEN
+INFO:openai._base_client:Retrying request to /chat/completions in 0.389184 seconds
+INFO:openai._base_client:Retrying request to /chat/completions in 0.865715 seconds
+WARNING:modules.name_deep_research_service:name-research synth attempt failed model=o3 attempt=1 run_id=cd147740-b0fa-4594-aac6-c00d6a9cc50a err=Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+INFO:openai._base_client:Retrying request to /chat/completions in 0.424772 seconds
+INFO:openai._base_client:Retrying request to /chat/completions in 0.938682 seconds
+WARNING:modules.name_deep_research_service:name-research synth attempt failed model=o3 attempt=2 run_id=cd147740-b0fa-4594-aac6-c00d6a9cc50a err=Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+INFO:openai._base_client:Retrying request to /chat/completions in 0.415293 seconds
+INFO:openai._base_client:Retrying request to /chat/completions in 0.769525 seconds
+WARNING:modules.name_deep_research_service:name-research synth attempt failed model=o3 attempt=3 run_id=cd147740-b0fa-4594-aac6-c00d6a9cc50a err=Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}
+INFO:modules.name_deep_research_service:name-research run completed: run_id=cd147740-b0fa-4594-aac6-c00d6a9cc50a

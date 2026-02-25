@@ -93,10 +93,14 @@ services:
       - key: QUERY_REWRITE_ROLLOUT_PERCENT
         value: "0"  # Gradually increase: 10, 25, 50, 100
       # Deep Research Runtime Controls
+      - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
+        value: "false"
       - key: DR_PHASE_12_SUPPRESS_UNRESOLVED
         value: "true"
       - key: DR_PHASE_12_AUTO_PUBLISH
         value: "false"
+      - key: OPENAI_DEEP_RESEARCH_MODEL
+        value: "o3"
 
     # Ephemeral disk for temp files
     disk:
@@ -166,3 +170,7 @@ services:
         value: "5"
       - key: QUERY_REWRITING_MIN_CONFIDENCE
         value: "0.7"
+      - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
+        value: "false"
+      - key: OPENAI_DEEP_RESEARCH_MODEL
+        value: "o3"

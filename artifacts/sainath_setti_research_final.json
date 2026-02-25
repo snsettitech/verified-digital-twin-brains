@@ -1,0 +1,258 @@
+{
+  "run_id": "58899528-5bc9-4823-9c00-4d6a8aa7ec49",
+  "input": {
+    "name": "Sainath Setti",
+    "hints": {
+      "location": "Toronto, Ontario, Canada",
+      "company": "Schulich School of Business",
+      "website": null
+    }
+  },
+  "claimed_identity": {
+    "canonical_name": "Sainath Setti",
+    "is_match_confidence": 0.61,
+    "disambiguation_notes": [
+      "Public sources show a Schulich GBC profile and Indian corporate-director records with the same name.",
+      "These may refer to the same person, but cross-country identity linkage is not fully proven from public evidence alone."
+    ],
+    "possible_duplicates": [
+      {
+        "name": "Setti Sainath",
+        "reason": "Name-order variation in Indian corporate records; may be same individual or a namesake.",
+        "confidence": 0.56
+      }
+    ]
+  },
+  "bio": {
+    "short": "Public sources indicate Sainath Setti appears in Schulich Graduate Business Council listings and in Indian corporate-director records.",
+    "medium": "Public evidence indicates Sainath Setti is listed as Student Affairs Director in Schulich GBC public listings and appears in Indian company-director records for two companies. Identity linkage across these records is plausible but not fully conclusive.",
+    "long": "Available public-web evidence suggests Sainath Setti is associated with student leadership listings at Schulich's Graduate Business Council and with director filings in Indian corporate registries/aggregators. A LinkedIn source was blocked and no direct first-party profile tying all records together was retrieved, so this profile is partially verified and should be treated as medium confidence pending stronger primary-source corroboration."
+  },
+  "profile_summary": {
+    "what_they_do": [
+      "Student-affairs leadership in a graduate business student council context",
+      "Listed director roles in Indian private companies"
+    ],
+    "expertise_topics": [
+      {
+        "topic": "Student Affairs",
+        "confidence": 0.76,
+        "evidence_count": 2
+      },
+      {
+        "topic": "Company Directorship",
+        "confidence": 0.71,
+        "evidence_count": 2
+      }
+    ],
+    "organizations": [
+      "Graduate Business Council at Schulich School of Business",
+      "SNSETTI Technologies Private Limited",
+      "Eduveda Consulting Private Limited"
+    ],
+    "locations": [
+      "Toronto, Ontario, Canada",
+      "Telangana, India"
+    ],
+    "public_roles": [
+      "GBC Student Affairs Director",
+      "Director (corporate filings)"
+    ]
+  },
+  "timeline": [
+    {
+      "date_or_range": "2022-05-23",
+      "event": "Corporate records show director entry for Setti Sainath (DIN 09615202) and directorship start date associated with SNSETTI Technologies Private Limited.",
+      "confidence": 0.72,
+      "citations": [
+        "src-4"
+      ]
+    },
+    {
+      "date_or_range": "2023-06-08",
+      "event": "Corporate records list Setti Sainath as Director for Eduveda Consulting Private Limited from this date.",
+      "confidence": 0.74,
+      "citations": [
+        "src-4",
+        "src-5"
+      ]
+    },
+    {
+      "date_or_range": "2025",
+      "event": "Schulich GBC public leadership listings show Sainath Setti in Student Affairs leadership context.",
+      "confidence": 0.68,
+      "citations": [
+        "src-2",
+        "src-6"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim_1",
+      "text": "Sainath Setti is listed as GBC Student Affairs Director on a Schulich leadership page.",
+      "claim_type": "role",
+      "status": "verified",
+      "confidence": 0.79,
+      "citations": [
+        "src-2"
+      ],
+      "notes": "Direct text hit: 'Sainath Setti' and 'GBC Student Affairs Director'."
+    },
+    {
+      "claim_id": "claim_2",
+      "text": "Sainath Setti appears in a Graduate Business Council employee/profile index with Director of Student Affairs context.",
+      "claim_type": "role",
+      "status": "partially_verified",
+      "confidence": 0.71,
+      "citations": [
+        "src-6"
+      ],
+      "notes": "Directory-style aggregator source; useful corroboration but not a primary institutional roster export."
+    },
+    {
+      "claim_id": "claim_3",
+      "text": "Setti Sainath (DIN 09615202) is listed as director of SNSETTI Technologies Private Limited.",
+      "claim_type": "experience",
+      "status": "partially_verified",
+      "confidence": 0.73,
+      "citations": [
+        "src-4"
+      ],
+      "notes": "From corporate-data aggregator; should be cross-checked with MCA primary filings for critical use."
+    },
+    {
+      "claim_id": "claim_4",
+      "text": "Setti Sainath is listed as Director of Eduveda Consulting Private Limited (appointment date 08 Jun 2023).",
+      "claim_type": "experience",
+      "status": "partially_verified",
+      "confidence": 0.75,
+      "citations": [
+        "src-4",
+        "src-5"
+      ],
+      "notes": "Corroborated by two corporate aggregators; still secondary-source evidence."
+    },
+    {
+      "claim_id": "claim_5",
+      "text": "The blocked LinkedIn source prevented direct first-party identity confirmation across all discovered records.",
+      "claim_type": "other",
+      "status": "verified",
+      "confidence": 0.95,
+      "citations": [
+        "src-3"
+      ],
+      "notes": "Scrape attempt returned unsupported/blocked status."
+    }
+  ],
+  "known_unknowns": [
+    {
+      "question": "Do the Schulich student-leadership records and Indian corporate-director records refer to the same person?",
+      "why_missing": "No single first-party profile in retrieved public pages conclusively links both domains."
+    },
+    {
+      "question": "What is the current primary professional role beyond student leadership?",
+      "why_missing": "Retrieved sources are mostly directory/aggregator pages and do not provide a definitive current-role statement."
+    }
+  ],
+  "suggested_followup_questions": [
+    "Can a first-party profile (official personal site or verified LinkedIn) be provided to confirm cross-source identity linkage?",
+    "Are there interviews, talks, or publications that directly connect the Schulich and corporate records?",
+    "Should primary MCA filing PDFs be pulled for high-assurance director verification?"
+  ],
+  "crawl_stats": {
+    "queries_used": [
+      "\"Sainath Setti\"",
+      "Sainath Setti Schulich",
+      "Sainath Setti leadership",
+      "Sainath Setti director",
+      "Setti Sainath DIN 09615202"
+    ],
+    "urls_considered": 6,
+    "urls_crawled": 5,
+    "urls_blocked": 1,
+    "sources_used_in_final": 4,
+    "words_extracted": 5607,
+    "run_started_at": "2026-02-25T06:39:37.893246+00:00",
+    "run_completed_at": "2026-02-25T06:39:37.893246+00:00"
+  },
+  "quality": {
+    "overall_confidence": 0.64,
+    "freshness_score": 0.66,
+    "coverage_score": 0.62,
+    "hallucination_risk": "medium",
+    "warnings": [
+      "LinkedIn source was blocked/unsupported for scraping.",
+      "Several corroborating sources are aggregators, not primary filings.",
+      "Cross-domain identity linkage remains partially verified."
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "src-1",
+      "url": "https://www.schulichgbc.com/gbc-executive-campaign-25-26",
+      "title": "Executive Elections Nominees 25-26 | GBC Schulich",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:39:37.893246+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.32,
+      "used_in_final": false
+    },
+    {
+      "source_id": "src-2",
+      "url": "https://oneschulich.yorku.ca/gbc/leadership-team/",
+      "title": "Leadership Team - Graduate Business Council  | Schulich School of Business - York University",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:39:37.893246+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.79,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-3",
+      "url": "https://in.linkedin.com/company/cloudtailor",
+      "title": "",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:39:37.893246+00:00",
+      "content_quality": "blocked",
+      "identity_match_confidence": 0.0,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-4",
+      "url": "https://www.falconebiz.com/director/09615202/SETTI-SAINATH",
+      "title": "SETTI SAINATH HAVING DIN/PAN 09615202 IS DIRECTOR OF 2 COMPANIES/LLPS at Falcon Ebiz",
+      "source_type": "profile",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:39:37.893246+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.74,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-5",
+      "url": "https://www.thecompanycheck.com/company/eduveda-consulting-private-limited/U70200TS2023PTC173915",
+      "title": "Eduveda Consulting Private Limited - 2026 Insights",
+      "source_type": "profile",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:39:37.893246+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.7,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-6",
+      "url": "https://www.signalhire.com/companies/graduate-business-council-at-schulich-school-of-business/employees",
+      "title": "List of 27 Graduate Business Council at Schulich School of Business Employees - Find Emails & Phones - SignalHire",
+      "source_type": "profile",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:39:37.893246+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.68,
+      "used_in_final": true
+    }
+  ]
+}

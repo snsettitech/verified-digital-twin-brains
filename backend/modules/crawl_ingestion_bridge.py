@@ -366,11 +366,14 @@ class CrawlIngestionBridge:
         # Index chunks
         try:
             num_chunks = await self.index_page_chunks(page, source_id, twin_id, crawl_id)
+            content = self.load_page_content(page, twin_id)
+            word_count = len((content or "").split())
             return {
                 "page_id": page_id,
                 "status": "indexed",
                 "source_id": source_id,
-                "chunks_indexed": num_chunks
+                "chunks_indexed": num_chunks,
+                "word_count": word_count,
             }
         except Exception as e:
             logger.error(f"Failed to index page {page_id}: {e}")
@@ -442,6 +445,7 @@ class CrawlIngestionBridge:
             "pages_processed": 0,
             "sources_created": 0,
             "chunks_indexed": 0,
+            "total_words": 0,
             "pages_skipped_unchanged": 0,
             "pages_failed": 0,
             "pages_skipped_no_artifact": 0,
@@ -488,6 +492,7 @@ class CrawlIngestionBridge:
             elif result["status"] == "indexed":
                 stats["sources_created"] += 1
                 stats["chunks_indexed"] += result.get("chunks_indexed", 0)
+                stats["total_words"] += result.get("word_count", 0)
         
         logger.info(f"Crawl ingestion complete: {stats}")
         

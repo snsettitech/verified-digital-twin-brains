@@ -44,15 +44,51 @@ type IngestionLog = {
     created_at?: string | null;
 };
 
-function inferProviderFromText(text: string): string {
+type SourceTypeKey = 'linkedin' | 'youtube' | 'instagram' | 'tiktok' | 'website' | 'other';
+
+function inferProviderFromText(text: string): SourceTypeKey {
     const t = (text || '').toLowerCase();
-    if (t.includes('youtube.com') || t.includes('youtu.be') || t.includes('youtube:')) return 'youtube';
-    if (t.includes('x.com') || t.includes('twitter.com') || t.includes('x thread')) return 'x';
     if (t.includes('linkedin.com')) return 'linkedin';
-    if (t.includes('.rss') || t.includes('podcast') || t.includes('anchor.fm') || t.includes('podbean')) return 'podcast';
-    if (t.startsWith('http://') || t.startsWith('https://')) return 'web';
-    return 'file';
+    if (t.includes('youtube.com') || t.includes('youtu.be') || t.includes('youtube:')) return 'youtube';
+    if (t.includes('instagram.com')) return 'instagram';
+    if (t.includes('tiktok.com')) return 'tiktok';
+    if (t.includes('x.com') || t.includes('twitter.com') || t.includes('.rss') || t.includes('podcast') || t.includes('anchor.fm') || t.includes('podbean')) return 'website';
+    if (t.startsWith('http://') || t.startsWith('https://')) return 'website';
+    return 'other';
 }
+
+function getSourceTypeKey(source: Source): SourceTypeKey {
+    const p = (source.provider || '').toLowerCase();
+    if (p === 'web') return 'website';
+    if (p === 'file' || p === 'document') return 'other';
+    if (['linkedin', 'youtube', 'instagram', 'tiktok', 'website', 'other'].includes(p)) return p as SourceTypeKey;
+    return inferProviderFromText(source.citationUrl || source.name || '');
+}
+
+function groupSourcesByType(sources: Source[]): Record<SourceTypeKey, Source[]> {
+    const groups: Record<SourceTypeKey, Source[]> = {
+        linkedin: [],
+        youtube: [],
+        instagram: [],
+        tiktok: [],
+        website: [],
+        other: [],
+    };
+    for (const s of sources) {
+        const key = getSourceTypeKey(s);
+        groups[key].push(s);
+    }
+    return groups;
+}
+
+const FOLDER_LABELS: Record<SourceTypeKey, string> = {
+    linkedin: 'LinkedIn',
+    youtube: 'YouTube',
+    instagram: 'Instagram',
+    tiktok: 'TikTok',
+    website: 'Website',
+    other: 'Other',
+};
 
 function formatUpdatedAt(iso?: string): string {
     if (!iso) return '';
@@ -176,6 +212,28 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
         url: '🔗',
         interview: '🎙️'
     };
+
+    const folderIcons: Record<SourceTypeKey, string> = {
+        linkedin: '🔗',
+        youtube: '▶️',
+        instagram: '📷',
+        tiktok: '🎵',
+        website: '🌐',
+        other: '📁',
+    };
+
+    const [expandedFolders, setExpandedFolders] = useState<Set<SourceTypeKey>>(new Set(['linkedin', 'youtube', 'website', 'other']));
+    const toggleFolder = (key: SourceTypeKey) => {
+        setExpandedFolders(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
+
+    const groupedSources = groupSourcesByType(loadedSources);
+    const folderOrder: SourceTypeKey[] = ['linkedin', 'youtube', 'instagram', 'tiktok', 'website', 'other'];
 
     const startPolling = useCallback(() => {
         if (pollRef.current) {
@@ -416,74 +474,100 @@ export function KnowledgeTab({ twinId, sources = [], onUpload, onUrlSubmit }: Kn
                                 </button>
                             </div>
                         ) : (
-                            loadedSources.map((source) => (
-                                <div key={source.id} className="grid grid-cols-12 gap-4 px-6 py-4 items-center hover:bg-white/5 transition-colors">
-                                    <div className="col-span-5 flex items-center gap-3">
-                                        <span className="text-xl">{typeIcons[source.type]}</span>
-                                        <div>
-                                            {source.citationUrl ? (
-                                                <a
-                                                    href={source.citationUrl}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="text-white font-medium text-sm hover:text-indigo-200"
-                                                    title={source.name}
-                                                >
-                                                    {source.name}
-                                                </a>
-                                            ) : (
-                                                <p className="text-white font-medium text-sm" title={source.name}>
-                                                    {source.name}
-                                                </p>
-                                            )}
-                                            {source.chunks && (
-                                                <p className="text-slate-500 text-xs">{source.chunks} chunks</p>
-                                            )}
-                                            {source.status === 'error' && (source.lastError?.message || source.lastError?.code) ? (
-                                                <p className="text-rose-200 text-xs mt-1 truncate" title={source.lastError?.message || source.lastError?.code}>
-                                                    {source.lastError?.code ? `${source.lastError.code}: ` : ''}
-                                                    {source.lastError?.message || 'Ingestion failed'}
-                                                </p>
-                                            ) : null}
-                                        </div>
-                                    </div>
-                                    <div className="col-span-1">
-                                        <span className="text-slate-400 text-xs uppercase">{source.provider || '-'}</span>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-lg border ${statusColors[source.status]}`}>
-                                            {source.status}
-                                        </span>
-                                    </div>
-                                    <div className="col-span-2">
-                                        <span className="text-slate-300 text-xs">
-                                            {source.lastStep || (source.status === 'pending' ? 'queued' : source.status)}
-                                        </span>
-                                    </div>
-                                    <div className="col-span-1">
-                                        <span className="text-slate-500 text-xs" title={source.updatedAt || undefined}>
-                                            {formatUpdatedAt(source.updatedAt) || '-'}
-                                        </span>
-                                    </div>
-                                    <div className="col-span-1">
-                                        <div className="flex items-center justify-end gap-2">
+                            <div className="divide-y divide-white/5">
+                                {folderOrder.map((folderKey) => {
+                                    const items = groupedSources[folderKey];
+                                    if (items.length === 0) return null;
+                                    const isExpanded = expandedFolders.has(folderKey);
+                                    return (
+                                        <div key={folderKey} className="border-b border-white/5 last:border-b-0">
                                             <button
-                                                onClick={() => openDiagnostics(source)}
-                                                className="px-2 py-1 text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-slate-200"
+                                                onClick={() => toggleFolder(folderKey)}
+                                                className="w-full flex items-center gap-3 px-6 py-3 hover:bg-white/5 transition-colors text-left"
                                             >
-                                                Diagnostics
+                                                <span className="text-lg">{folderIcons[folderKey]}</span>
+                                                <span className="font-medium text-white">{FOLDER_LABELS[folderKey]}</span>
+                                                <span className="text-slate-500 text-sm">({items.length})</span>
+                                                <svg className={`w-4 h-4 text-slate-400 ml-auto transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                                                </svg>
                                             </button>
-                                            <button
-                                                onClick={() => retrySource(source.id)}
-                                                disabled={source.status !== 'error' && source.status !== 'processing'}
-                                                className="px-2 py-1 text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-slate-200 disabled:opacity-40"
-                                            >
-                                                Retry
-                                            </button>
+                                            {isExpanded && (
+                                                <div className="bg-black/20">
+                                                    {items.map((source) => (
+                                                        <div key={source.id} className="grid grid-cols-12 gap-4 px-6 py-3 pl-12 items-center hover:bg-white/5 transition-colors border-t border-white/5">
+                                                            <div className="col-span-5 flex items-center gap-3">
+                                                                <span className="text-lg">{typeIcons[source.type]}</span>
+                                                                <div>
+                                                                    {source.citationUrl ? (
+                                                                        <a
+                                                                            href={source.citationUrl}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="text-white font-medium text-sm hover:text-indigo-200"
+                                                                            title={source.name}
+                                                                        >
+                                                                            {source.name}
+                                                                        </a>
+                                                                    ) : (
+                                                                        <p className="text-white font-medium text-sm" title={source.name}>
+                                                                            {source.name}
+                                                                        </p>
+                                                                    )}
+                                                                    {source.chunks && (
+                                                                        <p className="text-slate-500 text-xs">{source.chunks} chunks</p>
+                                                                    )}
+                                                                    {source.status === 'error' && (source.lastError?.message || source.lastError?.code) ? (
+                                                                        <p className="text-rose-200 text-xs mt-1 truncate" title={source.lastError?.message || source.lastError?.code}>
+                                                                            {source.lastError?.code ? `${source.lastError.code}: ` : ''}
+                                                                            {source.lastError?.message || 'Ingestion failed'}
+                                                                        </p>
+                                                                    ) : null}
+                                                                </div>
+                                                            </div>
+                                                            <div className="col-span-1">
+                                                                <span className="text-slate-400 text-xs uppercase">{source.provider || '-'}</span>
+                                                            </div>
+                                                            <div className="col-span-2">
+                                                                <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-lg border ${statusColors[source.status]}`}>
+                                                                    {source.status}
+                                                                </span>
+                                                            </div>
+                                                            <div className="col-span-2">
+                                                                <span className="text-slate-300 text-xs">
+                                                                    {source.lastStep || (source.status === 'pending' ? 'queued' : source.status)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="col-span-1">
+                                                                <span className="text-slate-500 text-xs" title={source.updatedAt || undefined}>
+                                                                    {formatUpdatedAt(source.updatedAt) || '-'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="col-span-1">
+                                                                <div className="flex items-center justify-end gap-2">
+                                                                    <button
+                                                                        onClick={() => openDiagnostics(source)}
+                                                                        className="px-2 py-1 text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-slate-200"
+                                                                    >
+                                                                        Diagnostics
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => retrySource(source.id)}
+                                                                        disabled={source.status !== 'error' && source.status !== 'processing'}
+                                                                        className="px-2 py-1 text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-slate-200 disabled:opacity-40"
+                                                                    >
+                                                                        Retry
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                </div>
-                            ))
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
                 </div>

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
+import { researchApi } from '@/lib/api/research';
+import { researchClaimsApi } from '@/lib/api/researchClaims';
 
 interface Claim {
   id: string;
@@ -15,10 +17,11 @@ interface Claim {
 
 interface StepClaimReviewProps {
   twinId: string | null;
+  researchRunId?: string | null;
   onApprove: () => void;
 }
 
-export function StepClaimReview({ twinId, onApprove }: StepClaimReviewProps) {
+export function StepClaimReview({ twinId, researchRunId: propResearchRunId, onApprove }: StepClaimReviewProps) {
   const [claims, setClaims] = useState<Claim[]>([]);
   const [loading, setLoading] = useState(true);
   const [approvedClaims, setApprovedClaims] = useState<Set<string>>(new Set());
@@ -29,18 +32,43 @@ export function StepClaimReview({ twinId, onApprove }: StepClaimReviewProps) {
 
     const fetchClaims = async () => {
       try {
-        const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
-        if (!response.ok) throw new Error('Failed to fetch claims');
-        
-        const data = await response.json();
-        setClaims(data.claims || []);
-        // Auto-approve high confidence claims
-        const autoApproved = new Set<string>(
-          (data.claims || [])
-            .filter((c: Claim) => c.confidence >= 0.7)
-            .map((c: Claim) => c.id)
-        );
-        setApprovedClaims(autoApproved);
+        let researchRunId = propResearchRunId;
+        if (!researchRunId) {
+          try {
+            const summary = await researchApi.getResearchSummary(twinId);
+            researchRunId = summary.research_run_id ?? undefined;
+          } catch {
+            // No research run, fall back to legacy
+          }
+        }
+
+        if (researchRunId) {
+          const data = await researchClaimsApi.listClaims(twinId, researchRunId, { limit: 100 });
+          const items = data.items || [];
+          setClaims(items.map((c) => ({
+            id: c.id,
+            claim_text: c.claim_text,
+            claim_type: c.claim_type,
+            confidence: c.confidence,
+            quote: c.evidence_quotes?.[0]?.quote ?? '',
+            authority: c.authority ?? '',
+          })));
+          const autoApproved = new Set<string>(
+            items.filter((c) => c.confidence >= 0.7).map((c) => c.id)
+          );
+          setApprovedClaims(autoApproved);
+        } else {
+          const response = await authFetchStandalone(`/persona/link-compile/twins/${twinId}/claims?min_confidence=0.3`);
+          if (!response.ok) throw new Error('Failed to fetch claims');
+          const data = await response.json();
+          setClaims(data.claims || []);
+          const autoApproved = new Set<string>(
+            (data.claims || [])
+              .filter((c: Claim) => c.confidence >= 0.7)
+              .map((c: Claim) => c.id)
+          );
+          setApprovedClaims(autoApproved);
+        }
       } catch (e) {
         console.error('Failed to load claims:', e);
       } finally {
@@ -49,7 +77,7 @@ export function StepClaimReview({ twinId, onApprove }: StepClaimReviewProps) {
     };
 
     fetchClaims();
-  }, [twinId]);
+  }, [twinId, propResearchRunId]);
 
   const toggleApproval = (claimId: string) => {
     const newApproved = new Set(approvedClaims);

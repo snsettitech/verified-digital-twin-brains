@@ -1,0 +1,24 @@
+
+> frontend_new@0.1.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://130.63.250.164:3000
+- Environments: .env.local
+
+✓ Starting...
+✓ Ready in 1039ms
+ GET /dashboard/deep-research 200 in 1580ms (compile: 1132ms, proxy.ts: 119ms, render: 329ms)
+ GET /auth/login?redirect=%2Fdashboard%2Fdeep-research 200 in 281ms (compile: 47ms, proxy.ts: 8ms, render: 226ms)
+ GET /dashboard/deep-research 200 in 43ms (compile: 8ms, proxy.ts: 7ms, render: 28ms)
+ GET /dashboard/deep-research 200 in 36ms (compile: 7ms, proxy.ts: 5ms, render: 25ms)
+ GET /auth/login?redirect=%2Fdashboard%2Fdeep-research 200 in 52ms (compile: 3ms, proxy.ts: 3ms, render: 45ms)
+ GET /dashboard/deep-research 200 in 38ms (compile: 4ms, proxy.ts: 6ms, render: 28ms)
+ GET /dashboard/deep-research 200 in 54ms (compile: 11ms, proxy.ts: 6ms, render: 38ms)
+ GET /auth/login?redirect=%2Fdashboard%2Fdeep-research 200 in 166ms (compile: 6ms, proxy.ts: 6ms, render: 153ms)
+ GET /dashboard/deep-research 200 in 171ms (compile: 48ms, proxy.ts: 9ms, render: 114ms)
+ GET /dashboard/deep-research 200 in 69ms (compile: 8ms, proxy.ts: 8ms, render: 54ms)
+ GET /auth/login?redirect=%2Fdashboard%2Fdeep-research 200 in 79ms (compile: 7ms, proxy.ts: 7ms, render: 65ms)
+ GET /dashboard/deep-research 200 in 43ms (compile: 5ms, proxy.ts: 8ms, render: 29ms)
+ GET /dashboard/deep-research 200 in 119ms (compile: 10ms, proxy.ts: 8ms, render: 101ms)

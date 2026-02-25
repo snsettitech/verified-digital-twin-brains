@@ -21,6 +21,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         title: 'Build',
         items: [
             { name: 'Dashboard', href: '/dashboard', icon: 'home' },
+            { name: 'Deep Research', href: '/dashboard/deep-research', icon: 'activity' },
             { name: 'Profile', href: '/dashboard/profile', icon: 'profile' },
             { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book' },
             { name: 'Memory Center', href: '/dashboard/memory', icon: 'memory', featureFlag: 'memoryCenter' },
@@ -34,6 +35,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         items: [
             { name: 'Chat', href: '/dashboard/chat', icon: 'chat', featureFlag: 'dashboardChat' },
             { name: 'Actions', href: '/dashboard/actions', icon: 'actions' },
+            { name: 'Products', href: '/dashboard/products', icon: 'products' },
             { name: 'Share', href: '/dashboard/share', icon: 'share' },
         ]
     },

@@ -30,9 +30,12 @@ interface StepResearchProps {
     fullName: string;
     location?: string;
     role?: string;
+    headline?: string;
+    preferredTwinName?: string;
   };
-  seedUrls: string[];
-  onComplete: () => void;
+  /** URLs to crawl; optional when fullName provided (Firecrawl search used) */
+  seedUrls?: string[];
+  onComplete: (researchRunId?: string) => void;
   onBack: () => void;
 }
 
@@ -101,13 +104,8 @@ export function StepResearch({
       handleContinueBio();
     } else if (status.status === 'bio_generated') {
       handleContinueFinalize();
-    } else if (status.status === 'completed') {
-      // Complete the step after a short delay to show success
-      const timer = setTimeout(() => {
-        onComplete();
-      }, 2000);
-      return () => clearTimeout(timer);
     }
+    // status === 'completed': ClaimsReview is shown; user completes via that
   }, [status?.status]);
 
   // Create research run
@@ -118,14 +116,17 @@ export function StepResearch({
     setCreateError(null);
 
     try {
+      const urls = seedUrls ?? [];
       const request: CreateResearchRunRequest = {
         claimed_identity: {
           full_name: claimedIdentity.fullName,
           location: claimedIdentity.location,
-          submitted_links: seedUrls,
+          submitted_links: urls,
           role: claimedIdentity.role,
+          headline: claimedIdentity.headline,
+          preferred_twin_name: claimedIdentity.preferredTwinName,
         },
-        seed_urls: seedUrls,
+        seed_urls: urls,
       };
 
       const response = await researchApi.createResearchRun(twinId, request);
@@ -320,8 +321,8 @@ export function StepResearch({
       <ClaimsReview
         twinId={twinId!}
         researchRunId={researchRunId}
-        onComplete={onComplete}
-        onSkip={onComplete}
+        onComplete={() => onComplete(researchRunId)}
+        onSkip={() => onComplete(researchRunId)}
       />
     );
   }

@@ -298,6 +298,10 @@ class IngestionCheckpointData:
     unresolved_skipped: int
     tombstone_actions: int
     errors: List[str]
+    # Phase 3 metrics for progress UI
+    chunks_created: int = 0
+    words_processed: int = 0
+    questions_answerable_estimate: int = 0
 
 
 @dataclass
@@ -1000,6 +1004,22 @@ class ResearchOrchestrator:
                 research_run_id=research_run_id,
             )
             
+            # Update training metrics so mind score / answerable Qs are available
+            try:
+                update_twin_training_metrics(twin_id)
+            except Exception as metrics_err:
+                logger.warning(f"Training metrics update failed (non-blocking): {metrics_err}")
+
+            # Get questions_answerable from twin settings if available
+            questions_estimate = 0
+            try:
+                response = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+                if response.data:
+                    tm = (response.data.get("settings") or {}).get("training_metrics", {})
+                    questions_estimate = tm.get("questions_answerable_est", 0)
+            except Exception:
+                pass
+
             # Build ingestion checkpoint data
             ingestion_checkpoint = IngestionCheckpointData(
                 require_confirmation=True,
@@ -1011,6 +1031,9 @@ class ResearchOrchestrator:
                 unresolved_skipped=ingestion_stats.get("pages_skipped_not_confirmed", 0),
                 tombstone_actions=0,  # Placeholder: tombstone logic deferred
                 errors=[],
+                chunks_created=ingestion_stats.get("chunks_indexed", 0),
+                words_processed=ingestion_stats.get("total_words", 0),
+                questions_answerable_estimate=questions_estimate,
             )
             
             # Build final checkpoint
@@ -1048,6 +1071,9 @@ class ResearchOrchestrator:
                 unresolved_skipped=0,
                 tombstone_actions=0,
                 errors=[str(e)],
+                chunks_created=0,
+                words_processed=0,
+                questions_answerable_estimate=0,
             )
             failure_checkpoint.warnings.append(f"Ingestion failed: {e}")
             
@@ -1231,6 +1257,9 @@ class ResearchOrchestrator:
                 unresolved_skipped=ing_dict.get("unresolved_skipped", 0),
                 tombstone_actions=ing_dict.get("tombstone_actions", 0),
                 errors=ing_dict.get("errors", []),
+                chunks_created=ing_dict.get("chunks_created", 0),
+                words_processed=ing_dict.get("words_processed", 0),
+                questions_answerable_estimate=ing_dict.get("questions_answerable_estimate", 0),
             )
         
         if existing_checkpoint.get("confirmation"):
@@ -1549,6 +1578,9 @@ class ResearchOrchestrator:
                 unresolved_skipped=ing_dict.get("unresolved_skipped", 0),
                 tombstone_actions=ing_dict.get("tombstone_actions", 0),
                 errors=ing_dict.get("errors", []),
+                chunks_created=ing_dict.get("chunks_created", 0),
+                words_processed=ing_dict.get("words_processed", 0),
+                questions_answerable_estimate=ing_dict.get("questions_answerable_estimate", 0),
             )
         
         if existing_checkpoint.get("confirmation"):

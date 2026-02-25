@@ -1,0 +1,82 @@
+{
+  "bio": {
+    "long": "Insufficient verified public evidence for a grounded long biography.",
+    "short": "Unknown. Needs additional evidence.",
+    "medium": "Unknown. Needs additional evidence from reliable public sources."
+  },
+  "input": {
+    "name": "Sainath Setti",
+    "hints": {
+      "company": "Schulich School of Business",
+      "website": null,
+      "location": "Toronto, Ontario, Canada"
+    }
+  },
+  "claims": [],
+  "run_id": "ff77a819-cc09-40ad-83b0-6c9c8f723b43",
+  "quality": {
+    "warnings": [
+      "No usable public content extracted from discovered sources."
+    ],
+    "coverage_score": 0.0,
+    "freshness_score": 0.4,
+    "hallucination_risk": "high",
+    "overall_confidence": 0.0
+  },
+  "sources": [],
+  "timeline": [],
+  "crawl_stats": {
+    "queries_used": [
+      "\"Sainath Setti\"",
+      "Sainath Setti biography",
+      "Sainath Setti interviews podcast talks",
+      "Sainath Setti profile linkedin",
+      "Sainath Setti 2026",
+      "Sainath Setti 2025",
+      "\"Sainath \"Setti\"\"",
+      "Sainath \"Setti\" biography",
+      "Sainath \"Setti\" interviews podcast talks",
+      "Sainath \"Setti\" profile linkedin",
+      "Sainath \"Setti\" 2026",
+      "Sainath \"Setti\" 2025",
+      "\"Sainath Setti\" \"Toronto, Ontario, Canada\"",
+      "Sainath Setti Toronto, Ontario, Canada profile",
+      "\"Sainath Setti\" \"Schulich School of Business\"",
+      "Sainath Setti Schulich School of Business leadership"
+    ],
+    "urls_blocked": 0,
+    "urls_crawled": 0,
+    "run_started_at": "2026-02-25T07:15:59.287885+00:00",
+    "urls_considered": 0,
+    "words_extracted": 0,
+    "run_completed_at": "2026-02-25T07:16:26.363122+00:00",
+    "sources_used_in_final": 0
+  },
+  "known_unknowns": [
+    {
+      "question": "Is all discovered content about Sainath Setti the same person?",
+      "why_missing": "Identity signals were weak or ambiguous across available sources."
+    }
+  ],
+  "profile_summary": {
+    "locations": [],
+    "public_roles": [],
+    "what_they_do": [
+      "unknown"
+    ],
+    "organizations": [],
+    "expertise_topics": []
+  },
+  "claimed_identity": {
+    "canonical_name": "Sainath Setti",
+    "is_match_confidence": 0.0,
+    "possible_duplicates": [],
+    "disambiguation_notes": [
+      "Evidence was limited; canonical identity requires manual review."
+    ]
+  },
+  "suggested_followup_questions": [
+    "What is the correct official profile URL for this person?",
+    "Which organizations can be independently verified from public records?"
+  ]
+}

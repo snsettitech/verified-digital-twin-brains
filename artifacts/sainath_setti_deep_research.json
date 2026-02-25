@@ -1,0 +1,158 @@
+{
+  "run_id": "f3ab3771-9ead-435e-a211-e223d06ac75e",
+  "input": {
+    "name": "Sainath Setti",
+    "hints": {
+      "location": "Toronto, Ontario, Canada",
+      "company": "Schulich School of Business",
+      "website": null
+    }
+  },
+  "claimed_identity": {
+    "canonical_name": "Sainath Setti",
+    "is_match_confidence": 0.405,
+    "disambiguation_notes": [
+      "Evidence was limited; canonical identity requires manual review."
+    ],
+    "possible_duplicates": []
+  },
+  "bio": {
+    "short": "Unknown. Needs additional evidence.",
+    "medium": "Unknown. Needs additional evidence from reliable public sources.",
+    "long": "Insufficient verified public evidence for a grounded long biography."
+  },
+  "profile_summary": {
+    "what_they_do": [
+      "unknown"
+    ],
+    "expertise_topics": [],
+    "organizations": [],
+    "locations": [],
+    "public_roles": []
+  },
+  "timeline": [
+    {
+      "date_or_range": "unknown",
+      "event": "No timeline event confidently supported.",
+      "confidence": 0.405,
+      "citations": [
+        "src-4"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "claim_id": "claim_1",
+      "text": "Identity match evidence exists but is insufficient for a complete verified profile.",
+      "claim_type": "other",
+      "status": "unknown",
+      "confidence": 0.405,
+      "citations": [
+        "src-4"
+      ],
+      "notes": "Automatic fallback output due insufficient structured synthesis confidence."
+    }
+  ],
+  "known_unknowns": [
+    {
+      "question": "Is all discovered content about Sainath Setti the same person?",
+      "why_missing": "Identity signals were weak or ambiguous across available sources."
+    }
+  ],
+  "suggested_followup_questions": [
+    "What is the correct official profile URL for this person?",
+    "Which organizations can be independently verified from public records?"
+  ],
+  "crawl_stats": {
+    "queries_used": [
+      "\"Sainath Setti\"",
+      "Sainath Setti Schulich",
+      "Sainath Setti leadership",
+      "Sainath Setti company director"
+    ],
+    "urls_considered": 6,
+    "urls_crawled": 5,
+    "urls_blocked": 1,
+    "sources_used_in_final": 6,
+    "words_extracted": 0,
+    "run_started_at": "2026-02-25T06:15:57.341450+00:00",
+    "run_completed_at": "2026-02-25T06:15:57.341450+00:00"
+  },
+  "quality": {
+    "overall_confidence": 0.405,
+    "freshness_score": 0.4,
+    "coverage_score": 0.2,
+    "hallucination_risk": "high",
+    "warnings": [
+      "Synthesis validation failed after retries: 38 validation errors for NameDeepResearchResultModel\nclaimed_identity.disambiguation_notes\n  Input should be a valid list [type=list_type, input_value='Sainath Setti is associa... in companies in India.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/list_type\nbio.full_name\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Sainath Setti', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nbio.current_position\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Director of Student Affairs', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nbio.organization\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Graduate Business Counci...lich School of Business', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nbio.location\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Toronto, Ontario, Canada', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nprofile_summary.what_they_do\n  Input should be a valid list [type=list_type, input_value='Sainath Setti is involve...two companies in India.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/list_type\nprofile_summary.expertise_topics.0\n  Input should be a valid dictionary or instance of ExpertiseTopicModel [type=model_type, input_value='Student Affairs', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/model_type\nprofile_summary.expertise_topics.1\n  Input should be a valid dictionary or instance of ExpertiseTopicModel [type=model_type, input_value='Business Management', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/model_type\nprofile_summary.current_role\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Director of Student Affa...lich School of Business', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nprofile_summary.past_roles\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['Director at SNSETTI Tec...ulting Private Limited'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nprofile_summary.education\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Unknown', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nprofile_summary.notable_achievements\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Involved in leadership r...two companies in India.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ntimeline.0.date_or_range\n  Field required [type=missing, input_value={'date': '2022-05-23', 'e... 'source_id': ['src-4']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\ntimeline.0.citations\n  Field required [type=missing, input_value={'date': '2022-05-23', 'e... 'source_id': ['src-4']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\ntimeline.0.date\n  Extra inputs are not permitted [type=extra_forbidden, input_value='2022-05-23', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ntimeline.0.source_id\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['src-4'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ntimeline.1.date_or_range\n  Field required [type=missing, input_value={'date': '2023-06-08', 'e...id': ['src-4', 'src-5']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\ntimeline.1.citations\n  Field required [type=missing, input_value={'date': '2023-06-08', 'e...id': ['src-4', 'src-5']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\ntimeline.1.date\n  Extra inputs are not permitted [type=extra_forbidden, input_value='2023-06-08', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ntimeline.1.source_id\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['src-4', 'src-5'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ntimeline.2.date_or_range\n  Field required [type=missing, input_value={'date': '2025', 'event':...id': ['src-2', 'src-6']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\ntimeline.2.citations\n  Field required [type=missing, input_value={'date': '2025', 'event':...id': ['src-2', 'src-6']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\ntimeline.2.date\n  Extra inputs are not permitted [type=extra_forbidden, input_value='2025', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ntimeline.2.source_id\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['src-2', 'src-6'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nclaims.0.text\n  Field required [type=missing, input_value={'claim_id': 'claim-1', '...id': ['src-2', 'src-6']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nclaims.0.citations\n  Field required [type=missing, input_value={'claim_id': 'claim-1', '...id': ['src-2', 'src-6']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nclaims.0.notes\n  Field required [type=missing, input_value={'claim_id': 'claim-1', '...id': ['src-2', 'src-6']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nclaims.0.value\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Director of Student Affa...lich School of Business', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nclaims.0.source_id\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['src-2', 'src-6'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nclaims.1.text\n  Field required [type=missing, input_value={'claim_id': 'claim-2', '...id': ['src-4', 'src-5']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nclaims.1.citations\n  Field required [type=missing, input_value={'claim_id': 'claim-2', '...id': ['src-4', 'src-5']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nclaims.1.notes\n  Field required [type=missing, input_value={'claim_id': 'claim-2', '...id': ['src-4', 'src-5']}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.12/v/missing\nclaims.1.value\n  Extra inputs are not permitted [type=extra_forbidden, input_value='Director at SNSETTI Tech...sulting Private Limited', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nclaims.1.source_id\n  Extra inputs are not permitted [type=extra_forbidden, input_value=['src-4', 'src-5'], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nknown_unknowns.0\n  Input should be a valid dictionary or instance of KnownUnknownModel [type=model_type, input_value='Education details are unknown.', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/model_type\ncrawl_stats.total_sources\n  Extra inputs are not permitted [type=extra_forbidden, input_value=6, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\ncrawl_stats.used_sources\n  Extra inputs are not permitted [type=extra_forbidden, input_value=6, input_type=int]\n    For further information visit https://errors.pydantic.dev/2.12/v/extra_forbidden\nquality.hallucination_risk\n  Input should be 'low', 'medium' or 'high' [type=literal_error, input_value=0.1, input_type=float]\n    For further information visit https://errors.pydantic.dev/2.12/v/literal_error"
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "src-1",
+      "url": "https://www.schulichgbc.com/gbc-executive-campaign-25-26",
+      "title": "Executive Elections Nominees 25-26 | GBC Schulich",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:15:07.504483+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.25,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-2",
+      "url": "https://oneschulich.yorku.ca/gbc/leadership-team/",
+      "title": "Leadership Team - Graduate Business Council  | Schulich School of Business - York University",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:15:13.971544+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.16,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-3",
+      "url": "https://in.linkedin.com/company/cloudtailor",
+      "title": "",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:15:24.148799+00:00",
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-4",
+      "url": "https://www.falconebiz.com/director/09615202/SETTI-SAINATH",
+      "title": "SETTI SAINATH HAVING DIN/PAN 09615202 IS DIRECTOR OF 2 COMPANIES/LLPS at Falcon Ebiz",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:15:24.148799+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.405,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-5",
+      "url": "https://www.thecompanycheck.com/company/eduveda-consulting-private-limited/U70200TS2023PTC173915",
+      "title": "Eduveda Consulting Private Limited - 2026 Insights",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:15:45.759912+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.28,
+      "used_in_final": true
+    },
+    {
+      "source_id": "src-6",
+      "url": "https://www.signalhire.com/companies/graduate-business-council-at-schulich-school-of-business/employees",
+      "title": "List of 27 Graduate Business Council at Schulich School of Business Employees - Find Emails & Phones - SignalHire",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T06:15:52.206887+00:00",
+      "content_quality": "full",
+      "identity_match_confidence": 0.32,
+      "used_in_final": true
+    }
+  ]
+}

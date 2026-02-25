@@ -1,0 +1,434 @@
+{
+  "bio": {
+    "long": "Insufficient verified public evidence for a grounded long biography.",
+    "short": "Unknown. Needs additional evidence.",
+    "medium": "Unknown. Needs additional evidence from reliable public sources."
+  },
+  "input": {
+    "name": "Sainath Setti",
+    "hints": {
+      "company": "Schulich School of Business",
+      "website": null,
+      "location": "Toronto, Ontario, Canada"
+    }
+  },
+  "claims": [
+    {
+      "text": "Identity match evidence exists but is insufficient for a complete verified profile.",
+      "notes": "Automatic fallback output due insufficient structured synthesis confidence.",
+      "status": "unknown",
+      "claim_id": "claim_1",
+      "citations": [
+        "41da02b4-3645-42a1-8f5c-11121ddba5bb"
+      ],
+      "claim_type": "other",
+      "confidence": 0.51
+    }
+  ],
+  "run_id": "bd334c79-eea4-4209-9ffa-e5e8850a116a",
+  "quality": {
+    "warnings": [
+      "Synthesis validation failed after retries: Error code: 429 - {'error': {'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors.', 'type': 'insufficient_quota', 'param': None, 'code': 'insufficient_quota'}}"
+    ],
+    "coverage_score": 0.2,
+    "freshness_score": 0.4,
+    "hallucination_risk": "high",
+    "overall_confidence": 0.51
+  },
+  "sources": [
+    {
+      "url": "https://ca.linkedin.com/in/sainathsetti",
+      "title": "",
+      "source_id": "602d1ad9-c1a6-4c8f-97ef-57483be0dbd4",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:18.714033+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.instagram.com/p/djke-opuggl",
+      "title": "",
+      "source_id": "1f994065-cb68-4010-bcc3-e7a1d8cae181",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:18.823192+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.weekday.works/people/sainath-setti-sainathsetti",
+      "title": "",
+      "source_id": "79c233b8-a883-4d54-a595-9580182408e9",
+      "source_type": "profile",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:18.922439+00:00",
+      "used_in_final": false,
+      "content_quality": "blocked",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://salesflow.io/contact/sainath-setti-director-of-student-affairs",
+      "title": "Sainath Setti - Director of Student Affairs - Salesflow - LinkedIn Automation Platform",
+      "source_id": "41da02b4-3645-42a1-8f5c-11121ddba5bb",
+      "source_type": "website",
+      "published_at": "2025-03-23T14:46:41+00:00",
+      "retrieved_at": "2026-02-25T07:19:19.625662+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.51
+    },
+    {
+      "url": "https://www.schulichgbc.com/gbc-team",
+      "title": "Executive Team | GBC Schulich",
+      "source_id": "e40ed74d-ed8c-4244-a7db-d7c815a3f64c",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:31.687792+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.1
+    },
+    {
+      "url": "https://www.researchgate.net/profile/sainath-setti",
+      "title": "Sainath SETTI | Research Assistant | Bachelor of Science | University of Central Missouri, Warrensburg | Department of Mathematics and Computer Science | Research profile",
+      "source_id": "e5779072-d4d7-49e8-b5c7-8c0b82099e83",
+      "source_type": "profile",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:42.187685+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.49
+    },
+    {
+      "url": "https://www.linkedin.com/posts/sainathsetti_mba-schulichschoolofbusiness-leadership-activity-7289975528126562304-4v6q",
+      "title": "",
+      "source_id": "ae2f232e-2cdd-402b-bbe5-4f1670d30375",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:58.647502+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://github.com/sainathsetti",
+      "title": "sainathsetti (Sainath Setti) \u00b7 GitHub",
+      "source_id": "075423a5-a58c-4344-a5ec-b6c4a2ed8c44",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:19:58.740204+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.45
+    },
+    {
+      "url": "https://stg.com/who-we-are",
+      "title": "Who We Are - STG",
+      "source_id": "c4271df0-f280-428b-9705-3c7492acc0ee",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:08.133295+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.18
+    },
+    {
+      "url": "https://www.instagram.com/gbcschulich?hl=en",
+      "title": "",
+      "source_id": "54f826af-6ae1-4cfa-a52b-b63707fb4198",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:19.773317+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.facebook.com/groups/612668672573604/posts/1831622860678173",
+      "title": "",
+      "source_id": "0d71a7be-0f15-4f66-9db8-330af55b03d9",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:19.877608+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://graduation.asu.edu/sites/g/files/litvpz3431/files/2024-12/asu_fall2024_dayofweb_links.pdf",
+      "title": "Page not found | Graduation",
+      "source_id": "480a963f-b643-4790-a33a-3b6273174771",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:19.975069+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/devi_shetty",
+      "title": "Devi shetty - Wikipedia",
+      "source_id": "d6d9e2b2-4ffc-498f-8704-9b60158afafc",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:34.570401+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.kscst.org.in/spp/46_series/07_46s_spp_sanctioned_projects.pdf",
+      "title": "File Not Found",
+      "source_id": "24ca7e8d-1e32-436a-abe6-1c4404a2fc6e",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:52.353843+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.04
+    },
+    {
+      "url": "https://nitc.ac.in/imgserver/uploads/attachments/18th_43a64a83-c277-4660-9dab-138ddb723898_0.pdf",
+      "title": "",
+      "source_id": "60bdf7ee-2fba-4092-b900-30c9f10e7500",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:20:59.606982+00:00",
+      "used_in_final": false,
+      "content_quality": "blocked",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.facebook.com/groups/959961874047953/posts/5632191516824942",
+      "title": "",
+      "source_id": "df65d0ae-dfe3-4e16-9e34-6277755e64c0",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:25:08.486686+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://escholarship.org/uc/item/4qc0x3mw",
+      "title": "Platform-Living: Theorizing life, work, and ethical living after the gig economy",
+      "source_id": "f99defdb-52d1-40c3-aed1-e9e56fd76dad",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:25:08.57351+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.04
+    },
+    {
+      "url": "https://podcastrepublic.net/podcast/1462533307",
+      "title": "The Brand Called You Podcast Republic",
+      "source_id": "02011031-e844-4481-b883-c14e10dc56a0",
+      "source_type": "podcast",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:26:09.487815+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.255
+    },
+    {
+      "url": "https://www.thehindu.com/books/books-authors/the-hindus-top-10-non-fiction-books-of-2022/article66281319.ece",
+      "title": "The Hindu\u2019s top 10 non-fiction books of 2022 - The Hindu",
+      "source_id": "c4979507-bb1a-49e7-8350-8192832827c2",
+      "source_type": "website",
+      "published_at": "2022-12-23T03:32:00+00:00",
+      "retrieved_at": "2026-02-25T07:26:19.053834+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.2
+    },
+    {
+      "url": "http://arxiv.org/list/cs/2021-04?show=2000&skip=1190",
+      "title": "Computer Science Apr 2021",
+      "source_id": "96f71cbc-9d5b-44a8-a6b5-b8e3feae4d45",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:26:27.052532+00:00",
+      "used_in_final": false,
+      "content_quality": "full",
+      "identity_match_confidence": 0.275
+    },
+    {
+      "url": "https://eprints.qut.edu.au/view/series/null/2024.html",
+      "title": "404 File not Found | QUT ePrints",
+      "source_id": "986319e7-113f-4a05-a117-273c7ac763ff",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:26:37.062559+00:00",
+      "used_in_final": false,
+      "content_quality": "partial",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://iimc.gov.in/files/inline-documents/text_april_june_2019.pdf",
+      "title": "",
+      "source_id": "a5110799-1b56-4867-8244-649f10b3381e",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:26:53.513889+00:00",
+      "used_in_final": false,
+      "content_quality": "blocked",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://in.linkedin.com/in/siddharth-vk",
+      "title": "",
+      "source_id": "d24be293-0f81-4829-aa75-fc96366dd999",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.370685+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.linkedin.com/posts/sainathsetti_im-excited-to-share-that-ive-been-selected-activity-7420933417682292736-af_d",
+      "title": "",
+      "source_id": "5809ba70-c99c-4e9e-b35d-fda1547acd7b",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.465505+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.linkedin.com/posts/sainathsetti_data-workshop-level-2-was-issued-by-ibm-activity-7387601467597070336-pnuv",
+      "title": "",
+      "source_id": "19c6f3bb-2964-45cc-b151-14912a43799f",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.571785+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.linkedin.com/posts/sainathsetti_evcharging-sustainability-innovation-activity-7305603536996708352--bdt",
+      "title": "",
+      "source_id": "415aad23-9dae-48fd-abcf-16638eb489ff",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.669148+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.linkedin.com/posts/sainathsetti_leadership-professionaldevelopment-schulichmba-activity-7305392099850403840-mu_z",
+      "title": "",
+      "source_id": "b94ea94f-49d4-4ad3-882a-d194d567dc5f",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.76911+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.linkedin.com/pub/dir/sai/setti",
+      "title": "",
+      "source_id": "9e041518-0b41-4e96-941d-2ec677a04188",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.870557+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.linkedin.com/pub/dir/sainath/s",
+      "title": "",
+      "source_id": "a8a0a9ef-aa05-4a1d-81b2-c4abd0868e13",
+      "source_type": "linkedin",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:03.962552+00:00",
+      "used_in_final": false,
+      "content_quality": "manual_needed",
+      "identity_match_confidence": 0.0
+    },
+    {
+      "url": "https://www.schulichgbc.com/gbc-executive-campaign-25-26",
+      "title": "",
+      "source_id": "cf48b00c-eb89-4cfe-bc52-5bb3a36ae7b0",
+      "source_type": "website",
+      "published_at": null,
+      "retrieved_at": "2026-02-25T07:28:04.075006+00:00",
+      "used_in_final": false,
+      "content_quality": "blocked",
+      "identity_match_confidence": 0.0
+    }
+  ],
+  "timeline": [
+    {
+      "event": "No timeline event confidently supported.",
+      "citations": [
+        "41da02b4-3645-42a1-8f5c-11121ddba5bb"
+      ],
+      "confidence": 0.5,
+      "date_or_range": "unknown"
+    }
+  ],
+  "crawl_stats": {
+    "queries_used": [
+      "\"Sainath Setti\"",
+      "Sainath Setti biography",
+      "Sainath Setti interviews podcast talks",
+      "Sainath Setti profile linkedin",
+      "Sainath Setti 2026",
+      "Sainath Setti 2025",
+      "\"Sainath \"Setti\"\"",
+      "Sainath \"Setti\" biography",
+      "Sainath \"Setti\" interviews podcast talks",
+      "Sainath \"Setti\" profile linkedin",
+      "Sainath \"Setti\" 2026",
+      "Sainath \"Setti\" 2025",
+      "\"Sainath Setti\" \"Toronto, Ontario, Canada\"",
+      "Sainath Setti Toronto, Ontario, Canada profile",
+      "\"Sainath Setti\" \"Schulich School of Business\"",
+      "Sainath Setti Schulich School of Business leadership"
+    ],
+    "urls_blocked": 17,
+    "urls_crawled": 13,
+    "run_started_at": "2026-02-25T07:19:12.710885+00:00",
+    "urls_considered": 30,
+    "words_extracted": 0,
+    "run_completed_at": "2026-02-25T07:28:12.665825+00:00",
+    "sources_used_in_final": 0
+  },
+  "known_unknowns": [
+    {
+      "question": "Is all discovered content about Sainath Setti the same person?",
+      "why_missing": "Identity signals were weak or ambiguous across available sources."
+    }
+  ],
+  "profile_summary": {
+    "locations": [],
+    "public_roles": [],
+    "what_they_do": [
+      "unknown"
+    ],
+    "organizations": [],
+    "expertise_topics": []
+  },
+  "claimed_identity": {
+    "canonical_name": "Sainath Setti",
+    "is_match_confidence": 0.51,
+    "possible_duplicates": [],
+    "disambiguation_notes": [
+      "Evidence was limited; canonical identity requires manual review."
+    ]
+  },
+  "suggested_followup_questions": [
+    "What is the correct official profile URL for this person?",
+    "Which organizations can be independently verified from public records?"
+  ]
+}

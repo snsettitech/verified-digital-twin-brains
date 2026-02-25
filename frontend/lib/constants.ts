@@ -125,7 +125,13 @@ export const API_ENDPOINTS = {
   // Auth
   AUTH_INVITATION: (token: string) => `/auth/invitation/${token}`,
   AUTH_ACCEPT_INVITATION: '/auth/accept-invitation',
+  AUTH_CONNECTED_ACCOUNTS: '/auth/connected-accounts',
   
+  // Products (Phase 7)
+  PRODUCTS: (twinId: string) => `/twins/${twinId}/products`,
+  PRODUCT_UPDATE: (productId: string) => `/products/${productId}`,
+  PRODUCT_DELETE: (productId: string) => `/products/${productId}`,
+
   // Specializations
   SPECIALIZATIONS: '/specializations',
   

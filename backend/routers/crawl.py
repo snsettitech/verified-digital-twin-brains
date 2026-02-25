@@ -916,7 +916,7 @@ async def get_confirmation_summary_endpoint(
 class CreateResearchRunRequest(BaseModel):
     """Request to create a research run."""
     claimed_identity: dict = Field(..., description="Identity info: {full_name, location, submitted_links, ...}")
-    seed_urls: List[str] = Field(..., description="URLs to crawl")
+    seed_urls: List[str] = Field(default_factory=list, description="URLs to crawl (optional; use Firecrawl search when empty + full_name)")
     onboarding_session_id: Optional[str] = Field(default=None, description="Optional onboarding session link")
     metadata: Optional[dict] = Field(default=None, description="Additional config")
 
@@ -965,6 +965,7 @@ async def create_research_run_endpoint(
     Create a new research run (Phase 3.4).
     
     Initializes research run with claimed identity and seed URLs.
+    When seed_urls is empty and full_name exists, uses Firecrawl search to discover URLs.
     Transitions through state machine:
     planning -> queued -> crawling -> awaiting_confirmation -> ready_for_ingestion
     """
@@ -974,6 +975,47 @@ async def create_research_run_endpoint(
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
+    seed_urls = list(request.seed_urls) if request.seed_urls else []
+    
+    # Name-only flow: when seed_urls empty and full_name exists, use Firecrawl search
+    if not seed_urls:
+        full_name = (request.claimed_identity or {}).get("full_name")
+        if full_name and str(full_name).strip():
+            try:
+                from modules.firecrawl_client import get_firecrawl_client
+                client = get_firecrawl_client()
+                if client:
+                    location = (request.claimed_identity or {}).get("location")
+                    query = f'"{str(full_name).strip()}"'
+                    if location and str(location).strip():
+                        query = f'{query} {str(location).strip()}'
+                    seed_urls = await client.search(query=query, limit=10)
+                    if seed_urls:
+                        logger.info(f"Firecrawl search resolved {len(seed_urls)} URLs for name-only research")
+            except Exception as e:
+                logger.warning(f"Firecrawl search for name-only research failed: {e}")
+    
+    # Require at least one URL to proceed
+    if not seed_urls:
+        full_name = (request.claimed_identity or {}).get("full_name")
+        if not (full_name and str(full_name).strip()):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "error": "No sources for research",
+                    "code": "NO_SOURCES",
+                    "message": "Provide seed_urls, or full_name for Firecrawl search."
+                }
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "No URLs discovered",
+                "code": "SEARCH_EMPTY",
+                "message": "Firecrawl search returned no URLs for the given name. Try adding URLs manually."
+            }
+        )
+    
     try:
         from modules.research_orchestrator import ResearchOrchestrator
         
@@ -982,7 +1024,7 @@ async def create_research_run_endpoint(
             twin_id=twin_id,
             actor_user_id=user.get("id"),
             claimed_identity=request.claimed_identity,
-            seed_urls=request.seed_urls,
+            seed_urls=seed_urls,
             onboarding_session_id=request.onboarding_session_id,
             metadata=request.metadata,
         )

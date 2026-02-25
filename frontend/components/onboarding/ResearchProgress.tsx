@@ -95,7 +95,43 @@ export function ResearchProgress({
         <p className="text-slate-400">
           We&apos;re processing your sources and creating your personalized AI.
         </p>
+        <p className="text-xs text-slate-500 mt-1">
+          Usually takes around 10 minutes for first-time setup.
+        </p>
       </div>
+
+      {/* Live Metrics */}
+      {status?.checkpoint_data?.ingestion && !isTerminalStatus(currentStatus || 'planning') && (
+        <Card className="p-4 bg-slate-900/50 border-slate-700">
+          <h4 className="text-sm font-medium text-slate-300 mb-3">Progress</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+            <div>
+              <div className="text-lg font-semibold text-white">
+                {status.checkpoint_data.ingestion.pages_ingested ?? status.checkpoint_data.ingestion.sources_ingested ?? 0}
+              </div>
+              <div className="text-slate-500">Pages ingested</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-white">
+                {status.checkpoint_data.ingestion.chunks_created ?? 0}
+              </div>
+              <div className="text-slate-500">Chunks created</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-white">
+                {(status.checkpoint_data.ingestion.words_processed ?? 0).toLocaleString()}
+              </div>
+              <div className="text-slate-500">Words ingested</div>
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-white">
+                {status.checkpoint_data.ingestion.questions_answerable_estimate ?? 0}
+              </div>
+              <div className="text-slate-500">Est. answerable questions</div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Status Badge */}
       {currentStatus && (
@@ -267,8 +303,8 @@ export function ResearchProgress({
                   <div className="flex justify-between text-xs text-slate-400 mb-1">
                     <span>Progress</span>
                     <span>
-                      {status.checkpoint_data.ingestion.sources_ingested ?? 0} /{' '}
-                      {status.checkpoint_data.ingestion.sources_total ?? 0} sources
+                      {status.checkpoint_data.ingestion.pages_ingested ?? status.checkpoint_data.ingestion.sources_ingested ?? 0} /{' '}
+                      {status.checkpoint_data.ingestion.pages_eligible ?? status.checkpoint_data.ingestion.sources_total ?? 0} sources
                     </span>
                   </div>
                   <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
@@ -276,8 +312,8 @@ export function ResearchProgress({
                       className="h-full bg-blue-500 transition-all duration-500"
                       style={{
                         width: `${
-                          ((status.checkpoint_data.ingestion.sources_ingested ?? 0) /
-                            (status.checkpoint_data.ingestion.sources_total || 1)) * 100
+                          ((status.checkpoint_data.ingestion.pages_ingested ?? status.checkpoint_data.ingestion.sources_ingested ?? 0) /
+                            (status.checkpoint_data.ingestion.pages_eligible ?? status.checkpoint_data.ingestion.sources_total ?? 1)) * 100
                         }%`,
                       }}
                     />
@@ -300,6 +336,12 @@ export function ResearchProgress({
                 <h3 className="font-medium text-white">Ingestion Complete</h3>
                 <p className="text-sm text-slate-400">
                   {status?.checkpoint_data?.ingestion?.chunks_created ?? 0} knowledge chunks created.
+                  {(status?.checkpoint_data?.ingestion?.words_processed ?? 0) > 0 && (
+                    <> {(status?.checkpoint_data?.ingestion?.words_processed ?? 0).toLocaleString()} words ingested.</>
+                  )}
+                  {(status?.checkpoint_data?.ingestion?.questions_answerable_estimate ?? 0) > 0 && (
+                    <> ~{(status?.checkpoint_data?.ingestion?.questions_answerable_estimate ?? 0)} answerable questions.</>
+                  )}
                 </p>
               </div>
             </div>

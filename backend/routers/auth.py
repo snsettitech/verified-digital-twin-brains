@@ -164,6 +164,52 @@ def _require_pending_invitation_or_raise(token: str) -> Dict[str, Any]:
 
     return record
 
+
+def _sync_connected_accounts(user_id: str, correlation_id: str) -> None:
+    """
+    Upsert connected_accounts from Supabase auth identities (e.g. LinkedIn).
+    Best-effort; failures are logged but do not block sync.
+    """
+    try:
+        auth_user = supabase.auth.admin.get_user_by_id(user_id)
+        if not auth_user or not hasattr(auth_user, "user"):
+            return
+        user_obj = _model_to_dict(getattr(auth_user, "user", None))
+        identities = user_obj.get("identities") or []
+        for ident in identities:
+            if not isinstance(ident, dict):
+                ident = _model_to_dict(ident) if hasattr(ident, "model_dump") else {}
+            provider = (ident.get("provider") or "").strip().lower()
+            if provider != "linkedin":
+                continue
+            provider_user_id = ident.get("provider_id") or ident.get("id")
+            identity_data = ident.get("identity_data") or {}
+            profile_url = identity_data.get("profile_url") or identity_data.get("url")
+            if not profile_url and provider_user_id:
+                profile_url = f"https://www.linkedin.com/in/{provider_user_id}"
+            display_name = identity_data.get("name") or identity_data.get("full_name")
+            image_url = identity_data.get("picture") or identity_data.get("avatar_url") or identity_data.get("image_url")
+            profile_snapshot = {
+                "profile_url": profile_url,
+                "display_name": display_name,
+                "image_url": image_url,
+            }
+            supabase.table("connected_accounts").upsert(
+                {
+                    "user_id": user_id,
+                    "provider": "linkedin",
+                    "provider_user_id": provider_user_id,
+                    "profile_snapshot": profile_snapshot,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="user_id,provider",
+            ).execute()
+            print(f"[SYNC {correlation_id}] Upserted connected_accounts for LinkedIn")
+            break
+    except Exception as e:
+        print(f"[SYNC {correlation_id}] connected_accounts sync skipped: {e}")
+
+
 @router.post("/auth/sync-user", response_model=SyncUserResponse)
 async def sync_user(request: Request, response: Response, user=Depends(get_current_user)):
     """
@@ -213,7 +259,9 @@ async def sync_user(request: Request, response: Response, user=Depends(get_curre
             has_twins = bool(twins_check.data)
         else:
             has_twins = False
-        
+
+        _sync_connected_accounts(user_id, correlation_id)
+
         return SyncUserResponse(
             status="exists",
             user=UserProfile(
@@ -263,6 +311,8 @@ async def sync_user(request: Request, response: Response, user=Depends(get_curre
     twins_check = supabase.table("twins").select("id").eq("tenant_id", tenant_id).limit(1).execute()
     has_twins = bool(twins_check.data)
 
+    _sync_connected_accounts(user_id, correlation_id)
+
     return SyncUserResponse(
         status="created",
         user=UserProfile(
@@ -304,6 +354,19 @@ async def whoami(user=Depends(get_current_user)):
         "has_tenant": tenant_id is not None,
         "auth_method": "api_key" if user.get("api_key_id") else "jwt"
     }
+
+@router.get("/auth/connected-accounts")
+async def get_connected_accounts(user=Depends(get_current_user)):
+    """Get current user's OAuth-connected accounts (e.g. LinkedIn)."""
+    user = _require_auth_user(user)
+    user_id = user.get("user_id")
+    try:
+        result = supabase.table("connected_accounts").select("*").eq("user_id", user_id).execute()
+        return {"accounts": result.data or []}
+    except Exception as e:
+        print(f"[auth] connected_accounts fetch error: {e}")
+        return {"accounts": []}
+
 
 @router.get("/auth/me", response_model=UserProfile)
 async def get_current_user_profile(user=Depends(get_current_user)):

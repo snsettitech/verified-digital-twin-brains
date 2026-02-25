@@ -144,7 +144,12 @@ export function StepLinkSuggestions({
       <div className="text-center py-12">
         <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
         <p className="text-slate-400">Searching for public links...</p>
-        <p className="text-sm text-slate-500 mt-2">{fullName}</p>
+        <p className="text-sm text-slate-500 mt-2 flex items-center justify-center gap-2">
+          <span>{fullName}</span>
+          <span className="px-2 py-0.5 text-xs bg-slate-700 text-slate-400 rounded border border-slate-600" title="Locked after Welcome step">
+            Locked
+          </span>
+        </p>
       </div>
     );
   }
@@ -164,6 +169,10 @@ export function StepLinkSuggestions({
       {/* Stats & Quick Actions */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900 p-4 rounded-xl border border-slate-700">
         <div className="flex items-center gap-4 text-sm">
+          <span className="text-slate-400 flex items-center gap-2">
+            <span>{fullName}</span>
+            <span className="px-1.5 py-0.5 text-xs bg-slate-700 text-slate-400 rounded border border-slate-600" title="Locked after Welcome step">Locked</span>
+          </span>
           <span className="text-slate-400">
             Found: <span className="text-white font-medium">{candidates.length}</span>
           </span>

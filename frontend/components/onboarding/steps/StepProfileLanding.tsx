@@ -44,6 +44,13 @@ export function StepProfileLanding({
   const [activating, setActivating] = useState(false);
   const [showEvidencePanel, setShowEvidencePanel] = useState(false);
 
+  // Starter questions (static for MVP)
+  const starterQuestions = [
+    'What is your background and what do you specialize in?',
+    'What topics can your digital brain answer well?',
+    'What are your main projects or services?',
+  ];
+
   useEffect(() => {
     if (!twinId) return;
 
@@ -124,6 +131,32 @@ export function StepProfileLanding({
     }
   };
 
+  function detectSourceType(url: string): string {
+    const t = (url || '').toLowerCase();
+    if (t.includes('linkedin.com')) return 'linkedin';
+    if (t.includes('youtube.com') || t.includes('youtu.be')) return 'youtube';
+    if (t.includes('instagram.com')) return 'instagram';
+    if (t.includes('tiktok.com')) return 'tiktok';
+    if (t.startsWith('http')) return 'website';
+    return 'other';
+  }
+
+  const groupedSources = sources.reduce<Record<string, { url: string; title: string }[]>>((acc, s) => {
+    const type = detectSourceType(s.url);
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(s);
+    return acc;
+  }, {});
+
+  const sourceTypeLabels: Record<string, string> = {
+    linkedin: 'LinkedIn',
+    youtube: 'YouTube',
+    instagram: 'Instagram',
+    tiktok: 'TikTok',
+    website: 'Website',
+    other: 'Other',
+  };
+
   const bioTypeLabels: Record<string, string> = {
     one_liner: 'One-Liner',
     short: 'Short Bio',
@@ -149,6 +182,11 @@ export function StepProfileLanding({
         <p className="text-slate-400">
           Review your auto-generated bio and evidence before activating.
         </p>
+        <div className="flex justify-center gap-2 mt-3">
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400">
+            Digital Brain Ready
+          </span>
+        </div>
       </div>
 
       {/* Twin Name */}
@@ -199,10 +237,26 @@ export function StepProfileLanding({
         </Card>
       )}
 
-      {/* Sources List */}
+      {/* Starter Questions */}
+      <Card className="p-6 bg-slate-900 border-slate-700">
+        <h3 className="text-sm font-medium text-slate-400 mb-3">Suggested questions to ask</h3>
+        <div className="flex flex-wrap gap-2">
+          {starterQuestions.map((q, idx) => (
+            <button
+              key={idx}
+              onClick={() => navigator.clipboard?.writeText(q)}
+              className="px-4 py-2 rounded-lg text-sm text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors text-left"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Social Links (grouped by type) */}
       <Card className="p-4 bg-slate-900 border-slate-700">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-slate-300">Sources ({sources.length})</h3>
+          <h3 className="font-medium text-slate-300">Your links ({sources.length})</h3>
           <button
             onClick={onAddMoreSources}
             className="text-sm text-indigo-400 hover:text-indigo-300"
@@ -210,14 +264,29 @@ export function StepProfileLanding({
             + Add More
           </button>
         </div>
-        <div className="space-y-2 max-h-32 overflow-y-auto">
+        <div className="space-y-4 max-h-48 overflow-y-auto">
           {sources.length === 0 ? (
             <p className="text-sm text-slate-500">No sources added yet.</p>
           ) : (
-            sources.map((source, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-sm">
-                <span className="text-slate-500">🔗</span>
-                <span className="text-slate-400 truncate">{source.title || source.url}</span>
+            Object.entries(groupedSources).map(([type, items]) => (
+              <div key={type}>
+                <div className="text-xs font-medium text-slate-500 mb-2">
+                  {sourceTypeLabels[type] || type}
+                </div>
+                <div className="space-y-1">
+                  {items.map((source, idx) => (
+                    <a
+                      key={idx}
+                      href={source.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-slate-400 hover:text-indigo-400 truncate"
+                    >
+                      <span className="text-slate-500 shrink-0">🔗</span>
+                      <span className="truncate">{source.title || source.url}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             ))
           )}

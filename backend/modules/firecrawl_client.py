@@ -450,13 +450,27 @@ class FirecrawlClient:
         
         # Run synchronous Firecrawl call in thread pool
         def _scrape():
+            # firecrawl-py v2 uses app.scrape(...); keep backward compatibility.
+            if hasattr(self.app, "scrape"):
+                return self.app.scrape(url, formats=formats)
             return self.app.scrape_url(url, params={"formats": formats})
         
         result = await asyncio.wait_for(
             loop.run_in_executor(None, _scrape),
             timeout=self.config.timeout_seconds
         )
-        
+
+        # Normalize object/dict responses.
+        if hasattr(result, "model_dump"):
+            result = result.model_dump()
+        elif not isinstance(result, dict):
+            result = {
+                "markdown": getattr(result, "markdown", ""),
+                "html": getattr(result, "html", ""),
+                "metadata": getattr(result, "metadata", {}) or {},
+                "links": getattr(result, "links", []) or [],
+            }
+
         # Extract content
         content = ""
         if "markdown" in result:
@@ -508,10 +522,18 @@ class FirecrawlClient:
                 loop = asyncio.get_event_loop()
                 
                 def _start_crawl():
+                    # firecrawl-py v2 uses app.crawl(...); keep fallback for old clients.
+                    if hasattr(self.app, "crawl"):
+                        return self.app.crawl(
+                            url,
+                            limit=limit,
+                            max_discovery_depth=max_depth,
+                            scrape_options={"formats": ["markdown"]},
+                        )
                     params = {
                         "limit": limit,
                         "maxDepth": max_depth,
-                        "scrapeOptions": {"formats": ["markdown"]}
+                        "scrapeOptions": {"formats": ["markdown"]},
                     }
                     return self.app.crawl_url(url, params=params)
                 
@@ -519,6 +541,9 @@ class FirecrawlClient:
                     loop.run_in_executor(None, _start_crawl),
                     timeout=self.config.timeout_seconds
                 )
+
+                if hasattr(crawl_result, "model_dump"):
+                    crawl_result = crawl_result.model_dump()
                 
                 # Process results
                 results = []
@@ -558,6 +583,74 @@ class FirecrawlClient:
                     quality=ContentQuality.BLOCKED,
                     quality_reason=f"Crawl failed: {e}",
                 )]
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> List[str]:
+        """
+        Search the web via Firecrawl /search API.
+        Returns list of URLs from search results (no scrape).
+
+        Args:
+            query: Search query (e.g. full name, "John Smith")
+            limit: Max results (default 10, max 100)
+
+        Returns:
+            List of URLs from search results
+        """
+        if not query or not str(query).strip():
+            return []
+        limit = min(max(1, limit), 100)
+        async with self._semaphore:
+            try:
+                loop = asyncio.get_event_loop()
+
+                def _search():
+                    return self.app.search(str(query).strip(), limit=limit)
+
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(None, _search),
+                    timeout=self.config.timeout_seconds,
+                )
+                urls: List[str] = []
+
+                # Normalize object/dict responses across Firecrawl SDK versions.
+                if hasattr(result, "model_dump"):
+                    result = result.model_dump()
+
+                items: List[Any] = []
+                if result and isinstance(result, dict):
+                    # Legacy shape: {"data": [...]}
+                    if isinstance(result.get("data"), list):
+                        items.extend(result["data"])
+                    # v2 shape: {"web": [...], "news": [...], "images": ...}
+                    if isinstance(result.get("web"), list):
+                        items.extend(result["web"])
+                    if isinstance(result.get("news"), list):
+                        items.extend(result["news"])
+                elif result and hasattr(result, "data") and isinstance(getattr(result, "data"), list):
+                    items.extend(getattr(result, "data"))
+
+                for item in items:
+                    url = item.get("url") if isinstance(item, dict) else getattr(item, "url", None)
+                    if url and str(url).startswith(("http://", "https://")):
+                        urls.append(str(url))
+
+                # Deduplicate while preserving order.
+                deduped_urls: List[str] = []
+                seen: set[str] = set()
+                for url in urls:
+                    if url not in seen:
+                        seen.add(url)
+                        deduped_urls.append(url)
+
+                logger.info(f"Firecrawl search '{query[:50]}...' returned {len(deduped_urls)} URLs")
+                return deduped_urls
+            except Exception as e:
+                logger.warning(f"Firecrawl search failed for '{query[:50]}': {e}")
+                return []
 
 
 # Global client instance (lazy-loaded)

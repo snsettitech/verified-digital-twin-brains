@@ -60,6 +60,7 @@ from routers import (
     
     # Phase 1A.6: Deep Research crawl management
     crawl,
+    deep_research,
     
     # Phase 8: Research claims enrichment
     research_claims,
@@ -82,6 +83,8 @@ DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() 
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 # Deep Research routes are always enabled.
 DEEP_RESEARCH_ENABLED = True
+# Name-only deep research flow (safe rollout)
+NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 
 def print_feature_flag_summary():
     """Print enabled/disabled feature summary for observability."""
@@ -92,6 +95,7 @@ def print_feature_flag_summary():
     print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
     print("  Deep Research:      ENABLED")
+    print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
     sys.stdout.flush()
 
@@ -220,6 +224,11 @@ app.include_router(crawl.router)
 print("[INFO] Deep Research crawl routes enabled")
 app.include_router(research_claims.router)
 print("[INFO] Deep Research claims routes enabled")
+app.include_router(deep_research.router)
+if NAME_ONLY_DEEP_RESEARCH_ENABLED:
+    print("[INFO] Name-only deep research routes enabled")
+else:
+    print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
 
 # Print feature flag summary after all routers loaded
 print_feature_flag_summary()

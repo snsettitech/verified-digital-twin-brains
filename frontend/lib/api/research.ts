@@ -51,7 +51,8 @@ export interface CreateResearchRunRequest {
     submitted_links?: string[];
     [key: string]: unknown;
   };
-  seed_urls: string[];
+  /** URLs to crawl; optional when full_name provided (Firecrawl search used) */
+  seed_urls?: string[];
   onboarding_session_id?: string;
   metadata?: Record<string, unknown>;
 }
@@ -72,7 +73,11 @@ export interface ResearchRunStatusResponse {
     ingestion?: {
       sources_total?: number;
       sources_ingested?: number;
+      pages_eligible?: number;
+      pages_ingested?: number;
       chunks_created?: number;
+      words_processed?: number;
+      questions_answerable_estimate?: number;
       errors?: string[];
     };
     bio_generation?: {
@@ -84,6 +89,8 @@ export interface ResearchRunStatusResponse {
       score?: number;
       previous_score?: number;
       delta?: number;
+      words_processed?: number;
+      questions_answerable_estimate?: number;
     };
     readiness?: {
       is_ready?: boolean;
