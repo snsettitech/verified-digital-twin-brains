@@ -172,7 +172,7 @@ async def get_dataset_export_stats(
                         date_range["min"] = dt
                     if date_range["max"] is None or dt > date_range["max"]:
                         date_range["max"] = dt
-                except:
+                except (TypeError, ValueError):
                     pass
         
         return {

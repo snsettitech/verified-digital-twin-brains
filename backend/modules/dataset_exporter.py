@@ -195,7 +195,7 @@ class DatasetExporter:
             if to_date and item_date > to_date:
                 return False
             return True
-        except:
+        except (TypeError, ValueError):
             return True
     
     def _export_jsonl(

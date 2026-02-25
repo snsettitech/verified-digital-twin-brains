@@ -9,7 +9,6 @@ import time
 import httpx
 import html
 import html as html_lib
-import asyncio
 from typing import List, Dict, Optional, Any, Tuple
 from bs4 import BeautifulSoup
 from modules.transcription import transcribe_audio_multi
@@ -154,6 +153,23 @@ class PIIScrubber:
             placeholder = f"[{pii_type.upper()}]"
             text = re.sub(pattern, placeholder, text)
         return text
+
+
+def _resolve_tenant_id(twin_id: str, source_id: Optional[str] = None) -> Optional[str]:
+    """Best-effort tenant lookup used for audit logging paths."""
+    try:
+        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
+        return twin_res.data.get("tenant_id") if twin_res.data else None
+    except Exception as exc:
+        message = f"Tenant lookup failed for twin {twin_id}: {type(exc).__name__}"
+        if source_id and twin_id:
+            try:
+                log_ingestion_event(source_id, twin_id, "warning", message)
+            except Exception:
+                print(f"[Ingestion] {message}")
+        else:
+            print(f"[Ingestion] {message}")
+        return None
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -825,8 +841,8 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
         if temp_audio_path and os.path.exists(temp_audio_path):
             try:
                 os.remove(temp_audio_path)
-            except:
-                pass
+            except OSError as cleanup_err:
+                print(f"[YouTube] Temp file cleanup failed ({temp_audio_path}): {cleanup_err}")
 
         if not text:
             # Get final error message with classification
@@ -954,13 +970,7 @@ async def ingest_youtube_transcript(source_id: str, twin_id: str, url: str, corr
             correlation_id=correlation_id,
         )
 
-        # Fetch tenant_id
-        tenant_id = None
-        try:
-            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-        except Exception:
-            pass
+        tenant_id = _resolve_tenant_id(twin_id, source_id=source_id)
 
         # Phase 8: Log the action
         AuditLogger.log(
@@ -1304,13 +1314,7 @@ async def ingest_x_thread(source_id: str, twin_id: str, url: str, correlation_id
             "tweet_id": tweet_id
         }, provider=provider, correlation_id=correlation_id)
 
-        # Fetch tenant_id
-        tenant_id = None
-        try:
-            twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-            tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-        except Exception:
-            pass
+        tenant_id = _resolve_tenant_id(twin_id, source_id=source_id)
 
         AuditLogger.log(
             tenant_id=tenant_id,
@@ -3113,12 +3117,7 @@ async def ingest_source(source_id: str, twin_id: str, file_path: str, filename: 
 
     log_ingestion_event(source_id, twin_id, "info", f"Text extracted: {len(text)} characters")
 
-    tenant_id = None
-    try:
-        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-        tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-    except Exception:
-        pass
+    tenant_id = _resolve_tenant_id(twin_id, source_id=source_id)
 
     # Phase 9: Log the action
     AuditLogger.log(
@@ -3218,12 +3217,7 @@ async def delete_source(source_id: str, twin_id: str):
     # 2. Delete from Supabase
     supabase.table("sources").delete().eq("id", source_id).eq("twin_id", twin_id).execute()
 
-    tenant_id = None
-    try:
-        twin_res = supabase.table("twins").select("tenant_id").eq("id", twin_id).single().execute()
-        tenant_id = twin_res.data.get("tenant_id") if twin_res.data else None
-    except Exception:
-        pass
+    tenant_id = _resolve_tenant_id(twin_id, source_id=source_id)
 
     # Phase 9: Log the action
     AuditLogger.log(

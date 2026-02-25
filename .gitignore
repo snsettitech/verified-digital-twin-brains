@@ -66,6 +66,11 @@ youtube_cookies.txt
 frontend/playwright-report/
 frontend/playwright-test-results/
 frontend/test-results-temp/
+frontend/lint_errors.json
+frontend/lint-full.txt
+frontend/lint_results.txt
 artifacts/simulator/
 artifacts/supabase_jwt.txt
 backend/test_token.txt
+package/
+supabase-mcp-server-supabase-*.tgz

@@ -89,7 +89,7 @@ class TestReasoningIntegration(unittest.TestCase):
             if line:
                 try:
                     blocks.append(json.loads(line))
-                except:
+                except json.JSONDecodeError:
                     pass
         
         # Verify metadata contains decision trace

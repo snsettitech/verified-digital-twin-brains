@@ -91,7 +91,7 @@ class LinkedInExportParser:
                 elif any(k in key_lower for k in ['date', 'timestamp', 'created']):
                     try:
                         timestamp = datetime.fromisoformat(value.strip('"'))
-                    except:
+                    except (TypeError, ValueError):
                         pass
             
             if text_content:
@@ -179,12 +179,12 @@ class TwitterArchiveParser:
                 # Try without the window assignment
                 try:
                     tweets = json.loads(content)
-                except:
+                except json.JSONDecodeError:
                     return items
         else:
             try:
                 tweets = json.loads(content)
-            except:
+            except json.JSONDecodeError:
                 return items
         
         for tweet_data in tweets:
@@ -219,7 +219,7 @@ class TwitterArchiveParser:
             # Twitter format: "Mon Sep 01 12:00:00 +0000 2020"
             dt = datetime.strptime(date_str, '%a %b %d %H:%M:%S +0000 %Y')
             return dt.isoformat()
-        except:
+        except ValueError:
             return None
 
 
@@ -271,7 +271,7 @@ class SlackExportParser:
                     if ts:
                         try:
                             timestamp = datetime.fromtimestamp(float(ts)).isoformat()
-                        except:
+                        except (TypeError, ValueError, OSError, OverflowError):
                             pass
                     
                     items.append({

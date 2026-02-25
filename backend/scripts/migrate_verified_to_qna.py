@@ -42,8 +42,8 @@ async def fetch_all_verified_vectors(twin_id: str = None) -> List[Dict[str, Any]
             try:
                 stats = index.describe_index_stats()
                 namespaces = list(stats.get("namespaces", {}).keys())
-            except:
-                print("Warning: Could not fetch namespaces. Using empty list.")
+            except Exception as e:
+                print(f"Warning: Could not fetch namespaces. Using empty list. Error: {e}")
     
     # Query each namespace for verified vectors
     # Use a dummy embedding (zeros) with high top_k and filter

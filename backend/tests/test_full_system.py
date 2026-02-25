@@ -90,8 +90,10 @@ class TestFullSystemFlow(unittest.TestCase):
         blocks = []
         for line in stream_content.strip().split('\n'):
             if line:
-                try: blocks.append(json.loads(line))
-                except: pass
+                try:
+                    blocks.append(json.loads(line))
+                except json.JSONDecodeError:
+                    pass
                 
         # 6. Verify Decision Trace is present in Metadata
         metadata = next((b for b in blocks if b.get("type") == "metadata"), None)

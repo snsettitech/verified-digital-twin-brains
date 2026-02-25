@@ -211,7 +211,8 @@ async def cognitive_interview(
             supabase.table("nodes").delete().eq("twin_id", twin_id).execute()
             supabase.table("edges").delete().eq("twin_id", twin_id).execute()
             InterviewController.update_session(session_id, new_stage=InterviewStage.OPENING.value, new_intent_confirmed=False)
-        except: pass
+        except Exception as reset_err:
+            print(f"[Cognitive] Failed to reset interview data for twin {twin_id}: {reset_err}")
         return InterviewResponse(
             response="Done. Starting fresh.\n\nWhat's this twin for?",
             conversation_id=conversation_id, session_id=session_id,

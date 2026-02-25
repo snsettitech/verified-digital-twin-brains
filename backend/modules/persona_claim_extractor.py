@@ -259,7 +259,7 @@ class ClaimExtractor:
                             year = int(time_scope)
                             time_start = datetime(year, 1, 1)
                             time_end = datetime(year, 12, 31)
-                    except:
+                    except (TypeError, ValueError, IndexError):
                         pass
                 
                 # Create claim

@@ -612,7 +612,7 @@ async def validate_share_token_endpoint(twin_id: str, token: str):
     try:
         twin_response = supabase.table("twins").select("name").eq("id", twin_id).single().execute()
         twin_name = twin_response.data.get("name", "AI Assistant") if twin_response.data else "AI Assistant"
-    except:
+    except Exception:
         twin_name = "AI Assistant"
     
     return {
