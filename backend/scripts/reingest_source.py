@@ -8,7 +8,6 @@ This will:
 __test__ = False
 import asyncio
 import sys
-import os
 sys.path.insert(0, '.')
 from dotenv import load_dotenv
 load_dotenv()

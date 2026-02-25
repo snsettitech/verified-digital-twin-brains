@@ -4,7 +4,6 @@ Checks: sources, graph nodes, Pinecone vectors.
 """
 __test__ = False
 
-import asyncio
 import sys
 import os
 

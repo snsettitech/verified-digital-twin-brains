@@ -6,7 +6,6 @@ Provides LLM-based evaluation of chat responses for:
 - Citation alignment: Are citations accurate?
 """
 
-import os
 import asyncio
 import json
 from typing import Dict, Any, Optional, List
@@ -74,8 +73,6 @@ Only respond with the JSON, no other text."""
         
         response = await loop.run_in_executor(None, _call)
         result = response.choices[0].message.content
-        
-        import json
         return json.loads(result)
         
     except Exception as e:
@@ -157,8 +154,6 @@ Only respond with the JSON, no other text."""
         
         response = await loop.run_in_executor(None, _call)
         result = response.choices[0].message.content
-        
-        import json
         return json.loads(result)
         
     except Exception as e:

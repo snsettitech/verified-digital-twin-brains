@@ -1,7 +1,7 @@
 
-import os
 import sys
 import subprocess
+import importlib.util
 
 def setup_youtube_auth():
     """
@@ -22,9 +22,7 @@ def setup_youtube_auth():
     print("================================================================")
     
     # Check if yt-dlp is installed
-    try:
-        import yt_dlp
-    except ImportError:
+    if importlib.util.find_spec("yt_dlp") is None:
         print("Error: yt-dlp is not installed. Run 'pip install yt-dlp'.")
         return
 

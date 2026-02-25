@@ -15,11 +15,9 @@ Usage:
     HF_TEST_ENABLED=1 CEREBRAS_API_KEY=your_key python benchmark_hf_cerebras.py
 """
 import os
-import sys
 import time
-import asyncio
 import statistics
-from typing import List, Dict, Any
+from typing import Dict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -113,7 +111,7 @@ class PerformanceBenchmark:
             text = test_texts[i % len(test_texts)]
             
             start = time.perf_counter()
-            embedding = client.embed(text)
+            client.embed(text)
             elapsed = (time.perf_counter() - start) * 1000
             
             latencies.append(elapsed)

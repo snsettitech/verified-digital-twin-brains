@@ -10,7 +10,7 @@ import os
 import sys
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 import logging
 
 # Add backend directory to path
@@ -141,12 +141,10 @@ async def evaluate_question(twin_id: str, question: Dict[str, Any]) -> Dict[str,
     q_text = question["question"]
     category = question.get("category", "unknown")
     context_needed = question.get("context_needed", [])
-    ground_truth = question.get("ground_truth", "")
     
     # Get graph snapshot for context
     snapshot = await get_graph_snapshot(twin_id, query=q_text)
     
-    context_text = snapshot.get("context_text", "")
     nodes_used = snapshot.get("nodes", [])
     
     # Check if context is relevant
