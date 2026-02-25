@@ -21,6 +21,19 @@ interface Product {
   created_at: string;
 }
 
+type PromotionFrequency = 'every_mention' | 'once_per_user' | 'once_per_conversation';
+
+interface ProductFormState {
+  product_name: string;
+  product_link: string;
+  image_url: string;
+  description: string;
+  keywords: string;
+  promotion_frequency: PromotionFrequency;
+  priority: number;
+  active: boolean;
+}
+
 const BASE_URL = resolveApiBaseUrl();
 
 export default function ProductsPage() {
@@ -30,13 +43,13 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ProductFormState>({
     product_name: '',
     product_link: '',
     image_url: '',
     description: '',
     keywords: '',
-    promotion_frequency: 'once_per_conversation' as const,
+    promotion_frequency: 'once_per_conversation',
     priority: 0,
     active: true,
   });
@@ -131,7 +144,7 @@ export default function ProductsPage() {
       image_url: p.image_url || '',
       description: p.description || '',
       keywords: (p.keywords || []).join(', '),
-      promotion_frequency: p.promotion_frequency as 'every_mention' | 'once_per_user' | 'once_per_conversation',
+      promotion_frequency: p.promotion_frequency as PromotionFrequency,
       priority: p.priority,
       active: p.active,
     });
