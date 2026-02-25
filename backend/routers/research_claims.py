@@ -10,7 +10,7 @@ Feature-gated by phase-specific environment variables.
 """
 
 import logging
-from typing import List, Optional, Dict
+from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
