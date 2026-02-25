@@ -83,8 +83,8 @@ DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() 
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 # Deep Research routes are always enabled.
 DEEP_RESEARCH_ENABLED = True
-# Name-only deep research flow (safe rollout)
-NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "false").lower() == "true"
+# Name-only deep research flow (enabled by default; can be disabled explicitly)
+NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true"
 
 def print_feature_flag_summary():
     """Print enabled/disabled feature summary for observability."""
@@ -123,6 +123,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         # Non-critical error - log but continue
         print(f"[Startup] Warning: Reranker warmup failed: {e}")
+
+    # Apply research orchestrator transition fix (deep-research aware terminal handling)
+    try:
+        from modules.research_orchestrator_state_fix import patch_research_orchestrator
+        patch_research_orchestrator()
+        print("[Startup] Research orchestrator state-machine patch applied")
+    except Exception as e:
+        print(f"[Startup] Warning: Could not apply research orchestrator patch: {e}")
 
     sys.stdout.flush()
     yield
