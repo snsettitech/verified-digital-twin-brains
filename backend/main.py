@@ -40,7 +40,6 @@ from routers import (
     debug_retrieval, # New debug router
     verify,
     owner_memory,
-    products,
     retrieval_delphi,
     
     # P2: Langfuse observability enhancements
@@ -193,7 +192,6 @@ app.include_router(api_keys.router)
 app.include_router(debug_retrieval.router)
 app.include_router(verify.router)
 app.include_router(owner_memory.router)
-app.include_router(products.router)
 
 if DELPHI_RETRIEVAL_ENABLED:
     app.include_router(retrieval_delphi.router)
