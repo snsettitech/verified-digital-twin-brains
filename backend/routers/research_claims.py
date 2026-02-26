@@ -10,6 +10,8 @@ Deep Research claim phases are always enabled.
 """
 
 import logging
+import asyncio
+import os
 from typing import Any, List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -39,6 +41,7 @@ from modules.research_claim_finalization_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["research-claims"])
+PC_TRIGGER_ON_RUNTIME_PUBLISH = os.getenv("PC_TRIGGER_ON_RUNTIME_PUBLISH", "true").lower() == "true"
 
 
 # =============================================================================
@@ -58,6 +61,36 @@ def _check_phase_9_enabled():
 def _check_phase_10_enabled():
     """No-op: Phase 10 is always enabled."""
     return None
+
+
+async def _trigger_person_completeness_pipeline(
+    twin_id: str,
+    research_run_id: str,
+) -> None:
+    """Best-effort trigger for person completeness after runtime publication."""
+    try:
+        from modules.person_completeness_pipeline import run_person_completeness_pipeline
+
+        result = await run_person_completeness_pipeline(
+            twin_id=twin_id,
+            research_run_id=research_run_id,
+            force_rebuild=True,
+        )
+        logger.info(
+            "Person completeness trigger after runtime publish: twin=%s run=%s success=%s status_completed=%s status_failed=%s",
+            twin_id,
+            result.run_id,
+            result.success,
+            len(result.stages_completed),
+            len(result.stages_failed),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Person completeness trigger failed after runtime publish for twin=%s research_run=%s: %s",
+            twin_id,
+            research_run_id,
+            exc,
+        )
 
 
 # =============================================================================
@@ -2422,6 +2455,14 @@ async def publish_runtime_claims_endpoint(
                     "code": "PUBLICATION_FAILED",
                     "message": result.errors[0] if result.errors else "Unknown error"
                 }
+            )
+
+        if PC_TRIGGER_ON_RUNTIME_PUBLISH:
+            asyncio.create_task(
+                _trigger_person_completeness_pipeline(
+                    twin_id=twin_id,
+                    research_run_id=research_run_id,
+                )
             )
         
         return PublishRuntimeClaimsResponse(

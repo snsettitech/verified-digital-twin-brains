@@ -288,7 +288,10 @@ class ConversationalQueryRewriter:
                 1 for pattern in PRONOUN_PATTERNS.values() if re.search(pattern, query_lower)
             )
             has_plural_pronoun = bool(re.search(r"\b(they|them|their|these|those)\b", query_lower))
-            if rule_based != current_query and (pronoun_hits >= 2 or has_plural_pronoun):
+            has_follow_up_phrase = bool(re.match(r"^\s*(what|how)\s+about\b", query_lower))
+            if rule_based != current_query and (
+                pronoun_hits >= 2 or has_plural_pronoun or has_follow_up_phrase
+            ):
                 llm_result.standalone_query = rule_based
                 llm_result.rewrite_applied = True
                 llm_result.reasoning += " (low confidence; kept rule-based pronoun resolution)"
@@ -298,9 +301,8 @@ class ConversationalQueryRewriter:
                 llm_result.rewrite_applied = False
                 llm_result.reasoning += " (confidence too low, using original)"
         
-        # Cache the result
-        if llm_result.rewrite_applied:
-            _query_rewrite_cache.set(cache_query, conversation_history, llm_result)
+        # Cache all results (including non-rewrites) for deterministic behavior.
+        _query_rewrite_cache.set(cache_query, conversation_history, llm_result)
         
         # Log metrics
         self._log_metrics(llm_result, cached=False)
@@ -391,14 +393,46 @@ class ConversationalQueryRewriter:
         """
         if not history:
             return query
-        
-        # Extract nouns/topics from recent assistant responses
-        last_entities = self._extract_entities_from_history(history[-3:])
+
+        # Extract nouns/topics from recent assistant responses only.
+        # If there is no assistant context yet, avoid speculative rewriting.
+        assistant_history = [
+            msg for msg in history[-self.max_history_turns:]
+            if str(msg.get("role", "")).lower() == "assistant" and msg.get("content")
+        ]
+        if not assistant_history:
+            return query
+
+        last_entities = self._extract_entities_from_history(assistant_history[-3:])
         
         if not last_entities:
             return query
-        
-        primary_entity = last_entities[0] if last_entities else None
+
+        business_priority_terms = (
+            "revenue", "profit", "growth", "sales", "pricing",
+            "cost", "budget", "forecast", "customers", "users",
+            "market", "roadmap", "product", "feature",
+        )
+
+        def _is_useful_entity(entity: Optional[str]) -> bool:
+            if not entity:
+                return False
+            normalized = entity.strip().lower()
+            if not normalized:
+                return False
+            if normalized in {"something", "anything", "everything", "nothing", "thing", "stuff"}:
+                return False
+            return True
+
+        primary_entity = None
+        for candidate in last_entities:
+            candidate_lower = candidate.lower()
+            if any(term in candidate_lower for term in business_priority_terms):
+                primary_entity = candidate
+                break
+        if primary_entity is None:
+            primary_entity = last_entities[0] if last_entities else None
+
         query_lower = query.lower()
         
         # Replace pronouns
@@ -435,6 +469,13 @@ class ConversationalQueryRewriter:
                 resolved = re.sub(r"\bthem\b", plural_entity, resolved, flags=re.IGNORECASE)
             if re.search(r"\btheir\b", query_lower):
                 resolved = re.sub(r"\btheir\b", f"{plural_entity}'s", resolved, flags=re.IGNORECASE)
+
+            # Follow-up shorthand expansion, e.g. "What about Q4?" -> "What was the revenue for Q4?"
+            follow_up_match = re.match(r"^\s*(what|how)\s+about\s+(.+?)\s*\??\s*$", query, flags=re.IGNORECASE)
+            if follow_up_match and _is_useful_entity(primary_entity):
+                follow_up_target = follow_up_match.group(2).strip()
+                if follow_up_target and primary_entity.lower() not in follow_up_target.lower():
+                    resolved = f"What was the {primary_entity} for {follow_up_target}?"
         
         return resolved
     

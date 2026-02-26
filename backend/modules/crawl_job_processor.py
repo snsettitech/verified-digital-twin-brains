@@ -22,6 +22,7 @@ Usage:
 
 import uuid
 import logging
+import sys
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -47,6 +48,15 @@ from modules.url_canonicalizer import canonicalize_url
 from modules.content_hasher import compute_secure_hash
 
 logger = logging.getLogger(__name__)
+
+# Keep module identity stable across both import paths:
+# "modules.crawl_job_processor" and "backend.modules.crawl_job_processor".
+if __name__.startswith("modules."):
+    sys.modules.setdefault(f"backend.{__name__}", sys.modules[__name__])
+elif __name__.startswith("backend.modules."):
+    sys.modules.setdefault(__name__.replace("backend.", "", 1), sys.modules[__name__])
+
+_AUTO_FIRECRAWL_CLIENT = object()
 
 
 # ============================================================================
@@ -322,7 +332,7 @@ class CrawlJobProcessor:
     
     def __init__(
         self,
-        firecrawl_client: Optional[FirecrawlClient] = None,
+        firecrawl_client: Optional[FirecrawlClient] | object = _AUTO_FIRECRAWL_CLIENT,
         crawl_repository: Optional[CrawlRepository] = None,
         crawl_manager: Optional[CrawlManager] = None,
         identity_scorer: Optional[IdentityConfidenceScorer] = None,
@@ -338,7 +348,13 @@ class CrawlJobProcessor:
             identity_scorer: Scorer for identity confidence
             artifact_store: Store for content artifacts
         """
-        self.firecrawl = firecrawl_client or get_firecrawl_client()
+        # Sentinel semantics:
+        # - omitted arg => auto-load configured Firecrawl client
+        # - explicit None => disable Firecrawl (for tests/fallback execution)
+        if firecrawl_client is _AUTO_FIRECRAWL_CLIENT:
+            self.firecrawl = get_firecrawl_client()
+        else:
+            self.firecrawl = firecrawl_client
         self.repository = crawl_repository or CrawlRepository()
         self.manager = crawl_manager or CrawlManager()
         self.scorer = identity_scorer or IdentityConfidenceScorer()
@@ -782,7 +798,36 @@ class CrawlJobProcessor:
                 if firecrawl_result.attempts:
                     insert_data["fetch_attempts"] = firecrawl_result.attempts
             
-            supabase.table("crawl_pages").insert(insert_data).execute()
+            try:
+                supabase.table("crawl_pages").insert(insert_data).execute()
+            except Exception as insert_error:
+                # Backward compatibility for environments where newer crawl_pages
+                # columns are not yet present.
+                message = str(insert_error).lower()
+                if "could not find" in message and "crawl_pages" in message:
+                    optional_columns = (
+                        "classification",
+                        "content_quality",
+                        "identity_confidence_score",
+                        "confirmation_status",
+                        "submitted_root_url",
+                        "failure_type",
+                        "title",
+                        "http_status",
+                        "fetch_attempts",
+                    )
+                    fallback = dict(insert_data)
+                    removed = False
+                    for column in optional_columns:
+                        if column in message:
+                            fallback.pop(column, None)
+                            removed = True
+                    if removed:
+                        supabase.table("crawl_pages").insert(fallback).execute()
+                    else:
+                        raise
+                else:
+                    raise
             
         except Exception as e:
             logger.error(f"Error persisting page record: {e}")

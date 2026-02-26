@@ -4,7 +4,16 @@
 -- Drop the old constraint
 ALTER TABLE jobs DROP CONSTRAINT IF EXISTS valid_job_type;
 
--- Add new constraint with content_extraction
+-- Add constraint as a superset so reruns are safe even after later job-type migrations.
 ALTER TABLE jobs ADD CONSTRAINT valid_job_type CHECK (
-    job_type IN ('ingestion', 'reindex', 'health_check', 'other', 'graph_extraction', 'content_extraction')
+    job_type IN (
+        'ingestion',
+        'reindex',
+        'health_check',
+        'other',
+        'realtime_ingestion',
+        'graph_extraction',
+        'content_extraction',
+        'feedback_learning'
+    )
 );

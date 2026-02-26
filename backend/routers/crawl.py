@@ -7,6 +7,8 @@ Deep Research routes are always enabled.
 """
 
 import logging
+import asyncio
+import uuid
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -25,6 +27,131 @@ router = APIRouter(tags=["crawl"])
 def _check_feature_enabled():
     """No-op compatibility check."""
     return None
+
+
+# Tracks in-flight research crawl tasks keyed by research_run_id.
+_ACTIVE_RESEARCH_CRAWL_TASKS: Dict[str, asyncio.Task[Any]] = {}
+
+
+async def _run_research_crawl_pipeline(
+    research_run_id: str,
+    twin_id: str,
+    crawl_id: str,
+    claimed_identity: Optional[Dict[str, Any]],
+) -> None:
+    """
+    Execute crawl processing for a research run and advance orchestrator status.
+
+    Flow:
+    1) Crawl pages with CrawlJobProcessor.
+    2) On success, generate confirmations + transition via on_crawl_completed.
+    3) On failure, transition run to failed.
+    """
+    from modules.crawl_job_processor import process_crawl_job
+    from modules.research_orchestrator import ResearchOrchestrator, ResearchRunStatus
+
+    orchestrator = ResearchOrchestrator()
+    crawl_job_id = str(uuid.uuid4())
+
+    try:
+        crawl_result = await process_crawl_job(
+            job_id=crawl_job_id,
+            crawl_id=crawl_id,
+            twin_id=twin_id,
+            claimed_identity=claimed_identity or {},
+        )
+
+        crawl_status = getattr(getattr(crawl_result, "status", None), "value", None) or str(
+            getattr(crawl_result, "status", "")
+        )
+
+        if crawl_status == "failed":
+            error_message = getattr(crawl_result, "error_message", None) or "Crawl failed"
+            failure_checkpoint = orchestrator._build_checkpoint(
+                phase="crawl_failed",
+                crawl_id=crawl_id,
+                summary=None,
+            )
+            failure_checkpoint.warnings.append(error_message)
+            await orchestrator._transition(
+                research_run_id=research_run_id,
+                twin_id=twin_id,
+                to_status=ResearchRunStatus.FAILED,
+                reason=f"Crawl failed: {error_message}",
+                checkpoint=failure_checkpoint,
+                crawl_id=crawl_id,
+            )
+            logger.error(
+                "Research crawl failed: research_run_id=%s crawl_id=%s error=%s",
+                research_run_id,
+                crawl_id,
+                error_message,
+            )
+            return
+
+        transition = await orchestrator.on_crawl_completed(
+            research_run_id=research_run_id,
+            twin_id=twin_id,
+            crawl_id=crawl_id,
+        )
+        if not transition.success:
+            transition_error = transition.error or "on_crawl_completed returned unsuccessful result"
+            failure_checkpoint = orchestrator._build_checkpoint(
+                phase="crawl_transition_failed",
+                crawl_id=crawl_id,
+                summary=None,
+            )
+            failure_checkpoint.warnings.append(transition_error)
+            await orchestrator._transition(
+                research_run_id=research_run_id,
+                twin_id=twin_id,
+                to_status=ResearchRunStatus.FAILED,
+                reason=f"Crawl completion transition failed: {transition_error}",
+                checkpoint=failure_checkpoint,
+                crawl_id=crawl_id,
+            )
+            logger.error(
+                "Research crawl completion transition failed: research_run_id=%s crawl_id=%s error=%s",
+                research_run_id,
+                crawl_id,
+                transition_error,
+            )
+            return
+
+        logger.info(
+            "Research crawl completed: research_run_id=%s crawl_id=%s transitioned=%s",
+            research_run_id,
+            crawl_id,
+            transition.new_status,
+        )
+
+    except Exception as e:
+        logger.exception(
+            "Unhandled error in research crawl pipeline: research_run_id=%s crawl_id=%s err=%s",
+            research_run_id,
+            crawl_id,
+            e,
+        )
+        try:
+            failure_checkpoint = orchestrator._build_checkpoint(
+                phase="crawl_pipeline_exception",
+                crawl_id=crawl_id,
+                summary=None,
+            )
+            failure_checkpoint.warnings.append(str(e))
+            await orchestrator._transition(
+                research_run_id=research_run_id,
+                twin_id=twin_id,
+                to_status=ResearchRunStatus.FAILED,
+                reason=f"Crawl pipeline exception: {e}",
+                checkpoint=failure_checkpoint,
+                crawl_id=crawl_id,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to transition research run to failed after pipeline exception: research_run_id=%s",
+                research_run_id,
+            )
 
 
 # ============================================================================
@@ -1018,6 +1145,7 @@ async def create_research_run_endpoint(
     
     try:
         from modules.research_orchestrator import ResearchOrchestrator
+        from modules.deep_research_config import get_config as get_deep_research_config
         
         orchestrator = ResearchOrchestrator()
         result = await orchestrator.create_research_run(
@@ -1039,10 +1167,64 @@ async def create_research_run_endpoint(
                 }
             )
         
+        # Create crawl run and transition research status to crawling immediately.
+        # This ensures polling sees active progress instead of a queued dead-end.
+        config = get_deep_research_config()
+        crawl_id = _create_crawl_run(
+            twin_id=twin_id,
+            seed_urls=seed_urls,
+            max_pages=config.firecrawl.website_crawl_limit,
+            max_depth=config.firecrawl.website_max_depth,
+            include_patterns=None,
+            exclude_patterns=None,
+        )
+
+        crawl_start = await orchestrator.mark_crawl_started(
+            research_run_id=result.research_run_id,
+            twin_id=twin_id,
+            crawl_id=crawl_id,
+        )
+        if not crawl_start.success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={
+                    "error": "Failed to start crawl",
+                    "code": "CRAWL_START_FAILED",
+                    "message": crawl_start.error or "Could not transition research run to crawling",
+                },
+            )
+
+        # Process crawl asynchronously and continue orchestrator transitions
+        # (crawling -> awaiting_confirmation/ready_for_ingestion).
+        crawl_task = asyncio.create_task(
+            _run_research_crawl_pipeline(
+                research_run_id=result.research_run_id,
+                twin_id=twin_id,
+                crawl_id=crawl_id,
+                claimed_identity=request.claimed_identity,
+            )
+        )
+        _ACTIVE_RESEARCH_CRAWL_TASKS[result.research_run_id] = crawl_task
+
+        def _cleanup_crawl_task(task: asyncio.Task[Any]) -> None:
+            _ACTIVE_RESEARCH_CRAWL_TASKS.pop(result.research_run_id, None)
+            if task.cancelled():
+                logger.warning("Research crawl task cancelled: research_run_id=%s", result.research_run_id)
+                return
+            exc = task.exception()
+            if exc:
+                logger.exception(
+                    "Research crawl task crashed: research_run_id=%s err=%s",
+                    result.research_run_id,
+                    exc,
+                )
+
+        crawl_task.add_done_callback(_cleanup_crawl_task)
+
         return CreateResearchRunResponse(
             research_run_id=result.research_run_id,
             twin_id=result.twin_id,
-            status=result.status,
+            status=crawl_start.new_status,
             created_at=result.created_at,
         )
         

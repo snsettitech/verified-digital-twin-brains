@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai").lower()
 EMBEDDING_FALLBACK_ENABLED = os.getenv("EMBEDDING_FALLBACK_ENABLED", "true").lower() == "true"
+OPENAI_BATCH_EMBEDDINGS_ENABLED = os.getenv("OPENAI_BATCH_EMBEDDINGS_ENABLED", "false").lower() == "true"
 
 # Validate provider
 if EMBEDDING_PROVIDER not in ["openai", "huggingface"]:
@@ -171,12 +172,18 @@ def with_retry_and_timeout(max_attempts: int = None, timeout_seconds: int = None
 def _get_embedding_openai(text: str) -> List[float]:
     """Generate embedding using OpenAI API."""
     client = get_openai_client()
+    target_dim = _resolve_target_dimension()
+    requested_dim = (
+        int(target_dim)
+        if target_dim and 1 <= int(target_dim) <= 3072
+        else 3072
+    )
     
     def _fetch():
         response = client.embeddings.create(
             input=text,
             model="text-embedding-3-large",
-            dimensions=3072
+            dimensions=requested_dim
         )
         return response.data[0].embedding
     
@@ -299,13 +306,19 @@ def get_embedding(text: str) -> List[float]:
 async def _get_embeddings_async_openai(texts: List[str]) -> List[List[float]]:
     """Generate embeddings using OpenAI API (async wrapper)."""
     client = get_openai_client()
+    target_dim = _resolve_target_dimension()
+    requested_dim = (
+        int(target_dim)
+        if target_dim and 1 <= int(target_dim) <= 3072
+        else 3072
+    )
     loop = asyncio.get_event_loop()
     
     def _fetch():
         response = client.embeddings.create(
             input=texts,
             model="text-embedding-3-large",
-            dimensions=3072,
+            dimensions=requested_dim,
             timeout=EMBEDDING_TIMEOUT
         )
         return [d.embedding for d in response.data]
@@ -343,6 +356,9 @@ async def get_embeddings_async(texts: List[str]) -> List[List[float]]:
         TimeoutError: If request exceeds timeout
         Exception: On API errors (if fallback disabled or both fail)
     """
+    if not texts:
+        return []
+
     # Try primary provider
     if EMBEDDING_PROVIDER == "huggingface":
         try:
@@ -357,7 +373,12 @@ async def get_embeddings_async(texts: List[str]) -> List[List[float]]:
     
     # Default: OpenAI
     try:
-        return await _get_embeddings_async_openai(texts)
+        # Default deterministic path: reuse single-embedding logic (and its
+        # retries/fallbacks) concurrently for consistency across environments.
+        # Batch OpenAI call can be re-enabled via env for throughput tuning.
+        if OPENAI_BATCH_EMBEDDINGS_ENABLED:
+            return await _get_embeddings_async_openai(texts)
+        return await asyncio.gather(*[asyncio.to_thread(get_embedding, t) for t in texts])
     except Exception as e:
         if "timeout" in str(e).lower():
             raise TimeoutError(f"Embedding batch request timed out after {EMBEDDING_TIMEOUT}s")

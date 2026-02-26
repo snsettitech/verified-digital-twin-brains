@@ -3,6 +3,14 @@
 -- forcing authorization to happen in the Application Layer (FastAPI Guard) rather than DB Layer (RLS)
 -- when using Mock Tokens.
 
+-- Drop old signatures first so return-type changes don't fail on reruns.
+DROP FUNCTION IF EXISTS check_twin_tenant_access(UUID, UUID);
+DROP FUNCTION IF EXISTS get_twin_system(UUID);
+DROP FUNCTION IF EXISTS get_nodes_system(UUID, INT);
+DROP FUNCTION IF EXISTS get_edges_system(UUID, INT);
+DROP FUNCTION IF EXISTS create_node_system(UUID, TEXT, TEXT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS create_edge_system(UUID, UUID, UUID, TEXT, TEXT, JSONB);
+
 -- 1. Check Twin Access (for tenant_guard.py)
 CREATE OR REPLACE FUNCTION check_twin_tenant_access(t_id UUID, req_tenant_id UUID)
 RETURNS BOOLEAN

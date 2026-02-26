@@ -1,4 +1,4 @@
-const { test } = require('@playwright/test');
+import { test } from '@playwright/test';
 
 test('intended production flow: login -> start run -> poll', async ({ page }) => {
   test.setTimeout(600000);

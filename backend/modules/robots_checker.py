@@ -20,7 +20,7 @@ from functools import lru_cache
 ROBOTS_TXT_CACHE_TTL_SECONDS = int(os.getenv("ROBOTS_TXT_CACHE_TTL", "3600"))  # 1 hour
 WEB_FETCH_RATE_LIMIT_SECONDS = float(os.getenv("WEB_FETCH_RATE_LIMIT", "2.0"))
 LINK_FIRST_ALLOWLIST = os.getenv("LINK_FIRST_ALLOWLIST", "")
-ALLOW_ALL_URLS = os.getenv("LINK_FIRST_ALLOW_ALL_URLS", "true").strip().lower() in {
+ALLOW_ALL_URLS = os.getenv("LINK_FIRST_ALLOW_ALL_URLS", "false").strip().lower() in {
     "1", "true", "yes", "on"
 }
 

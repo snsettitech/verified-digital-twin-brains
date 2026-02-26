@@ -157,10 +157,18 @@ class FeatureVerifier:
         try:
             from modules.observability import supabase
             
-            # Try calling an RPC function
+            # Probe with a real twin when available to validate end-to-end execution.
+            twin_rows = supabase.table("twins").select("id").limit(1).execute().data or []
+            if not twin_rows:
+                return FeatureStatus(
+                    name="RPC Functions",
+                    status="PARTIAL",
+                    issue="RPC not validated: no twins available in this environment",
+                )
+
             result = supabase.rpc("get_or_create_interview_session", {
-                "p_twin_id": "test-123",
-                "p_user_id": "test-456"
+                "t_id": twin_rows[0]["id"],
+                "conv_id": None,
             }).execute()
             
             return FeatureStatus(
@@ -169,13 +177,28 @@ class FeatureVerifier:
                 last_tested=self.timestamp
             )
         except Exception as e:
-            if "function" in str(e).lower() or "does not exist" in str(e).lower():
+            error_text = str(e).lower()
+            if (
+                "could not find the function" in error_text
+                or "does not exist" in error_text
+            ):
                 return FeatureStatus(
                     name="RPC Functions",
                     status="NOT_WORKING",
                     issue="RPC functions missing",
                     solution="Apply migration: migration_interview_sessions.sql",
                     error_rate=100.0
+                )
+            if (
+                "foreign key" in error_text
+                or "violates row-level security" in error_text
+                or "permission denied" in error_text
+                or "invalid input syntax for type uuid" in error_text
+            ):
+                return FeatureStatus(
+                    name="RPC Functions",
+                    status="PARTIAL",
+                    issue="RPC exists but probe data is not executable in current env",
                 )
             else:
                 # May exist but fail with test data
@@ -189,6 +212,7 @@ class FeatureVerifier:
         """Test: Pinecone connection works"""
         try:
             from modules.clients import get_pinecone_client
+            from modules.embeddings import _resolve_target_dimension
             
             client = get_pinecone_client()
             index_name = os.getenv("PINECONE_INDEX_NAME", "unknown")
@@ -197,8 +221,9 @@ class FeatureVerifier:
             start = time.time()
             stats = index.describe_index_stats()
             latency = (time.time() - start) * 1000
+            target_dim = _resolve_target_dimension() or 3072
             
-            if stats.dimension == 3072:
+            if stats.dimension == target_dim:
                 return FeatureStatus(
                     name="Pinecone Connection",
                     status="WORKING",
@@ -210,8 +235,8 @@ class FeatureVerifier:
                 return FeatureStatus(
                     name="Pinecone Connection",
                     status="NOT_WORKING",
-                    issue=f"Dimension {stats.dimension}, need 3072",
-                    solution="Recreate index with 3072 dimensions or update code to use 1536-dim model"
+                    issue=f"Dimension {stats.dimension}, expected {target_dim}",
+                    solution="Align EMBEDDING_TARGET_DIMENSION / index dimension with active embedding provider"
                 )
         except Exception as e:
             return FeatureStatus(
@@ -362,11 +387,11 @@ class FeatureVerifier:
                 
                 # Print status with color
                 if result.status == "WORKING":
-                    print(f"{GREEN}✅ {result.status}{RESET}")
+                    print(f"{GREEN}[OK] {result.status}{RESET}")
                 elif result.status == "PARTIAL":
-                    print(f"{YELLOW}🟡 {result.status}{RESET}")
+                    print(f"{YELLOW}[WARN] {result.status}{RESET}")
                 else:
-                    print(f"{RED}❌ {result.status}{RESET}")
+                    print(f"{RED}[FAIL] {result.status}{RESET}")
                 
                 # Print details if available
                 if result.latency_ms:
@@ -377,7 +402,7 @@ class FeatureVerifier:
                     print(f"   Solution: {result.solution}")
             
             except Exception as e:
-                print(f"{RED}❌ ERROR: {str(e)[:50]}{RESET}")
+                print(f"{RED}[ERR] ERROR: {str(e)[:50]}{RESET}")
                 self.results.append(FeatureStatus(
                     name=name,
                     status="ERROR",
@@ -397,10 +422,10 @@ class FeatureVerifier:
         not_working = sum(1 for r in self.results if r.status == "NOT_WORKING")
         errors = sum(1 for r in self.results if r.status == "ERROR")
         
-        print(f"✅ Working: {working}")
-        print(f"🟡 Partial: {partial}")
-        print(f"❌ Not Working: {not_working}")
-        print(f"⚠️  Errors: {errors}")
+        print(f"[OK] Working: {working}")
+        print(f"[WARN] Partial: {partial}")
+        print(f"[FAIL] Not Working: {not_working}")
+        print(f"[ERR] Errors: {errors}")
         
         print(f"\n{BLUE}BLOCKERS DETECTED:{RESET}")
         blockers = [r for r in self.results if r.status == "NOT_WORKING"]
@@ -438,7 +463,7 @@ class FeatureVerifier:
         with open(path, "w") as f:
             json.dump(report, f, indent=2)
         
-        print(f"\n✅ Report saved to {path}")
+        print(f"\n[OK] Report saved to {path}")
 
 def main():
     verifier = FeatureVerifier()

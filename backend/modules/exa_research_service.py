@@ -242,7 +242,9 @@ class ExaResearchService:
         Args:
             api_key: Exa API key. Defaults to EXA_API_KEY env var.
         """
-        self.api_key = api_key or os.getenv("EXA_API_KEY", "")
+        # Respect explicit empty-string API keys in tests/callers. Only fall back
+        # to env when the argument is omitted (None).
+        self.api_key = os.getenv("EXA_API_KEY", "") if api_key is None else api_key
         self._client = None
         
         if not self.api_key:

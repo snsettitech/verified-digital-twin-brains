@@ -9,6 +9,7 @@ ALTER TABLE memory_events
     ADD CONSTRAINT memory_events_event_type_check
     CHECK (event_type IN (
         'auto_extract',
+        'content_extract',
         'manual_edit',
         'confirm',
         'delete',
@@ -72,6 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_clarification_threads_twin_created ON clarificati
 ALTER TABLE owner_beliefs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clarification_threads ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Tenant Isolation: View Owner Beliefs" ON owner_beliefs;
 CREATE POLICY "Tenant Isolation: View Owner Beliefs" ON owner_beliefs
 FOR SELECT USING (
   EXISTS (
@@ -81,6 +83,7 @@ FOR SELECT USING (
   )
 );
 
+DROP POLICY IF EXISTS "Tenant Isolation: Modify Owner Beliefs" ON owner_beliefs;
 CREATE POLICY "Tenant Isolation: Modify Owner Beliefs" ON owner_beliefs
 FOR ALL USING (
   EXISTS (
@@ -90,6 +93,7 @@ FOR ALL USING (
   )
 );
 
+DROP POLICY IF EXISTS "Tenant Isolation: View Clarifications" ON clarification_threads;
 CREATE POLICY "Tenant Isolation: View Clarifications" ON clarification_threads
 FOR SELECT USING (
   EXISTS (
@@ -99,6 +103,7 @@ FOR SELECT USING (
   )
 );
 
+DROP POLICY IF EXISTS "Tenant Isolation: Modify Clarifications" ON clarification_threads;
 CREATE POLICY "Tenant Isolation: Modify Clarifications" ON clarification_threads
 FOR ALL USING (
   EXISTS (

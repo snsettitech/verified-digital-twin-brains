@@ -71,6 +71,7 @@ ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS = max(0, int(os.getenv("ONLINE_EVAL_POLICY_
 ONLINE_EVAL_POLICY_STRICT_ONLY = os.getenv("ONLINE_EVAL_POLICY_STRICT_ONLY", "false").lower() == "true"
 ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FALLBACK_POINTS", "3")))
 ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE = float(os.getenv("ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE", "0.2"))
+RUNTIME_CONFIDENCE_GATE_ENABLED = os.getenv("RUNTIME_CONFIDENCE_GATE_ENABLED", "false").lower() == "true"
 
 _GROUNDING_STOPWORDS = {
     "a",
@@ -107,6 +108,84 @@ _GROUNDING_STOPWORDS = {
 
 def _uncertainty_message(interaction_context: Optional[str]) -> str:
     return f"{UNCERTAINTY_RESPONSE}{owner_guidance_suffix(interaction_context)}"
+
+
+def _extract_runtime_gate_topic(planning_output: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(planning_output, dict):
+        return None
+    candidate_keys = ("topic", "primary_topic", "topic_slug", "focus_topic")
+    for key in candidate_keys:
+        raw = planning_output.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+async def _apply_runtime_confidence_gate_if_enabled(
+    *,
+    twin_id: str,
+    query: str,
+    response: str,
+    fallback_message: str,
+    planning_output: Optional[Dict[str, Any]],
+    dialogue_mode: Optional[str],
+    retrieved_context_snippets: Optional[List[Dict[str, Any]]] = None,
+) -> Tuple[str, Dict[str, Any]]:
+    metadata: Dict[str, Any] = {
+        "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+        "applied": False,
+        "decision": "skipped",
+    }
+
+    if not RUNTIME_CONFIDENCE_GATE_ENABLED:
+        metadata["skip_reason"] = "disabled"
+        return response, metadata
+    if not isinstance(response, str) or not response.strip():
+        metadata["skip_reason"] = "empty_response"
+        return response, metadata
+    if response.strip() == fallback_message.strip():
+        metadata["skip_reason"] = "already_fallback"
+        return response, metadata
+    if str(dialogue_mode or "").upper() == "SMALLTALK":
+        metadata["skip_reason"] = "smalltalk"
+        return response, metadata
+
+    try:
+        from modules.runtime_confidence_gate import RuntimeConfidenceGate, GateDecision
+
+        gate = RuntimeConfidenceGate(twin_id)
+        gate_result = await gate.check(
+            query=query,
+            query_topic=_extract_runtime_gate_topic(planning_output),
+            retrieved_chunks=retrieved_context_snippets or [],
+        )
+        decision_value = str(getattr(gate_result.decision, "value", gate_result.decision))
+        metadata.update(
+            {
+                "applied": True,
+                "decision": decision_value,
+                "reason": gate_result.reason,
+                "answerability_score": gate_result.answerability_score,
+                "confidence_threshold": gate_result.confidence_threshold,
+                "open_contradictions": gate_result.open_contradictions,
+            }
+        )
+        if gate_result.decision == GateDecision.BLOCK:
+            return (gate_result.fallback_message or fallback_message), metadata
+        if gate_result.decision == GateDecision.PARTIAL:
+            return gate.format_response_with_confidence(response, gate_result), metadata
+        return response, metadata
+    except Exception as exc:
+        logger.warning(f"Runtime confidence gate failed open for twin {twin_id}: {exc}")
+        metadata.update(
+            {
+                "applied": True,
+                "decision": "allow",
+                "reason": "gate_error_fail_open",
+                "error": str(exc),
+            }
+        )
+        return response, metadata
 
 
 def _grounding_tokens(text: str) -> Set[str]:
@@ -2052,6 +2131,20 @@ async def chat(
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
+            full_response, runtime_gate_meta = await _apply_runtime_confidence_gate_if_enabled(
+                twin_id=twin_id,
+                query=query,
+                response=full_response,
+                fallback_message=fallback_message,
+                planning_output=planning_output if isinstance(planning_output, dict) else {},
+                dialogue_mode=dialogue_mode,
+                retrieved_context_snippets=retrieved_context_snippets,
+            )
+            if runtime_gate_meta.get("decision") == "block":
+                confidence_score = min(confidence_score, 0.2)
+                citations = []
+            context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
+            context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
             
             debug_snapshot = _build_debug_snapshot(
                 query=query,
@@ -2095,6 +2188,7 @@ async def chat(
                 "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
+                "runtime_confidence_gate": runtime_gate_meta,
                 "deepagents": deepagents_meta,
                 "turn_counters": _extract_turn_counter_payload(debug_snapshot),
                 "router_policy": {
@@ -2637,6 +2731,20 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         context_trace["online_eval_action"] = online_eval_result.get("action")
         context_trace["online_eval_score"] = online_eval_result.get("overall_score")
         context_trace["online_eval_flags"] = online_eval_result.get("flags")
+        final_content, runtime_gate_meta = await _apply_runtime_confidence_gate_if_enabled(
+            twin_id=twin_id,
+            query=query,
+            response=final_content,
+            fallback_message=fallback_message,
+            planning_output=planning_output if isinstance(planning_output, dict) else {},
+            dialogue_mode=dialogue_mode,
+            retrieved_context_snippets=retrieved_context_snippets,
+        )
+        if runtime_gate_meta.get("decision") == "block":
+            confidence_score = min(confidence_score, 0.2)
+            citations = []
+        context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
+        context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
         citation_details = _resolve_citation_details(citations, twin_id)
         debug_snapshot = _build_debug_snapshot(
             query=query,
@@ -2673,6 +2781,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "debug_snapshot": debug_snapshot,
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
+            "runtime_confidence_gate": runtime_gate_meta,
             "deepagents": deepagents_meta,
             "turn_counters": _extract_turn_counter_payload(debug_snapshot),
             "session_id": session_id,
@@ -3116,6 +3225,20 @@ async def public_chat_endpoint(
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
+            final_response, runtime_gate_meta = await _apply_runtime_confidence_gate_if_enabled(
+                twin_id=twin_id,
+                query=request.message,
+                response=final_response,
+                fallback_message=fallback_message,
+                planning_output=planning_output if isinstance(planning_output, dict) else {},
+                dialogue_mode=dialogue_mode,
+                retrieved_context_snippets=retrieved_context_snippets,
+            )
+            if runtime_gate_meta.get("decision") == "block":
+                confidence_score = min(confidence_score, 0.2)
+                citations = []
+            context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
+            context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
 
             try:
                 from modules.evaluation_pipeline import evaluate_response_async
@@ -3213,6 +3336,7 @@ async def public_chat_endpoint(
                 "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
+                "runtime_confidence_gate": runtime_gate_meta,
                 "used_owner_memory": False,
                 "identity_gate_mode": gate.get("gate_mode"),
                 **context_trace,

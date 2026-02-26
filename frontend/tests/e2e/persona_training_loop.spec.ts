@@ -10,7 +10,7 @@ test.describe('Persona Training Loop (UI)', () => {
     const state = createTrainingHarnessState();
     await registerTrainingModuleRoutes(page, state);
 
-    await page.goto('/dashboard/simulator');
+    await page.goto('/dashboard/simulator/workflow');
 
     await expect(page.getByRole('heading', { name: 'Training Module' })).toBeVisible();
     await expect(page.getByText('Step 5. Validate')).toBeVisible();

@@ -9,6 +9,11 @@ ADD COLUMN IF NOT EXISTS last_repair_strategy TEXT,
 ADD COLUMN IF NOT EXISTS response_quality_scores JSONB DEFAULT '[]'::jsonb,
 ADD COLUMN IF NOT EXISTS skipped_slots TEXT[] DEFAULT '{}';
 
+-- Replace the legacy signature explicitly to avoid overload ambiguity on reruns.
+DROP FUNCTION IF EXISTS update_interview_session(
+    UUID, TEXT, BOOLEAN, TEXT, JSONB, TEXT, BOOLEAN, INTEGER, INTEGER
+);
+
 -- Update the update_interview_session function to support new fields
 CREATE OR REPLACE FUNCTION update_interview_session(
     session_id UUID,
@@ -83,4 +88,7 @@ END;
 $$;
 
 -- Grant execute to service role
-GRANT EXECUTE ON FUNCTION update_interview_session TO service_role;
+GRANT EXECUTE ON FUNCTION update_interview_session(
+    UUID, TEXT, BOOLEAN, TEXT, JSONB, TEXT, BOOLEAN, INTEGER, INTEGER,
+    INTEGER, TEXT, TEXT, JSONB, BOOLEAN, TEXT
+) TO service_role;

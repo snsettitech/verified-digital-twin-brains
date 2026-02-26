@@ -102,7 +102,7 @@ test.describe('Gate 6: Tenant Isolation', () => {
         });
 
         test('Simulator page loads and shows training module', async ({ page }) => {
-            await page.goto('/dashboard/simulator');
+            await page.goto('/dashboard/simulator/workflow');
 
             await expect(page.getByRole('heading', { name: 'Training Module' })).toBeVisible();
             await expect(page.getByText('Step 5. Validate')).toBeVisible();
@@ -122,11 +122,11 @@ test.describe('Gate 6: Tenant Isolation', () => {
             await page.goto('/dashboard/brain');
 
             // Check for graph elements
-            await expect(page.locator('h1')).toContainText('Brain Graph');
+            await expect(page.locator('h1')).toContainText('Brain Graph Explorer');
         });
 
         test('Training knowledge modal exposes file input', async ({ page }) => {
-            await page.goto('/dashboard/simulator');
+            await page.goto('/dashboard/simulator/workflow');
 
             await page.getByRole('button', { name: 'Skip to Knowledge' }).click();
             await page.getByRole('button', { name: 'Add Knowledge' }).first().click();

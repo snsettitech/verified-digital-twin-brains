@@ -257,7 +257,7 @@ SELECT
     rp.*,
     c.claim_text as original_claim_text,
     c.claim_type,
-    c.source_chunk_id,
+    to_jsonb(c)->>'source_chunk_id' as source_chunk_id,
     cc.canonical_status,
     cc.source_of_truth
 FROM research_claim_runtime_publication rp

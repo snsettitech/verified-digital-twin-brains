@@ -152,7 +152,7 @@ test.describe('Ingestion Diagnostics (UI)', () => {
       });
     });
 
-    await page.goto('/dashboard/simulator');
+    await page.goto('/dashboard/simulator/workflow');
 
     await page.getByRole('button', { name: 'Skip to Knowledge' }).click();
 

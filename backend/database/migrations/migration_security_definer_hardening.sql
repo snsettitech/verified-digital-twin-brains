@@ -2,6 +2,14 @@
 -- Purpose: Harden all SECURITY DEFINER functions to prevent object shadowing attacks
 -- This migration adds SET search_path = '' and fully qualifies all table references
 
+-- Drop function signatures that may have drifted in return type.
+DROP FUNCTION IF EXISTS check_twin_tenant_access(UUID, UUID);
+DROP FUNCTION IF EXISTS get_twin_system(UUID);
+DROP FUNCTION IF EXISTS get_nodes_system(UUID, INT);
+DROP FUNCTION IF EXISTS get_edges_system(UUID, INT);
+DROP FUNCTION IF EXISTS create_node_system(UUID, TEXT, TEXT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS create_edge_system(UUID, UUID, UUID, TEXT, TEXT, JSONB);
+
 -- ============================================================================
 -- Phase 3.5 Gate 3 Functions (migration_phase3_5_gate3_fix_rls.sql)
 -- ============================================================================

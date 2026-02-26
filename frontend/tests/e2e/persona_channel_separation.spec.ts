@@ -60,7 +60,7 @@ test.describe('Persona Channel Separation (UI)', () => {
     });
 
     // Owner training request carries explicit training context.
-    await page.goto('/dashboard/simulator');
+    await page.goto('/dashboard/simulator/workflow');
     await page.getByRole('button', { name: 'Start Training' }).click();
 
     const ownerInput = page.locator('textarea[aria-label="Chat message input"]');

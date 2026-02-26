@@ -74,6 +74,7 @@ export function useResearchPoller({
   const researchRunIdRef = useRef<string | null>(initialResearchRunId);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const pollRef = useRef<(() => Promise<void>) | null>(null);
   const errorCountRef = useRef(0);
   const startTimeRef = useRef<number>(0);
   const isVisibleRef = useRef(true);
@@ -122,7 +123,9 @@ export function useResearchPoller({
     // Don't poll if page is hidden
     if (!isVisibleRef.current) {
       log('Page hidden, scheduling next poll');
-      timeoutRef.current = setTimeout(poll, 1000);
+      timeoutRef.current = setTimeout(() => {
+        void pollRef.current?.();
+      }, 1000);
       return;
     }
 
@@ -171,7 +174,9 @@ export function useResearchPoller({
       }
       
       log('Scheduling next poll in', currentIntervalRef.current, 'ms');
-      timeoutRef.current = setTimeout(poll, currentIntervalRef.current);
+      timeoutRef.current = setTimeout(() => {
+        void pollRef.current?.();
+      }, currentIntervalRef.current);
       
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -191,9 +196,15 @@ export function useResearchPoller({
       );
       
       log('Retrying after error backoff:', backoffMs, 'ms');
-      timeoutRef.current = setTimeout(poll, backoffMs);
+      timeoutRef.current = setTimeout(() => {
+        void pollRef.current?.();
+      }, backoffMs);
     }
   }, [timeout, initialInterval, maxInterval, cleanup, log]);
+
+  useEffect(() => {
+    pollRef.current = poll;
+  }, [poll]);
 
   // Start polling
   const startPolling = useCallback((newTwinId: string, newResearchRunId: string) => {
@@ -205,7 +216,7 @@ export function useResearchPoller({
     currentIntervalRef.current = initialInterval;
     setError(null);
     setIsPolling(true);
-    poll();
+    void pollRef.current?.();
   }, [poll, initialInterval, log]);
 
   // Stop polling
@@ -235,7 +246,7 @@ export function useResearchPoller({
     errorCountRef.current = 0;
     setError(null);
     setIsPolling(true);
-    poll();
+    void pollRef.current?.();
   }, [poll, log]);
 
   // Cleanup on unmount

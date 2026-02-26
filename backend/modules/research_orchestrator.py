@@ -606,6 +606,7 @@ class ResearchOrchestrator:
         self,
         research_run_id: str,
         twin_id: str,
+        crawl_id: Optional[str] = None,
     ) -> TransitionResult:
         """
         Mark that crawl has started.
@@ -622,6 +623,7 @@ class ResearchOrchestrator:
             twin_id=twin_id,
             to_status=ResearchRunStatus.CRAWLING,
             reason="Crawl job started",
+            crawl_id=crawl_id,
         )
     
     async def on_crawl_completed(
@@ -1936,8 +1938,12 @@ class ResearchOrchestrator:
         
         from_status = ResearchRunStatus(run.get("status", "planning"))
         
-        # Validate transition
-        if not is_valid_transition(from_status, to_status):
+        # Validate transition (pass run context when supported by patched validator)
+        try:
+            transition_valid = is_valid_transition(from_status, to_status, run)
+        except TypeError:
+            transition_valid = is_valid_transition(from_status, to_status)
+        if not transition_valid:
             return TransitionResult(
                 success=False,
                 research_run_id=research_run_id,
@@ -1955,6 +1961,10 @@ class ResearchOrchestrator:
             )
         else:
             checkpoint.last_transition_at = datetime.utcnow().isoformat()
+        
+        # Keep checkpoint and top-level row crawl_id in sync when provided.
+        if crawl_id and not checkpoint.crawl_id:
+            checkpoint.crawl_id = crawl_id
         
         # Update database
         checkpoint_dict = {

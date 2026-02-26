@@ -43,7 +43,7 @@ test.describe('Teaching UX', () => {
       });
     });
 
-    await page.goto('/dashboard/simulator');
+    await page.goto('/dashboard/simulator/owner');
 
     const input = page.locator('textarea[aria-label="Chat message input"]');
     await input.fill('How should I evaluate founder risk?');

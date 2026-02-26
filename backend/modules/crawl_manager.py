@@ -18,11 +18,19 @@ Edge Cases Handled:
 """
 
 import logging
+import sys
 from typing import Optional, Dict, Any, Tuple
 from enum import Enum
 
 from modules.crawl_repository import CrawlRepository
 from modules.content_hasher import compute_secure_hash
+
+# Keep module identity stable across both import paths:
+# "modules.crawl_manager" and "backend.modules.crawl_manager".
+if __name__.startswith("modules."):
+    sys.modules.setdefault(f"backend.{__name__}", sys.modules[__name__])
+elif __name__.startswith("backend.modules."):
+    sys.modules.setdefault(__name__.replace("backend.", "", 1), sys.modules[__name__])
 
 logger = logging.getLogger(__name__)
 

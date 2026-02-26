@@ -105,7 +105,6 @@ class ExaSearchProvider(WebSearchProvider):
                 return client.search(
                     query,
                     num_results=num_results,
-                    use_autoprompt=True,
                     type="auto",
                 )
             
@@ -113,10 +112,15 @@ class ExaSearchProvider(WebSearchProvider):
             
             results = []
             for result in response.results:
+                text = getattr(result, "text", "") or ""
+                highlights = getattr(result, "highlights", None) or []
+                highlight_text = " ".join(
+                    [item for item in highlights if isinstance(item, str)]
+                ).strip()
                 results.append(SearchResult(
                     url=result.url,
                     title=result.title or "",
-                    snippet=result.text or result.highlight or "",
+                    snippet=text or highlight_text,
                     score=getattr(result, 'score', 0.0),
                     published_date=getattr(result, 'published_date', None),
                     source="exa"

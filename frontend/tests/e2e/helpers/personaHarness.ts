@@ -69,7 +69,7 @@ export async function registerTrainingModuleRoutes(
     return fulfillJson(route, { ok: true });
   });
 
-  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/training-sessions/active`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/training-sessions/active*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     const active = !!state.activeTrainingSessionId;
     return fulfillJson(route, {
@@ -84,7 +84,7 @@ export async function registerTrainingModuleRoutes(
     });
   });
 
-  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/training-sessions/start`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/training-sessions/start*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     state.startCalls += 1;
     state.activeTrainingSessionId = 'ts-e2e-1';
@@ -97,7 +97,7 @@ export async function registerTrainingModuleRoutes(
     });
   });
 
-  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/training-sessions/*/stop`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/training-sessions/*/stop*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     state.stopCalls += 1;
     state.activeTrainingSessionId = null;
@@ -109,7 +109,7 @@ export async function registerTrainingModuleRoutes(
     });
   });
 
-  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/graph-stats`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/twins/e2e-twin/graph-stats*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     return fulfillJson(route, {
       node_count: 0,
@@ -120,7 +120,7 @@ export async function registerTrainingModuleRoutes(
     });
   });
 
-  await page.route(`${BACKEND_GLOB}/twins/e2e-twin`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/twins/e2e-twin*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     const method = route.request().method();
     if (method === 'PATCH') {
@@ -143,12 +143,12 @@ export async function registerTrainingModuleRoutes(
     });
   });
 
-  await page.route(`${BACKEND_GLOB}/sources/e2e-twin`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/sources/e2e-twin*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     return fulfillJson(route, []);
   });
 
-  await page.route(`${BACKEND_GLOB}/chat/e2e-twin`, async (route) => {
+  await page.route(`${BACKEND_GLOB}/chat/e2e-twin*`, async (route) => {
     if (route.request().method() === 'OPTIONS') return fulfillOptions(route);
     const body = (route.request().postDataJSON() || {}) as JsonRecord;
     state.ownerChatBodies.push(body);
@@ -171,4 +171,3 @@ export async function registerTrainingModuleRoutes(
     });
   });
 }
-

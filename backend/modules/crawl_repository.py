@@ -5,11 +5,19 @@ Data access layer for crawl operations with idempotency support.
 Provides methods for persisting and querying crawl data with canonical URL tracking.
 """
 
+import sys
 from typing import Optional, Dict, List, Any
 from datetime import datetime
 
 from modules.observability import supabase
 from modules.url_canonicalizer import get_url_hash
+
+# Keep module identity stable across both import paths:
+# "modules.crawl_repository" and "backend.modules.crawl_repository".
+if __name__.startswith("modules."):
+    sys.modules.setdefault(f"backend.{__name__}", sys.modules[__name__])
+elif __name__.startswith("backend.modules."):
+    sys.modules.setdefault(__name__.replace("backend.", "", 1), sys.modules[__name__])
 
 
 class CrawlRepository:
@@ -79,8 +87,8 @@ class CrawlRepository:
             previous_page_id: ID of previous version (for recrawls)
         """
         url_hash = get_url_hash(canonical_url)
-        
-        supabase.table("crawl_pages").insert({
+
+        insert_data = {
             "id": page_id,
             "crawl_id": crawl_id,
             "url": url,
@@ -90,7 +98,20 @@ class CrawlRepository:
             "previous_page_id": previous_page_id,
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
-        }).execute()
+        }
+
+        try:
+            supabase.table("crawl_pages").insert(insert_data).execute()
+        except Exception as e:
+            # Backward compatibility for partially migrated environments where
+            # previous_page_id does not exist yet.
+            message = str(e).lower()
+            if "previous_page_id" in message and "crawl_pages" in message:
+                fallback_data = dict(insert_data)
+                fallback_data.pop("previous_page_id", None)
+                supabase.table("crawl_pages").insert(fallback_data).execute()
+                return
+            raise
     
     @staticmethod
     def update_page_after_fetch(

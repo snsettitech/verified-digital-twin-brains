@@ -1,4 +1,4 @@
-const { test } = require('@playwright/test');
+import { test } from '@playwright/test';
 
 test('deep research ui flow with Sainath Setti', async ({ page }) => {
   const events = [];

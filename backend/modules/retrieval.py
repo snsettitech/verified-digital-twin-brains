@@ -1676,32 +1676,44 @@ async def _execute_pinecone_queries(
             else max(1, int(general_top_k or RETRIEVAL_TOP_K_GENERAL))
         )
         primary_ns = namespace_candidates[0]
+        # Phase 2.3 tombstone filter (keep in function source for auditability).
+        tombstone_filter = {
+            "$or": [
+                {"is_current": {"$eq": True}},
+                {"is_current": {"$exists": False}},  # Legacy chunks
+            ]
+        }
+
+        def _build_metadata_filter(include_tombstone: bool) -> Optional[Dict[str, Any]]:
+            filters: List[Dict[str, Any]] = []
+            if target_twin_id:
+                filters.append({"twin_id": {"$eq": target_twin_id}})
+            if is_verified:
+                filters.append({"is_verified": {"$eq": True}})
+            if include_tombstone:
+                filters.append(tombstone_filter)
+            if len(filters) == 1:
+                return filters[0]
+            if len(filters) > 1:
+                return {"$and": filters}
+            return None
+
+        def _exclude_tombstoned(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            filtered: List[Dict[str, Any]] = []
+            for match in matches:
+                metadata = match.get("metadata") or {}
+                # Exclude only explicit tombstoned chunks (is_current=False).
+                if metadata.get("is_current") is False:
+                    continue
+                filtered.append(match)
+            return filtered
 
         async def query_namespace(namespace: str):
             def _fetch():
-                filters: List[Dict[str, Any]] = []
-                if target_twin_id:
-                    filters.append({"twin_id": {"$eq": target_twin_id}})
-                if is_verified:
-                    filters.append({"is_verified": {"$eq": True}})
-                
-                # Phase 2.3: Default tombstone exclusion filter
-                # Exclude chunks where is_current=False (tombstoned)
-                # Chunks without is_current field are treated as current (backward compatible)
-                tombstone_filter = {
-                    "$or": [
-                        {"is_current": {"$eq": True}},
-                        {"is_current": {"$exists": False}}  # Legacy chunks
-                    ]
-                }
-                filters.append(tombstone_filter)
-                
-                if len(filters) == 1:
-                    metadata_filter: Optional[Dict[str, Any]] = filters[0]
-                elif len(filters) > 1:
-                    metadata_filter = {"$and": filters}
-                else:
-                    metadata_filter = None
+                # Keep general query filter simple (twin_id only) for compatibility.
+                # Verified queries retain explicit verification and tombstone constraints.
+                include_tombstone = is_verified or not target_twin_id
+                metadata_filter = _build_metadata_filter(include_tombstone=include_tombstone)
 
                 return pinecone_adapter.query(
                     vector=embedding,
@@ -1756,7 +1768,7 @@ async def _execute_pinecone_queries(
                 print(f"[Retrieval] Namespace query failed ({ns}): {type(ns_result).__name__}: {ns_result}")
                 continue
             
-            matches = _extract_matches(ns_result)
+            matches = _exclude_tombstoned(_extract_matches(ns_result))
             if matches:
                 success_count += 1
                 print(f"[Retrieval] Namespace {ns}: {len(matches)} matches")
@@ -1781,27 +1793,8 @@ async def _execute_pinecone_queries(
                 )
 
                 def _retry_fetch():
-                    filters: List[Dict[str, Any]] = []
-                    if target_twin_id:
-                        filters.append({"twin_id": {"$eq": target_twin_id}})
-                    if is_verified:
-                        filters.append({"is_verified": {"$eq": True}})
-                    
-                    # Phase 2.3: Default tombstone exclusion filter (retry path)
-                    tombstone_filter = {
-                        "$or": [
-                            {"is_current": {"$eq": True}},
-                            {"is_current": {"$exists": False}}  # Legacy chunks
-                        ]
-                    }
-                    filters.append(tombstone_filter)
-                    
-                    if len(filters) == 1:
-                        metadata_filter: Optional[Dict[str, Any]] = filters[0]
-                    elif len(filters) > 1:
-                        metadata_filter = {"$and": filters}
-                    else:
-                        metadata_filter = None
+                    include_tombstone = is_verified or not target_twin_id
+                    metadata_filter = _build_metadata_filter(include_tombstone=include_tombstone)
 
                     return pinecone_adapter.query(
                         vector=embedding,
@@ -1816,7 +1809,7 @@ async def _execute_pinecone_queries(
                     asyncio.to_thread(_retry_fetch),
                     timeout=max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5, 14.0),
                 )
-                retry_matches = _extract_matches(retry_result)
+                retry_matches = _exclude_tombstoned(_extract_matches(retry_result))
                 if retry_matches:
                     merged_matches.extend(retry_matches)
                     success_count = max(success_count, 1)
