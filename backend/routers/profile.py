@@ -285,9 +285,9 @@ def _best_effort_purge_vectors(twin_id: str) -> None:
         logger.warning("Profile reset: vector purge setup failed for twin=%s (%s)", twin_id, e)
 
 
-def _safe_update_twin_reset(twin_id: str, payload: Dict[str, Any]) -> None:
+def _safe_update_twin_row(twin_id: str, payload: Dict[str, Any]) -> None:
     mutable_payload = dict(payload)
-    removable_columns = {"status", "is_active"}
+    removable_columns = {"status", "is_active", "updated_at", "creation_mode"}
 
     while True:
         try:
@@ -472,7 +472,7 @@ async def create_profile(
                         "settings": merged_settings,
                         "updated_at": datetime.utcnow().isoformat(),
                     }
-                    supabase.table("twins").update(update_payload).eq("id", existing["id"]).execute()
+                    _safe_update_twin_row(existing["id"], update_payload)
                     refreshed = get_or_create_profile_for_user(user)
                     if refreshed:
                         logger.info(
@@ -582,9 +582,10 @@ async def update_profile(
         update_data["settings"] = updated_settings
     
     # Apply update
-    result = supabase.table("twins").update(update_data).eq("id", profile["id"]).execute()
-    
-    return map_twin_to_profile(result.data[0])
+    _safe_update_twin_row(profile["id"], update_data)
+    refreshed_twin = supabase.table("twins").select("*").eq("id", profile["id"]).single().execute()
+
+    return map_twin_to_profile(refreshed_twin.data)
 
 
 @router.post("/profile/reset", response_model=ResetProfileResponse)
@@ -641,7 +642,7 @@ async def reset_profile(user: dict = Depends(require_tenant)):
         if current.get("name"):
             update_payload["description"] = f"{current['name']}'s verified digital profile"
 
-        _safe_update_twin_reset(twin_id, update_payload)
+        _safe_update_twin_row(twin_id, update_payload)
 
         logger.info("Profile reset completed for twin=%s user=%s", twin_id, user.get("user_id"))
         return ResetProfileResponse(

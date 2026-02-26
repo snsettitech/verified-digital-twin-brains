@@ -139,6 +139,7 @@ function ProfilePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedTwinId = searchParams.get('twinId');
+  const [canonicalProfileId, setCanonicalProfileId] = useState<string | null>(null);
   const [profileInsights, setProfileInsights] = useState<ProfileInsightsResponse | null>(null);
 
   useEffect(() => {
@@ -146,18 +147,59 @@ function ProfilePageContent() {
   }, [refreshTwins]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function resolveCanonicalProfile() {
+      try {
+        const response = await authFetchStandalone('/profile');
+        if (!response.ok) {
+          if (response.status === 404 && !cancelled) {
+            setCanonicalProfileId(null);
+          }
+          return;
+        }
+        const payload = await response.json();
+        if (!cancelled) {
+          setCanonicalProfileId(typeof payload?.id === 'string' ? payload.id : null);
+        }
+      } catch (error) {
+        console.error('[Profile] Failed to resolve canonical profile:', error);
+      }
+    }
+
+    void resolveCanonicalProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!requestedTwinId) return;
+    if (canonicalProfileId && requestedTwinId !== canonicalProfileId) return;
     if (activeTwin?.id === requestedTwinId) return;
     const exists = twins.some((t) => t.id === requestedTwinId);
     if (!exists) return;
     setActiveTwin(requestedTwinId);
-  }, [requestedTwinId, activeTwin?.id, twins, setActiveTwin]);
+  }, [requestedTwinId, canonicalProfileId, activeTwin?.id, twins, setActiveTwin]);
+
+  useEffect(() => {
+    if (!canonicalProfileId) return;
+    if (activeTwin?.id === canonicalProfileId) return;
+    const exists = twins.some((t) => t.id === canonicalProfileId);
+    if (!exists) return;
+    setActiveTwin(canonicalProfileId);
+  }, [canonicalProfileId, activeTwin?.id, twins, setActiveTwin]);
+
+  const effectiveTwin = useMemo(() => {
+    if (!canonicalProfileId) return activeTwin;
+    return twins.find((t) => t.id === canonicalProfileId) || activeTwin;
+  }, [canonicalProfileId, twins, activeTwin]);
 
   // Extract training metrics from twin data
   const trainingMetrics = useMemo<TrainingMetricsData | null>(() => {
-    if (!activeTwin?.settings) return null;
+    if (!effectiveTwin?.settings) return null;
     
-    const settings = isRecord(activeTwin.settings) ? activeTwin.settings : {};
+    const settings = isRecord(effectiveTwin.settings) ? effectiveTwin.settings : {};
     
     // Check for training_metrics in settings (from API)
     const metrics = settings.training_metrics;
@@ -176,19 +218,19 @@ function ProfilePageContent() {
     }
     
     return null;
-  }, [activeTwin?.settings]);
+  }, [effectiveTwin?.settings]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadProfileInsights() {
-      if (!activeTwin?.id) {
+      if (!effectiveTwin?.id) {
         setProfileInsights(null);
         return;
       }
 
       try {
-        const response = await authFetchStandalone(API_ENDPOINTS.TWIN_PROFILE_INSIGHTS(activeTwin.id));
+        const response = await authFetchStandalone(API_ENDPOINTS.TWIN_PROFILE_INSIGHTS(effectiveTwin.id));
         if (!response.ok) {
           throw new Error(`Failed to load profile insights (${response.status})`);
         }
@@ -208,7 +250,7 @@ function ProfilePageContent() {
     return () => {
       cancelled = true;
     };
-  }, [activeTwin?.id]);
+  }, [effectiveTwin?.id]);
 
   const effectiveTrainingMetrics = useMemo<TrainingMetricsData | null>(() => {
     const combined = profileInsights?.metrics?.combined;
@@ -219,13 +261,13 @@ function ProfilePageContent() {
   }, [profileInsights, trainingMetrics]);
 
   const derivedProfile = useMemo<ProfileDraft>(() => {
-    const settings = isRecord(activeTwin?.settings) ? activeTwin.settings : {};
+    const settings = isRecord(effectiveTwin?.settings) ? effectiveTwin.settings : {};
     const profile = isRecord(settings.public_profile) ? settings.public_profile : {};
     const tagline = typeof settings.tagline === 'string' ? settings.tagline : '';
     const publicIntro = typeof settings.public_intro === 'string' ? settings.public_intro : '';
     const displayName =
       (typeof profile.display_name === 'string' && profile.display_name.trim()) ||
-      activeTwin?.name ||
+      effectiveTwin?.name ||
       user?.full_name ||
       'Digital Twin';
 
@@ -267,7 +309,7 @@ function ProfilePageContent() {
       avatarUrl,
       mindLabel,
     };
-  }, [activeTwin?.name, activeTwin?.settings, user?.avatar_url, user?.full_name, effectiveTrainingMetrics]);
+  }, [effectiveTwin?.name, effectiveTwin?.settings, user?.avatar_url, user?.full_name, effectiveTrainingMetrics]);
 
   const [draft, setDraft] = useState<ProfileDraft>(derivedProfile);
   const [isEditing, setIsEditing] = useState(false);
@@ -322,14 +364,14 @@ function ProfilePageContent() {
   };
 
   const handleOpenChat = (seedQuestion?: string) => {
-    if (!activeTwin?.id) {
+    if (!effectiveTwin?.id) {
       showToast('No profile is selected yet.', 'info');
       return;
     }
-    const twinStatus = String(activeTwin?.status || '').toLowerCase();
+    const twinStatus = String(effectiveTwin?.status || '').toLowerCase();
     const canChatByStatus =
       twinStatus === 'active' || twinStatus === 'persona_built' || twinStatus === 'live';
-    const canChatByLegacyFlag = !twinStatus && Boolean(activeTwin?.is_active);
+    const canChatByLegacyFlag = !twinStatus && Boolean(effectiveTwin?.is_active);
     const canChat = canChatByStatus || canChatByLegacyFlag;
     if (!canChat) {
       showToast('Profile is still building. Chat unlocks when setup is complete.', 'info');
@@ -338,7 +380,7 @@ function ProfilePageContent() {
 
     const params = new URLSearchParams();
     params.set('source', 'profile');
-    params.set('twinId', activeTwin.id);
+    params.set('twinId', effectiveTwin.id);
     if (seedQuestion && seedQuestion.trim()) {
       params.set('q', seedQuestion.trim());
     }
@@ -354,7 +396,7 @@ function ProfilePageContent() {
   };
 
   const handleSave = async () => {
-    if (!activeTwin) return;
+    if (!effectiveTwin) return;
 
     const cleanedPinned = draft.pinnedQuestions
       .map((item) => item.trim())
@@ -365,7 +407,7 @@ function ProfilePageContent() {
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
 
-    const currentSettings = isRecord(activeTwin.settings) ? activeTwin.settings : {};
+    const currentSettings = isRecord(effectiveTwin.settings) ? effectiveTwin.settings : {};
     const currentProfile = isRecord(currentSettings.public_profile) ? currentSettings.public_profile : {};
 
     const nextSettings = {
@@ -387,7 +429,7 @@ function ProfilePageContent() {
 
     setIsSaving(true);
     try {
-      const response = await authFetchStandalone(API_ENDPOINTS.TWIN_DETAIL(activeTwin.id), {
+      const response = await authFetchStandalone(API_ENDPOINTS.TWIN_DETAIL(effectiveTwin.id), {
         method: 'PATCH',
         body: JSON.stringify({ settings: nextSettings }),
       });
@@ -416,7 +458,7 @@ function ProfilePageContent() {
     );
   }
 
-  if (!activeTwin) {
+  if (!effectiveTwin) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-8">
         <h2 className="text-xl font-bold text-slate-900">No Twin Selected</h2>

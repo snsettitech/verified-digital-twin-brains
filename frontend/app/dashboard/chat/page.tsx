@@ -33,6 +33,7 @@ function DashboardChatPageContent() {
   const { activeTwin, isLoading, twins, setActiveTwin } = useTwin();
   const searchParams = useSearchParams();
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [canonicalProfileId, setCanonicalProfileId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<ContextSnapshot | null>(null);
   const [profileQuestions, setProfileQuestions] = useState<string[]>([]);
   const [profileQuestionCapacity, setProfileQuestionCapacity] = useState<number | null>(null);
@@ -43,29 +44,61 @@ function DashboardChatPageContent() {
   const contextPanelEnabled = isRuntimeFeatureEnabled('contextPanel');
   const requestedTwinId = searchParams.get('twinId');
   const twinId = activeTwin?.id;
+  const effectiveTwinId = canonicalProfileId || twinId;
   const chatSource = searchParams.get('source');
   const seededQuestion = searchParams.get('q');
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function resolveCanonicalProfile() {
+      try {
+        const response = await authFetchStandalone('/profile');
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (!cancelled) {
+          setCanonicalProfileId(typeof payload?.id === 'string' ? payload.id : null);
+        }
+      } catch (error) {
+        console.error('[DashboardChat] Failed to resolve canonical profile:', error);
+      }
+    }
+
+    void resolveCanonicalProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!requestedTwinId) return;
+    if (canonicalProfileId && requestedTwinId !== canonicalProfileId) return;
     if (activeTwin?.id === requestedTwinId) return;
     const exists = twins.some((t) => t.id === requestedTwinId);
     if (!exists) return;
     setActiveTwin(requestedTwinId);
-  }, [requestedTwinId, activeTwin?.id, twins, setActiveTwin]);
+  }, [requestedTwinId, canonicalProfileId, activeTwin?.id, twins, setActiveTwin]);
+
+  useEffect(() => {
+    if (!canonicalProfileId) return;
+    if (activeTwin?.id === canonicalProfileId) return;
+    const exists = twins.some((t) => t.id === canonicalProfileId);
+    if (!exists) return;
+    setActiveTwin(canonicalProfileId);
+  }, [canonicalProfileId, activeTwin?.id, twins, setActiveTwin]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadProfileQuestions() {
-      if (!twinId || chatSource !== 'profile') {
+      if (!effectiveTwinId || chatSource !== 'profile') {
         setProfileQuestions([]);
         setProfileQuestionCapacity(null);
         return;
       }
 
       try {
-        const response = await authFetchStandalone(API_ENDPOINTS.TWIN_PROFILE_INSIGHTS(twinId));
+        const response = await authFetchStandalone(API_ENDPOINTS.TWIN_PROFILE_INSIGHTS(effectiveTwinId));
         if (!response.ok) {
           throw new Error(`Failed to load profile insights: ${response.status}`);
         }
@@ -99,7 +132,7 @@ function DashboardChatPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [twinId, chatSource, seededQuestion]);
+  }, [effectiveTwinId, chatSource, seededQuestion]);
 
   const flushSnapshot = useCallback(() => {
     if (!pendingSnapshotRef.current) return;
@@ -151,7 +184,7 @@ function DashboardChatPageContent() {
       );
     }
 
-    if (!twinId) {
+    if (!effectiveTwinId) {
       return (
         <div className="rounded-2xl border border-slate-200 bg-white p-8">
           <h2 className="text-xl font-bold text-slate-900">No Twin Selected</h2>
@@ -170,7 +203,7 @@ function DashboardChatPageContent() {
             </div>
           ) : null}
           <ChatInterface
-            twinId={twinId}
+            twinId={effectiveTwinId}
             tenantId={activeTwin?.tenant_id}
             conversationId={conversationId}
             onConversationStarted={setConversationId}
@@ -184,7 +217,7 @@ function DashboardChatPageContent() {
     );
   }, [
     isLoading,
-    twinId,
+    effectiveTwinId,
     activeTwin?.tenant_id,
     conversationId,
     handleStreamEvent,
