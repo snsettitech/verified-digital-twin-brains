@@ -13,6 +13,22 @@ from modules.observability import supabase
 logger = logging.getLogger(__name__)
 
 
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    """Detect Supabase/PostgREST missing-column errors across schema variants."""
+    message = str(error).lower()
+    col = (column_name or "").lower()
+    return (
+        bool(col)
+        and col in message
+        and (
+            "pgrst204" in message
+            or "could not find" in message
+            or "column" in message
+            or "does not exist" in message
+        )
+    )
+
+
 async def create_twin_for_name_research(
     db: Any,
     tenant_id: str,
@@ -113,7 +129,7 @@ async def create_twin_for_name_research(
             # Check for missing column errors
             removed_column = None
             for column in ("status", "creation_mode", "is_active"):
-                if column in insert_data and f"column \"{column}\" does not exist" in error_msg:
+                if column in insert_data and _is_missing_column_error(e, column):
                     removed_column = column
                     break
             
