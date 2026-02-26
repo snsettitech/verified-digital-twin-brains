@@ -427,14 +427,16 @@ async def get_my_twins(user=Depends(get_current_user)):
     print(f"[AUTH] get_my_twins: user={user_id}, tenant={tenant_id}")
     
     # Query twins by tenant_id (bounded) and rank for current user first.
-    result = (
+    twins_query = (
         supabase.table("twins")
         .select("*")
         .eq("tenant_id", tenant_id)
         .order("created_at", desc=True)
-        .limit(50)
-        .execute()
     )
+    # Some query adapters used in tests/legacy integrations do not expose limit().
+    if hasattr(twins_query, "limit"):
+        twins_query = twins_query.limit(50)
+    result = twins_query.execute()
     twins = result.data if result.data else []
     
     # AUTO-REPAIR: Check for orphaned twins if none found
