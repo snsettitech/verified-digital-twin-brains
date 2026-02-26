@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTwin } from '@/lib/context/TwinContext';
 import { API_ENDPOINTS } from '@/lib/constants';
@@ -133,7 +133,7 @@ function IconChat() {
   );
 }
 
-export default function ProfilePage() {
+function ProfilePageContent() {
   const { activeTwin, user, refreshTwins, isLoading, twins, setActiveTwin } = useTwin();
   const { showToast } = useToast();
   const router = useRouter();
@@ -778,5 +778,21 @@ export default function ProfilePage() {
         </button>
       </div>
     </div>
+  );
+}
+
+function ProfilePageFallback() {
+  return (
+    <div className="flex h-[60vh] items-center justify-center">
+      <div className="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent" />
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<ProfilePageFallback />}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }
