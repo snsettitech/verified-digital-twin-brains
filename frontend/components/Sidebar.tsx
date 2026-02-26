@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { TwinSelector } from './ui/TwinSelector';
+
 import { createClient } from '@/lib/supabase/client';
 import { SIDEBAR_CONFIG, APP_NAME, APP_TAGLINE } from '@/lib/navigation/config';
 import { isRuntimeFeatureEnabled, type RuntimeFeatureFlag } from '@/lib/features/runtimeFlags';
@@ -100,10 +100,12 @@ export default function Sidebar() {
         </Link>
       </div>
 
-      {/* Twin Selector */}
+      {/* Profile Name Display */}
       {!collapsed && (
-        <div className="relative border-b border-slate-800/50">
-          <TwinSelector />
+        <div className="px-4 py-3 border-b border-slate-800/50">
+          <div className="text-sm font-medium text-white truncate">
+            {/* Profile name will be shown here via ProfileContext */}
+          </div>
         </div>
       )}
 

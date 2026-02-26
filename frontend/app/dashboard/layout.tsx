@@ -9,6 +9,7 @@ import { ApiConnectivityBanner } from '@/components/ui/ApiConnectivityBanner';
 import { EnvironmentBadge } from '@/components/ui/EnvironmentBadge';
 import { DebugPanel } from '@/components/ui/DebugPanel';
 import { TwinProvider } from '@/lib/context/TwinContext';
+import { ProfileProvider } from '@/lib/context/ProfileContext';
 import { ThemeProvider } from '@/lib/context/ThemeContext';
 
 /**
@@ -32,7 +33,8 @@ export default function DashboardLayout({
   return (
     <ThemeProvider>
       <TwinProvider>
-        <ToastProvider>
+        <ProfileProvider>
+          <ToastProvider>
           <SkipNavigation>
             <SkipNavLink href="#main-content">Skip to main content</SkipNavLink>
             <SkipNavLink href="#chat-input">Skip to chat</SkipNavLink>
@@ -50,7 +52,8 @@ export default function DashboardLayout({
               </div>
             </main>
           </div>
-        </ToastProvider>
+          </ToastProvider>
+        </ProfileProvider>
       </TwinProvider>
     </ThemeProvider>
   );

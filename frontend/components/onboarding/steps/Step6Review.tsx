@@ -339,9 +339,9 @@ export function Step6Review({ data, onTestChat, onEditStep, onLaunch, isLaunchin
           <div className="flex items-start gap-3 p-4 border border-amber-500/30 bg-amber-500/10 rounded-lg">
             <span className="text-amber-400 text-xl">⚠️</span>
             <div className="text-sm">
-              <p className="font-medium text-amber-400">Legacy Twins</p>
+              <p className="font-medium text-amber-400">Legacy Records</p>
               <p className="text-slate-400">
-                Existing twins continue using the legacy system. Only new twins created through 
+                Existing records continue using the legacy system. Only new profiles created through 
                 this onboarding flow get 5-Layer Persona v2.
               </p>
             </div>

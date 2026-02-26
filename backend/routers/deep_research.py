@@ -64,6 +64,7 @@ class CreateDeepResearchRunRequest(BaseModel):
 
 class CreateDeepResearchRunResponse(BaseModel):
     run_id: str
+    twin_id: Optional[str] = None
     status: str
     created_at: str
     run_started_at: Optional[str] = None
@@ -71,6 +72,7 @@ class CreateDeepResearchRunResponse(BaseModel):
 
 class DeepResearchRunStatusResponse(BaseModel):
     run_id: str
+    twin_id: Optional[str] = None
     status: str
     input: Dict[str, Any]
     crawl_stats: Dict[str, Any]
@@ -110,8 +112,25 @@ async def create_deep_research_run(
             hints=request.hints.model_dump(),
             idempotency_key=request.idempotency_key,
         )
+        response_twin_id = row.get("twin_id")
+        if not response_twin_id:
+            try:
+                twin_result = (
+                    service.db.table("twins")
+                    .select("id")
+                    .eq("tenant_id", user["tenant_id"])
+                    .is_("settings->>deleted_at", "null")
+                    .order("created_at", desc=True)
+                    .limit(1)
+                    .execute()
+                )
+                if twin_result.data:
+                    response_twin_id = twin_result.data[0]["id"]
+            except Exception:
+                response_twin_id = None
         return CreateDeepResearchRunResponse(
             run_id=row["id"],
+            twin_id=response_twin_id,
             status=row.get("status", "created"),
             created_at=row.get("created_at"),
             run_started_at=row.get("run_started_at"),
@@ -177,6 +196,7 @@ async def get_deep_research_run(
     }
     return DeepResearchRunStatusResponse(
         run_id=row["id"],
+        twin_id=row.get("twin_id"),
         status=row["status"],
         input={
             "name": row.get("input_name"),

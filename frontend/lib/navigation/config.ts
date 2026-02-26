@@ -97,4 +97,4 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
  * This can be customized per deployment if needed.
  */
 export const APP_NAME = 'VT-BRAIN';
-export const APP_TAGLINE = 'Digital Twin';
+export const APP_TAGLINE = 'Verified Profile';

@@ -9,6 +9,7 @@ Deep Research routes are always enabled.
 import logging
 import asyncio
 import uuid
+import re
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -280,6 +281,182 @@ def _build_progress(crawl: dict) -> dict:
         "pages_failed": crawl.get("pages_failed", 0),
         "failed_authentications": crawl.get("failed_authentications", 0),
     }
+
+
+_URL_IN_TEXT_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+
+
+def _extract_http_urls_from_text(content: str) -> List[str]:
+    """Extract likely absolute URLs from free text."""
+    if not content:
+        return []
+    urls: List[str] = []
+    for raw in _URL_IN_TEXT_PATTERN.findall(content):
+        candidate = str(raw).strip().rstrip(").,;]")
+        if candidate.startswith(("http://", "https://")):
+            urls.append(candidate)
+    return urls
+
+
+def _normalize_seed_urls(urls: List[str], max_urls: int = 50) -> List[str]:
+    """
+    Normalize and dedupe URLs for crawl seeding.
+
+    Uses canonicalization for consistency with deep-research pipelines.
+    """
+    if not urls:
+        return []
+    deduped: List[str] = []
+    seen: set[str] = set()
+    try:
+        from modules.url_canonicalizer import canonicalize_url
+    except Exception:
+        canonicalize_url = None
+
+    for raw in urls:
+        candidate = str(raw or "").strip()
+        if not candidate:
+            continue
+        if not candidate.startswith(("http://", "https://")):
+            continue
+        try:
+            normalized = canonicalize_url(candidate) if canonicalize_url else candidate
+        except Exception:
+            normalized = candidate
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+        if len(deduped) >= max_urls:
+            break
+    return deduped
+
+
+def _collect_seed_urls_from_latest_link_compile_job(twin_id: str) -> List[str]:
+    """
+    Collect URL signals from latest link-compile jobs (Mode A/B/C).
+
+    - Mode C contributes explicit source_urls.
+    - Mode A/B may include URLs inside parsed content; extract them.
+    """
+    try:
+        result = (
+            supabase.table("link_compile_jobs")
+            .select("source_urls,source_files")
+            .eq("twin_id", twin_id)
+            .order("created_at", desc=True)
+            .limit(3)
+            .execute()
+        )
+    except Exception as exc:
+        logger.warning("Failed to load link-compile jobs for twin=%s: %s", twin_id, exc)
+        return []
+
+    candidates: List[str] = []
+    for job in result.data or []:
+        for url in job.get("source_urls") or []:
+            if isinstance(url, str):
+                candidates.append(url)
+
+        for source_file in job.get("source_files") or []:
+            if not isinstance(source_file, dict):
+                continue
+            maybe_url = source_file.get("url")
+            if isinstance(maybe_url, str) and maybe_url.strip():
+                candidates.append(maybe_url)
+            content = source_file.get("content")
+            if isinstance(content, str) and content.strip():
+                candidates.extend(_extract_http_urls_from_text(content))
+
+    return candidates
+
+
+def _collect_seed_urls_from_request_inputs(
+    twin_id: str,
+    claimed_identity: Optional[Dict[str, Any]],
+    request_seed_urls: List[str],
+) -> List[str]:
+    """
+    Build initial seed URLs from all onboarding mode inputs.
+
+    Sources:
+    - explicit request.seed_urls
+    - claimed_identity.submitted_links
+    - latest Mode A/B/C link-compile job payloads for this twin
+    """
+    candidates: List[str] = list(request_seed_urls or [])
+
+    identity = claimed_identity or {}
+    submitted_links = identity.get("submitted_links")
+    if isinstance(submitted_links, list):
+        for link in submitted_links:
+            if isinstance(link, str):
+                candidates.append(link)
+    elif isinstance(submitted_links, str):
+        candidates.append(submitted_links)
+
+    candidates.extend(_collect_seed_urls_from_latest_link_compile_job(twin_id))
+    return _normalize_seed_urls(candidates, max_urls=60)
+
+
+def _build_name_research_hints(
+    claimed_identity: Optional[Dict[str, Any]],
+    seed_urls: List[str],
+) -> Dict[str, Optional[str]]:
+    """Map onboarding identity payload to name-research hint schema."""
+    identity = claimed_identity or {}
+    website = None
+    for url in seed_urls:
+        if isinstance(url, str) and url.startswith(("http://", "https://")):
+            website = url
+            break
+
+    company = (
+        identity.get("company")
+        or identity.get("organization")
+        or identity.get("org")
+        or identity.get("employer")
+    )
+    if not company:
+        headline_or_role = str(identity.get("headline") or identity.get("role") or "").strip()
+        marker = " at "
+        if marker in headline_or_role.lower():
+            lower_value = headline_or_role.lower()
+            idx = lower_value.find(marker)
+            extracted = headline_or_role[idx + len(marker):].strip(" -|,")
+            company = extracted or None
+    location = identity.get("location")
+
+    return {
+        "location": str(location).strip() if location else None,
+        "company": str(company).strip() if company else None,
+        "website": str(website).strip() if website else None,
+    }
+
+
+async def _discover_seed_urls_with_name_research_tools(
+    full_name: str,
+    hints: Dict[str, Optional[str]],
+) -> List[str]:
+    """
+    Reuse name-only deep research discovery stack for onboarding.
+
+    This gives /twins/{id}/research the same query expansion + provider fallback
+    behavior used by /deep-research/runs.
+    """
+    try:
+        from modules.name_deep_research_service import get_name_deep_research_service
+
+        service = get_name_deep_research_service()
+        return await service.discover_urls_for_identity(
+            name=full_name,
+            hints=hints,
+            max_queries=8,
+            max_urls=50,
+        )
+    except Exception as exc:
+        logger.warning("Name-research URL discovery failed for '%s': %s", full_name, exc)
+        return []
 
 
 # ============================================================================
@@ -1092,7 +1269,11 @@ async def create_research_run_endpoint(
     Create a new research run (Phase 3.4).
     
     Initializes research run with claimed identity and seed URLs.
-    When seed_urls is empty and full_name exists, uses Firecrawl search to discover URLs.
+    Seed URL collection is mode-aware:
+    - direct seed_urls in request
+    - claimed_identity.submitted_links
+    - latest Mode A/B/C link-compile payloads (URLs extracted from content)
+    Then augments discovery using the same name-research URL discovery tools.
     Transitions through state machine:
     planning -> queued -> crawling -> awaiting_confirmation -> ready_for_ingestion
     """
@@ -1102,36 +1283,45 @@ async def create_research_run_endpoint(
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
-    seed_urls = list(request.seed_urls) if request.seed_urls else []
-    
-    # Name-only flow: when seed_urls empty and full_name exists, use Firecrawl search
-    if not seed_urls:
-        full_name = (request.claimed_identity or {}).get("full_name")
-        if full_name and str(full_name).strip():
-            try:
-                from modules.firecrawl_client import get_firecrawl_client
-                client = get_firecrawl_client()
-                if client:
-                    location = (request.claimed_identity or {}).get("location")
-                    query = f'"{str(full_name).strip()}"'
-                    if location and str(location).strip():
-                        query = f'{query} {str(location).strip()}'
-                    seed_urls = await client.search(query=query, limit=10)
-                    if seed_urls:
-                        logger.info(f"Firecrawl search resolved {len(seed_urls)} URLs for name-only research")
-            except Exception as e:
-                logger.warning(f"Firecrawl search for name-only research failed: {e}")
+    claimed_identity = request.claimed_identity or {}
+    full_name = str(claimed_identity.get("full_name") or "").strip()
+
+    # 1) Collect explicit seed URLs from all onboarding mode inputs.
+    seed_urls = _collect_seed_urls_from_request_inputs(
+        twin_id=twin_id,
+        claimed_identity=claimed_identity,
+        request_seed_urls=list(request.seed_urls or []),
+    )
+
+    # 2) Augment discovery with name-research stack when identity is available.
+    # We do this even when some URLs exist so onboarding can "lock on" identity
+    # and still discover additional corroborating sources.
+    if full_name:
+        hints = _build_name_research_hints(claimed_identity, seed_urls)
+        discovered_urls = await _discover_seed_urls_with_name_research_tools(
+            full_name=full_name,
+            hints=hints,
+        )
+        if discovered_urls:
+            before_count = len(seed_urls)
+            seed_urls = _normalize_seed_urls(seed_urls + discovered_urls, max_urls=60)
+            logger.info(
+                "Research seed URL expansion: twin_id=%s base=%s discovered=%s final=%s",
+                twin_id,
+                before_count,
+                len(discovered_urls),
+                len(seed_urls),
+            )
     
     # Require at least one URL to proceed
     if not seed_urls:
-        full_name = (request.claimed_identity or {}).get("full_name")
-        if not (full_name and str(full_name).strip()):
+        if not full_name:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={
                     "error": "No sources for research",
                     "code": "NO_SOURCES",
-                    "message": "Provide seed_urls, or full_name for Firecrawl search."
+                    "message": "Provide seed_urls, submitted links, or full_name for discovery."
                 }
             )
         raise HTTPException(
@@ -1139,7 +1329,7 @@ async def create_research_run_endpoint(
             detail={
                 "error": "No URLs discovered",
                 "code": "SEARCH_EMPTY",
-                "message": "Firecrawl search returned no URLs for the given name. Try adding URLs manually."
+                "message": "No crawlable URLs discovered from onboarding inputs and name-based discovery. Try adding explicit URLs."
             }
         )
     
@@ -1151,7 +1341,7 @@ async def create_research_run_endpoint(
         result = await orchestrator.create_research_run(
             twin_id=twin_id,
             actor_user_id=user.get("id"),
-            claimed_identity=request.claimed_identity,
+            claimed_identity=claimed_identity,
             seed_urls=seed_urls,
             onboarding_session_id=request.onboarding_session_id,
             metadata=request.metadata,
@@ -1201,7 +1391,7 @@ async def create_research_run_endpoint(
                 research_run_id=result.research_run_id,
                 twin_id=twin_id,
                 crawl_id=crawl_id,
-                claimed_identity=request.claimed_identity,
+                claimed_identity=claimed_identity,
             )
         )
         _ACTIVE_RESEARCH_CRAWL_TASKS[result.research_run_id] = crawl_task

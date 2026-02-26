@@ -64,6 +64,11 @@ from routers import (
     
     # Phase 8: Research claims enrichment
     research_claims,
+    
+    # Person Completeness v1: Profile abstraction layer
+    profile,
+    profile_person_data,
+    profile_public,
 )
 from modules.specializations import get_specialization
 
@@ -237,6 +242,12 @@ if NAME_ONLY_DEEP_RESEARCH_ENABLED:
     print("[INFO] Name-only deep research routes enabled")
 else:
     print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
+
+# Person Completeness v1: Profile abstraction layer
+app.include_router(profile.router)
+app.include_router(profile_person_data.router)
+app.include_router(profile_public.router)
+print("[INFO] Profile routes enabled (Person Completeness v1)")
 
 # Print feature flag summary after all routers loaded
 print_feature_flag_summary()

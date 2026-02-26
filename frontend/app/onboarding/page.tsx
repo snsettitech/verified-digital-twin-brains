@@ -3,6 +3,15 @@
 import React, { useState, Suspense, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
+// Redirect legacy onboarding to v2
+function LegacyOnboardingRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/onboarding/v2');
+  }, [router]);
+  return null;
+}
+
 import { StepWelcome, type WelcomeData } from '@/components/onboarding/steps/StepWelcome';
 import { StepLinkSuggestions } from '@/components/onboarding/steps/StepLinkSuggestions';
 import { StepAddSources } from '@/components/onboarding/steps/StepAddSources';
@@ -102,6 +111,12 @@ interface MemoryData {
 function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // Redirect to v2 onboarding (legacy onboarding deprecated)
+  useEffect(() => {
+    router.replace('/onboarding/v2');
+  }, [router]);
+  
   const returnTo = searchParams.get('returnTo');
   const resumeTwinId = searchParams.get('twinId');
 
@@ -603,7 +618,23 @@ function OnboardingContent() {
             }}
             seedUrls={submittedUrls.length > 0 ? submittedUrls : suggestedUrls}
             onComplete={(runId) => {
-              if (runId) setResearchRunId(runId);
+              if (runId) {
+                setResearchRunId(runId);
+              }
+              if (twin?.id) {
+                try {
+                  localStorage.setItem('activeTwinId', twin.id);
+                } catch {
+                  // Non-blocking localStorage write
+                }
+                const params = new URLSearchParams();
+                params.set('from', 'onboarding');
+                if (runId) {
+                  params.set('researchRunId', runId);
+                }
+                router.push(`/dashboard/profile?${params.toString()}`);
+                return;
+              }
               setCurrentStep('profile');
             }}
             onBack={() => setCurrentStep('source_review')}

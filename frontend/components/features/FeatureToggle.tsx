@@ -104,12 +104,12 @@ export function FeatureFlagsPanel() {
                 <FeatureToggle
                     flag="customBranding"
                     label="Custom Branding"
-                    description="White-label your twin's appearance"
+                    description="White-label your twin appearance"
                 />
                 <FeatureToggle
                     flag="teamCollaboration"
                     label="Team Collaboration"
-                    description="Invite team members to manage twins"
+                    description="Invite team members to manage the twin"
                 />
             </FeatureGroup>
 

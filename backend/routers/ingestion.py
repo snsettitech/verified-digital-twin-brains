@@ -36,6 +36,54 @@ ALLOWED_EXTENSIONS = {
 ALLOWED_SOURCE_LABELS = {"identity", "knowledge", "policies"}
 
 
+def _is_missing_column_error(error: Exception, column_name: str) -> bool:
+    message = str(error).lower()
+    col = (column_name or "").lower()
+    return (
+        bool(col)
+        and col in message
+        and (
+            "pgrst204" in message
+            or "could not find" in message
+            or "column" in message
+            or "does not exist" in message
+        )
+    )
+
+
+def _insert_source_with_schema_fallback(payload: dict) -> None:
+    """
+    Insert into sources table with backward-compatible column fallback.
+
+    Some environments may not yet include newer optional columns.
+    """
+    mutable_payload = dict(payload)
+    removable_columns = [
+        "staging_status",
+        "health_status",
+        "extracted_text_length",
+        "content_hash",
+        "citation_url",
+    ]
+
+    while True:
+        try:
+            supabase.table("sources").insert(mutable_payload).execute()
+            return
+        except Exception as insert_error:
+            removed = None
+            for column in removable_columns:
+                if column in mutable_payload and _is_missing_column_error(insert_error, column):
+                    removed = column
+                    break
+
+            if removed:
+                mutable_payload.pop(removed, None)
+                continue
+
+            raise
+
+
 def _validate_file_size(content_length: int) -> None:
     """
     Validate file size before processing.
@@ -173,7 +221,7 @@ def _insert_source_row(
     identity_confirmed: Optional[bool] = False,
 ):
     # Keep insert minimal and safe; later steps will update content_text, hashes, etc.
-    supabase.table("sources").insert({
+    _insert_source_with_schema_fallback({
         "id": source_id,
         "twin_id": twin_id,
         "filename": filename,
@@ -183,7 +231,7 @@ def _insert_source_row(
         "staging_status": "staged",
         "health_status": "healthy",
         "citation_url": citation_url,
-    }).execute()
+    })
     _persist_source_label_metadata(
         source_id=source_id,
         source_label=source_label,
@@ -381,7 +429,7 @@ async def ingest_file_endpoint(
         # Step 5: No duplicate - create new source
         source_id = str(uuid.uuid4())
         
-        supabase.table("sources").insert({
+        _insert_source_with_schema_fallback({
             "id": source_id,
             "twin_id": twin_id,
             "filename": filename,
@@ -392,7 +440,7 @@ async def ingest_file_endpoint(
             "staging_status": "staged",
             "health_status": "healthy",
             "extracted_text_length": len(text),
-        }).execute()
+        })
 
         _persist_source_label_metadata(
             source_id=source_id,
@@ -412,9 +460,13 @@ async def ingest_file_endpoint(
             text,
             source_data={"filename": filename, "twin_id": twin_id}
         )
-        supabase.table("sources").update({
-            "health_status": health.get("overall_status", "healthy")
-        }).eq("id", source_id).execute()
+        try:
+            supabase.table("sources").update({
+                "health_status": health.get("overall_status", "healthy")
+            }).eq("id", source_id).execute()
+        except Exception as health_update_error:
+            if not _is_missing_column_error(health_update_error, "health_status"):
+                raise
         
         finish_step(event_id=ev_p, source_id=source_id, twin_id=twin_id, provider=provider, step="parsed", status="completed", correlation_id=corr, metadata={"text_len": len(text)})
         
@@ -495,6 +547,8 @@ async def ingest_document_compat(
             http_req=http_req,
             user=user,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -518,6 +572,8 @@ async def ingest_url_compat(request: URLIngestWithTwinRequest, http_req: Request
             http_req=http_req,
             user=user,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

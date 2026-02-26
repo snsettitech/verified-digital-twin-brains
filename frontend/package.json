@@ -13,7 +13,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky",
+    "enforce:ui:single": "node scripts/enforce-single-twin.js --mode single-twin",
+    "enforce:ui:strict": "node scripts/enforce-single-twin.js --mode strict"
   },
   "dependencies": {
     "@playwright/test": "^1.57.0",

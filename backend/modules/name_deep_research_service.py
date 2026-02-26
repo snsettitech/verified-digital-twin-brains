@@ -418,32 +418,88 @@ class NameDeepResearchService:
                 .execute()
             )
             if existing.data:
-                return existing.data[0]
+                row = dict(existing.data[0])
+                if not row.get("twin_id"):
+                    fallback_twin = (
+                        self.db.table("twins")
+                        .select("id")
+                        .eq("tenant_id", tenant_id)
+                        .is_("settings->>deleted_at", "null")
+                        .order("created_at", desc=True)
+                        .limit(1)
+                        .execute()
+                    )
+                    if fallback_twin.data:
+                        row["twin_id"] = fallback_twin.data[0]["id"]
+                return row
 
-        created = (
-            self.db.table("name_deep_research_runs")
-            .insert(
-                {
-                    "tenant_id": tenant_id,
-                    "created_by": user_id,
-                    "status": "created",
-                    "input_name": normalized_name,
-                    "input_location": (hints.get("location") or None),
-                    "input_company": (hints.get("company") or None),
-                    "input_website": (hints.get("website") or None),
-                    "idempotency_key": idempotency_key,
-                    "run_started_at": _utcnow_iso(),
-                }
-            )
+        # ====================================================================
+        # STEP 1: Check for existing profile (one profile per user rule)
+        # ====================================================================
+        existing_twin = (
+            self.db.table("twins")
+            .select("id")
+            .eq("tenant_id", tenant_id)
+            .is_("settings->>deleted_at", "null")
+            .order("created_at", desc=True)
+            .limit(1)
             .execute()
         )
+        
+        if existing_twin.data:
+            # User already has a profile - attach research to existing twin
+            twin_id = existing_twin.data[0]["id"]
+            logger.info(
+                "name-research attaching to existing twin: twin_id=%s tenant_id=%s",
+                twin_id, tenant_id
+            )
+        else:
+            # No existing profile - create new twin in "name_first" mode
+            from modules.twin_service import create_twin_for_name_research
+            
+            twin_id = await create_twin_for_name_research(
+                db=self.db,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                name=normalized_name,
+                hints=hints,
+            )
+            logger.info("name-research created twin: twin_id=%s name=%s", twin_id, normalized_name)
+
+        insert_payload = {
+            "tenant_id": tenant_id,
+            "created_by": user_id,
+            "twin_id": twin_id,
+            "status": "created",
+            "input_name": normalized_name,
+            "input_location": (hints.get("location") or None),
+            "input_company": (hints.get("company") or None),
+            "input_website": (hints.get("website") or None),
+            "idempotency_key": idempotency_key,
+            "run_started_at": _utcnow_iso(),
+        }
+
+        try:
+            created = self.db.table("name_deep_research_runs").insert(insert_payload).execute()
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "twin_id" in msg and ("could not find" in msg or "does not exist" in msg):
+                # Backward compatibility for environments that have not yet applied
+                # migration adding name_deep_research_runs.twin_id.
+                logger.warning(
+                    "name_deep_research_runs.twin_id missing; retrying insert without twin_id column"
+                )
+                insert_payload.pop("twin_id", None)
+                created = self.db.table("name_deep_research_runs").insert(insert_payload).execute()
+            else:
+                raise
         if not created.data:
             raise RuntimeError("Failed to create deep research run")
 
         run_row = created.data[0]
         run_id = run_row["id"]
 
-        task = asyncio.create_task(self._execute_pipeline(run_id=run_id, tenant_id=tenant_id, user_id=user_id))
+        task = asyncio.create_task(self._execute_pipeline(run_id=run_id, tenant_id=tenant_id, user_id=user_id, twin_id=twin_id))
         _ACTIVE_RUN_TASKS[run_id] = task
 
         def _cleanup(_task: asyncio.Task) -> None:
@@ -456,6 +512,9 @@ class NameDeepResearchService:
                 logger.exception("name-research run task failed: run_id=%s err=%s", run_id, exc)
 
         task.add_done_callback(_cleanup)
+        
+        # Include twin_id in the returned row for the API response
+        run_row["twin_id"] = twin_id
         return run_row
 
     async def get_run(self, *, run_id: str, tenant_id: str) -> Optional[Dict[str, Any]]:
@@ -522,6 +581,38 @@ class NameDeepResearchService:
                 unique_queries.append(normalized)
         return unique_queries[:20]
 
+    async def discover_urls_for_identity(
+        self,
+        *,
+        name: str,
+        hints: Dict[str, Optional[str]],
+        max_queries: int = 10,
+        max_urls: int = 80,
+    ) -> List[str]:
+        """
+        Shared URL discovery helper for name-anchored research flows.
+
+        This exposes the same discovery stack used by name-only deep research
+        (query expansion + provider fallback + Firecrawl search) so other
+        onboarding flows can reuse it safely.
+        """
+        queries = self.build_queries(name=name, hints=hints)
+        if max_queries > 0:
+            queries = queries[:max_queries]
+        if not queries:
+            return []
+
+        try:
+            discovered = await self._discover_urls(queries)
+        except Exception as exc:
+            logger.warning("URL discovery failed for '%s': %s", name, exc)
+            return []
+
+        deduped = self.dedupe_urls(discovered)
+        if max_urls > 0:
+            return deduped[:max_urls]
+        return deduped
+
     def dedupe_urls(self, urls: List[str]) -> List[str]:
         deduped: List[str] = []
         seen: set[str] = set()
@@ -553,7 +644,7 @@ class NameDeepResearchService:
             payload["detail"] = detail[:1200]
         logger.warning("name-research fallback run_id=%s %s", run_id, json.dumps(payload, default=str))
 
-    async def _execute_pipeline(self, *, run_id: str, tenant_id: str, user_id: str) -> None:
+    async def _execute_pipeline(self, *, run_id: str, tenant_id: str, user_id: str, twin_id: str) -> None:
         try:
             run = await self.get_run(run_id=run_id, tenant_id=tenant_id)
             if not run:
@@ -644,7 +735,17 @@ class NameDeepResearchService:
                 run_completed_at=result_doc["crawl_stats"]["run_completed_at"],
                 updated_at=_utcnow_iso(),
             )
-            logger.info("name-research run completed: run_id=%s", run_id)
+            
+            # Update twin with research results
+            from modules.twin_service import update_twin_from_research
+            await update_twin_from_research(
+                db=self.db,
+                twin_id=twin_id,
+                tenant_id=tenant_id,
+                research_result=result_doc,
+            )
+            
+            logger.info("name-research run completed: run_id=%s twin_id=%s", run_id, twin_id)
         except Exception as exc:
             logger.exception("name-research run failed: run_id=%s error=%s", run_id, exc)
             await self._update_run(
