@@ -35,7 +35,9 @@ from modules.persona_spec_store_v2 import create_persona_spec_v2
 from modules.training_metrics import (
     get_training_metrics_for_api,
     is_training_metrics_enabled,
-    update_twin_training_metrics
+    update_twin_training_metrics,
+    format_number_compact,
+    get_mind_score_label,
 )
 
 
@@ -179,6 +181,94 @@ def _normalize_twin_status_shape(twin: Dict[str, Any]) -> Dict[str, Any]:
     if derived_status:
         twin["status"] = derived_status
     return twin
+
+
+def _normalize_name_key(value: Any) -> str:
+    """Normalize a name-like field for fuzzy equality checks."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    return " ".join(text.split())
+
+
+def _to_non_negative_int(value: Any, default: int = 0) -> int:
+    """Best-effort numeric coercion for metrics values."""
+    try:
+        return max(0, int(float(value)))
+    except Exception:
+        return default
+
+
+def _coerce_training_metrics_payload(raw: Any) -> Dict[str, Any]:
+    """
+    Normalize arbitrary training metrics payloads to a UI-safe shape.
+
+    Keeps compatibility with both twin.settings.training_metrics and
+    name_deep_research result_json.training_metrics.
+    """
+    data = raw if isinstance(raw, dict) else {}
+    words_processed = _to_non_negative_int(data.get("words_processed"), 0)
+    questions_answerable_est = _to_non_negative_int(data.get("questions_answerable_est"), 0)
+    mind_score = min(100, _to_non_negative_int(data.get("mind_score"), 0))
+
+    return {
+        "words_processed": words_processed,
+        "words_processed_display": str(data.get("words_processed_display") or format_number_compact(words_processed)),
+        "questions_answerable_est": questions_answerable_est,
+        "questions_answerable_display": str(
+            data.get("questions_answerable_display") or format_number_compact(questions_answerable_est)
+        ),
+        "mind_score": mind_score,
+        "mind_score_label": str(data.get("mind_score_label") or get_mind_score_label(mind_score)),
+        "method_version": str(data.get("method_version") or "v1_heuristic"),
+        "notes": str(
+            data.get("notes")
+            or "Estimated metrics based on ingested content volume, diversity, and extraction quality."
+        ),
+        "last_computed_at": data.get("last_computed_at"),
+    }
+
+
+def _dedupe_questions(values: List[Any], limit: int = 12) -> List[str]:
+    """Deduplicate while preserving order."""
+    seen = set()
+    out: List[str] = []
+    for raw in values:
+        question = str(raw or "").strip()
+        if not question:
+            continue
+        key = " ".join(question.lower().split())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(question)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _extract_name_research_questions(result_json: Dict[str, Any], combined_questions_estimate: int) -> List[str]:
+    """Build chat-ready suggested questions from name deep research artifacts."""
+    collected: List[Any] = []
+
+    follow_ups = result_json.get("suggested_followup_questions")
+    if isinstance(follow_ups, list):
+        collected.extend(follow_ups)
+
+    prepared = result_json.get("prepared_question_answers")
+    if isinstance(prepared, list):
+        for item in prepared:
+            if isinstance(item, dict):
+                collected.append(item.get("question"))
+
+    # Generic "capacity discovery" prompts to let users ask broad questions.
+    if combined_questions_estimate > 0:
+        top_n = min(max(combined_questions_estimate, 5), 20)
+        collected.append(f"What are the top {top_n} questions you can answer about me right now?")
+    collected.append("Which parts of my profile still need stronger evidence?")
+    collected.append("Show me your confidence and source citations for your next answer.")
+
+    return _dedupe_questions(collected, limit=12)
 
 
 # ============================================================================
@@ -545,6 +635,195 @@ async def get_twin(twin_id: str, include_metrics: bool = True, user=Depends(get_
             twin["training_metrics"] = TrainingMetricsSchema().model_dump()
     
     return twin
+
+
+@router.get("/twins/{twin_id}/profile-insights")
+async def get_twin_profile_insights(twin_id: str, user=Depends(get_current_user)):
+    """
+    Aggregate profile-facing metrics and starter questions for chat.
+
+    Combines:
+    - Twin onboarding training metrics (settings.training_metrics)
+    - Latest matching name-deep-research metrics (if available)
+    - Suggested follow-up chat questions from deep research artifacts
+    """
+    user = _require_authenticated_user(user)
+    verify_twin_ownership(twin_id, user)
+
+    tenant_id = user.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="User has no tenant association")
+
+    twin_res = supabase.table("twins").select("id,name,settings").eq("id", twin_id).single().execute()
+    if not twin_res.data:
+        raise HTTPException(status_code=404, detail="Twin not found")
+
+    twin = twin_res.data
+    settings = twin.get("settings") or {}
+    twin_metrics = _coerce_training_metrics_payload(settings.get("training_metrics"))
+
+    # Resolve best identity name from latest twin research run, fallback to twin name.
+    identity_name = str(twin.get("name") or "").strip()
+    latest_twin_research_run_id = None
+    try:
+        research_run_res = (
+            supabase.table("research_runs")
+            .select("id,claimed_identity,created_at")
+            .eq("twin_id", twin_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if research_run_res.data:
+            latest = research_run_res.data[0]
+            latest_twin_research_run_id = latest.get("id")
+            claimed_identity = latest.get("claimed_identity") or {}
+            if isinstance(claimed_identity, dict):
+                claimed_name = str(claimed_identity.get("full_name") or "").strip()
+                if claimed_name:
+                    identity_name = claimed_name
+    except Exception as e:
+        print(f"[TWINS] Warning: failed to resolve latest research run for {twin_id}: {e}")
+
+    normalized_identity_name = _normalize_name_key(identity_name)
+
+    name_research_summary: Optional[Dict[str, Any]] = None
+    name_research_metrics: Optional[Dict[str, Any]] = None
+    question_suggestions: List[str] = []
+
+    try:
+        # Pull a small candidate window for tenant and match by normalized input name.
+        candidate_runs_res = (
+            supabase.table("name_deep_research_runs")
+            .select("id,status,input_name,input_company,run_completed_at,created_at")
+            .eq("tenant_id", tenant_id)
+            .order("created_at", desc=True)
+            .limit(25)
+            .execute()
+        )
+        candidate_runs = candidate_runs_res.data or []
+
+        matched = [
+            row for row in candidate_runs
+            if _normalize_name_key(row.get("input_name")) == normalized_identity_name
+        ]
+        if not matched and candidate_runs:
+            # Fallback to most recent tenant run when identity name is unavailable/missing.
+            matched = candidate_runs
+
+        selected_run = None
+        for row in matched:
+            if str(row.get("status") or "").lower() == "completed":
+                selected_run = row
+                break
+        if not selected_run and matched:
+            selected_run = matched[0]
+
+        if selected_run:
+            run_id = selected_run.get("id")
+            name_research_summary = {
+                "run_id": run_id,
+                "status": selected_run.get("status"),
+                "input_name": selected_run.get("input_name"),
+                "run_completed_at": selected_run.get("run_completed_at"),
+            }
+
+            artifact_res = (
+                supabase.table("name_deep_research_artifacts")
+                .select("result_json")
+                .eq("tenant_id", tenant_id)
+                .eq("run_id", run_id)
+                .limit(1)
+                .execute()
+            )
+            if artifact_res.data:
+                result_json = artifact_res.data[0].get("result_json") or {}
+                if isinstance(result_json, dict):
+                    if isinstance(result_json.get("training_metrics"), dict):
+                        name_research_metrics = _coerce_training_metrics_payload(result_json.get("training_metrics"))
+                    else:
+                        # Fallback when artifact predates embedded training_metrics.
+                        words_extracted = _to_non_negative_int(
+                            (result_json.get("crawl_stats") or {}).get("words_extracted"), 0
+                        )
+                        fallback_questions = _to_non_negative_int(words_extracted / 90, 0)
+                        fallback_mind = min(100, _to_non_negative_int(words_extracted / 1000, 0))
+                        name_research_metrics = _coerce_training_metrics_payload(
+                            {
+                                "words_processed": words_extracted,
+                                "questions_answerable_est": fallback_questions,
+                                "mind_score": fallback_mind,
+                                "mind_score_label": get_mind_score_label(fallback_mind),
+                                "method_version": "name_research_fallback_v1",
+                                "notes": "Estimated from name deep research crawl stats.",
+                            }
+                        )
+                    preview_combined_questions = (
+                        _to_non_negative_int(twin_metrics.get("questions_answerable_est"), 0)
+                        + _to_non_negative_int((name_research_metrics or {}).get("questions_answerable_est"), 0)
+                    )
+                    question_suggestions = _extract_name_research_questions(result_json, preview_combined_questions)
+    except Exception as e:
+        print(f"[TWINS] Warning: failed to load name deep research insights for twin {twin_id}: {e}")
+
+    twin_words = _to_non_negative_int(twin_metrics.get("words_processed"), 0)
+    twin_questions = _to_non_negative_int(twin_metrics.get("questions_answerable_est"), 0)
+    twin_mind = _to_non_negative_int(twin_metrics.get("mind_score"), 0)
+
+    name_words = _to_non_negative_int((name_research_metrics or {}).get("words_processed"), 0)
+    name_questions = _to_non_negative_int((name_research_metrics or {}).get("questions_answerable_est"), 0)
+    name_mind = _to_non_negative_int((name_research_metrics or {}).get("mind_score"), 0)
+
+    combined_words = twin_words + name_words
+    combined_questions = twin_questions + name_questions
+    combined_mind = min(100, max(twin_mind, name_mind))
+    combined_metrics = _coerce_training_metrics_payload(
+        {
+            "words_processed": combined_words,
+            "questions_answerable_est": combined_questions,
+            "mind_score": combined_mind,
+            "mind_score_label": get_mind_score_label(combined_mind),
+            "method_version": "combined_v1",
+            "notes": (
+                "Combined estimate from twin onboarding training metrics and latest name deep research run. "
+                "Counts may overlap across sources."
+            ),
+        }
+    )
+
+    # If name-research suggestions are unavailable, fall back to pinned profile questions.
+    if not question_suggestions:
+        public_profile = settings.get("public_profile") if isinstance(settings.get("public_profile"), dict) else {}
+        pinned = public_profile.get("pinned_questions") if isinstance(public_profile.get("pinned_questions"), list) else []
+        question_suggestions = _dedupe_questions(
+            [
+                *pinned,
+                "What are the top questions you can answer about me right now?",
+                "What details in my profile should I verify next?",
+            ],
+            limit=12,
+        )
+
+    capacity_prompt = (
+        f"What are the top {min(max(combined_questions, 5), 20)} questions you can answer about me right now?"
+        if combined_questions > 0
+        else "What can you confidently answer about me right now?"
+    )
+
+    return {
+        "twin_id": twin_id,
+        "identity_name": identity_name,
+        "latest_twin_research_run_id": latest_twin_research_run_id,
+        "name_deep_research": name_research_summary,
+        "metrics": {
+            "combined": combined_metrics,
+            "twin_onboarding": twin_metrics,
+            "name_deep_research": name_research_metrics,
+        },
+        "question_suggestions": question_suggestions,
+        "question_capacity_estimate": combined_questions,
+        "question_capacity_prompt": capacity_prompt,
+    }
 
 
 @router.get("/twins/{twin_id}/metrics/debug")

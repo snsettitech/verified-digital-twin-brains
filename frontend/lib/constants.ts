@@ -56,6 +56,7 @@ export const API_ENDPOINTS = {
   TWIN_KNOWLEDGE_PROFILE: (twinId: string) => `/twins/${twinId}/knowledge-profile`,
   TWIN_GRAPH: (twinId: string) => `/twins/${twinId}/graph`,
   TWIN_GRAPH_STATS: (twinId: string) => `/twins/${twinId}/graph-stats`,
+  TWIN_PROFILE_INSIGHTS: (twinId: string) => `/twins/${twinId}/profile-insights`,
   TWIN_LOGS: (twinId: string) => `/twins/${twinId}/logs`,
   TWIN_EXPORT: (twinId: string) => `/twins/${twinId}/export`,
   

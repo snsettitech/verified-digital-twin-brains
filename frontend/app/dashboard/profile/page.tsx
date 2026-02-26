@@ -21,6 +21,21 @@ type ProfileDraft = {
   mindLabel: string;
 };
 
+type ProfileInsightsResponse = {
+  metrics?: {
+    combined?: TrainingMetricsData | null;
+    twin_onboarding?: TrainingMetricsData | null;
+    name_deep_research?: TrainingMetricsData | null;
+  };
+  question_suggestions?: string[];
+  question_capacity_estimate?: number;
+  question_capacity_prompt?: string;
+  name_deep_research?: {
+    run_id?: string;
+    status?: string;
+  } | null;
+};
+
 const DEFAULT_PINNED_QUESTIONS = [
   'What inspired you to start this project?',
   'What should people know about your style and approach?',
@@ -122,6 +137,7 @@ export default function ProfilePage() {
   const { activeTwin, user, refreshTwins, isLoading } = useTwin();
   const { showToast } = useToast();
   const router = useRouter();
+  const [profileInsights, setProfileInsights] = useState<ProfileInsightsResponse | null>(null);
 
   // Extract training metrics from twin data
   const trainingMetrics = useMemo<TrainingMetricsData | null>(() => {
@@ -147,6 +163,46 @@ export default function ProfilePage() {
     
     return null;
   }, [activeTwin?.settings]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfileInsights() {
+      if (!activeTwin?.id) {
+        setProfileInsights(null);
+        return;
+      }
+
+      try {
+        const response = await authFetchStandalone(API_ENDPOINTS.TWIN_PROFILE_INSIGHTS(activeTwin.id));
+        if (!response.ok) {
+          throw new Error(`Failed to load profile insights (${response.status})`);
+        }
+        const payload = await response.json();
+        if (!cancelled) {
+          setProfileInsights(payload as ProfileInsightsResponse);
+        }
+      } catch (error) {
+        console.error('[Profile] Failed to load profile insights:', error);
+        if (!cancelled) {
+          setProfileInsights(null);
+        }
+      }
+    }
+
+    void loadProfileInsights();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTwin?.id]);
+
+  const effectiveTrainingMetrics = useMemo<TrainingMetricsData | null>(() => {
+    const combined = profileInsights?.metrics?.combined;
+    if (combined && typeof combined === 'object') {
+      return combined;
+    }
+    return trainingMetrics;
+  }, [profileInsights, trainingMetrics]);
 
   const derivedProfile = useMemo<ProfileDraft>(() => {
     const settings = isRecord(activeTwin?.settings) ? activeTwin.settings : {};
@@ -178,8 +234,8 @@ export default function ProfilePage() {
       '';
     
     // Use training metrics for mind label if available
-    const metricsLabel = trainingMetrics?.mind_score_label;
-    const metricsWords = trainingMetrics?.words_processed_display;
+    const metricsLabel = effectiveTrainingMetrics?.mind_score_label;
+    const metricsWords = effectiveTrainingMetrics?.words_processed_display;
     const mindLabel = metricsLabel && metricsWords
       ? `${metricsWords} ${metricsLabel}`
       : (typeof profile.mind_label === 'string' && profile.mind_label.trim()) ||
@@ -197,7 +253,7 @@ export default function ProfilePage() {
       avatarUrl,
       mindLabel,
     };
-  }, [activeTwin?.name, activeTwin?.settings, user?.avatar_url, user?.full_name, trainingMetrics]);
+  }, [activeTwin?.name, activeTwin?.settings, user?.avatar_url, user?.full_name, effectiveTrainingMetrics]);
 
   const [draft, setDraft] = useState<ProfileDraft>(derivedProfile);
   const [isEditing, setIsEditing] = useState(false);
@@ -251,8 +307,13 @@ export default function ProfilePage() {
     router.push('/dashboard/share');
   };
 
-  const handleOpenChat = () => {
-    router.push('/dashboard/chat');
+  const handleOpenChat = (seedQuestion?: string) => {
+    const params = new URLSearchParams();
+    params.set('source', 'profile');
+    if (seedQuestion && seedQuestion.trim()) {
+      params.set('q', seedQuestion.trim());
+    }
+    router.push(`/dashboard/chat?${params.toString()}`);
   };
 
   const handleBioAssist = (mode: 'highlight' | 'generate') => {
@@ -422,7 +483,7 @@ export default function ProfilePage() {
             {!isEditing && (
               <div className="mt-4">
                 <TrainingMetrics 
-                  metrics={trainingMetrics} 
+                  metrics={effectiveTrainingMetrics}
                   isLoading={isLoading}
                   size="md"
                   className="max-w-2xl"
@@ -431,6 +492,12 @@ export default function ProfilePage() {
                   Higher mind scores indicate more trained and accurate profiles. 
                   Metrics are estimates and improve as more high-quality sources are added.
                 </p>
+                {profileInsights?.metrics?.name_deep_research ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Combined from onboarding ({profileInsights.metrics.twin_onboarding?.words_processed_display || '0'} words)
+                    and deep research ({profileInsights.metrics.name_deep_research.words_processed_display || '0'} words).
+                  </p>
+                ) : null}
               </div>
             )}
 
@@ -441,7 +508,7 @@ export default function ProfilePage() {
                   <p className="text-2xl font-bold">Call {firstName(draft.displayName)}</p>
                   <p className="mt-1 text-sm text-orange-100">Have a live conversation with your digital twin.</p>
                   <button
-                    onClick={handleOpenChat}
+                    onClick={() => handleOpenChat()}
                     className="mt-4 w-full rounded-full bg-white/20 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/30"
                   >
                     Open Chat
@@ -467,6 +534,31 @@ export default function ProfilePage() {
                 ))}
               </div>
             </section>
+
+            {Array.isArray(profileInsights?.question_suggestions) && profileInsights.question_suggestions.length > 0 ? (
+              <section className="rounded-3xl border border-white/60 bg-white/75 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-2xl font-bold text-slate-900">Chat Follow-ups</h2>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                    ~{(profileInsights.question_capacity_estimate || 0).toLocaleString()} answerable questions
+                  </span>
+                </div>
+                {profileInsights.question_capacity_prompt ? (
+                  <p className="mb-4 text-sm text-slate-600">{profileInsights.question_capacity_prompt}</p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {profileInsights.question_suggestions.slice(0, 10).map((question, idx) => (
+                    <button
+                      key={`${question}-${idx}`}
+                      onClick={() => handleOpenChat(question)}
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="rounded-3xl border border-white/60 bg-white/75 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
               <h2 className="text-2xl font-bold text-slate-900">Follow {firstName(draft.displayName)} for more...</h2>
@@ -648,7 +740,7 @@ export default function ProfilePage() {
 
       <div className="fixed bottom-5 left-1/2 z-30 -translate-x-1/2">
         <button
-          onClick={handleOpenChat}
+          onClick={() => handleOpenChat()}
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/95 px-5 py-3 text-base font-semibold text-slate-700 shadow-lg shadow-slate-900/10 backdrop-blur transition hover:-translate-y-0.5 hover:bg-white"
         >
           <IconChat />

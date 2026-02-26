@@ -28,6 +28,8 @@ export default function ChatInterface({
   publicShareToken,
   onMemoryUpdated,
   onStreamEvent,
+  presetQuestions = [],
+  initialInput,
 }: {
   twinId: string;
   conversationId?: string | null;
@@ -39,6 +41,8 @@ export default function ChatInterface({
   publicShareToken?: string | null;
   onMemoryUpdated?: () => void;
   onStreamEvent?: (event: ChatStreamEvent) => void;
+  presetQuestions?: string[];
+  initialInput?: string | null;
 }) {
   const { user } = useTwin();
   const isE2EBypass =
@@ -76,6 +80,7 @@ export default function ChatInterface({
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const seededInputRef = useRef<string | null>(null);
 
   const contextStorageKey = mode === 'training'
     ? `training_${trainingSessionId || 'none'}`
@@ -99,6 +104,14 @@ export default function ChatInterface({
   useEffect(() => {
     setEffectiveConversationId(conversationId || null);
   }, [conversationId]);
+
+  useEffect(() => {
+    const next = (initialInput || '').trim();
+    if (!next) return;
+    if (seededInputRef.current === next) return;
+    seededInputRef.current = next;
+    setInput(next);
+  }, [initialInput]);
 
 
   const persistMessages = useCallback((nextMessages: Message[]) => {
@@ -803,6 +816,7 @@ export default function ChatInterface({
           <div className="max-w-4xl mx-auto w-full px-6 mb-4">
             <SuggestedQuestions
               twinId={twinId}
+              presetQuestions={presetQuestions}
               onSelect={(question) => {
                 setInput(question);
                 // Focus the textarea

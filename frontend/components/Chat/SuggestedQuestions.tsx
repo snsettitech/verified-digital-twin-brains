@@ -15,6 +15,7 @@ interface SuggestedQuestionsProps {
   twinId: string;
   onSelect: (question: string) => void;
   disabled?: boolean;
+  presetQuestions?: string[];
 }
 
 // Default fallback questions when no data available
@@ -33,7 +34,7 @@ const ONBOARDING_QUESTIONS = [
   'What should I know about you?',
 ];
 
-export default function SuggestedQuestions({ twinId, onSelect, disabled }: SuggestedQuestionsProps) {
+export default function SuggestedQuestions({ twinId, onSelect, disabled, presetQuestions }: SuggestedQuestionsProps) {
   const [questions, setQuestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +48,20 @@ export default function SuggestedQuestions({ twinId, onSelect, disabled }: Sugge
   }, [supabase]);
 
   const fetchQuestions = useCallback(async () => {
+    const normalizedPreset = Array.isArray(presetQuestions)
+      ? presetQuestions
+          .map((q) => (typeof q === 'string' ? q.trim() : ''))
+          .filter((q) => q.length > 0)
+      : [];
+
+    if (normalizedPreset.length > 0) {
+      setQuestions(Array.from(new Set(normalizedPreset)).slice(0, 12));
+      setUsingDefaults(false);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     if (!twinId) {
       setQuestions(ONBOARDING_QUESTIONS);
       setLoading(false);
@@ -91,7 +106,7 @@ export default function SuggestedQuestions({ twinId, onSelect, disabled }: Sugge
     } finally {
       setLoading(false);
     }
-  }, [twinId, getAuthToken]);
+  }, [twinId, getAuthToken, presetQuestions]);
 
   useEffect(() => {
     fetchQuestions();
@@ -118,7 +133,11 @@ export default function SuggestedQuestions({ twinId, onSelect, disabled }: Sugge
     <div className="space-y-2">
       {/* Label */}
       <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
-        {usingDefaults ? 'Suggested questions' : 'Popular questions'}
+        {Array.isArray(presetQuestions) && presetQuestions.length > 0
+          ? 'Profile follow-up questions'
+          : usingDefaults
+            ? 'Suggested questions'
+            : 'Popular questions'}
       </p>
       
       {/* Questions */}

@@ -1,11 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ChatInterface, { type ChatStreamEvent } from '@/components/Chat/ChatInterface';
 import ContextPanel from '@/components/Chat/ContextPanel';
 import FeatureGate from '@/components/ui/FeatureGate';
 import { useTwin } from '@/lib/context/TwinContext';
 import { isRuntimeFeatureEnabled } from '@/lib/features/runtimeFlags';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
+import { API_ENDPOINTS } from '@/lib/constants';
 
 type ContextSnapshot = {
   queryClass?: string;
@@ -28,14 +31,66 @@ const CONTEXT_FLUSH_MS = 120;
 
 export default function DashboardChatPage() {
   const { activeTwin, isLoading } = useTwin();
+  const searchParams = useSearchParams();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<ContextSnapshot | null>(null);
+  const [profileQuestions, setProfileQuestions] = useState<string[]>([]);
+  const [profileQuestionCapacity, setProfileQuestionCapacity] = useState<number | null>(null);
   const pendingSnapshotRef = useRef<ContextSnapshot | null>(null);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const chatEnabled = isRuntimeFeatureEnabled('dashboardChat');
   const contextPanelEnabled = isRuntimeFeatureEnabled('contextPanel');
   const twinId = activeTwin?.id;
+  const chatSource = searchParams.get('source');
+  const seededQuestion = searchParams.get('q');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfileQuestions() {
+      if (!twinId || chatSource !== 'profile') {
+        setProfileQuestions([]);
+        setProfileQuestionCapacity(null);
+        return;
+      }
+
+      try {
+        const response = await authFetchStandalone(API_ENDPOINTS.TWIN_PROFILE_INSIGHTS(twinId));
+        if (!response.ok) {
+          throw new Error(`Failed to load profile insights: ${response.status}`);
+        }
+        const payload = await response.json();
+        const suggested = Array.isArray(payload?.question_suggestions)
+          ? payload.question_suggestions
+              .map((q: unknown) => (typeof q === 'string' ? q.trim() : ''))
+              .filter((q: string) => q.length > 0)
+          : [];
+        const withSeed: string[] = seededQuestion && seededQuestion.trim()
+          ? [seededQuestion.trim(), ...suggested]
+          : suggested;
+        const deduped: string[] = Array.from(new Set(withSeed)).slice(0, 12);
+
+        if (!cancelled) {
+          setProfileQuestions(deduped);
+          const capacity = Number(payload?.question_capacity_estimate);
+          setProfileQuestionCapacity(Number.isFinite(capacity) ? Math.max(0, Math.floor(capacity)) : null);
+        }
+      } catch (error) {
+        console.error('[DashboardChat] Failed to load profile questions:', error);
+        if (!cancelled) {
+          const fallback = seededQuestion && seededQuestion.trim() ? [seededQuestion.trim()] : [];
+          setProfileQuestions(fallback);
+          setProfileQuestionCapacity(null);
+        }
+      }
+    }
+
+    void loadProfileQuestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [twinId, chatSource, seededQuestion]);
 
   const flushSnapshot = useCallback(() => {
     if (!pendingSnapshotRef.current) return;
@@ -99,18 +154,38 @@ export default function DashboardChatPage() {
     return (
       <div className="flex flex-col gap-4 xl:flex-row">
         <div className="min-h-[620px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          {chatSource === 'profile' && profileQuestionCapacity !== null ? (
+            <div className="border-b border-slate-200 bg-amber-50 px-4 py-3 text-xs text-slate-700">
+              Profile research suggests about <strong>{profileQuestionCapacity.toLocaleString()}</strong> answerable
+              questions. Start with a follow-up prompt below or ask your own question.
+            </div>
+          ) : null}
           <ChatInterface
             twinId={twinId}
             tenantId={activeTwin?.tenant_id}
             conversationId={conversationId}
             onConversationStarted={setConversationId}
             onStreamEvent={handleStreamEvent}
+            presetQuestions={profileQuestions}
+            initialInput={seededQuestion}
           />
         </div>
         {contextPanelEnabled ? <ContextPanel snapshot={snapshot} /> : null}
       </div>
     );
-  }, [isLoading, twinId, activeTwin?.tenant_id, conversationId, handleStreamEvent, contextPanelEnabled, snapshot]);
+  }, [
+    isLoading,
+    twinId,
+    activeTwin?.tenant_id,
+    conversationId,
+    handleStreamEvent,
+    contextPanelEnabled,
+    snapshot,
+    chatSource,
+    profileQuestionCapacity,
+    profileQuestions,
+    seededQuestion,
+  ]);
 
   return (
     <FeatureGate
