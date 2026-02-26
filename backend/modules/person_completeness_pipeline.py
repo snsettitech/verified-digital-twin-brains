@@ -181,6 +181,37 @@ class PersonCompletenessPipeline:
         self.config = config or get_config()
         self.repository = PipelineRunRepository()
         self._stage_handlers: Dict[str, Any] = {}
+
+    def _promote_twin_to_active(self, twin_id: str) -> None:
+        """
+        Best-effort promotion so owner chat is unblocked after successful builds.
+        """
+        update_payload: Dict[str, Any] = {
+            "status": "active",
+            "is_active": True,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        removable_columns = {"status", "is_active"}
+
+        while True:
+            try:
+                supabase.table("twins").update(update_payload).eq("id", twin_id).execute()
+                return
+            except Exception as e:
+                err = str(e).lower()
+                removed = None
+                for column in list(removable_columns):
+                    if column in update_payload and column in err and (
+                        "column" in err or "does not exist" in err or "pgrst204" in err
+                    ):
+                        removed = column
+                        break
+                if removed:
+                    update_payload.pop(removed, None)
+                    removable_columns.discard(removed)
+                    continue
+                logger.warning("Failed to promote twin %s to active: %s", twin_id, e)
+                return
     
     def _get_stage_handler(self, stage: PipelineStage):
         """Lazy load stage handler to avoid circular imports."""
@@ -392,6 +423,9 @@ class PersonCompletenessPipeline:
                 completed_stages=completed_stages,
                 metrics=stage_metrics
             )
+
+            if success and final_status in {"completed", "partial"}:
+                self._promote_twin_to_active(twin_id)
             
             return PipelineResult(
                 run_id=run_id,

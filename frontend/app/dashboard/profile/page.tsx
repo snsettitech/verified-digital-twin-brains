@@ -308,8 +308,20 @@ export default function ProfilePage() {
   };
 
   const handleOpenChat = (seedQuestion?: string) => {
+    if (!activeTwin?.id) {
+      showToast('No profile is selected yet.', 'info');
+      return;
+    }
+    const twinStatus = String(activeTwin?.status || '').toLowerCase();
+    const canChat = twinStatus === 'active' || Boolean(activeTwin?.is_active);
+    if (!canChat) {
+      showToast('Profile is still building. Chat unlocks when setup is complete.', 'info');
+      return;
+    }
+
     const params = new URLSearchParams();
     params.set('source', 'profile');
+    params.set('twinId', activeTwin.id);
     if (seedQuestion && seedQuestion.trim()) {
       params.set('q', seedQuestion.trim());
     }

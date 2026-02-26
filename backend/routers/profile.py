@@ -96,14 +96,14 @@ def map_twin_to_profile(twin: Dict[str, Any]) -> Dict[str, Any]:
         "id": twin["id"],
         "name": twin["name"],
         "headline": settings.get("headline"),
-        "status": map_status(twin.get("status"), twin.get("settings", {})),
+        "status": map_status(twin.get("status"), twin.get("id")),
         "answerability_score": answerability_score,
         "created_at": twin.get("created_at"),
         "updated_at": twin.get("updated_at"),
     }
 
 
-def map_status(twin_status: Optional[str], settings: Dict[str, Any]) -> str:
+def map_status(twin_status: Optional[str], twin_id: Optional[str]) -> str:
     """Map internal twin status to profile status."""
     if not twin_status:
         return "draft"
@@ -122,13 +122,16 @@ def map_status(twin_status: Optional[str], settings: Dict[str, Any]) -> str:
     
     # Check if there's an active build
     try:
-        latest_run = supabase.table("person_completeness_runs") \
-            .select("status") \
-            .eq("twin_id", settings.get("id")) \
-            .order("created_at", desc=True) \
-            .limit(1).execute()
-        
-        if latest_run.data and latest_run.data[0].get("status") in ["running", "pending"]:
+        if twin_id:
+            latest_run = supabase.table("person_completeness_runs") \
+                .select("status") \
+                .eq("twin_id", twin_id) \
+                .order("created_at", desc=True) \
+                .limit(1).execute()
+        else:
+            latest_run = None
+
+        if latest_run and latest_run.data and latest_run.data[0].get("status") in ["running", "pending"]:
             return "building"
     except Exception:
         pass
@@ -136,23 +139,86 @@ def map_status(twin_status: Optional[str], settings: Dict[str, Any]) -> str:
     return mapped
 
 
-def get_or_create_profile_for_user(user: Dict[str, Any]) -> Dict[str, Any]:
-    """Get existing profile or return None (doesn't create - creation is explicit)."""
+def _normalize_name(value: Optional[str]) -> str:
+    cleaned = " ".join((value or "").strip().split())
+    if cleaned.lower().endswith(" (draft)"):
+        cleaned = cleaned[:-8].strip()
+    return cleaned
+
+
+def _names_conflict(existing_name: Optional[str], requested_name: Optional[str]) -> bool:
+    existing = _normalize_name(existing_name).lower()
+    requested = _normalize_name(requested_name).lower()
+    if not existing or not requested:
+        return False
+    return existing != requested
+
+
+def _score_profile_candidate(twin: Dict[str, Any], user: Dict[str, Any], creator_candidates: set[str]) -> int:
+    score = 0
+    user_id = str(user.get("user_id") or "").strip()
+    creator_id = str(twin.get("creator_id") or "").strip()
+    settings = twin.get("settings") or {}
+    owner_user_id = str(settings.get("owner_user_id") or "").strip()
+    status = str(twin.get("status") or "").strip().lower()
+
+    if owner_user_id and user_id and owner_user_id == user_id:
+        score += 100
+    if creator_id and user_id and creator_id == user_id:
+        score += 80
+    if creator_id and creator_id in creator_candidates:
+        score += 40
+    if status == "active":
+        score += 20
+    if status == "persona_built":
+        score += 10
+    return score
+
+
+def _select_profile_twin_for_user(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     tenant_id = user.get("tenant_id")
     user_id = user.get("user_id")
-    
-    # Get most recent non-deleted twin for this tenant
-    result = supabase.table("twins") \
-        .select("*") \
-        .eq("tenant_id", tenant_id) \
-        .is_("settings->>deleted_at", "null") \
-        .order("created_at", desc=True) \
-        .limit(1).execute()
-    
-    if result.data:
-        return map_twin_to_profile(result.data[0])
-    
-    return None
+    if not tenant_id:
+        return None
+
+    # Pull a bounded set then rank locally so legacy rows still work.
+    result = (
+        supabase.table("twins")
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .is_("settings->>deleted_at", "null")
+        .order("created_at", desc=True)
+        .limit(25)
+        .execute()
+    )
+    twins = result.data or []
+    if not twins:
+        return None
+
+    creator_candidates = set(derive_creator_ids(user) or [])
+    if user_id:
+        creator_candidates.add(str(user_id))
+    creator_candidates.add(f"tenant_{tenant_id}")
+
+    ranked = sorted(
+        twins,
+        key=lambda twin: (
+            _score_profile_candidate(twin, user, creator_candidates),
+            str(twin.get("created_at") or ""),
+        ),
+        reverse=True,
+    )
+    if not ranked:
+        return None
+    return ranked[0]
+
+
+def get_or_create_profile_for_user(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Get existing profile or return None (doesn't create - creation is explicit)."""
+    twin = _select_profile_twin_for_user(user)
+    if not twin:
+        return None
+    return map_twin_to_profile(twin)
 
 
 # =============================================================================
@@ -195,6 +261,59 @@ async def create_profile(
     # Check for existing profile (idempotency)
     existing = get_or_create_profile_for_user(user)
     if existing:
+        # Prevent/repair identity drift on stale drafts.
+        requested_name = _normalize_name(request.full_name)
+        existing_name = _normalize_name(existing.get("name"))
+        if _names_conflict(existing_name, requested_name):
+            if existing.get("status") == "draft":
+                try:
+                    twin_row = (
+                        supabase.table("twins")
+                        .select("settings")
+                        .eq("id", existing["id"])
+                        .single()
+                        .execute()
+                    )
+                    current_settings = (twin_row.data or {}).get("settings") or {}
+                    merged_settings = {
+                        **current_settings,
+                        "owner_name": requested_name,
+                        "owner_user_id": user_id,
+                        "build_mode": request.build_mode,
+                    }
+                    if request.headline:
+                        merged_settings["headline"] = request.headline
+                    update_payload = {
+                        "name": requested_name,
+                        "settings": merged_settings,
+                        "updated_at": datetime.utcnow().isoformat(),
+                    }
+                    supabase.table("twins").update(update_payload).eq("id", existing["id"]).execute()
+                    refreshed = get_or_create_profile_for_user(user)
+                    if refreshed:
+                        logger.info(
+                            "Profile identity updated on existing draft: user=%s old=%s new=%s",
+                            user_id,
+                            existing_name,
+                            requested_name,
+                        )
+                        return refreshed
+                except Exception as e:
+                    logger.warning("Failed to update stale draft identity: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "Profile identity conflict",
+                    "code": "PROFILE_IDENTITY_CONFLICT",
+                    "message": (
+                        f"Existing profile belongs to '{existing_name}'. "
+                        "Reset the profile before switching to a different person."
+                    ),
+                    "existing_name": existing_name,
+                    "requested_name": requested_name,
+                },
+            )
+
         logger.info(f"Profile already exists for user {user_id}, returning existing")
         return existing
     
@@ -214,6 +333,7 @@ async def create_profile(
             "use_person_completeness": True,
             "created_via": "profile_api",
             "owner_name": request.full_name.strip(),
+            "owner_user_id": user_id,
         },
         "is_active": False,
     }

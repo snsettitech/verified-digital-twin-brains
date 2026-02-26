@@ -30,7 +30,7 @@ type ContextSnapshot = {
 const CONTEXT_FLUSH_MS = 120;
 
 function DashboardChatPageContent() {
-  const { activeTwin, isLoading } = useTwin();
+  const { activeTwin, isLoading, twins, setActiveTwin } = useTwin();
   const searchParams = useSearchParams();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<ContextSnapshot | null>(null);
@@ -41,9 +41,18 @@ function DashboardChatPageContent() {
 
   const chatEnabled = isRuntimeFeatureEnabled('dashboardChat');
   const contextPanelEnabled = isRuntimeFeatureEnabled('contextPanel');
+  const requestedTwinId = searchParams.get('twinId');
   const twinId = activeTwin?.id;
   const chatSource = searchParams.get('source');
   const seededQuestion = searchParams.get('q');
+
+  useEffect(() => {
+    if (!requestedTwinId) return;
+    if (activeTwin?.id === requestedTwinId) return;
+    const exists = twins.some((t) => t.id === requestedTwinId);
+    if (!exists) return;
+    setActiveTwin(requestedTwinId);
+  }, [requestedTwinId, activeTwin?.id, twins, setActiveTwin]);
 
   useEffect(() => {
     let cancelled = false;

@@ -17,6 +17,7 @@ from modules.user_management import (
     accept_invitation,
 )
 from modules.observability import supabase
+from modules.tenant_guard import derive_creator_ids
 from supabase import create_client as create_supabase_client
 from supabase_auth.errors import AuthApiError
 
@@ -425,8 +426,15 @@ async def get_my_twins(user=Depends(get_current_user)):
     
     print(f"[AUTH] get_my_twins: user={user_id}, tenant={tenant_id}")
     
-    # Query twins by tenant_id
-    result = supabase.table("twins").select("*").eq("tenant_id", tenant_id).order("created_at", desc=True).execute()
+    # Query twins by tenant_id (bounded) and rank for current user first.
+    result = (
+        supabase.table("twins")
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
     twins = result.data if result.data else []
     
     # AUTO-REPAIR: Check for orphaned twins if none found
@@ -456,6 +464,34 @@ async def get_my_twins(user=Depends(get_current_user)):
     
     # Filter out archived/deleted twins (settings.deleted_at)
     twins = [t for t in twins if not (t.get("settings") or {}).get("deleted_at")]
+    creator_candidates = set(derive_creator_ids(user) or [])
+    if user_id:
+        creator_candidates.add(str(user_id))
+    creator_candidates.add(f"tenant_{tenant_id}")
+
+    def _score_twin(t: Dict[str, Any]) -> int:
+        score = 0
+        creator_id = str(t.get("creator_id") or "")
+        settings = t.get("settings") if isinstance(t.get("settings"), dict) else {}
+        owner_user_id = str(settings.get("owner_user_id") or "")
+        status = str(t.get("status") or "").lower()
+        if owner_user_id and user_id and owner_user_id == user_id:
+            score += 100
+        if creator_id and user_id and creator_id == user_id:
+            score += 80
+        if creator_id and creator_id in creator_candidates:
+            score += 40
+        if status == "active":
+            score += 20
+        if status == "persona_built":
+            score += 10
+        return score
+
+    twins = sorted(
+        twins,
+        key=lambda t: (_score_twin(t), str(t.get("created_at") or "")),
+        reverse=True,
+    )
     twins = [_normalize_twin_status_shape(t) for t in twins]
 
     print(f"[MY-TWINS DEBUG] Returning {len(twins)} twins for tenant {tenant_id}")

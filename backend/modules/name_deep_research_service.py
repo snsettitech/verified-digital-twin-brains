@@ -151,6 +151,21 @@ def _normalize_name(name: str) -> str:
     return re.sub(r"\s+", " ", (name or "").strip())
 
 
+def _strip_draft_suffix(name: str) -> str:
+    cleaned = _normalize_name(name)
+    if cleaned.lower().endswith(" (draft)"):
+        return cleaned[:-8].strip()
+    return cleaned
+
+
+def _names_conflict(existing: Optional[str], requested: Optional[str]) -> bool:
+    left = _strip_draft_suffix(existing or "").lower()
+    right = _strip_draft_suffix(requested or "").lower()
+    if not left or not right:
+        return False
+    return left != right
+
+
 def _name_variants(full_name: str) -> List[str]:
     name = _normalize_name(full_name)
     parts = [p for p in name.split(" ") if p]
@@ -393,6 +408,198 @@ class NameDeepResearchService:
         preferred_provider = (os.getenv("SEARCH_PROVIDER", "exa") or "exa").lower()
         self.search_provider = create_search_provider_with_fallback(preferred=preferred_provider)
 
+    def _creator_candidates(self, *, tenant_id: str, user_id: str) -> List[str]:
+        candidates: List[str] = []
+        if user_id:
+            candidates.append(str(user_id))
+        if tenant_id:
+            candidates.append(f"tenant_{tenant_id}")
+        # Keep order, remove duplicates.
+        seen: set[str] = set()
+        ordered: List[str] = []
+        for candidate in candidates:
+            if not candidate or candidate in seen:
+                continue
+            seen.add(candidate)
+            ordered.append(candidate)
+        return ordered
+
+    def _score_twin_for_user(self, twin: Dict[str, Any], *, user_id: str, creator_candidates: List[str]) -> int:
+        score = 0
+        creator_id = str(twin.get("creator_id") or "")
+        settings = twin.get("settings") or {}
+        owner_user_id = str(settings.get("owner_user_id") or "")
+        status = str(twin.get("status") or "").lower()
+
+        if owner_user_id and user_id and owner_user_id == user_id:
+            score += 100
+        if creator_id and user_id and creator_id == user_id:
+            score += 80
+        if creator_id in creator_candidates:
+            score += 40
+        if status == "active":
+            score += 20
+        if status == "persona_built":
+            score += 10
+        return score
+
+    def _find_existing_profile_twin(self, *, tenant_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        rows = (
+            self.db.table("twins")
+            .select("id,name,status,is_active,settings,created_at,creator_id")
+            .eq("tenant_id", tenant_id)
+            .is_("settings->>deleted_at", "null")
+            .order("created_at", desc=True)
+            .limit(25)
+            .execute()
+        ).data or []
+        if not rows:
+            return None
+
+        creator_candidates = self._creator_candidates(tenant_id=tenant_id, user_id=user_id)
+        ranked = sorted(
+            rows,
+            key=lambda row: (
+                self._score_twin_for_user(row, user_id=user_id, creator_candidates=creator_candidates),
+                str(row.get("created_at") or ""),
+            ),
+            reverse=True,
+        )
+        return ranked[0] if ranked else None
+
+    def _has_material_person_data(self, *, twin_id: str) -> bool:
+        count_checks = [
+            ("sources", "id"),
+            ("chunks", "id"),
+            ("person_source_registry", "id"),
+            ("person_claims", "id"),
+            ("person_timeline_events", "id"),
+        ]
+        for table, field in count_checks:
+            try:
+                res = (
+                    self.db.table(table)
+                    .select(field, count="exact")
+                    .eq("twin_id", twin_id)
+                    .limit(1)
+                    .execute()
+                )
+                if (res.count or 0) > 0:
+                    return True
+            except Exception:
+                # Legacy/missing table/column should not block flow.
+                continue
+        return False
+
+    def _clear_twin_person_data(self, *, twin_id: str) -> None:
+        # Ordered from derived tables -> base sources.
+        tables = [
+            "person_claim_evidence_spans",
+            "person_claims",
+            "person_timeline_events",
+            "person_topic_profiles",
+            "person_contradictions",
+            "person_answerability_scores",
+            "person_style_profile",
+            "person_source_registry",
+            "person_completeness_runs",
+            "chunks",
+            "sources",
+        ]
+        for table in tables:
+            try:
+                self.db.table(table).delete().eq("twin_id", twin_id).execute()
+            except Exception as exc:
+                logger.warning("name-research reset: failed clearing %s for twin=%s (%s)", table, twin_id, exc)
+
+        # Best-effort vector namespace purge to avoid cross-person retrieval bleed.
+        try:
+            from modules.clients import get_pinecone_index
+            from modules.delphi_namespace import get_primary_namespace_for_twin
+
+            namespace = get_primary_namespace_for_twin(twin_id=twin_id)
+            index = get_pinecone_index()
+            index.delete(delete_all=True, namespace=namespace)
+        except Exception as exc:
+            logger.warning("name-research reset: vector purge failed for twin=%s (%s)", twin_id, exc)
+
+    def _safe_update_twin_record(self, *, twin_id: str, tenant_id: str, payload: Dict[str, Any]) -> None:
+        mutable_payload = dict(payload)
+        removable_columns = ["status", "is_active"]
+
+        while True:
+            try:
+                (
+                    self.db.table("twins")
+                    .update(mutable_payload)
+                    .eq("id", twin_id)
+                    .eq("tenant_id", tenant_id)
+                    .execute()
+                )
+                return
+            except Exception as exc:
+                msg = str(exc).lower()
+                removed = None
+                for column in removable_columns:
+                    if column in mutable_payload and column in msg and (
+                        "does not exist" in msg or "could not find" in msg or "pgrst204" in msg
+                    ):
+                        removed = column
+                        break
+                if removed:
+                    mutable_payload.pop(removed, None)
+                    continue
+                raise
+
+    def _reset_identity_on_existing_twin(
+        self,
+        *,
+        twin: Dict[str, Any],
+        tenant_id: str,
+        user_id: str,
+        normalized_name: str,
+        hints: Dict[str, Optional[str]],
+    ) -> None:
+        twin_id = twin["id"]
+        previous_name = str(twin.get("name") or "").strip()
+        self._clear_twin_person_data(twin_id=twin_id)
+
+        current_settings = twin.get("settings") or {}
+        merged_settings = {
+            **current_settings,
+            "owner_name": normalized_name,
+            "owner_user_id": user_id,
+            "build_mode": "name_only",
+            "creation_mode": "name_first",
+            "name_first_state": "researching",
+            "name_first_hints": {
+                "location": hints.get("location"),
+                "company": hints.get("company"),
+                "website": hints.get("website"),
+            },
+            "identity_reset_at": _utcnow_iso(),
+            "identity_reset_from": previous_name,
+        }
+
+        update_payload = {
+            "name": normalized_name,
+            "settings": merged_settings,
+            "description": f"{normalized_name}'s verified digital profile",
+            "status": "draft",
+            "is_active": False,
+        }
+        self._safe_update_twin_record(
+            twin_id=twin_id,
+            tenant_id=tenant_id,
+            payload=update_payload,
+        )
+        logger.info(
+            "name-research identity reset applied: twin_id=%s from=%s to=%s",
+            twin_id,
+            previous_name,
+            normalized_name,
+        )
+
     async def create_run(
         self,
         *,
@@ -420,38 +627,43 @@ class NameDeepResearchService:
             if existing.data:
                 row = dict(existing.data[0])
                 if not row.get("twin_id"):
-                    fallback_twin = (
-                        self.db.table("twins")
-                        .select("id")
-                        .eq("tenant_id", tenant_id)
-                        .is_("settings->>deleted_at", "null")
-                        .order("created_at", desc=True)
-                        .limit(1)
-                        .execute()
-                    )
-                    if fallback_twin.data:
-                        row["twin_id"] = fallback_twin.data[0]["id"]
+                    fallback_twin = self._find_existing_profile_twin(tenant_id=tenant_id, user_id=user_id)
+                    if fallback_twin:
+                        row["twin_id"] = fallback_twin["id"]
                 return row
 
         # ====================================================================
         # STEP 1: Check for existing profile (one profile per user rule)
         # ====================================================================
-        existing_twin = (
-            self.db.table("twins")
-            .select("id")
-            .eq("tenant_id", tenant_id)
-            .is_("settings->>deleted_at", "null")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
-        
-        if existing_twin.data:
-            # User already has a profile - attach research to existing twin
-            twin_id = existing_twin.data[0]["id"]
+        existing_twin = self._find_existing_profile_twin(tenant_id=tenant_id, user_id=user_id)
+
+        if existing_twin:
+            existing_name = _strip_draft_suffix(str(existing_twin.get("name") or ""))
+            status = str(existing_twin.get("status") or "").lower()
+            material_data_exists = self._has_material_person_data(twin_id=existing_twin["id"])
+
+            if _names_conflict(existing_name, normalized_name):
+                # Guard against multi-person identity drift for single-profile accounts.
+                if status == "active" and material_data_exists:
+                    raise ValueError(
+                        f"Existing profile identity is '{existing_name}'. "
+                        "Reset profile before researching a different person."
+                    )
+                self._reset_identity_on_existing_twin(
+                    twin=existing_twin,
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    normalized_name=normalized_name,
+                    hints=hints,
+                )
+
+            # User already has a profile - attach research to existing twin.
+            twin_id = existing_twin["id"]
             logger.info(
-                "name-research attaching to existing twin: twin_id=%s tenant_id=%s",
-                twin_id, tenant_id
+                "name-research attaching to existing twin: twin_id=%s tenant_id=%s user_id=%s",
+                twin_id,
+                tenant_id,
+                user_id,
             )
         else:
             # No existing profile - create new twin in "name_first" mode
@@ -727,23 +939,27 @@ class NameDeepResearchService:
                 on_conflict="run_id",
             ).execute()
 
-            await self._update_run(
-                run_id,
-                status="completed",
-                selected_model=selected_model,
-                sources_used_in_final=len([s for s in result_doc.get("sources", []) if s.get("used_in_final")]),
-                run_completed_at=result_doc["crawl_stats"]["run_completed_at"],
-                updated_at=_utcnow_iso(),
-            )
-            
-            # Update twin with research results
+            # Update twin with research results before marking the run complete.
             from modules.twin_service import update_twin_from_research
-            await update_twin_from_research(
+            twin_updated = await update_twin_from_research(
                 db=self.db,
                 twin_id=twin_id,
                 tenant_id=tenant_id,
                 research_result=result_doc,
             )
+
+            update_fields: Dict[str, Any] = {
+                "status": "completed",
+                "selected_model": selected_model,
+                "sources_used_in_final": len([s for s in result_doc.get("sources", []) if s.get("used_in_final")]),
+                "run_completed_at": result_doc["crawl_stats"]["run_completed_at"],
+                "updated_at": _utcnow_iso(),
+            }
+            if not twin_updated:
+                update_fields["error_message"] = (
+                    "Research completed but profile activation update failed; retry may be required."
+                )
+            await self._update_run(run_id, **update_fields)
             
             logger.info("name-research run completed: run_id=%s twin_id=%s", run_id, twin_id)
         except Exception as exc:

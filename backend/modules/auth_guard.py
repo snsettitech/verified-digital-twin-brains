@@ -950,7 +950,8 @@ def ensure_twin_active(twin_id: str) -> bool:
         
         # Check if twin is active (only when status field is present)
         twin_status = result.data.get("status")
-        if twin_status and twin_status not in ["active", "live", None]:
+        allowed_statuses = {"active", "live", "persona_built", None}
+        if twin_status and twin_status not in allowed_statuses:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Twin {twin_id} is not active (status: {twin_status})"

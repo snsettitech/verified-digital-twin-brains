@@ -104,6 +104,11 @@ export default function OnboardingV2Page() {
         });
         setResearchRun(run);
         setProfileId(run.twin_id); // Use the twin_id as profileId
+        try {
+          localStorage.setItem('activeTwinId', run.twin_id);
+        } catch {
+          // Non-blocking storage write.
+        }
         setCurrentStep('building');
       } else {
         // With-links flow: Create profile first
@@ -113,6 +118,11 @@ export default function OnboardingV2Page() {
           build_mode: 'with_links'
         });
         setProfileId(profile.id);
+        try {
+          localStorage.setItem('activeTwinId', profile.id);
+        } catch {
+          // Non-blocking storage write.
+        }
         setCurrentStep('hints');
       }
     } catch (err: any) {
@@ -384,6 +394,13 @@ export default function OnboardingV2Page() {
   // ============================================================================
 
   const handleComplete = () => {
+    if (profileId) {
+      try {
+        localStorage.setItem('activeTwinId', profileId);
+      } catch {
+        // Non-blocking storage write.
+      }
+    }
     router.push('/dashboard/profile');
   };
 

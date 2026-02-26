@@ -67,6 +67,8 @@ async def create_twin_for_name_research(
         "use_5layer_persona": True,
         "persona_v2_version": "2.0.0",
         "creation_mode": "name_first",
+        "owner_name": normalized_name,
+        "owner_user_id": user_id,
         "name_first_hints": {
             "location": hints.get("location"),
             "company": hints.get("company"),
@@ -165,7 +167,7 @@ async def update_twin_from_research(
     twin_id: str,
     tenant_id: str,
     research_result: Dict[str, Any],
-) -> None:
+) -> bool:
     """
     Update a twin with data from completed name-only deep research.
     
@@ -178,26 +180,44 @@ async def update_twin_from_research(
         research_result: The synthesized research result
     """
     try:
+        twin_row = (
+            db.table("twins")
+            .select("id, settings")
+            .eq("id", twin_id)
+            .eq("tenant_id", tenant_id)
+            .limit(1)
+            .execute()
+        )
+        if not twin_row.data:
+            logger.warning("No twin found to update from research: twin_id=%s tenant_id=%s", twin_id, tenant_id)
+            return False
+
+        current_settings = twin_row.data[0].get("settings") or {}
+
         # Extract key information from research result
         claimed_identity = research_result.get("claimed_identity", {})
         bio = research_result.get("bio", {})
         profile = research_result.get("profile_summary", {})
         
         # Build update payload
-        update_data: Dict[str, Any] = {
-            "settings": {
-                "use_5layer_persona": True,
-                "persona_v2_version": "2.0.0",
-                "creation_mode": "name_first",
-                "name_first_state": "complete",
-                "research_completed_at": research_result.get("crawl_stats", {}).get("run_completed_at"),
-            }
+        update_data: Dict[str, Any] = {}
+
+        merged_settings = {
+            **current_settings,
+            "use_5layer_persona": True,
+            "persona_v2_version": "2.0.0",
+            "creation_mode": "name_first",
+            "name_first_state": "complete",
+            "research_completed_at": research_result.get("crawl_stats", {}).get("run_completed_at"),
         }
         
         # If we have a canonical name, update the twin name
         canonical_name = claimed_identity.get("canonical_name")
         if canonical_name:
-            update_data["name"] = canonical_name
+            normalized_name = canonical_name.strip()
+            if normalized_name:
+                update_data["name"] = normalized_name
+                merged_settings["owner_name"] = normalized_name
         
         # Update description with bio if available
         short_bio = bio.get("short")
@@ -215,24 +235,46 @@ async def update_twin_from_research(
         # Mark as active now that research is complete
         update_data["status"] = "active"
         update_data["is_active"] = True
+        update_data["settings"] = merged_settings
         
         # Perform update
-        result = (
-            db.table("twins")
-            .update(update_data)
-            .eq("id", twin_id)
-            .eq("tenant_id", tenant_id)
-            .execute()
-        )
+        mutable_payload = dict(update_data)
+        removable_columns = {"status", "is_active"}
+        while True:
+            try:
+                result = (
+                    db.table("twins")
+                    .update(mutable_payload)
+                    .eq("id", twin_id)
+                    .eq("tenant_id", tenant_id)
+                    .execute()
+                )
+                break
+            except Exception as update_error:
+                err = str(update_error).lower()
+                removed = None
+                for column in list(removable_columns):
+                    if column in mutable_payload and column in err and (
+                        "column" in err or "does not exist" in err or "pgrst204" in err
+                    ):
+                        removed = column
+                        break
+                if removed:
+                    mutable_payload.pop(removed, None)
+                    removable_columns.discard(removed)
+                    continue
+                raise
         
         if result.data:
             logger.info(
                 "Updated twin from research: twin_id=%s name=%s",
-                twin_id, update_data.get("name", "unchanged")
+                twin_id, mutable_payload.get("name", "unchanged")
             )
+            return True
         else:
             logger.warning("No twin updated: twin_id=%s tenant_id=%s", twin_id, tenant_id)
+            return False
             
     except Exception as e:
         logger.exception("Failed to update twin from research: twin_id=%s error=%s", twin_id, e)
-        # Don't raise - this is a best-effort update
+        return False

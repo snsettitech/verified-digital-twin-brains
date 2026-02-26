@@ -115,17 +115,12 @@ async def create_deep_research_run(
         response_twin_id = row.get("twin_id")
         if not response_twin_id:
             try:
-                twin_result = (
-                    service.db.table("twins")
-                    .select("id")
-                    .eq("tenant_id", user["tenant_id"])
-                    .is_("settings->>deleted_at", "null")
-                    .order("created_at", desc=True)
-                    .limit(1)
-                    .execute()
+                fallback_twin = service._find_existing_profile_twin(
+                    tenant_id=user["tenant_id"],
+                    user_id=user["user_id"],
                 )
-                if twin_result.data:
-                    response_twin_id = twin_result.data[0]["id"]
+                if fallback_twin:
+                    response_twin_id = fallback_twin["id"]
             except Exception:
                 response_twin_id = None
         return CreateDeepResearchRunResponse(
