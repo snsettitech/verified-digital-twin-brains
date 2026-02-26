@@ -1,379 +1,258 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface DeleteTwinModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onDelete: (permanent: boolean) => Promise<void>;
-    twinName: string;
-    twinHandle?: string;
-    twinId: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onDelete: (permanent: boolean) => Promise<void>;
+  twinName: string;
+  twinHandle?: string;
+  twinId: string;
 }
 
 interface TwinDataVolume {
-    knowledgeCount: number;
-    conversationCount: number;
-    isLoading: boolean;
-    error: string | null;
+  knowledgeCount: number;
+  conversationCount: number;
+  isLoading: boolean;
+  error: string | null;
 }
 
 export default function DeleteTwinModal({
-    isOpen,
-    onClose,
-    onDelete,
-    twinName,
-    twinHandle,
-    twinId
+  isOpen,
+  onClose,
+  onDelete,
+  twinName,
+  twinHandle,
+  twinId,
 }: DeleteTwinModalProps) {
-    const [step, setStep] = useState<'choose' | 'confirm'>('choose');
-    const [deleteType, setDeleteType] = useState<'archive' | 'permanent'>('archive');
-    const [confirmText, setConfirmText] = useState('');
-    const [isDeleting, setIsDeleting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [dataVolume, setDataVolume] = useState<TwinDataVolume>({
-        knowledgeCount: 0,
-        conversationCount: 0,
+  const [step, setStep] = useState<'review' | 'confirm'>('review');
+  const [confirmText, setConfirmText] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dataVolume, setDataVolume] = useState<TwinDataVolume>({
+    knowledgeCount: 0,
+    conversationCount: 0,
+    isLoading: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!isOpen || !twinId) return;
+    void fetchDataVolume();
+  }, [isOpen, twinId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setStep('review');
+    setConfirmText('');
+    setError(null);
+  }, [isOpen]);
+
+  const fetchDataVolume = async () => {
+    setDataVolume((prev) => ({ ...prev, isLoading: true, error: null }));
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const [knowledgeRes, conversationsRes] = await Promise.all([
+        fetch(`${apiBase}/sources/${twinId}`, { credentials: 'include' }),
+        fetch(`${apiBase}/conversations/${twinId}`, { credentials: 'include' }),
+      ]);
+
+      const knowledgeCount = knowledgeRes.ok ? (await knowledgeRes.json()).length || 0 : 0;
+      const conversationCount = conversationsRes.ok ? (await conversationsRes.json()).length || 0 : 0;
+
+      setDataVolume({
+        knowledgeCount,
+        conversationCount,
         isLoading: false,
-        error: null
-    });
+        error: null,
+      });
+    } catch {
+      setDataVolume((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: 'Could not load profile data volume',
+      }));
+    }
+  };
 
-    // Fetch data volume when modal opens
-    useEffect(() => {
-        if (isOpen && twinId) {
-            fetchDataVolume();
-        }
-    }, [isOpen, twinId]);
+  if (!isOpen) return null;
 
-    const fetchDataVolume = async () => {
-        setDataVolume(prev => ({ ...prev, isLoading: true, error: null }));
-        try {
-            // Fetch knowledge sources count
-            const knowledgeRes = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/sources/${twinId}`,
-                { credentials: 'include' }
-            );
-            
-            // Fetch conversations count  
-            const conversationsRes = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/conversations/${twinId}`,
-                { credentials: 'include' }
-            );
+  const normalized = confirmText.trim();
+  const matchesName = normalized === twinName;
+  const matchesHandle = twinHandle ? normalized === twinHandle : false;
+  const isConfirmValid = matchesName || matchesHandle;
 
-            const knowledgeCount = knowledgeRes.ok ? (await knowledgeRes.json()).length || 0 : 0;
-            const conversationCount = conversationsRes.ok ? (await conversationsRes.json()).length || 0 : 0;
+  const handleProceed = () => {
+    setStep('confirm');
+    setError(null);
+  };
 
-            setDataVolume({
-                knowledgeCount,
-                conversationCount,
-                isLoading: false,
-                error: null
-            });
-        } catch {
-            setDataVolume(prev => ({
-                ...prev,
-                isLoading: false,
-                error: 'Could not load data volume'
-            }));
-        }
-    };
+  const handleBack = () => {
+    setStep('review');
+    setError(null);
+  };
 
-    // Reset state when modal opens/closes
-    React.useEffect(() => {
-        if (isOpen) {
-            setStep('choose');
-            setDeleteType('archive');
-            setConfirmText('');
-            setError(null);
-        }
-    }, [isOpen]);
+  const handleReset = async () => {
+    if (!isConfirmValid) {
+      setError('Confirmation does not match profile name or handle');
+      return;
+    }
 
-    if (!isOpen) return null;
+    setIsResetting(true);
+    setError(null);
+    try {
+      await onDelete(true);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to reset profile');
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
-    const handleProceed = () => {
-        setStep('confirm');
-        setConfirmText('');
-        setError(null);
-    };
+  const totalItems = dataVolume.knowledgeCount + dataVolume.conversationCount;
 
-    const handleBack = () => {
-        setStep('choose');
-        setError(null);
-    };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-    const handleDelete = async () => {
-        const normalized = confirmText.trim();
-        const nameMatch = normalized === twinName;
-        const handleMatch = twinHandle ? normalized === twinHandle : false;
-        if (!nameMatch && !handleMatch) {
-            setError('Confirmation does not match twin name or handle');
-            return;
-        }
-
-        setIsDeleting(true);
-        setError(null);
-
-        try {
-            await onDelete(deleteType === 'permanent');
-            onClose();
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to delete twin');
-        } finally {
-            setIsDeleting(false);
-        }
-    };
-
-    const isConfirmValid = confirmText.trim() === twinName || (twinHandle ? confirmText.trim() === twinHandle : false);
-
-    const totalItems = dataVolume.knowledgeCount + dataVolume.conversationCount;
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Backdrop */}
-            <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={onClose}
-            />
-
-            {/* Modal */}
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-                {/* Header */}
-                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-slate-900">
-                            {step === 'choose' ? 'Delete Twin' : 'Confirm Deletion'}
-                        </h2>
-                        <button
-                            onClick={onClose}
-                            className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Content */}
-                <div className="p-6">
-                    {step === 'choose' ? (
-                        <>
-                            {/* Warning */}
-                            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                                <div className="flex gap-3">
-                                    <span className="text-2xl">⚠️</span>
-                                    <div>
-                                        <p className="font-semibold text-amber-800">You are about to delete &quot;{twinName}&quot;</p>
-                                        <p className="text-sm text-amber-700 mt-1">This will affect all knowledge, conversations, and API integrations.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Data Volume Summary */}
-                            <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
-                                <p className="font-semibold text-indigo-900 mb-3">📊 Data Volume</p>
-                                {dataVolume.isLoading ? (
-                                    <div className="flex items-center gap-2 text-sm text-indigo-600">
-                                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                                        </svg>
-                                        Calculating...
-                                    </div>
-                                ) : dataVolume.error ? (
-                                    <p className="text-sm text-amber-600">{dataVolume.error}</p>
-                                ) : (
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="text-center p-3 bg-white rounded-lg">
-                                            <p className="text-2xl font-bold text-indigo-600">{dataVolume.knowledgeCount}</p>
-                                            <p className="text-xs text-slate-500">Knowledge Sources</p>
-                                        </div>
-                                        <div className="text-center p-3 bg-white rounded-lg">
-                                            <p className="text-2xl font-bold text-indigo-600">{dataVolume.conversationCount}</p>
-                                            <p className="text-xs text-slate-500">Conversations</p>
-                                        </div>
-                                    </div>
-                                )}
-                                {totalItems > 0 && !dataVolume.isLoading && (
-                                    <p className="mt-3 text-xs text-indigo-700 text-center">
-                                        Total: <strong>{totalItems}</strong> items will be {deleteType === 'permanent' ? 'permanently deleted' : 'archived'}
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Options */}
-                            <div className="space-y-3">
-                                <button
-                                    onClick={() => setDeleteType('archive')}
-                                    className={`w-full p-4 rounded-xl border-2 text-left transition-all ${deleteType === 'archive'
-                                            ? 'border-indigo-500 bg-indigo-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                        }`}
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${deleteType === 'archive' ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300'
-                                            }`}>
-                                            {deleteType === 'archive' && (
-                                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-slate-900">Archive (Recommended)</p>
-                                            <p className="text-sm text-slate-500 mt-1">
-                                                Hide the twin and disable access. Data is preserved and can be recovered.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </button>
-
-                                <button
-                                    onClick={() => setDeleteType('permanent')}
-                                    className={`w-full p-4 rounded-xl border-2 text-left transition-all ${deleteType === 'permanent'
-                                            ? 'border-red-500 bg-red-50'
-                                            : 'border-slate-200 hover:border-slate-300'
-                                        }`}
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${deleteType === 'permanent' ? 'border-red-500 bg-red-500' : 'border-slate-300'
-                                            }`}>
-                                            {deleteType === 'permanent' && (
-                                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <p className="font-semibold text-slate-900">Permanent Delete</p>
-                                            <p className="text-sm text-slate-500 mt-1">
-                                                Permanently delete all data including knowledge, graphs, and API keys. <span className="text-red-600 font-medium">Cannot be undone.</span>
-                                            </p>
-                                        </div>
-                                    </div>
-                                </button>
-                            </div>
-
-                            {/* What will be affected */}
-                            <div className="mt-6 p-4 bg-slate-50 rounded-xl">
-                                <p className="font-medium text-slate-700 mb-2">What will be affected:</p>
-                                <ul className="text-sm text-slate-600 space-y-1">
-                                    <li className="flex items-center gap-2">
-                                        <span>📚</span> All knowledge sources and embeddings
-                                        {dataVolume.knowledgeCount > 0 && (
-                                            <span className="ml-auto text-xs bg-slate-200 px-2 py-0.5 rounded-full">
-                                                {dataVolume.knowledgeCount}
-                                            </span>
-                                        )}
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <span>💬</span> Conversation history
-                                        {dataVolume.conversationCount > 0 && (
-                                            <span className="ml-auto text-xs bg-slate-200 px-2 py-0.5 rounded-full">
-                                                {dataVolume.conversationCount}
-                                            </span>
-                                        )}
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <span>🔑</span> API keys and integrations
-                                    </li>
-                                    <li className="flex items-center gap-2">
-                                        <span>🌐</span> Published share links
-                                    </li>
-                                </ul>
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            {/* Confirm step */}
-                            <div className={`mb-6 p-4 rounded-xl ${deleteType === 'permanent'
-                                    ? 'bg-red-50 border border-red-200'
-                                    : 'bg-amber-50 border border-amber-200'
-                                }`}>
-                                <p className={`font-semibold ${deleteType === 'permanent' ? 'text-red-800' : 'text-amber-800'
-                                    }`}>
-                                    {deleteType === 'permanent'
-                                        ? '⚠️ This action is irreversible!'
-                                        : '📦 You are archiving this twin'
-                                    }
-                                </p>
-                                <p className={`text-sm mt-1 ${deleteType === 'permanent' ? 'text-red-700' : 'text-amber-700'
-                                    }`}>
-                                    {deleteType === 'permanent'
-                                        ? `All ${totalItems} items will be permanently deleted and cannot be recovered.`
-                                        : 'The twin will be hidden but data will be preserved.'
-                                    }
-                                </p>
-                            </div>
-
-                            {/* Confirmation input */}
-                            <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">
-                                    Type <span className="font-bold text-slate-900">&quot;{twinName}&quot;</span>
-                                    {twinHandle ? <span> or <span className="font-bold text-slate-900">&quot;{twinHandle}&quot;</span></span> : null}
-                                    {" "}to confirm:
-                                </label>
-                                <input
-                                    type="text"
-                                    value={confirmText}
-                                    onChange={(e) => setConfirmText(e.target.value)}
-                                    placeholder={twinHandle ? `${twinName} or ${twinHandle}` : twinName}
-                                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                                    autoFocus
-                                />
-                            </div>
-
-                            {error && (
-                                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                                    {error}
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between">
-                    {step === 'confirm' && (
-                        <button
-                            onClick={handleBack}
-                            className="px-4 py-2 text-slate-600 font-medium rounded-lg hover:bg-slate-200 transition-colors"
-                        >
-                            ← Back
-                        </button>
-                    )}
-                    <div className={`flex gap-3 ${step === 'choose' ? 'w-full justify-end' : 'ml-auto'}`}>
-                        <button
-                            onClick={onClose}
-                            className="px-4 py-2 text-slate-600 font-medium rounded-lg hover:bg-slate-200 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        {step === 'choose' ? (
-                            <button
-                                onClick={handleProceed}
-                                className={`px-6 py-2 font-semibold rounded-xl transition-colors ${deleteType === 'permanent'
-                                        ? 'bg-red-500 text-white hover:bg-red-600'
-                                        : 'bg-amber-500 text-white hover:bg-amber-600'
-                                    }`}
-                            >
-                                Continue
-                            </button>
-                        ) : (
-                            <button
-                                onClick={handleDelete}
-                                disabled={!isConfirmValid || isDeleting}
-                                className={`px-6 py-2 font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${deleteType === 'permanent'
-                                        ? 'bg-red-500 text-white hover:bg-red-600'
-                                        : 'bg-amber-500 text-white hover:bg-amber-600'
-                                    }`}
-                            >
-                                {isDeleting ? 'Deleting...' : deleteType === 'permanent' ? 'Delete Forever' : 'Archive'}
-                            </button>
-                        )}
-                    </div>
-                </div>
-            </div>
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900">
+              {step === 'review' ? 'Reset Profile' : 'Confirm Profile Reset'}
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
-    );
+
+        <div className="p-6">
+          {step === 'review' ? (
+            <>
+              <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="font-semibold text-amber-800">Reset "{twinName}"</p>
+                <p className="text-sm text-amber-700 mt-1">
+                  This clears profile knowledge, research outputs, chat history, and vectors. Your account remains.
+                </p>
+              </div>
+
+              <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+                <p className="font-semibold text-indigo-900 mb-3">Data Snapshot</p>
+                {dataVolume.isLoading ? (
+                  <p className="text-sm text-indigo-600">Calculating...</p>
+                ) : dataVolume.error ? (
+                  <p className="text-sm text-amber-600">{dataVolume.error}</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-white rounded-lg">
+                      <p className="text-2xl font-bold text-indigo-600">{dataVolume.knowledgeCount}</p>
+                      <p className="text-xs text-slate-500">Knowledge Sources</p>
+                    </div>
+                    <div className="text-center p-3 bg-white rounded-lg">
+                      <p className="text-2xl font-bold text-indigo-600">{dataVolume.conversationCount}</p>
+                      <p className="text-xs text-slate-500">Conversations</p>
+                    </div>
+                  </div>
+                )}
+                {!dataVolume.isLoading && (
+                  <p className="mt-3 text-xs text-indigo-700 text-center">
+                    Estimated items to clear: <strong>{totalItems}</strong>
+                  </p>
+                )}
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl">
+                <p className="font-medium text-slate-700 mb-2">After reset:</p>
+                <ul className="text-sm text-slate-600 space-y-1">
+                  <li>Profile returns to draft mode</li>
+                  <li>Public sharing and tokens are disabled</li>
+                  <li>You can run onboarding again for this profile</li>
+                </ul>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200">
+                <p className="font-semibold text-red-800">This will clear profile data.</p>
+                <p className="text-sm mt-1 text-red-700">
+                  Type the profile name to confirm and continue.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Type <span className="font-bold text-slate-900">"{twinName}"</span>
+                  {twinHandle ? (
+                    <span>
+                      {' '}or <span className="font-bold text-slate-900">"{twinHandle}"</span>
+                    </span>
+                  ) : null}
+                  {' '}to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder={twinHandle ? `${twinName} or ${twinHandle}` : twinName}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between">
+          {step === 'confirm' ? (
+            <button
+              onClick={handleBack}
+              className="px-4 py-2 text-slate-600 font-medium rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              Back
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-slate-600 font-medium rounded-lg hover:bg-slate-200 transition-colors"
+            >
+              Cancel
+            </button>
+            {step === 'review' ? (
+              <button
+                onClick={handleProceed}
+                className="px-6 py-2 font-semibold rounded-xl transition-colors bg-amber-500 text-white hover:bg-amber-600"
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                onClick={handleReset}
+                disabled={!isConfirmValid || isResetting}
+                className="px-6 py-2 font-semibold rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-red-500 text-white hover:bg-red-600"
+              >
+                {isResetting ? 'Resetting...' : 'Reset Profile'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

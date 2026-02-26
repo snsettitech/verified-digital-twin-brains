@@ -70,6 +70,12 @@ class PersonCompletenessSummaryResponse(BaseModel):
     next_actions: List[Dict[str, Any]]
 
 
+class ResetProfileResponse(BaseModel):
+    profile_id: str
+    status: str  # "reset"
+    message: str
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -219,6 +225,127 @@ def get_or_create_profile_for_user(user: Dict[str, Any]) -> Optional[Dict[str, A
     if not twin:
         return None
     return map_twin_to_profile(twin)
+
+
+def _best_effort_delete_by_twin_id(table: str, twin_id: str) -> None:
+    try:
+        supabase.table(table).delete().eq("twin_id", twin_id).execute()
+    except Exception as e:
+        logger.warning("Profile reset: failed deleting %s for twin=%s (%s)", table, twin_id, e)
+
+
+def _best_effort_purge_vectors(twin_id: str) -> None:
+    try:
+        from modules.clients import get_pinecone_index
+        from modules.delphi_namespace import get_namespace_candidates_for_twin
+
+        index = get_pinecone_index()
+        for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
+            try:
+                index.delete(delete_all=True, namespace=namespace)
+            except Exception as ns_err:
+                logger.warning(
+                    "Profile reset: failed deleting Pinecone namespace %s for twin=%s (%s)",
+                    namespace,
+                    twin_id,
+                    ns_err,
+                )
+    except Exception as e:
+        logger.warning("Profile reset: vector purge setup failed for twin=%s (%s)", twin_id, e)
+
+
+def _safe_update_twin_reset(twin_id: str, payload: Dict[str, Any]) -> None:
+    mutable_payload = dict(payload)
+    removable_columns = {"status", "is_active"}
+
+    while True:
+        try:
+            supabase.table("twins").update(mutable_payload).eq("id", twin_id).execute()
+            return
+        except Exception as e:
+            err = str(e).lower()
+            removed = None
+            for column in list(removable_columns):
+                if column in mutable_payload and column in err and (
+                    "column" in err or "does not exist" in err or "pgrst204" in err
+                ):
+                    removed = column
+                    break
+            if removed:
+                mutable_payload.pop(removed, None)
+                removable_columns.discard(removed)
+                continue
+            raise
+
+
+def _reset_profile_data(twin_id: str) -> None:
+    # Child tables first where possible to avoid FK edge cases.
+    delete_tables = [
+        "person_claim_evidence_spans",
+        "person_claims",
+        "person_timeline_events",
+        "person_topic_profiles",
+        "person_contradictions",
+        "person_answerability_scores",
+        "person_style_profile",
+        "person_source_registry",
+        "person_completeness_runs",
+        "research_claim_web_evidence",
+        "research_claim_web_verifications",
+        "research_claim_web_verification_status",
+        "research_claim_finalizations",
+        "research_claim_finalization_status",
+        "research_claim_adjudication_events",
+        "research_claim_adjudications",
+        "research_claim_consistency_actions",
+        "research_claim_consistency_issues",
+        "research_claim_runtime_publication_audit",
+        "research_claim_runtime_retraction_log",
+        "research_claim_runtime_claims",
+        "research_claim_runtime_publication_status",
+        "research_claim_runtime_publication",
+        "research_claims",
+        "research_runs",
+        "crawl_page_classifications",
+        "crawl_page_extractions",
+        "crawl_pages",
+        "crawl_runs",
+        "verified_qna_grounding_chunks",
+        "verified_qna_summaries",
+        "verified_qna",
+        "training_decisions",
+        "training_interactions",
+        "training_sessions",
+        "owner_memory_snapshots",
+        "owner_memory_entries",
+        "memory_events",
+        "action_executions",
+        "action_drafts",
+        "action_triggers",
+        "events",
+        "tool_connectors",
+        "products",
+        "escalations",
+        "conversations",
+        "chunks",
+        "sources",
+    ]
+
+    for table in delete_tables:
+        _best_effort_delete_by_twin_id(table, twin_id)
+
+    # Optional tables that may not exist in all environments.
+    try:
+        supabase.table("name_deep_research_runs").delete().eq("twin_id", twin_id).execute()
+    except Exception as e:
+        logger.warning("Profile reset: failed deleting name_deep_research_runs for twin=%s (%s)", twin_id, e)
+
+    try:
+        supabase.table("twin_api_keys").delete().eq("twin_id", twin_id).execute()
+    except Exception as e:
+        logger.warning("Profile reset: failed deleting twin_api_keys for twin=%s (%s)", twin_id, e)
+
+    _best_effort_purge_vectors(twin_id)
 
 
 # =============================================================================
@@ -402,6 +529,78 @@ async def update_profile(
     result = supabase.table("twins").update(update_data).eq("id", profile["id"]).execute()
     
     return map_twin_to_profile(result.data[0])
+
+
+@router.post("/profile/reset", response_model=ResetProfileResponse)
+async def reset_profile(user: dict = Depends(require_tenant)):
+    """
+    Reset the current user's profile data while keeping the account.
+
+    This keeps the twin identity row but clears accumulated research/knowledge/chat data
+    so onboarding can be re-run cleanly.
+    """
+    profile = get_or_create_profile_for_user(user)
+    if not profile:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "Profile not found", "code": "PROFILE_NOT_FOUND"},
+        )
+
+    twin_id = profile["id"]
+
+    try:
+        twin_row = (
+            supabase.table("twins")
+            .select("name, settings")
+            .eq("id", twin_id)
+            .single()
+            .execute()
+        )
+        current = twin_row.data or {}
+        settings = current.get("settings") or {}
+
+        _reset_profile_data(twin_id)
+
+        settings.pop("deleted_at", None)
+        settings.pop("deleted_by", None)
+        settings.pop("deleted_reason", None)
+        settings["is_public"] = False
+        settings["reset_at"] = datetime.utcnow().isoformat()
+        settings["name_first_state"] = "planning"
+
+        widget_settings = settings.get("widget_settings")
+        if not isinstance(widget_settings, dict):
+            widget_settings = {}
+        widget_settings["public_share_enabled"] = False
+        widget_settings.pop("share_token", None)
+        widget_settings.pop("share_token_expires_at", None)
+        settings["widget_settings"] = widget_settings
+
+        update_payload: Dict[str, Any] = {
+            "settings": settings,
+            "status": "draft",
+            "is_active": False,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        if current.get("name"):
+            update_payload["description"] = f"{current['name']}'s verified digital profile"
+
+        _safe_update_twin_reset(twin_id, update_payload)
+
+        logger.info("Profile reset completed for twin=%s user=%s", twin_id, user.get("user_id"))
+        return ResetProfileResponse(
+            profile_id=twin_id,
+            status="reset",
+            message="Profile has been reset. You can run onboarding again.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to reset profile twin=%s: %s", twin_id, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "Profile reset failed", "code": "PROFILE_RESET_FAILED", "message": str(e)},
+        )
 
 
 @router.get("/profile/build-status", response_model=BuildStatusResponse)

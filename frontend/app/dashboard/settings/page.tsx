@@ -49,7 +49,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
   const [twinActionLoading, setTwinActionLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const router = useRouter();
@@ -322,8 +322,8 @@ export default function SettingsPage() {
     }
   };
 
-  // Delete twin handler
-  const handleDeleteTwin = async (permanent: boolean): Promise<void> => {
+  // Reset profile handler (single-profile mode)
+  const handleResetProfile = async (_permanent: boolean): Promise<void> => {
     if (!activeTwin) throw new Error('No active twin');
     setTwinActionLoading(true);
 
@@ -331,14 +331,8 @@ export default function SettingsPage() {
       const token = await getAuthToken();
       if (!token) throw new Error('Not authenticated');
 
-      // Use archive endpoint for soft delete, DELETE with ?hard=true for permanent
-      const url = permanent
-        ? `${API_URL}/twins/${activeTwin.id}?hard=true`
-        : `${API_URL}/twins/${activeTwin.id}/archive`;
-      const method = permanent ? 'DELETE' : 'POST';
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch(`${API_URL}/profile/reset`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -351,11 +345,16 @@ export default function SettingsPage() {
         throw new Error(errorData.detail || 'Failed to delete twin');
       }
 
-      console.log('[Settings] Twin deleted successfully, refreshing...');
+      console.log('[Settings] Profile reset successfully, refreshing...');
       await refreshTwins({ allowEmpty: true });
+      try {
+        localStorage.removeItem('activeTwinId');
+      } catch {
+        // Ignore storage errors.
+      }
       clearActiveTwin();
-      showToast(permanent ? 'Twin permanently deleted' : 'Twin archived', 'success');
-      router.push('/dashboard');
+      showToast('Profile reset. Start onboarding again.', 'success');
+      router.push('/onboarding/v2');
     } finally {
       setTwinActionLoading(false);
     }
@@ -829,21 +828,21 @@ export default function SettingsPage() {
             </div>
             <div className="p-4 border border-red-200 rounded-xl flex items-center justify-between">
               <div>
-                <p className="font-medium text-slate-900">Delete Twin</p>
-                <p className="text-sm text-slate-500">Archive or permanently delete your digital twin</p>
+                <p className="font-medium text-slate-900">Reset Profile</p>
+                <p className="text-sm text-slate-500">Clear profile knowledge and restart onboarding (account stays)</p>
               </div>
               <button
-                onClick={() => setShowDeleteModal(true)}
+                onClick={() => setShowResetModal(true)}
                 disabled={!activeTwin || twinActionLoading}
                 className="px-4 py-2 bg-red-500 text-white font-medium text-sm rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50"
               >
-                {twinActionLoading ? 'Working...' : 'Delete'}
+                {twinActionLoading ? 'Working...' : 'Reset'}
               </button>
             </div>
             <div className="p-4 border border-red-200 rounded-xl flex items-center justify-between">
               <div>
                 <p className="font-medium text-slate-900">Delete Account</p>
-                <p className="text-sm text-slate-500">Permanently delete your account and all data</p>
+                <p className="text-sm text-slate-500">Full account closure and compliance-level data deletion</p>
               </div>
               <button
                 onClick={() => setShowDeleteAccountModal(true)}
@@ -872,11 +871,11 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Delete Twin Modal */}
+      {/* Reset Profile Modal */}
       <DeleteTwinModal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        onDelete={handleDeleteTwin}
+        isOpen={showResetModal}
+        onClose={() => setShowResetModal(false)}
+        onDelete={handleResetProfile}
         twinName={activeTwin?.name || ''}
         twinHandle={(activeTwin?.settings as any)?.handle || ''}
         twinId={activeTwin?.id || ''}
@@ -888,11 +887,12 @@ export default function SettingsPage() {
           <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl">
             <h2 className="text-xl font-bold text-red-600 mb-2">Delete Account</h2>
             <p className="text-slate-600 mb-4">
-              This will permanently delete your account and archive all your twins. This action cannot be undone.
+              This will close your account and permanently delete profile data where possible.
+              Any blocked records will be archived pending cleanup.
             </p>
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
               <p className="text-sm text-red-700">
-                <strong>Warning:</strong> All your twins, data, and settings will be lost.
+                <strong>Warning:</strong> This action is irreversible and may take time to fully complete.
               </p>
             </div>
             <div className="mb-4">

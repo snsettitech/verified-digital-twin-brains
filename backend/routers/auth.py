@@ -745,10 +745,10 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
     Delete the current user's account.
     
     This is an irreversible action that:
-    1. Archives all twins owned by the user
-    2. Revokes all publish links
-    3. Anonymizes user data
-    4. Terminates the session
+    1. Hard-deletes profile/twin data where possible
+    2. Purges vector namespaces best-effort
+    3. Removes or anonymizes user identity records
+    4. Leaves cleanup_status='pending' if any best-effort step fails
     
     Requires typed confirmation ("DELETE" or user's email).
     """
@@ -778,10 +778,11 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
         
         # 1. Get all twins owned by this user's tenant
         twins_res = supabase.table("twins").select("id, name, settings").eq("tenant_id", tenant_id).execute()
-        twins_to_archive = twins_res.data or []
-        total_twins = len(twins_to_archive)
+        twins_to_delete = twins_res.data or []
+        total_twins = len(twins_to_delete)
         
-        archived_count = 0
+        deleted_count = 0
+        archived_fallback_count = 0
         cleanup_pending = False
         
         # Revoke tenant-level API keys up front
@@ -791,40 +792,13 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
             print(f"[ACCOUNT] Error revoking tenant API keys: {e}")
             cleanup_pending = True
 
-        for twin in twins_to_archive:
+        for twin in twins_to_delete:
             twin_id = twin["id"]
             settings = twin.get("settings") or {}
-            
-            already_archived = bool(settings.get("deleted_at"))
-
-            # Archive the twin (idempotent)
-            if not already_archived:
-                settings["deleted_at"] = datetime.utcnow().isoformat()
-                settings["deleted_by"] = user_id
-                settings["deleted_reason"] = "account_deletion"
-                settings["is_public"] = False
-            else:
-                # Ensure public/share is disabled even if already archived
-                settings["deleted_reason"] = settings.get("deleted_reason") or "account_deletion"
-                settings["is_public"] = False
-            if "widget_settings" in settings:
-                settings["widget_settings"]["public_share_enabled"] = False
-                settings["widget_settings"].pop("share_token", None)
-                settings["widget_settings"].pop("share_token_expires_at", None)
-            
-            try:
-                supabase.table("twins").update({
-                    "settings": settings
-                }).eq("id", twin_id).execute()
-                if not already_archived:
-                    archived_count += 1
-            except Exception as e:
-                print(f"[ACCOUNT] Error archiving twin {twin_id}: {e}")
-                cleanup_pending = True
 
             # Revoke twin-scoped API keys
             try:
-                supabase.table("twin_api_keys").update({"is_active": False}).eq("twin_id", twin_id).execute()
+                supabase.table("twin_api_keys").delete().eq("twin_id", twin_id).execute()
             except Exception as e:
                 print(f"[ACCOUNT] Error revoking twin API keys for {twin_id}: {e}")
                 cleanup_pending = True
@@ -839,6 +813,39 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
             except Exception as e:
                 print(f"[ACCOUNT] Pinecone cleanup failed for {twin_id}: {e}")
                 cleanup_pending = True
+
+            # Hard-delete twin row (most tables should cascade via FK).
+            deleted = False
+            try:
+                supabase.table("twins").delete().eq("id", twin_id).execute()
+                exists_after_delete = (
+                    supabase.table("twins").select("id").eq("id", twin_id).limit(1).execute()
+                )
+                if not (exists_after_delete.data or []):
+                    deleted = True
+                    deleted_count += 1
+            except Exception as e:
+                print(f"[ACCOUNT] Hard delete failed for twin {twin_id}: {e}")
+
+            # Fallback for environments where FK constraints block hard delete:
+            # archive the twin so it is inaccessible while cleanup is completed.
+            if not deleted:
+                cleanup_pending = True
+                archived_fallback_count += 1
+                try:
+                    settings["deleted_at"] = datetime.utcnow().isoformat()
+                    settings["deleted_by"] = user_id
+                    settings["deleted_reason"] = "account_deletion_pending_cleanup"
+                    settings["is_public"] = False
+                    widget_settings = settings.get("widget_settings")
+                    if isinstance(widget_settings, dict):
+                        widget_settings["public_share_enabled"] = False
+                        widget_settings.pop("share_token", None)
+                        widget_settings.pop("share_token_expires_at", None)
+                    supabase.table("twins").update({"settings": settings}).eq("id", twin_id).execute()
+                except Exception as archive_err:
+                    print(f"[ACCOUNT] Archive fallback failed for twin {twin_id}: {archive_err}")
+                    cleanup_pending = True
         
         # 2. Anonymize user data
         try:
@@ -867,20 +874,27 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
             action="ACCOUNT_DELETED",
             actor_id=user_id,
             metadata={
-                "twins_archived": archived_count,
+                "twins_deleted": deleted_count,
+                "twins_archived_fallback": archived_fallback_count,
                 "cleanup_pending": cleanup_pending
             }
         )
-        
-        # Fallback: ensure count reflects actual archived records
-        if archived_count == 0 and total_twins > 0:
-            archived_count = total_twins
 
-        print(f"[ACCOUNT] Deleted account {user_id}: archived {archived_count} twins")
+        print(
+            f"[ACCOUNT] Deleted account {user_id}: deleted={deleted_count}, "
+            f"archived_fallback={archived_fallback_count}, total={total_twins}"
+        )
         
         return DeleteAccountResponse(
             status="deleted",
-            message=f"Account deleted. {archived_count} twins archived.",
+            message=(
+                f"Account deleted. {deleted_count} profiles deleted."
+                + (
+                    f" {archived_fallback_count} profile(s) archived pending cleanup."
+                    if archived_fallback_count > 0
+                    else ""
+                )
+            ),
             cleanup_status="pending" if cleanup_pending else "done"
         )
         
