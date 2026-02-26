@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: '/onboarding/v2', destination: '/onboarding', permanent: true },
+    ];
+  },
   // Environment variables that should be available at build time
   env: {
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://jvtffdbuwyhmcynauety.supabase.co',

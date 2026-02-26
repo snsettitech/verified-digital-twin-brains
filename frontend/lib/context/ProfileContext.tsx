@@ -239,7 +239,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       const isPublic = pathname.startsWith('/share');
       
       if (!isOnboarding && !isAuth && !isPublic) {
-        router.push('/onboarding/v2');
+        router.push('/onboarding');
       }
     }
   }, [profile, isLoading, error, router]);

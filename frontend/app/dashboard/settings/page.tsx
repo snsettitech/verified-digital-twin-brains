@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import { useTwin } from '@/lib/context/TwinContext';
+import { resolveApiBaseUrl } from '@/lib/api';
 import DeleteTwinModal from '@/components/ui/DeleteTwinModal';
 import { useToast } from '@/components/ui';
 import VoiceSettings from '@/components/settings/VoiceSettings';
@@ -38,7 +39,7 @@ interface QuotaResponse {
   quotas: QuotaData[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const API_URL = resolveApiBaseUrl();
 
 export default function SettingsPage() {
   const { activeTwin, user, refreshTwins, isLoading: twinLoading, clearActiveTwin } = useTwin();
@@ -354,7 +355,7 @@ export default function SettingsPage() {
       }
       clearActiveTwin();
       showToast('Profile reset. Start onboarding again.', 'success');
-      router.push('/onboarding/v2');
+      router.push('/onboarding');
     } finally {
       setTwinActionLoading(false);
     }

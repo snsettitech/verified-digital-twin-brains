@@ -28,6 +28,8 @@ export default defineConfig({
         env: {
             E2E_BYPASS_AUTH: '1',
             NEXT_PUBLIC_E2E_BYPASS_AUTH: '1',
+            NEXT_PUBLIC_BACKEND_URL: 'http://localhost:8000',
+            NEXT_PUBLIC_API_URL: 'http://localhost:8000',
         },
     },
 });
