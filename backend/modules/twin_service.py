@@ -43,21 +43,30 @@ async def create_twin_for_name_research(
     if not normalized_name:
         raise ValueError("name is required for twin creation")
     
-    # Check for existing twin with same name for this tenant
-    existing = (
+    # Check for existing same-name twin owned by this user.
+    existing_rows = (
         db.table("twins")
-        .select("id")
+        .select("id, creator_id, settings, created_at")
         .eq("tenant_id", tenant_id)
         .eq("name", normalized_name)
         .is_("settings->>deleted_at", "null")  # Not soft-deleted
-        .limit(1)
+        .order("created_at", desc=True)
+        .limit(10)
         .execute()
-    )
-    
-    if existing.data:
-        twin_id = existing.data[0]["id"]
+    ).data or []
+
+    user_owned = []
+    for row in existing_rows:
+        settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+        owner_user_id = str(settings.get("owner_user_id") or "").strip()
+        creator_id = str(row.get("creator_id") or "").strip()
+        if owner_user_id == user_id or creator_id == user_id:
+            user_owned.append(row)
+
+    if user_owned:
+        twin_id = user_owned[0]["id"]
         logger.info(
-            "Reusing existing twin for name-research: twin_id=%s tenant_id=%s name=%s",
+            "Reusing existing user-owned twin for name-research: twin_id=%s tenant_id=%s name=%s",
             twin_id, tenant_id, normalized_name
         )
         return twin_id

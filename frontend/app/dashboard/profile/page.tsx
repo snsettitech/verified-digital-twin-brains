@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTwin } from '@/lib/context/TwinContext';
 import { API_ENDPOINTS } from '@/lib/constants';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
@@ -134,10 +134,24 @@ function IconChat() {
 }
 
 export default function ProfilePage() {
-  const { activeTwin, user, refreshTwins, isLoading } = useTwin();
+  const { activeTwin, user, refreshTwins, isLoading, twins, setActiveTwin } = useTwin();
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTwinId = searchParams.get('twinId');
   const [profileInsights, setProfileInsights] = useState<ProfileInsightsResponse | null>(null);
+
+  useEffect(() => {
+    void refreshTwins();
+  }, [refreshTwins]);
+
+  useEffect(() => {
+    if (!requestedTwinId) return;
+    if (activeTwin?.id === requestedTwinId) return;
+    const exists = twins.some((t) => t.id === requestedTwinId);
+    if (!exists) return;
+    setActiveTwin(requestedTwinId);
+  }, [requestedTwinId, activeTwin?.id, twins, setActiveTwin]);
 
   // Extract training metrics from twin data
   const trainingMetrics = useMemo<TrainingMetricsData | null>(() => {
@@ -313,7 +327,10 @@ export default function ProfilePage() {
       return;
     }
     const twinStatus = String(activeTwin?.status || '').toLowerCase();
-    const canChat = twinStatus === 'active' || Boolean(activeTwin?.is_active);
+    const canChatByStatus =
+      twinStatus === 'active' || twinStatus === 'persona_built' || twinStatus === 'live';
+    const canChatByLegacyFlag = !twinStatus && Boolean(activeTwin?.is_active);
+    const canChat = canChatByStatus || canChatByLegacyFlag;
     if (!canChat) {
       showToast('Profile is still building. Chat unlocks when setup is complete.', 'info');
       return;

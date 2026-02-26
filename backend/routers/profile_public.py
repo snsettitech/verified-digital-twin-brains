@@ -35,10 +35,21 @@ async def get_public_profile(twin_id: str, token: str):
             }
         )
     
-    # Get twin (profile) basic info
-    twin_result = supabase.table("twins") \
-        .select("name, settings, status, is_active") \
-        .eq("id", twin_id).single().execute()
+    # Get twin (profile) basic info; tolerate older schemas without twins.is_active.
+    try:
+        twin_result = supabase.table("twins") \
+            .select("name, settings, status, is_active") \
+            .eq("id", twin_id).single().execute()
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "is_active" in msg and (
+            "does not exist" in msg or "could not find" in msg or "pgrst204" in msg
+        ):
+            twin_result = supabase.table("twins") \
+                .select("name, settings, status") \
+                .eq("id", twin_id).single().execute()
+        else:
+            raise
     
     if not twin_result.data:
         raise HTTPException(
@@ -50,7 +61,9 @@ async def get_public_profile(twin_id: str, token: str):
     settings = twin.get("settings") or {}
     
     # Check if profile is active/published
-    if not twin.get("is_active") and twin.get("status") not in ["active", "persona_built"]:
+    status_value = str(twin.get("status") or "").lower()
+    is_published = (twin.get("is_active") is True) or status_value in ["active", "persona_built"]
+    if not is_published:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

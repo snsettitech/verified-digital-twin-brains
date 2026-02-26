@@ -444,21 +444,70 @@ class NameDeepResearchService:
         return score
 
     def _find_existing_profile_twin(self, *, tenant_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-        rows = (
-            self.db.table("twins")
-            .select("id,name,status,is_active,settings,created_at,creator_id")
-            .eq("tenant_id", tenant_id)
-            .is_("settings->>deleted_at", "null")
-            .order("created_at", desc=True)
-            .limit(25)
-            .execute()
-        ).data or []
+        select_candidates = [
+            "id,name,status,is_active,settings,created_at,creator_id",
+            "id,name,status,settings,created_at,creator_id",
+            "id,name,settings,created_at,creator_id",
+        ]
+        rows: List[Dict[str, Any]] = []
+        last_error: Optional[Exception] = None
+        for select_expr in select_candidates:
+            try:
+                rows = (
+                    self.db.table("twins")
+                    .select(select_expr)
+                    .eq("tenant_id", tenant_id)
+                    .is_("settings->>deleted_at", "null")
+                    .order("created_at", desc=True)
+                    .limit(25)
+                    .execute()
+                ).data or []
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                msg = str(exc).lower()
+                if any(
+                    fragment in msg
+                    for fragment in ("does not exist", "could not find", "pgrst204")
+                ):
+                    continue
+                raise
+        if last_error:
+            raise last_error
         if not rows:
             return None
 
         creator_candidates = self._creator_candidates(tenant_id=tenant_id, user_id=user_id)
+        strong_matches: List[Dict[str, Any]] = []
+        for row in rows:
+            settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+            owner_user_id = str(settings.get("owner_user_id") or "").strip()
+            creator_id = str(row.get("creator_id") or "").strip()
+            if (user_id and owner_user_id == user_id) or (user_id and creator_id == user_id):
+                strong_matches.append(row)
+
+        # Legacy fallback: only consider tenant-scoped creator matches when exactly
+        # one unclaimed candidate exists. This avoids cross-person identity drift.
+        if strong_matches:
+            candidate_rows = strong_matches
+        else:
+            legacy_matches: List[Dict[str, Any]] = []
+            for row in rows:
+                settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+                owner_user_id = str(settings.get("owner_user_id") or "").strip()
+                creator_id = str(row.get("creator_id") or "").strip()
+                if owner_user_id:
+                    continue
+                if creator_id in creator_candidates:
+                    legacy_matches.append(row)
+            if len(legacy_matches) == 1:
+                candidate_rows = legacy_matches
+            else:
+                return None
+
         ranked = sorted(
-            rows,
+            candidate_rows,
             key=lambda row: (
                 self._score_twin_for_user(row, user_id=user_id, creator_candidates=creator_candidates),
                 str(row.get("created_at") or ""),

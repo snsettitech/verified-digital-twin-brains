@@ -432,20 +432,22 @@ export function TwinProvider({ children }: { children: React.ReactNode }) {
 
         const persistedId = getPersistedTwinId();
 
-        // Priority 1: Current activeTwin state (if exists in new list)
-        if (currentActiveTwinId) {
-            const found = twinsList.find(t => t.id === currentActiveTwinId);
-            if (found) {
-                console.log('[TwinContext] selectActiveTwin: Keeping current state:', currentActiveTwinId);
-                return found;
-            }
-        }
-
-        // Priority 2: localStorage (if exists in new list)
+        // Priority 1: localStorage (if exists in new list)
+        // This allows explicit redirects (onboarding/profile/chat) to switch the
+        // active twin deterministically by writing activeTwinId first.
         if (persistedId) {
             const found = twinsList.find(t => t.id === persistedId);
             if (found) {
                 console.log('[TwinContext] selectActiveTwin: Using localStorage:', persistedId);
+                return found;
+            }
+        }
+
+        // Priority 2: Current activeTwin state (if exists in new list)
+        if (currentActiveTwinId) {
+            const found = twinsList.find(t => t.id === currentActiveTwinId);
+            if (found) {
+                console.log('[TwinContext] selectActiveTwin: Keeping current state:', currentActiveTwinId);
                 return found;
             }
         }

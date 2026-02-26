@@ -201,13 +201,44 @@ def _select_profile_twin_for_user(user: Dict[str, Any]) -> Optional[Dict[str, An
     if not twins:
         return None
 
+    # Ignore archived/deleted twins.
+    twins = [t for t in twins if not ((t.get("settings") or {}).get("deleted_at"))]
+    if not twins:
+        return None
+
     creator_candidates = set(derive_creator_ids(user) or [])
     if user_id:
         creator_candidates.add(str(user_id))
     creator_candidates.add(f"tenant_{tenant_id}")
 
+    strong_matches: List[Dict[str, Any]] = []
+    for twin in twins:
+        settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
+        owner_user_id = str(settings.get("owner_user_id") or "").strip()
+        creator_id = str(twin.get("creator_id") or "").strip()
+        if (user_id and owner_user_id == user_id) or (user_id and creator_id == user_id):
+            strong_matches.append(twin)
+
+    # Legacy fallback: allow ambiguous tenant-level ownership only when
+    # there is exactly one unclaimed legacy candidate.
+    if strong_matches:
+        candidate_twins = strong_matches
+    else:
+        legacy_candidates: List[Dict[str, Any]] = []
+        for twin in twins:
+            settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
+            owner_user_id = str(settings.get("owner_user_id") or "").strip()
+            creator_id = str(twin.get("creator_id") or "").strip()
+            if owner_user_id:
+                continue
+            if creator_id in creator_candidates:
+                legacy_candidates.append(twin)
+        if len(legacy_candidates) != 1:
+            return None
+        candidate_twins = legacy_candidates
+
     ranked = sorted(
-        twins,
+        candidate_twins,
         key=lambda twin: (
             _score_profile_candidate(twin, user, creator_candidates),
             str(twin.get("created_at") or ""),
@@ -262,6 +293,32 @@ def _safe_update_twin_reset(twin_id: str, payload: Dict[str, Any]) -> None:
         try:
             supabase.table("twins").update(mutable_payload).eq("id", twin_id).execute()
             return
+        except Exception as e:
+            err = str(e).lower()
+            removed = None
+            for column in list(removable_columns):
+                if column in mutable_payload and column in err and (
+                    "column" in err or "does not exist" in err or "pgrst204" in err
+                ):
+                    removed = column
+                    break
+            if removed:
+                mutable_payload.pop(removed, None)
+                removable_columns.discard(removed)
+                continue
+            raise
+
+
+def _safe_insert_profile_twin(payload: Dict[str, Any]) -> Dict[str, Any]:
+    mutable_payload = dict(payload)
+    removable_columns = {"status", "is_active"}
+
+    while True:
+        try:
+            result = supabase.table("twins").insert(mutable_payload).execute()
+            if not result.data:
+                raise RuntimeError("Failed to create twin: no data returned")
+            return result.data[0]
         except Exception as e:
             err = str(e).lower()
             removed = None
@@ -466,8 +523,7 @@ async def create_profile(
     }
     
     try:
-        result = supabase.table("twins").insert(twin_data).execute()
-        twin = result.data[0]
+        twin = _safe_insert_profile_twin(twin_data)
         
         logger.info(f"Created profile {twin['id']} for user {user_id}")
         

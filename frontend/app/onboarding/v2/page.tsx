@@ -400,6 +400,11 @@ export default function OnboardingV2Page() {
       } catch {
         // Non-blocking storage write.
       }
+      const params = new URLSearchParams();
+      params.set('twinId', profileId);
+      params.set('source', 'onboarding');
+      router.push(`/dashboard/profile?${params.toString()}`);
+      return;
     }
     router.push('/dashboard/profile');
   };

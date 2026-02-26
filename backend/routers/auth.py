@@ -471,6 +471,30 @@ async def get_my_twins(user=Depends(get_current_user)):
         creator_candidates.add(str(user_id))
     creator_candidates.add(f"tenant_{tenant_id}")
 
+    strong_matches: List[Dict[str, Any]] = []
+    for t in twins:
+        settings = t.get("settings") if isinstance(t.get("settings"), dict) else {}
+        owner_user_id = str(settings.get("owner_user_id") or "")
+        creator_id = str(t.get("creator_id") or "")
+        if (user_id and owner_user_id == user_id) or (user_id and creator_id == user_id):
+            strong_matches.append(t)
+
+    # Legacy fallback for pre-owner_user_id records: only keep tenant-scoped
+    # rows when there is exactly one unclaimed candidate.
+    if strong_matches:
+        twins = strong_matches
+    else:
+        legacy_candidates: List[Dict[str, Any]] = []
+        for t in twins:
+            settings = t.get("settings") if isinstance(t.get("settings"), dict) else {}
+            owner_user_id = str(settings.get("owner_user_id") or "")
+            creator_id = str(t.get("creator_id") or "")
+            if owner_user_id:
+                continue
+            if creator_id in creator_candidates:
+                legacy_candidates.append(t)
+        twins = legacy_candidates if len(legacy_candidates) == 1 else []
+
     def _score_twin(t: Dict[str, Any]) -> int:
         score = 0
         creator_id = str(t.get("creator_id") or "")
