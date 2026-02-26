@@ -364,8 +364,12 @@ function OnboardingContent() {
       }
 
       // Handle URLs (Mode C)
-      const urls = sources.filter(s => s.type === 'link').map(s => s.value);
-      const allUrls = [...new Set([...suggestedUrls, ...urls])].filter(Boolean);
+      const urls = sources
+        .filter(s => s.type === 'link')
+        .map(s => s.value.trim())
+        .filter(Boolean);
+      const allUrls = [...new Set([...suggestedUrls.map((u) => u.trim()), ...urls])]
+        .filter((url) => Boolean(url) && /^https?:\/\//i.test(url));
       setSubmittedUrls(allUrls);
       if (allUrls.length > 0) {
         const modeCResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
@@ -376,7 +380,19 @@ function OnboardingContent() {
           }),
         });
         if (!modeCResponse.ok) {
-          throw new Error('Failed to submit URLs');
+          let detailMessage = `Failed to submit URLs (${modeCResponse.status})`;
+          try {
+            const payload = await modeCResponse.json();
+            const detail = payload?.detail;
+            if (typeof detail === 'string' && detail.trim()) {
+              detailMessage = detail.trim();
+            } else if (detail && typeof detail?.message === 'string' && detail.message.trim()) {
+              detailMessage = detail.message.trim();
+            }
+          } catch {
+            // Ignore parsing error and keep fallback detail message.
+          }
+          throw new Error(detailMessage);
         }
       }
 
@@ -400,7 +416,10 @@ function OnboardingContent() {
       setCurrentStep('source_review');
     } catch (error) {
       console.error('Failed to submit sources:', error);
-      alert('Failed to submit sources. Please try again.');
+      const message = error instanceof Error && error.message
+        ? error.message
+        : 'Failed to submit sources. Please try again.';
+      alert(message);
     } finally {
       setIsLoading(false);
     }

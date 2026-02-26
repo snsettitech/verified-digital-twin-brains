@@ -11,6 +11,7 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel, Field
 from datetime import datetime
+from urllib.parse import urlparse
 
 from modules.auth_guard import get_current_user, verify_twin_ownership
 from modules.observability import supabase
@@ -368,30 +369,44 @@ async def create_mode_c_job(
     twin_id = request.twin_id
     verify_twin_ownership(twin_id, user)
     
-    # Validate URLs
-    allowed_urls = []
-    blocked_urls = []
-    
-    for url in request.urls:
-        check_result = await check_url_fetchable(url)
-        
-        if check_result["allowed"]:
-            allowed_urls.append(url)
-        else:
-            blocked_urls.append({
-                "url": url,
-                "reason": check_result["reason"],
-                "error_code": check_result["error_code"],
+    # Basic validation only: queue all valid absolute http(s) URLs.
+    # Preflight checks are treated as warnings and ingestion is still attempted.
+    normalized_urls: List[str] = []
+    invalid_urls: List[Dict[str, str]] = []
+    seen_urls = set()
+    for raw_url in request.urls:
+        url = str(raw_url or "").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            invalid_urls.append({
+                "url": str(raw_url or ""),
+                "reason": "Invalid URL. Use an absolute http(s) URL.",
             })
-    
-    if not allowed_urls:
+            continue
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+        normalized_urls.append(url)
+
+    if not normalized_urls:
         raise HTTPException(
-            400,
+            status_code=400,
             detail={
-                "message": "No URLs allowed for fetching",
-                "blocked": blocked_urls,
-            }
+                "message": "No valid URLs provided",
+                "invalid": invalid_urls,
+            },
         )
+
+    # Best-effort preflight checks for telemetry/user messaging only.
+    preflight_blocked = 0
+    for url in normalized_urls:
+        try:
+            check_result = await check_url_fetchable(url)
+            if not check_result.get("allowed", False):
+                preflight_blocked += 1
+        except Exception:
+            # Ignore preflight failures; ingestion performs the real fetch attempt.
+            preflight_blocked += 1
     
     # Create job record
     job_data = {
@@ -399,8 +414,8 @@ async def create_mode_c_job(
         "created_by": user_id,
         "mode": "C",
         "status": "pending",
-        "source_urls": allowed_urls,
-        "total_sources": len(allowed_urls),
+        "source_urls": normalized_urls,
+        "total_sources": len(normalized_urls),
     }
     
     result = supabase.table("link_compile_jobs").insert(job_data).execute()
@@ -412,7 +427,14 @@ async def create_mode_c_job(
         job_id=job_id,
         status="processing",
         mode="C",
-        message=f"{len(allowed_urls)} URLs accepted. {len(blocked_urls)} blocked.",
+        message=(
+            f"{len(normalized_urls)} URLs queued for ingestion."
+            + (
+                f" {preflight_blocked} had preflight warnings; ingestion will still attempt fetch."
+                if preflight_blocked
+                else ""
+            )
+        ),
     )
 
 
