@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import ChatInterface, { type ChatStreamEvent } from '@/components/Chat/ChatInterface';
 import ContextPanel from '@/components/Chat/ContextPanel';
@@ -29,7 +29,7 @@ type ContextSnapshot = {
 
 const CONTEXT_FLUSH_MS = 120;
 
-export default function DashboardChatPage() {
+function DashboardChatPageContent() {
   const { activeTwin, isLoading } = useTwin();
   const searchParams = useSearchParams();
   const [conversationId, setConversationId] = useState<string | null>(null);
@@ -203,5 +203,21 @@ export default function DashboardChatPage() {
         {content}
       </div>
     </FeatureGate>
+  );
+}
+
+function DashboardChatFallback() {
+  return (
+    <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-slate-200 bg-white">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+    </div>
+  );
+}
+
+export default function DashboardChatPage() {
+  return (
+    <Suspense fallback={<DashboardChatFallback />}>
+      <DashboardChatPageContent />
+    </Suspense>
   );
 }
