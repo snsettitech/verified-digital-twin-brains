@@ -262,18 +262,34 @@ class CrawlIngestionBridge:
         }
         
         try:
-            try:
-                supabase.table("sources").insert(source_data).execute()
-            except Exception as insert_error:
-                message = str(insert_error).lower()
-                if "staging_status" in message and "sources" in message:
-                    fallback = dict(source_data)
-                    fallback.pop("staging_status", None)
+            fallback = dict(source_data)
+            optional_columns = ("staging_status", "metadata", "content_hash", "extracted_text_length")
+            last_insert_error: Optional[Exception] = None
+
+            for _ in range(len(optional_columns) + 1):
+                try:
                     supabase.table("sources").insert(fallback).execute()
-                else:
+                    logger.info(f"Created source {source_id} from page {page_id}")
+                    return source_id
+                except Exception as insert_error:
+                    last_insert_error = insert_error
+                    message = str(insert_error).lower()
+                    if "sources" not in message or ("could not find" not in message and "does not exist" not in message):
+                        raise
+
+                    removed_column = None
+                    for optional_column in optional_columns:
+                        if optional_column in fallback and optional_column in message:
+                            removed_column = optional_column
+                            break
+
+                    if removed_column:
+                        fallback.pop(removed_column, None)
+                        continue
                     raise
-            logger.info(f"Created source {source_id} from page {page_id}")
-            return source_id
+
+            if last_insert_error:
+                raise last_insert_error
         except Exception as e:
             logger.error(f"Failed to create source for page {page_id}: {e}")
             return None

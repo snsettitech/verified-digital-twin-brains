@@ -302,6 +302,32 @@ class TestCreateSourceFromPage:
         retry_payload = mock_supabase.table.return_value.insert.call_args_list[-1][0][0]
         assert "staging_status" not in retry_payload
 
+    @patch("modules.crawl_ingestion_bridge.supabase")
+    def test_create_source_retries_without_metadata(self, mock_supabase):
+        """Older sources schemas without metadata should still accept crawl ingestion."""
+        page = {
+            "id": "page_123",
+            "crawl_id": "crawl_456",
+            "canonical_url": "https://example.com/blog/my-post",
+            "metadata": {"title": "My Post"},
+        }
+
+        insert_mock = mock_supabase.table.return_value.insert.return_value
+        insert_mock.execute.side_effect = [
+            Exception("Could not find the 'metadata' column of 'sources' in the schema cache"),
+            Mock(),
+        ]
+
+        bridge = CrawlIngestionBridge()
+        bridge.load_page_content = Mock(return_value="Content")
+
+        source_id = bridge.create_source_from_page(page, "twin_123", "crawl_456")
+
+        assert source_id is not None
+        assert insert_mock.execute.call_count == 2
+        retry_payload = mock_supabase.table.return_value.insert.call_args_list[-1][0][0]
+        assert "metadata" not in retry_payload
+
 
 class TestProcessPage:
     """Test full page processing flow."""
