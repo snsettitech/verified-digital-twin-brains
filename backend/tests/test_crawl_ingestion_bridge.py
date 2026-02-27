@@ -78,9 +78,33 @@ class TestShouldSkipIngestion:
         bridge.artifact_store.artifact_exists = Mock(return_value=False)
         
         should_skip, reason = bridge.should_skip_ingestion(page)
-        
+
         assert should_skip is True
         assert reason == "artifact_not_found"
+
+    def test_skip_uses_context_twin_id_when_page_row_lacks_it(self):
+        """Ingestion should resolve artifact scope from the crawl context, not crawl_pages.twin_id."""
+        page = {
+            "id": "page_123",
+            "status": "fetched",
+            "classification": "new",
+            "normalized_artifact_path": "artifacts/crawl/twin_123/crawl_456/pages/page_123/normalized.md",
+            "crawl_id": "crawl_456",
+        }
+
+        bridge = CrawlIngestionBridge()
+        bridge.artifact_store.artifact_exists = Mock(return_value=True)
+
+        should_skip, reason = bridge.should_skip_ingestion(page, twin_id="twin_123")
+
+        assert should_skip is False
+        assert reason == ""
+        bridge.artifact_store.artifact_exists.assert_called_once_with(
+            artifact_type="crawl",
+            twin_id="twin_123",
+            entity_id="crawl_456",
+            filename="pages/page_123/normalized.md",
+        )
     
     def test_process_changed_page(self):
         """Changed pages should be processed (not skipped)."""
@@ -310,7 +334,6 @@ class TestProcessPage:
             "content_hash": "abc123",
             "normalized_artifact_path": "crawl/twin_123/crawl_456/pages/page_123/normalized.md",
             "crawl_id": "crawl_456",
-            "twin_id": "twin_123"
         }
         
         bridge = CrawlIngestionBridge()

@@ -18,6 +18,7 @@ import logging
 import uuid
 from typing import Optional, Dict, Any, List, Tuple, Set
 from datetime import datetime
+from pathlib import PurePosixPath
 
 from modules.crawl_repository import CrawlRepository
 from modules.artifact_store import get_artifact_store
@@ -52,8 +53,52 @@ class CrawlIngestionBridge:
         self.artifact_store = get_artifact_store()
         self.version_manager = ChunkVersionManager()
         self.confirmation_manager = SourceConfirmationManager()
+
+    @staticmethod
+    def _resolve_artifact_scope(
+        page: Dict[str, Any],
+        twin_id: Optional[str] = None,
+    ) -> Tuple[str, str]:
+        """
+        Resolve the artifact scope for a crawl page.
+
+        Historical crawl_pages rows do not include twin_id, so callers must be
+        able to supply it from the crawl/research run context. As a fallback,
+        derive it from normalized_artifact_path when available.
+        """
+        resolved_twin_id = str(twin_id or page.get("twin_id") or "").strip()
+        resolved_crawl_id = str(page.get("crawl_id") or "").strip()
+
+        if resolved_twin_id and resolved_crawl_id:
+            return resolved_twin_id, resolved_crawl_id
+
+        normalized_path = str(page.get("normalized_artifact_path") or "").strip()
+        if not normalized_path:
+            return resolved_twin_id, resolved_crawl_id
+
+        parts = [part for part in PurePosixPath(normalized_path).parts if part and part != "."]
+        if not parts:
+            return resolved_twin_id, resolved_crawl_id
+
+        # Stored artifact paths may be either:
+        # - crawl/{twin_id}/{crawl_id}/pages/{page_id}/normalized.md
+        # - artifacts/crawl/{twin_id}/{crawl_id}/pages/{page_id}/normalized.md
+        if parts[0] == "artifacts":
+            parts = parts[1:]
+
+        if len(parts) >= 3 and parts[0] == "crawl":
+            if not resolved_twin_id:
+                resolved_twin_id = parts[1]
+            if not resolved_crawl_id:
+                resolved_crawl_id = parts[2]
+
+        return resolved_twin_id, resolved_crawl_id
     
-    def should_skip_ingestion(self, page: Dict[str, Any]) -> Tuple[bool, str]:
+    def should_skip_ingestion(
+        self,
+        page: Dict[str, Any],
+        twin_id: Optional[str] = None,
+    ) -> Tuple[bool, str]:
         """
         Determine if a page should be skipped during ingestion.
         
@@ -85,12 +130,16 @@ class CrawlIngestionBridge:
         # Skip pages without normalized content
         if not normalized_path:
             return True, "no_normalized_artifact"
+
+        artifact_twin_id, artifact_crawl_id = self._resolve_artifact_scope(page, twin_id)
+        if not artifact_twin_id or not artifact_crawl_id:
+            return True, "artifact_scope_unknown"
         
         # Check if artifact exists
         if not self.artifact_store.artifact_exists(
             artifact_type="crawl",
-            twin_id=page.get("twin_id", ""),
-            entity_id=page.get("crawl_id", ""),
+            twin_id=artifact_twin_id,
+            entity_id=artifact_crawl_id,
             filename=f"pages/{page.get('id')}/normalized.md"
         ):
             return True, "artifact_not_found"
@@ -366,7 +415,7 @@ class CrawlIngestionBridge:
         page_id = page.get("id", "")
         
         # Check if should skip (standard checks)
-        should_skip, reason = self.should_skip_ingestion(page)
+        should_skip, reason = self.should_skip_ingestion(page, twin_id)
         if should_skip:
             logger.info(f"Skipping page {page_id}: {reason}")
             return {
