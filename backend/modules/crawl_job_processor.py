@@ -950,7 +950,7 @@ async def process_crawl_job(
     crawl_id: str,
     twin_id: Optional[str] = None,
     claimed_identity: Optional[Dict[str, Any]] = None,
-    firecrawl_client: Optional[FirecrawlClient] = None,
+    firecrawl_client: Optional[FirecrawlClient] | object = _AUTO_FIRECRAWL_CLIENT,
     crawl_repository: Optional[CrawlRepository] = None,
     crawl_manager: Optional[CrawlManager] = None,
     identity_scorer: Optional[IdentityConfidenceScorer] = None,
@@ -964,7 +964,9 @@ async def process_crawl_job(
         crawl_id: Crawl run ID to process
         twin_id: Optional twin ID
         claimed_identity: Optional claimed identity for scoring
-        firecrawl_client: Optional Firecrawl client
+        firecrawl_client: Optional Firecrawl client.
+            Omit to auto-load configured client.
+            Pass None explicitly to disable Firecrawl (tests/fallback).
         crawl_repository: Optional crawl repository
         crawl_manager: Optional crawl manager
         identity_scorer: Optional identity scorer
