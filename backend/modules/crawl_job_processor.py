@@ -24,7 +24,9 @@ import uuid
 import logging
 import sys
 import re
-from typing import Optional, Dict, Any, List, Tuple
+import os
+import inspect
+from typing import Optional, Dict, Any, List, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
@@ -199,13 +201,15 @@ class SourceStrategyResolver:
         """Create strategy configuration for source type."""
         
         if source_type == SourceType.WEBSITE_ROOT:
+            crawl_limit = max(1, int(os.getenv("FIRECRAWL_WEBSITE_CRAWL_LIMIT", "50")))
+            crawl_depth = max(1, int(os.getenv("FIRECRAWL_WEBSITE_MAX_DEPTH", "3")))
             return SourceStrategy(
                 source_type=source_type,
                 method="crawl",
                 reason="Website root URL - use deep crawl to discover pages",
                 firecrawl_params={
-                    "limit": 50,
-                    "max_depth": 3,
+                    "limit": crawl_limit,
+                    "max_depth": crawl_depth,
                     "scrapeOptions": {"formats": ["markdown"]},
                 }
             )
@@ -313,6 +317,71 @@ class CrawlJobResult:
     page_results: List[PageProcessingResult] = field(default_factory=list)
 
 
+@dataclass
+class CrawlMetricsAccumulator:
+    """
+    Streaming metrics accumulator to avoid retaining all page results in memory.
+
+    Keeps aggregate counters for final status while retaining only a bounded
+    sample of page-level results for diagnostics.
+    """
+
+    detail_limit: int = 200
+    unique_urls: Set[str] = field(default_factory=set)
+    page_results_sample: List[PageProcessingResult] = field(default_factory=list)
+    pages_discovered: int = 0
+    pages_fetched: int = 0
+    pages_failed: int = 0
+    pages_new: int = 0
+    pages_changed: int = 0
+    pages_unchanged: int = 0
+    pages_blocked: int = 0
+    pages_manual_needed: int = 0
+    auto_confirmed: int = 0
+    pending: int = 0
+    auto_rejected: int = 0
+    manual_review: int = 0
+    failures_by_type: Dict[str, int] = field(default_factory=dict)
+
+    def add(self, result: PageProcessingResult) -> None:
+        """Add a single page result into rolling metrics."""
+        self.pages_discovered += 1
+        self.unique_urls.add(result.url)
+
+        if result.success:
+            self.pages_fetched += 1
+        else:
+            self.pages_failed += 1
+
+        if result.classification == PageClassification.NEW:
+            self.pages_new += 1
+        elif result.classification == PageClassification.CHANGED:
+            self.pages_changed += 1
+        elif result.classification == PageClassification.UNCHANGED:
+            self.pages_unchanged += 1
+
+        if result.content_quality == ContentQuality.BLOCKED:
+            self.pages_blocked += 1
+        elif result.content_quality == ContentQuality.MANUAL_NEEDED:
+            self.pages_manual_needed += 1
+
+        if result.confirmation_status == ConfirmationStatus.AUTO_CONFIRMED:
+            self.auto_confirmed += 1
+        elif result.confirmation_status == ConfirmationStatus.PENDING:
+            self.pending += 1
+        elif result.confirmation_status == ConfirmationStatus.AUTO_REJECTED:
+            self.auto_rejected += 1
+        elif result.confirmation_status == ConfirmationStatus.MANUAL_REVIEW:
+            self.manual_review += 1
+
+        if result.failure_type:
+            key = result.failure_type.value
+            self.failures_by_type[key] = self.failures_by_type.get(key, 0) + 1
+
+        if len(self.page_results_sample) < self.detail_limit:
+            self.page_results_sample.append(result)
+
+
 # ============================================================================
 # Crawl Job Processor
 # ============================================================================
@@ -360,6 +429,32 @@ class CrawlJobProcessor:
         self.manager = crawl_manager or CrawlManager()
         self.scorer = identity_scorer or IdentityConfidenceScorer()
         self.artifacts = artifact_store or get_artifact_store()
+        self._result_detail_limit = max(
+            0, int(os.getenv("CRAWL_RESULT_DETAIL_LIMIT", "200"))
+        )
+
+    def _log_memory_usage(self, context: str) -> None:
+        """
+        Log process RSS to help diagnose memory pressure in production.
+
+        Falls back silently when platform/runtime metrics are unavailable.
+        """
+        try:
+            import psutil  # type: ignore
+
+            rss_bytes = psutil.Process(os.getpid()).memory_info().rss
+            logger.info("Memory RSS at %s: %.1f MB", context, rss_bytes / (1024 * 1024))
+            return
+        except Exception:
+            pass
+
+        try:
+            import resource  # Unix only
+
+            rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            logger.info("Memory max RSS at %s: %.1f MB", context, rss_kb / 1024)
+        except Exception:
+            return
     
     async def process_crawl_job(
         self,
@@ -410,7 +505,8 @@ class CrawlJobProcessor:
                 )
             
             # Process each seed URL
-            page_results: List[PageProcessingResult] = []
+            metrics = CrawlMetricsAccumulator(detail_limit=self._result_detail_limit)
+            self._log_memory_usage(f"crawl_start:{crawl_id}")
             
             for seed_url in seed_urls:
                 try:
@@ -420,19 +516,18 @@ class CrawlJobProcessor:
                     
                     # Execute based on strategy
                     if strategy.method == "crawl":
-                        results = await self._process_crawl_strategy(
-                            seed_url, crawl_id, twin_id, strategy, claimed_identity
+                        await self._process_crawl_strategy(
+                            seed_url, crawl_id, twin_id, strategy, claimed_identity, metrics
                         )
                     else:
-                        results = await self._process_scrape_strategy(
-                            seed_url, crawl_id, twin_id, strategy, claimed_identity
+                        await self._process_scrape_strategy(
+                            seed_url, crawl_id, twin_id, strategy, claimed_identity, metrics
                         )
-                    
-                    page_results.extend(results)
+                    self._log_memory_usage(f"after_seed:{seed_url}")
                     
                 except Exception as e:
                     logger.error(f"Error processing seed URL {seed_url}: {e}")
-                    page_results.append(PageProcessingResult(
+                    metrics.add(PageProcessingResult(
                         page_id=str(uuid.uuid4()),
                         url=seed_url,
                         canonical_url=canonicalize_url(seed_url),
@@ -442,7 +537,7 @@ class CrawlJobProcessor:
             
             # Finalize crawl run
             result = self._finalize_job_result(
-                job_id, crawl_id, started_at, page_results
+                job_id, crawl_id, started_at, metrics
             )
             
             # Update crawl run with final status
@@ -505,7 +600,8 @@ class CrawlJobProcessor:
         twin_id: str,
         strategy: SourceStrategy,
         claimed_identity: Optional[Dict[str, Any]],
-    ) -> List[PageProcessingResult]:
+        metrics: CrawlMetricsAccumulator,
+    ) -> None:
         """
         Process a crawl strategy (multi-page).
         
@@ -517,38 +613,55 @@ class CrawlJobProcessor:
             claimed_identity: Identity for scoring
         
         Returns:
-            List of page processing results
+            None. Results are accumulated into metrics.
         """
-        results = []
-        
         if not self.firecrawl:
             logger.warning("Firecrawl not configured, skipping crawl")
-            return results
+            return
         
         try:
-            # Execute crawl via Firecrawl
-            crawl_results = await self.firecrawl.crawl_with_polling(
-                url=seed_url,
-                limit=strategy.firecrawl_params.get("limit", 50),
-                max_depth=strategy.firecrawl_params.get("max_depth", 3),
-            )
-            
-            for firecrawl_result in crawl_results:
-                page_result = await self._process_firecrawl_result(
-                    firecrawl_result,
-                    crawl_id,
-                    twin_id,
-                    seed_url,
-                    claimed_identity,
+            # Execute crawl via Firecrawl without retaining full result sets in memory.
+            crawl_iter = None
+            iter_method = getattr(self.firecrawl, "crawl_with_polling_iter", None)
+            if iter_method and inspect.isasyncgenfunction(iter_method):
+                crawl_iter = iter_method(
+                    url=seed_url,
+                    limit=strategy.firecrawl_params.get("limit", 50),
+                    max_depth=strategy.firecrawl_params.get("max_depth", 3),
                 )
-                results.append(page_result)
+
+            if crawl_iter is not None:
+                async for firecrawl_result in crawl_iter:
+                    page_result = await self._process_firecrawl_result(
+                        firecrawl_result,
+                        crawl_id,
+                        twin_id,
+                        seed_url,
+                        claimed_identity,
+                    )
+                    metrics.add(page_result)
+            else:
+                crawl_results = await self.firecrawl.crawl_with_polling(
+                    url=seed_url,
+                    limit=strategy.firecrawl_params.get("limit", 50),
+                    max_depth=strategy.firecrawl_params.get("max_depth", 3),
+                )
+                for firecrawl_result in crawl_results:
+                    page_result = await self._process_firecrawl_result(
+                        firecrawl_result,
+                        crawl_id,
+                        twin_id,
+                        seed_url,
+                        claimed_identity,
+                    )
+                    metrics.add(page_result)
                 
         except Exception as e:
             logger.error(f"Error in crawl strategy for {seed_url}: {e}")
             # Create failure result
             canonical_url = canonicalize_url(seed_url)
             page_id = str(uuid.uuid4())
-            results.append(PageProcessingResult(
+            metrics.add(PageProcessingResult(
                 page_id=page_id,
                 url=seed_url,
                 canonical_url=canonical_url,
@@ -556,8 +669,7 @@ class CrawlJobProcessor:
                 failure_type=FailureType.NETWORK,
                 error_message=str(e),
             ))
-        
-        return results
+        return
     
     async def _process_scrape_strategy(
         self,
@@ -566,7 +678,8 @@ class CrawlJobProcessor:
         twin_id: str,
         strategy: SourceStrategy,
         claimed_identity: Optional[Dict[str, Any]],
-    ) -> List[PageProcessingResult]:
+        metrics: CrawlMetricsAccumulator,
+    ) -> None:
         """
         Process a scrape strategy (single page).
         
@@ -578,11 +691,11 @@ class CrawlJobProcessor:
             claimed_identity: Identity for scoring
         
         Returns:
-            List with single page processing result
+            None. Result is accumulated into metrics.
         """
         if not self.firecrawl:
             logger.warning("Firecrawl not configured, skipping scrape")
-            return []
+            return
         
         try:
             # Execute scrape via Firecrawl
@@ -599,20 +712,22 @@ class CrawlJobProcessor:
                 claimed_identity,
             )
             
-            return [page_result]
+            metrics.add(page_result)
+            return
             
         except Exception as e:
             logger.error(f"Error in scrape strategy for {seed_url}: {e}")
             canonical_url = canonicalize_url(seed_url)
             page_id = str(uuid.uuid4())
-            return [PageProcessingResult(
+            metrics.add(PageProcessingResult(
                 page_id=page_id,
                 url=seed_url,
                 canonical_url=canonical_url,
                 success=False,
                 failure_type=FailureType.NETWORK,
                 error_message=str(e),
-            )]
+            ))
+            return
     
     async def _process_firecrawl_result(
         self,
@@ -888,42 +1003,20 @@ class CrawlJobProcessor:
         job_id: str,
         crawl_id: str,
         started_at: datetime,
-        page_results: List[PageProcessingResult],
+        metrics: CrawlMetricsAccumulator,
     ) -> CrawlJobResult:
         """Finalize crawl job result with metrics."""
         completed_at = datetime.utcnow()
         
-        # Calculate metrics
-        total_urls = len(set(r.url for r in page_results))
-        pages_discovered = len(page_results)
-        pages_fetched = sum(1 for r in page_results if r.success)
-        pages_failed = sum(1 for r in page_results if not r.success)
-        
-        pages_new = sum(1 for r in page_results if r.classification == PageClassification.NEW)
-        pages_changed = sum(1 for r in page_results if r.classification == PageClassification.CHANGED)
-        pages_unchanged = sum(1 for r in page_results if r.classification == PageClassification.UNCHANGED)
-        
-        pages_blocked = sum(1 for r in page_results if r.content_quality == ContentQuality.BLOCKED)
-        pages_manual_needed = sum(1 for r in page_results if r.content_quality == ContentQuality.MANUAL_NEEDED)
-        
-        # Identity confirmation summary
-        auto_confirmed = sum(1 for r in page_results if r.confirmation_status == ConfirmationStatus.AUTO_CONFIRMED)
-        pending = sum(1 for r in page_results if r.confirmation_status == ConfirmationStatus.PENDING)
-        auto_rejected = sum(1 for r in page_results if r.confirmation_status == ConfirmationStatus.AUTO_REJECTED)
-        manual_review = sum(1 for r in page_results if r.confirmation_status == ConfirmationStatus.MANUAL_REVIEW)
-        
-        # Failure types
-        failures_by_type: Dict[str, int] = {}
-        for r in page_results:
-            if r.failure_type:
-                ft = r.failure_type.value
-                failures_by_type[ft] = failures_by_type.get(ft, 0) + 1
-        
         # Determine status
         status = CrawlJobStatus.COMPLETED
-        if pages_failed > 0 and pages_fetched == 0:
+        if metrics.pages_failed > 0 and metrics.pages_fetched == 0:
             status = CrawlJobStatus.FAILED
-        elif pages_failed > 0 or pages_blocked > 0 or pages_manual_needed > 0:
+        elif (
+            metrics.pages_failed > 0
+            or metrics.pages_blocked > 0
+            or metrics.pages_manual_needed > 0
+        ):
             status = CrawlJobStatus.COMPLETED_WITH_WARNINGS
         
         return CrawlJobResult(
@@ -932,21 +1025,21 @@ class CrawlJobProcessor:
             status=status,
             started_at=started_at,
             completed_at=completed_at,
-            total_urls=total_urls,
-            pages_discovered=pages_discovered,
-            pages_fetched=pages_fetched,
-            pages_new=pages_new,
-            pages_changed=pages_changed,
-            pages_unchanged=pages_unchanged,
-            pages_failed=pages_failed,
-            pages_blocked=pages_blocked,
-            pages_manual_needed=pages_manual_needed,
-            auto_confirmed=auto_confirmed,
-            pending=pending,
-            auto_rejected=auto_rejected,
-            manual_review=manual_review,
-            failures_by_type=failures_by_type,
-            page_results=page_results,
+            total_urls=len(metrics.unique_urls),
+            pages_discovered=metrics.pages_discovered,
+            pages_fetched=metrics.pages_fetched,
+            pages_new=metrics.pages_new,
+            pages_changed=metrics.pages_changed,
+            pages_unchanged=metrics.pages_unchanged,
+            pages_failed=metrics.pages_failed,
+            pages_blocked=metrics.pages_blocked,
+            pages_manual_needed=metrics.pages_manual_needed,
+            auto_confirmed=metrics.auto_confirmed,
+            pending=metrics.pending,
+            auto_rejected=metrics.auto_rejected,
+            manual_review=metrics.manual_review,
+            failures_by_type=metrics.failures_by_type,
+            page_results=metrics.page_results_sample,
         )
     
     def _create_failed_result(

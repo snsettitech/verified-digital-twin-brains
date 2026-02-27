@@ -21,7 +21,7 @@ import os
 import asyncio
 import logging
 import time
-from typing import Optional, Dict, Any, List, Literal
+from typing import Optional, Dict, Any, List, AsyncIterator, Literal
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -145,6 +145,8 @@ class FirecrawlConfig:
     website_crawl_limit: int = 50
     website_max_depth: int = 3
     scrape_formats: List[str] = field(default_factory=lambda: ["markdown"])
+    max_content_chars: int = 500000
+    max_metadata_chars: int = 8000
     
     @classmethod
     def from_env(cls) -> "FirecrawlConfig":
@@ -160,6 +162,8 @@ class FirecrawlConfig:
             circuit_recovery_timeout=int(os.getenv("FIRECRAWL_CIRCUIT_RECOVERY_TIMEOUT", "30")),
             website_crawl_limit=int(os.getenv("FIRECRAWL_WEBSITE_CRAWL_LIMIT", "50")),
             website_max_depth=int(os.getenv("FIRECRAWL_WEBSITE_MAX_DEPTH", "3")),
+            max_content_chars=max(0, int(os.getenv("FIRECRAWL_MAX_CONTENT_CHARS", "500000"))),
+            max_metadata_chars=max(0, int(os.getenv("FIRECRAWL_MAX_METADATA_CHARS", "8000"))),
         )
     
     def is_configured(self) -> bool:
@@ -370,6 +374,64 @@ class FirecrawlClient:
         
         # Full content
         return ContentQuality.FULL, f"Full content extracted ({content_length} chars)"
+
+    def _truncate_content_if_needed(self, content: str, url: str) -> tuple[str, bool]:
+        """
+        Truncate very large page bodies to avoid memory pressure on small instances.
+
+        Returns:
+            (content, was_truncated)
+        """
+        max_chars = self.config.max_content_chars
+        if max_chars > 0 and len(content) > max_chars:
+            logger.warning(
+                "Truncating content for %s from %d to %d chars",
+                url,
+                len(content),
+                max_chars,
+            )
+            return content[:max_chars], True
+        return content, False
+
+    def _compact_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Keep metadata payload bounded to avoid retaining unexpectedly large blobs.
+        """
+        if not isinstance(metadata, dict):
+            return {}
+
+        max_chars = self.config.max_metadata_chars
+        compact: Dict[str, Any] = {}
+        for key, value in metadata.items():
+            if isinstance(value, str):
+                compact[key] = value[:max_chars] if max_chars > 0 else value
+            elif isinstance(value, (int, float, bool)) or value is None:
+                compact[key] = value
+            elif isinstance(value, list):
+                trimmed = value[:25]
+                if max_chars > 0:
+                    compact[key] = [
+                        item[:max_chars] if isinstance(item, str) else item
+                        for item in trimmed
+                    ]
+                else:
+                    compact[key] = trimmed
+            elif isinstance(value, dict):
+                # Keep nested object shallow and bounded.
+                nested: Dict[str, Any] = {}
+                for idx, (nested_key, nested_value) in enumerate(value.items()):
+                    if idx >= 25:
+                        break
+                    if isinstance(nested_value, str) and max_chars > 0:
+                        nested[nested_key] = nested_value[:max_chars]
+                    elif isinstance(nested_value, (int, float, bool)) or nested_value is None:
+                        nested[nested_key] = nested_value
+                    else:
+                        nested[nested_key] = str(nested_value)[:max_chars] if max_chars > 0 else str(nested_value)
+                compact[key] = nested
+            else:
+                compact[key] = str(value)[:max_chars] if max_chars > 0 else str(value)
+        return compact
     
     async def scrape_with_retry(
         self,
@@ -478,10 +540,14 @@ class FirecrawlClient:
         elif "html" in result:
             content = result["html"]
         
-        metadata = result.get("metadata", {})
+        metadata = self._compact_metadata(result.get("metadata", {}))
+        content, was_truncated = self._truncate_content_if_needed(content, url)
         
         # Assess quality
         quality, quality_reason = self._assess_content_quality(content, metadata, None)
+        if was_truncated:
+            quality = ContentQuality.PARTIAL
+            quality_reason = f"{quality_reason} (truncated to {self.config.max_content_chars} chars)"
         
         return FirecrawlResult(
             success=True,
@@ -494,15 +560,15 @@ class FirecrawlClient:
             firecrawl_status="success",
         )
     
-    async def crawl_with_polling(
+    async def crawl_with_polling_iter(
         self,
         url: str,
         limit: Optional[int] = None,
         max_depth: Optional[int] = None,
         poll_interval: int = 5
-    ) -> List[FirecrawlResult]:
+    ) -> AsyncIterator[FirecrawlResult]:
         """
-        Start a crawl job and poll for completion.
+        Start a crawl job and stream page results.
         
         Args:
             url: Starting URL
@@ -510,8 +576,8 @@ class FirecrawlClient:
             max_depth: Max crawl depth
             poll_interval: Seconds between status checks
         
-        Returns:
-            List of FirecrawlResult for each crawled page
+        Yields:
+            FirecrawlResult for each crawled page
         """
         limit = limit or self.config.website_crawl_limit
         max_depth = max_depth or self.config.website_max_depth
@@ -545,35 +611,48 @@ class FirecrawlClient:
                 if hasattr(crawl_result, "model_dump"):
                     crawl_result = crawl_result.model_dump()
                 
-                # Process results
-                results = []
-                if crawl_result and crawl_result.get("data"):
-                    for page in crawl_result["data"]:
-                        page_content = page.get("markdown", "")
-                        page_metadata = page.get("metadata", {})
-                        page_url = page_metadata.get("sourceURL", url)
-                        
-                        quality, quality_reason = self._assess_content_quality(
-                            page_content, page_metadata, None
+                # Process results without building a second in-memory list.
+                page_count = 0
+                data_pages: List[Dict[str, Any]] = []
+                if isinstance(crawl_result, dict) and isinstance(crawl_result.get("data"), list):
+                    data_pages = crawl_result["data"]
+
+                while data_pages:
+                    page = data_pages.pop()
+                    page_content = page.get("markdown", "")
+                    page_metadata = self._compact_metadata(page.get("metadata", {}))
+                    page_url = page_metadata.get("sourceURL", url)
+                    page_content, was_truncated = self._truncate_content_if_needed(page_content, page_url)
+
+                    quality, quality_reason = self._assess_content_quality(
+                        page_content, page_metadata, None
+                    )
+                    if was_truncated:
+                        quality = ContentQuality.PARTIAL
+                        quality_reason = (
+                            f"{quality_reason} (truncated to {self.config.max_content_chars} chars)"
                         )
-                        
-                        results.append(FirecrawlResult(
-                            success=True,
-                            url=page_url,
-                            content=page_content,
-                            metadata=page_metadata,
-                            quality=quality,
-                            quality_reason=quality_reason,
-                            http_status=page_metadata.get("statusCode"),
-                        ))
-                
-                logger.info(f"Crawl of {url} completed: {len(results)} pages")
-                return results
+
+                    page_count += 1
+                    yield FirecrawlResult(
+                        success=True,
+                        url=page_url,
+                        content=page_content,
+                        metadata=page_metadata,
+                        quality=quality,
+                        quality_reason=quality_reason,
+                        http_status=page_metadata.get("statusCode"),
+                    )
+
+                if isinstance(crawl_result, dict):
+                    crawl_result.clear()
+
+                logger.info(f"Crawl of {url} completed: {page_count} pages")
                 
             except Exception as e:
                 logger.error(f"Crawl failed for {url}: {e}")
                 failure_type = self._map_exception_to_failure_type(e)
-                return [FirecrawlResult(
+                yield FirecrawlResult(
                     success=False,
                     url=url,
                     error={
@@ -582,7 +661,27 @@ class FirecrawlClient:
                     },
                     quality=ContentQuality.BLOCKED,
                     quality_reason=f"Crawl failed: {e}",
-                )]
+                )
+
+    async def crawl_with_polling(
+        self,
+        url: str,
+        limit: Optional[int] = None,
+        max_depth: Optional[int] = None,
+        poll_interval: int = 5
+    ) -> List[FirecrawlResult]:
+        """
+        Backward-compatible crawl API that collects streamed page results.
+        """
+        results: List[FirecrawlResult] = []
+        async for result in self.crawl_with_polling_iter(
+            url=url,
+            limit=limit,
+            max_depth=max_depth,
+            poll_interval=poll_interval,
+        ):
+            results.append(result)
+        return results
 
     async def search(
         self,
