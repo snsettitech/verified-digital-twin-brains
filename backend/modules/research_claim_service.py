@@ -11,6 +11,7 @@ Idempotent: Safe to retry. Checks existing state before processing.
 """
 
 import logging
+import uuid
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime
@@ -343,6 +344,8 @@ class ResearchClaimService:
             claim = result.claim
             
             # Update verification status
+            if not claim.id:
+                claim.id = str(uuid.uuid4())
             claim.verification_status = result.status
             claim.confidence = result.confidence
             

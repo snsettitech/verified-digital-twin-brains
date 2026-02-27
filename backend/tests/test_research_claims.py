@@ -338,6 +338,35 @@ class TestResearchClaimService:
         
         assert status is None
 
+    @pytest.mark.asyncio
+    async def test_persist_claims_generates_missing_ids(self):
+        """Persisted claims should always have UUIDs even if extractor left id unset."""
+        mock_db = MagicMock()
+        insert_mock = mock_db.table.return_value.insert.return_value
+        insert_mock.execute.return_value = MagicMock()
+
+        service = ResearchClaimService(supabase_client=mock_db)
+        claim = ResearchClaim(
+            research_run_id="run-123",
+            twin_id="twin-456",
+            claim_text="I prefer remote work",
+            claim_type=ClaimType.PREFERENCE,
+        )
+        result = VerificationResult(
+            claim=claim,
+            status=VerificationStatus.SUPPORTED,
+            confidence=0.91,
+            supporting_evidence=[EvidenceQuote(quote="I prefer remote work", relevance=0.91)],
+            conflicting_evidence=[],
+            reasoning="Supported by source text",
+        )
+
+        await service._persist_claims([result])
+
+        inserted_payload = mock_db.table.return_value.insert.call_args.args[0]
+        assert inserted_payload["id"]
+        assert claim.id == inserted_payload["id"]
+
 
 # =============================================================================
 # API Contract Tests

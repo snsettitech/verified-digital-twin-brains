@@ -60,6 +60,37 @@ def test_vector_mode_upsert_and_query_passthrough(monkeypatch):
     assert result == mock_query_response
 
 
+def test_vector_mode_upsert_strips_null_metadata(monkeypatch):
+    monkeypatch.setenv("PINECONE_INDEX_MODE", "vector")
+
+    mock_index = MagicMock()
+    adapter = PineconeIndexAdapter(mock_index)
+
+    vectors = [
+        {
+            "id": "vec-1",
+            "values": [0.1, 0.2],
+            "metadata": {
+                "text": "hello",
+                "source_id": "src-1",
+                "tombstoned_at": None,
+                "nested": {"keep": "yes", "drop": None},
+                "tags": ["a", None, "b"],
+            },
+        }
+    ]
+
+    adapter.upsert(vectors=vectors, namespace="creator_a_twin_b")
+
+    upsert_payload = mock_index.upsert.call_args.kwargs["vectors"]
+    assert upsert_payload[0]["metadata"] == {
+        "text": "hello",
+        "source_id": "src-1",
+        "nested": {"keep": "yes"},
+        "tags": ["a", "b"],
+    }
+
+
 def test_integrated_mode_requires_text_field(monkeypatch):
     monkeypatch.setenv("PINECONE_INDEX_MODE", "integrated")
     monkeypatch.setenv("PINECONE_TEXT_FIELD", "")

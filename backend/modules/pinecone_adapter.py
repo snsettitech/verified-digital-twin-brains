@@ -95,11 +95,17 @@ class PineconeIndexAdapter:
                 )
 
     def upsert(self, vectors: List[Dict[str, Any]], namespace: str) -> Any:
+        sanitized_vectors: List[Dict[str, Any]] = []
+        for vector in vectors:
+            sanitized_vector = dict(vector)
+            sanitized_vector["metadata"] = self._sanitize_metadata(vector.get("metadata") or {})
+            sanitized_vectors.append(sanitized_vector)
+
         if self.mode == "vector":
-            return self.index.upsert(vectors=vectors, namespace=namespace)
+            return self.index.upsert(vectors=sanitized_vectors, namespace=namespace)
 
         records: List[Dict[str, Any]] = []
-        for vector in vectors:
+        for vector in sanitized_vectors:
             metadata = dict(vector.get("metadata") or {})
             text_value = str(metadata.get("text") or "").strip()
             if not text_value:
@@ -118,6 +124,24 @@ class PineconeIndexAdapter:
         if not records:
             return {"upserted_count": 0}
         return self.index.upsert_records(namespace=namespace, records=records)
+
+    def _sanitize_metadata(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop null metadata values before upsert; Pinecone rejects them."""
+        sanitized: Dict[str, Any] = {}
+        for key, value in metadata.items():
+            if value is None:
+                continue
+            if isinstance(value, dict):
+                nested = self._sanitize_metadata(value)
+                if nested:
+                    sanitized[key] = nested
+                continue
+            if isinstance(value, list):
+                sanitized_list = [item for item in value if item is not None]
+                sanitized[key] = sanitized_list
+                continue
+            sanitized[key] = value
+        return sanitized
 
     def query(
         self,
