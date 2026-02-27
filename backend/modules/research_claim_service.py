@@ -227,32 +227,32 @@ class ResearchClaimService:
         Returns:
             List of source dicts with content, id, url, title
         """
-        conf_result = None
         try:
             conf_result = self.db.table("source_confirmations").select(
-                "crawl_page_id, confirmation_status"
-            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-                "confirmation_status", ["confirmed", "auto_confirmed"]
-            ).execute()
+                "*"
+            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).execute()
         except Exception as e:
-            # Backward compatibility for legacy environments that still use `status`
-            if "confirmation_status" not in str(e):
-                logger.error(f"Error fetching confirmed source confirmations: {e}")
-                return []
-            try:
-                conf_result = self.db.table("source_confirmations").select(
-                    "crawl_page_id, status"
-                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-                    "status", ["confirmed", "auto_confirmed"]
-                ).execute()
-            except Exception as fallback_error:
-                logger.error(f"Error fetching confirmed source confirmations: {fallback_error}")
-                return []
-
-        if not conf_result or not conf_result.data:
+            logger.error(f"Error fetching confirmed source confirmations: {e}")
             return []
 
-        confirmed_page_ids = [row.get("crawl_page_id") for row in conf_result.data if row.get("crawl_page_id")]
+        rows = conf_result.data or []
+        if not rows:
+            return []
+
+        confirmed_page_ids = []
+        for row in rows:
+            status_value = (
+                row.get("confirmation_status")
+                or row.get("status")
+                or row.get("state")
+                or ""
+            )
+            if status_value not in ("confirmed", "auto_confirmed"):
+                continue
+            page_id = row.get("crawl_page_id")
+            if page_id:
+                confirmed_page_ids.append(page_id)
+
         if not confirmed_page_ids:
             return []
 

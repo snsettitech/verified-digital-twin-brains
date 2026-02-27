@@ -220,32 +220,27 @@ class TwinReadinessChecker:
         Returns:
             ReadinessCounts with breakdown by status
         """
-        response = None
         try:
             response = supabase.table("source_confirmations").select(
-                "confirmation_status"
+                "*"
             ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).execute()
-
         except Exception as e:
-            # Backward compatibility for legacy environments that still use `status`
-            if "confirmation_status" not in str(e):
-                logger.error(f"Phase 5: Error getting confirmation counts: {e}")
-                return ReadinessCounts()
-            try:
-                response = supabase.table("source_confirmations").select(
-                    "status"
-                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).execute()
-            except Exception as fallback_error:
-                logger.error(f"Phase 5: Error getting confirmation counts: {fallback_error}")
-                return ReadinessCounts()
+            logger.error(f"Phase 5: Error getting confirmation counts: {e}")
+            return ReadinessCounts()
 
-        if not response or not response.data:
+        rows = response.data or []
+        if not rows:
             return ReadinessCounts()
 
         # Count by status
         counts = ReadinessCounts()
-        for row in response.data:
-            status_value = row.get("confirmation_status", row.get("status", ""))
+        for row in rows:
+            status_value = (
+                row.get("confirmation_status")
+                or row.get("status")
+                or row.get("state")
+                or ""
+            )
             if status_value == "confirmed":
                 counts.confirmed += 1
             elif status_value == "auto_confirmed":

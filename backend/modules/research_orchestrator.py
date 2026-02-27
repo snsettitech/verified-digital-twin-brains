@@ -1149,35 +1149,41 @@ class ResearchOrchestrator:
         Returns:
             List of canonical URLs (deduplicated, sorted by confidence desc, created_at asc)
         """
-        response = None
         try:
-            # Query confirmed sources with their metadata
             response = supabase.table("source_confirmations").select(
-                "crawl_page_id, confirmation_status, identity_confidence_score, created_at"
-            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-                "confirmation_status", ["confirmed", "auto_confirmed"]
-            ).order("identity_confidence_score", desc=True).order("created_at").execute()
-
+                "*"
+            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).execute()
         except Exception as e:
-            # Backward compatibility for legacy environments that still use `status`
-            if "confirmation_status" not in str(e):
-                logger.error(f"Phase 4: Error fetching confirmed source URLs: {e}")
-                return []
-            try:
-                response = supabase.table("source_confirmations").select(
-                    "crawl_page_id, status, identity_confidence_score, created_at"
-                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-                    "status", ["confirmed", "auto_confirmed"]
-                ).order("identity_confidence_score", desc=True).order("created_at").execute()
-            except Exception as fallback_error:
-                logger.error(f"Phase 4: Error fetching confirmed source URLs: {fallback_error}")
-                return []
-
-        if not response or not response.data:
+            logger.error(f"Phase 4: Error fetching confirmed source URLs: {e}")
             return []
 
+        rows = response.data or []
+        if not rows:
+            return []
+
+        confirmed_rows = []
+        for row in rows:
+            status_value = (
+                row.get("confirmation_status")
+                or row.get("status")
+                or row.get("state")
+                or ""
+            )
+            if status_value in ("confirmed", "auto_confirmed"):
+                confirmed_rows.append(row)
+
+        if not confirmed_rows:
+            return []
+
+        confirmed_rows.sort(
+            key=lambda row: (
+                -(row.get("identity_confidence_score") or 0),
+                row.get("created_at") or "",
+            )
+        )
+
         # Get crawl page IDs
-        page_ids = [row["crawl_page_id"] for row in response.data if row.get("crawl_page_id")]
+        page_ids = [row["crawl_page_id"] for row in confirmed_rows if row.get("crawl_page_id")]
 
         if not page_ids:
             return []
@@ -1200,7 +1206,7 @@ class ResearchOrchestrator:
         seen_urls = set()
         unique_urls = []
 
-        for row in response.data:
+        for row in confirmed_rows:
             page_id = row.get("crawl_page_id")
             url = url_map.get(page_id, "")
 

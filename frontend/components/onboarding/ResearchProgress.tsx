@@ -80,6 +80,7 @@ export function ResearchProgress({
   };
 
   const currentStepIndex = getCurrentStepIndex();
+  const crawlProgress = status?.checkpoint_data?.crawl_progress;
 
   // Get next action display
   const nextActions = status?.next_actions ?? [];
@@ -234,6 +235,34 @@ export function ResearchProgress({
               </p>
             </div>
           </div>
+          {crawlProgress && (
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+              <div>
+                <div className="text-lg font-semibold text-white">
+                  {crawlProgress.seed_urls_total ?? 0}
+                </div>
+                <div className="text-slate-500">Seed URLs</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-white">
+                  {crawlProgress.pages_found ?? 0}
+                </div>
+                <div className="text-slate-500">Pages discovered</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-white">
+                  {crawlProgress.pages_ingested ?? 0}
+                </div>
+                <div className="text-slate-500">Pages fetched</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-white">
+                  {crawlProgress.pages_failed ?? 0}
+                </div>
+                <div className="text-slate-500">Pages failed</div>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 

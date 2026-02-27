@@ -302,6 +302,17 @@ class FirecrawlClient:
         
         if "401" in error_str or "unauthorized" in error_str:
             return FailureType.AUTH
+
+        # Permanent platform/domain limitations - don't burn retries.
+        if any(
+            token in error_str
+            for token in (
+                "website not supported",
+                "we do not support this site",
+                "domain not supported",
+            )
+        ):
+            return FailureType.GATING
         
         if "5" in error_str[:3] or "server error" in error_str:
             return FailureType.UNAVAILABLE
@@ -309,6 +320,19 @@ class FirecrawlClient:
         if "timeout" in error_str or "timed out" in error_str:
             return FailureType.TIMEOUT
         
+        # DNS resolution failures for missing/invalid hostnames are typically permanent.
+        if any(
+            x in error_str
+            for x in [
+                "dns resolution failed for hostname",
+                "name or service not known",
+                "nodename nor servname provided",
+                "no such host",
+                "domain does not exist",
+            ]
+        ):
+            return FailureType.INVALID_HOSTNAME
+
         if any(x in error_str for x in ["dns", "connection", "network", "ssl", "certificate", "tls"]):
             return FailureType.NETWORK
         

@@ -26,6 +26,7 @@ import sys
 import re
 import os
 import inspect
+import time
 from typing import Optional, Dict, Any, List, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -432,6 +433,7 @@ class CrawlJobProcessor:
         self._result_detail_limit = max(
             0, int(os.getenv("CRAWL_RESULT_DETAIL_LIMIT", "200"))
         )
+        self._last_progress_flush_by_crawl: Dict[str, float] = {}
 
     def _log_memory_usage(self, context: str) -> None:
         """
@@ -507,6 +509,7 @@ class CrawlJobProcessor:
             # Process each seed URL
             metrics = CrawlMetricsAccumulator(detail_limit=self._result_detail_limit)
             self._log_memory_usage(f"crawl_start:{crawl_id}")
+            self._flush_progress_metrics(crawl_id, metrics, force=True)
             
             for seed_url in seed_urls:
                 try:
@@ -523,6 +526,7 @@ class CrawlJobProcessor:
                         await self._process_scrape_strategy(
                             seed_url, crawl_id, twin_id, strategy, claimed_identity, metrics
                         )
+                    self._flush_progress_metrics(crawl_id, metrics, force=True)
                     self._log_memory_usage(f"after_seed:{seed_url}")
                     
                 except Exception as e:
@@ -534,6 +538,7 @@ class CrawlJobProcessor:
                         success=False,
                         error_message=str(e),
                     ))
+                    self._flush_progress_metrics(crawl_id, metrics, force=True)
             
             # Finalize crawl run
             result = self._finalize_job_result(
@@ -542,12 +547,14 @@ class CrawlJobProcessor:
             
             # Update crawl run with final status
             self._update_crawl_status(crawl_id, result.status.value, result)
+            self._last_progress_flush_by_crawl.pop(crawl_id, None)
             
             return result
             
         except Exception as e:
             logger.error(f"Crawl job {job_id} failed: {e}")
             self._update_crawl_status(crawl_id, "failed")
+            self._last_progress_flush_by_crawl.pop(crawl_id, None)
             return self._create_failed_result(job_id, crawl_id, started_at, str(e))
     
     def _get_crawl_run(self, crawl_id: str) -> Optional[Dict[str, Any]]:
@@ -592,6 +599,37 @@ class CrawlJobProcessor:
             
         except Exception as e:
             logger.error(f"Error updating crawl status: {e}")
+
+    def _flush_progress_metrics(
+        self,
+        crawl_id: str,
+        metrics: CrawlMetricsAccumulator,
+        *,
+        force: bool = False,
+        min_interval_seconds: float = 2.0,
+    ) -> None:
+        """
+        Persist rolling crawl metrics so polling UIs show live progress.
+
+        Writes are throttled by default to avoid excessive database churn.
+        """
+        try:
+            now = time.time()
+            last = self._last_progress_flush_by_crawl.get(crawl_id, 0.0)
+            if not force and (now - last) < min_interval_seconds:
+                return
+
+            update_data = {
+                "pages_found": metrics.pages_discovered,
+                "pages_ingested": metrics.pages_fetched,
+                "pages_failed": metrics.pages_failed,
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+            from modules.observability import supabase
+            supabase.table("crawl_runs").update(update_data).eq("id", crawl_id).execute()
+            self._last_progress_flush_by_crawl[crawl_id] = now
+        except Exception as e:
+            logger.debug(f"Error flushing crawl progress metrics: {e}")
     
     async def _process_crawl_strategy(
         self,
@@ -640,6 +678,7 @@ class CrawlJobProcessor:
                         claimed_identity,
                     )
                     metrics.add(page_result)
+                    self._flush_progress_metrics(crawl_id, metrics)
             else:
                 crawl_results = await self.firecrawl.crawl_with_polling(
                     url=seed_url,
@@ -655,6 +694,7 @@ class CrawlJobProcessor:
                         claimed_identity,
                     )
                     metrics.add(page_result)
+                    self._flush_progress_metrics(crawl_id, metrics)
                 
         except Exception as e:
             logger.error(f"Error in crawl strategy for {seed_url}: {e}")
@@ -669,6 +709,7 @@ class CrawlJobProcessor:
                 failure_type=FailureType.NETWORK,
                 error_message=str(e),
             ))
+            self._flush_progress_metrics(crawl_id, metrics)
         return
     
     async def _process_scrape_strategy(
@@ -713,6 +754,7 @@ class CrawlJobProcessor:
             )
             
             metrics.add(page_result)
+            self._flush_progress_metrics(crawl_id, metrics)
             return
             
         except Exception as e:
@@ -727,6 +769,7 @@ class CrawlJobProcessor:
                 failure_type=FailureType.NETWORK,
                 error_message=str(e),
             ))
+            self._flush_progress_metrics(crawl_id, metrics)
             return
     
     async def _process_firecrawl_result(

@@ -283,6 +283,47 @@ def _build_progress(crawl: dict) -> dict:
     }
 
 
+def _get_live_crawl_progress(crawl_id: Optional[str]) -> Optional[dict]:
+    """
+    Fetch rolling crawl progress for live UI updates.
+
+    Returns None when crawl_id is missing or the crawl row cannot be read.
+    """
+    if not crawl_id:
+        return None
+
+    try:
+        response = (
+            supabase.table("crawl_runs")
+            .select("id,status,seed_urls,pages_found,pages_ingested,pages_failed,pages_unchanged,started_at,updated_at")
+            .eq("id", crawl_id)
+            .maybe_single()
+            .execute()
+        )
+        crawl = response.data or {}
+        if not crawl:
+            return None
+
+        seed_urls = crawl.get("seed_urls") or []
+        if not isinstance(seed_urls, list):
+            seed_urls = []
+
+        return {
+            "crawl_id": crawl.get("id"),
+            "crawl_status": crawl.get("status"),
+            "seed_urls_total": len(seed_urls),
+            "pages_found": crawl.get("pages_found", 0),
+            "pages_ingested": crawl.get("pages_ingested", 0),
+            "pages_failed": crawl.get("pages_failed", 0),
+            "pages_unchanged": crawl.get("pages_unchanged", 0),
+            "started_at": crawl.get("started_at"),
+            "updated_at": crawl.get("updated_at"),
+        }
+    except Exception as e:
+        logger.debug("Could not fetch live crawl progress for %s: %s", crawl_id, e)
+        return None
+
+
 _URL_IN_TEXT_PATTERN = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 
 
@@ -1488,13 +1529,18 @@ async def get_research_run_status(
                 "all_resolved": result.confirmation_summary.all_resolved,
                 "resolution_percent": result.confirmation_summary.resolution_percent,
             }
+
+        checkpoint_data = dict(result.checkpoint_data or {})
+        live_crawl_progress = _get_live_crawl_progress(result.crawl_id)
+        if live_crawl_progress:
+            checkpoint_data["crawl_progress"] = live_crawl_progress
         
         return ResearchRunStatusResponse(
             research_run_id=result.research_run_id,
             twin_id=result.twin_id,
             status=result.status,
             crawl_id=result.crawl_id,
-            checkpoint_data=result.checkpoint_data,
+            checkpoint_data=checkpoint_data,
             confirmation_summary=confirmation_summary,
             next_actions=result.next_actions,
             warnings=result.warnings,

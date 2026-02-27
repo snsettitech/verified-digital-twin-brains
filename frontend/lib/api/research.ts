@@ -70,6 +70,17 @@ export interface ResearchRunStatusResponse {
   status: ResearchRunStatus;
   crawl_id?: string;
   checkpoint_data: {
+    crawl_progress?: {
+      crawl_id?: string;
+      crawl_status?: string;
+      seed_urls_total?: number;
+      pages_found?: number;
+      pages_ingested?: number;
+      pages_failed?: number;
+      pages_unchanged?: number;
+      started_at?: string;
+      updated_at?: string;
+    };
     ingestion?: {
       sources_total?: number;
       sources_ingested?: number;
