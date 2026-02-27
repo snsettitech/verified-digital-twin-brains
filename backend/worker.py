@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import os
 import signal
@@ -6,6 +7,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
 
 def validate_worker_environment():
     """
@@ -17,12 +19,12 @@ def validate_worker_environment():
         ("PINECONE_API_KEY", "Pinecone vector search"),
         ("PINECONE_INDEX_NAME", "Pinecone index name"),
     ]
-    
+
     optional_vars = [
         ("REDIS_URL", "Redis queue (falls back to DB polling if missing)"),
         ("DATABASE_URL", "LangGraph checkpointer (optional)"),
     ]
-    
+
     missing = []
     for var, description in required_vars:
         value = os.getenv(var)
@@ -53,14 +55,20 @@ def validate_worker_environment():
         missing.append("  - OPENAI_API_KEY required when EMBEDDING_PROVIDER=openai")
     if embedding_provider == "huggingface":
         if hf_embedding_backend in {"inference_api", "api", "inference"} and not hf_api_token:
-            missing.append("  - HF_API_TOKEN (or HUGGINGFACEHUB_API_TOKEN) required when EMBEDDING_PROVIDER=huggingface and HF_EMBEDDING_BACKEND=inference_api")
+            missing.append(
+                "  - HF_API_TOKEN (or HUGGINGFACEHUB_API_TOKEN) required when "
+                "EMBEDDING_PROVIDER=huggingface and HF_EMBEDDING_BACKEND=inference_api"
+            )
         if hf_embedding_backend == "auto" and not hf_api_token:
-            print("[WARN] EMBEDDING_PROVIDER=huggingface with HF_EMBEDDING_BACKEND=auto and no HF_API_TOKEN; worker will try local embeddings.")
+            print(
+                "[WARN] EMBEDDING_PROVIDER=huggingface with HF_EMBEDDING_BACKEND=auto "
+                "and no HF_API_TOKEN; worker will try local embeddings."
+            )
     if inference_provider == "openai" and not openai_key:
         missing.append("  - OPENAI_API_KEY required when INFERENCE_PROVIDER=openai")
     if asr_provider == "openai" and not openai_key:
         missing.append("  - OPENAI_API_KEY required when YOUTUBE_ASR_PROVIDER=openai")
-    
+
     if missing:
         print("=" * 70)
         print("FATAL: Worker missing required environment variables:")
@@ -71,64 +79,72 @@ def validate_worker_environment():
         print("For Render: Check your Background Worker service environment variables.")
         print("For local: Create a .env file with these variables.")
         sys.exit(1)
-    
+
     # Warn about optional variables
     for var, description in optional_vars:
         if not os.getenv(var):
             print(f"[WARN] {var} not set: {description}")
-    
+
     # Validate Supabase connection format
     supabase_url = os.getenv("SUPABASE_URL", "")
     if not supabase_url.startswith("https://"):
         print(f"[WARN] SUPABASE_URL should start with https://, got: {supabase_url[:30]}...")
-    
+
     # Validate OpenAI key format when present
     if openai_key and not openai_key.startswith("sk-"):
-        print(f"[WARN] OPENAI_API_KEY should start with 'sk-', check your key format")
-    
+        print("[WARN] OPENAI_API_KEY should start with 'sk-', check your key format")
+
     print("[OK] Worker environment validation passed")
     return True
+
 
 # Run validation before importing modules that depend on env vars
 validate_worker_environment()
 
-from modules.job_queue import dequeue_job, get_redis_client, get_queue_length
+from modules.job_queue import dequeue_job, get_redis_client
 from modules._core.scribe_engine import process_graph_extraction_job, process_content_extraction_job
+from modules.graph_outbox_worker import process_next_graph_outbox_job
 from modules.persona_feedback_learning_jobs import process_feedback_learning_job
-from modules.training_jobs import process_training_job
 
 # Graceful shutdown
 shutdown_event = asyncio.Event()
 
 # Ensure logs are flushed immediately
-if sys.platform != 'win32':
-    # Windows doesn't support line_buffering param in reconfigure easily in all versions, 
+if sys.platform != "win32":
+    # Windows doesn't support line_buffering param in reconfigure easily in all versions,
     # but strictly this is for Render (Linux)
     try:
         sys.stdout.reconfigure(line_buffering=True)
     except Exception:
         pass
 
+
 def handle_shutdown(sig, frame):
     print("\n[Worker] Shutdown signal received. Finishing current job and stopping...")
     shutdown_event.set()
 
+
 signal.signal(signal.SIGINT, handle_shutdown)
 signal.signal(signal.SIGTERM, handle_shutdown)
 
-async def worker_loop():
+
+async def worker_loop(queue_mode: str = "all"):
     """
     Main worker loop that polls for jobs and executes them.
+
+    queue_mode:
+    - all: process graph_outbox + legacy jobs/training queues
+    - default: process only legacy jobs/training queues
+    - graph_memory: process only graph_outbox
     """
     worker_id = os.getenv("RENDER_INSTANCE_ID", "local-worker")
-    print(f"[Worker] Starting background worker ({worker_id})...")
-    
+    print(f"[Worker] Starting background worker ({worker_id}) queue_mode={queue_mode}")
+
     # Check Redis connection
     redis_client = get_redis_client()
     if redis_client:
         print("[Worker] Connected to Redis queue")
     else:
-        # Job queue falls back to DB-backed dequeue when REDIS_URL is not configured.
         print("[Worker] INFO: REDIS_URL not configured/available - using DB-backed queue polling")
         print("[Worker] TIP: Configure REDIS_URL for lower latency and horizontal scaling")
 
@@ -137,22 +153,41 @@ async def worker_loop():
 
     while not shutdown_event.is_set():
         try:
-            # Poll for job
+            graph_job_processed = False
+            if queue_mode in {"all", "graph_memory"}:
+                graph_job_processed = await process_next_graph_outbox_job(worker_id=worker_id)
+                if graph_job_processed:
+                    consecutive_empty_polls = 0
+                    jobs_processed += 1
+
+            if queue_mode == "graph_memory":
+                if graph_job_processed:
+                    continue
+
+                consecutive_empty_polls += 1
+                sleep_time = min(5, 0.5 + (consecutive_empty_polls * 0.1))
+                await asyncio.sleep(sleep_time)
+                if consecutive_empty_polls % 60 == 0 and consecutive_empty_polls > 0:
+                    print("[Worker] Heartbeat: waiting for graph_outbox jobs...")
+                continue
+
+            if graph_job_processed:
+                continue
+
+            # Poll for non-graph jobs
             job = dequeue_job()
-            
             if job:
                 consecutive_empty_polls = 0
                 jobs_processed += 1
-                
+
                 job_id = job.get("job_id")
                 job_type = job.get("job_type")
-                metadata = job.get("metadata", {})
-                
+
                 print(f"[Worker] Processing job {job_id} ({job_type})")
-                
+
                 start_time = asyncio.get_event_loop().time()
                 success = False
-                
+
                 try:
                     # Dispatch based on job type
                     if job_type == "content_extraction":
@@ -162,42 +197,52 @@ async def worker_loop():
                     elif job_type == "feedback_learning":
                         success = await process_feedback_learning_job(job_id)
                     elif job_type in ["ingestion", "reindex", "health_check"]:
-                        # Training jobs with automatic retry logic
                         from modules.training_jobs import process_training_job_with_retry
+
                         success = await process_training_job_with_retry(job_id)
                     else:
                         print(f"[Worker] Unknown job type: {job_type}")
                         success = False
-                        
+
                 except Exception as e:
                     print(f"[Worker] Job {job_id} crashed: {e}")
                     import traceback
+
                     traceback.print_exc()
                     success = False
-                
+
                 duration = asyncio.get_event_loop().time() - start_time
-                status_symbol = "✅" if success else "❌"
-                print(f"[Worker] {status_symbol} Job {job_id} finished in {duration:.2f}s")
-                
+                status_label = "[OK]" if success else "[FAIL]"
+                print(f"[Worker] {status_label} Job {job_id} finished in {duration:.2f}s")
             else:
                 consecutive_empty_polls += 1
-                # Adaptive sleep: sleep longer if queue is empty for a while, up to 5s
                 sleep_time = min(5, 0.5 + (consecutive_empty_polls * 0.1))
                 await asyncio.sleep(sleep_time)
-                
-                # Log heartbeat every ~60s of inactivity
+
                 if consecutive_empty_polls % 60 == 0 and consecutive_empty_polls > 0:
-                     print(f"[Worker] Heartbeat: Waiting for jobs... (Queue empty)")
+                    print("[Worker] Heartbeat: waiting for jobs... (queue empty)")
 
         except Exception as e:
             print(f"[Worker] Critical error in loop: {e}")
             import traceback
+
             traceback.print_exc()
-            await asyncio.sleep(5)  # Backoff on critical error
+            await asyncio.sleep(5)
 
     print(f"[Worker] Shutdown complete. Processed {jobs_processed} jobs.")
 
+
 if __name__ == "__main__":
-    if sys.platform == 'win32':
+    parser = argparse.ArgumentParser(description="Background worker")
+    parser.add_argument(
+        "--queue",
+        choices=["all", "default", "graph_memory"],
+        default=os.getenv("WORKER_QUEUE", "all"),
+        help="Queue selection",
+    )
+    args = parser.parse_args()
+
+    if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(worker_loop())
+    asyncio.run(worker_loop(queue_mode=args.queue))
+

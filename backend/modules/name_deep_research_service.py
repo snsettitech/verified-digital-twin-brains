@@ -11,6 +11,7 @@ Pipeline:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -31,6 +32,10 @@ from modules.name_deep_research_synthesis import (
     normalize_name_deep_research_synthesis_payload,
 )
 from modules.observability import supabase
+from modules.profile_selection import (
+    build_creator_candidates,
+    select_profile_twin_from_rows,
+)
 from modules.research_claim_web_search import create_search_provider_with_fallback
 from modules.robots_checker import RobotsChecker
 from modules.training_metrics import (
@@ -408,41 +413,6 @@ class NameDeepResearchService:
         preferred_provider = (os.getenv("SEARCH_PROVIDER", "exa") or "exa").lower()
         self.search_provider = create_search_provider_with_fallback(preferred=preferred_provider)
 
-    def _creator_candidates(self, *, tenant_id: str, user_id: str) -> List[str]:
-        candidates: List[str] = []
-        if user_id:
-            candidates.append(str(user_id))
-        if tenant_id:
-            candidates.append(f"tenant_{tenant_id}")
-        # Keep order, remove duplicates.
-        seen: set[str] = set()
-        ordered: List[str] = []
-        for candidate in candidates:
-            if not candidate or candidate in seen:
-                continue
-            seen.add(candidate)
-            ordered.append(candidate)
-        return ordered
-
-    def _score_twin_for_user(self, twin: Dict[str, Any], *, user_id: str, creator_candidates: List[str]) -> int:
-        score = 0
-        creator_id = str(twin.get("creator_id") or "")
-        settings = twin.get("settings") or {}
-        owner_user_id = str(settings.get("owner_user_id") or "")
-        status = str(twin.get("status") or "").lower()
-
-        if owner_user_id and user_id and owner_user_id == user_id:
-            score += 100
-        if creator_id and user_id and creator_id == user_id:
-            score += 80
-        if creator_id in creator_candidates:
-            score += 40
-        if status == "active":
-            score += 20
-        if status == "persona_built":
-            score += 10
-        return score
-
     def _find_existing_profile_twin(self, *, tenant_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         select_candidates = [
             "id,name,status,is_active,settings,created_at,creator_id",
@@ -478,43 +448,16 @@ class NameDeepResearchService:
         if not rows:
             return None
 
-        creator_candidates = self._creator_candidates(tenant_id=tenant_id, user_id=user_id)
-        strong_matches: List[Dict[str, Any]] = []
-        for row in rows:
-            settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
-            owner_user_id = str(settings.get("owner_user_id") or "").strip()
-            creator_id = str(row.get("creator_id") or "").strip()
-            if (user_id and owner_user_id == user_id) or (user_id and creator_id == user_id):
-                strong_matches.append(row)
-
-        # Legacy fallback: only consider tenant-scoped creator matches when exactly
-        # one unclaimed candidate exists. This avoids cross-person identity drift.
-        if strong_matches:
-            candidate_rows = strong_matches
-        else:
-            legacy_matches: List[Dict[str, Any]] = []
-            for row in rows:
-                settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
-                owner_user_id = str(settings.get("owner_user_id") or "").strip()
-                creator_id = str(row.get("creator_id") or "").strip()
-                if owner_user_id:
-                    continue
-                if creator_id in creator_candidates:
-                    legacy_matches.append(row)
-            if len(legacy_matches) == 1:
-                candidate_rows = legacy_matches
-            else:
-                return None
-
-        ranked = sorted(
-            candidate_rows,
-            key=lambda row: (
-                self._score_twin_for_user(row, user_id=user_id, creator_candidates=creator_candidates),
-                str(row.get("created_at") or ""),
-            ),
-            reverse=True,
+        creator_candidates = build_creator_candidates(
+            user_id=user_id,
+            tenant_id=tenant_id,
         )
-        return ranked[0] if ranked else None
+        return select_profile_twin_from_rows(
+            rows=rows,
+            user_id=user_id,
+            creator_candidates=creator_candidates,
+            allow_single_legacy_fallback=True,
+        )
 
     def _has_material_person_data(self, *, twin_id: str) -> bool:
         count_checks = [
@@ -905,6 +848,169 @@ class NameDeepResearchService:
             payload["detail"] = detail[:1200]
         logger.warning("name-research fallback run_id=%s %s", run_id, json.dumps(payload, default=str))
 
+    @staticmethod
+    def _build_graph_memory_text(result_doc: Dict[str, Any]) -> str:
+        """
+        Build deterministic text blob for graph episode/claim extraction.
+        """
+        parts: List[str] = []
+
+        claimed_identity = result_doc.get("claimed_identity") or {}
+        canonical_name = str(claimed_identity.get("canonical_name") or "").strip()
+        if canonical_name:
+            parts.append(f"Canonical Name: {canonical_name}")
+
+        bio = result_doc.get("bio") or {}
+        for key in ("short", "medium", "long"):
+            value = str(bio.get(key) or "").strip()
+            if value:
+                parts.append(f"Bio {key}: {value}")
+
+        profile_summary = result_doc.get("profile_summary") or {}
+        for item in profile_summary.get("what_they_do") or []:
+            text = str(item).strip()
+            if text:
+                parts.append(f"What they do: {text}")
+
+        for item in result_doc.get("claims") or []:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or "").strip()
+            status = str(item.get("status") or "").strip()
+            confidence = item.get("confidence")
+            if text:
+                parts.append(f"Claim ({status}, confidence={confidence}): {text}")
+
+        if not parts:
+            serialized = json.dumps(result_doc, ensure_ascii=True)
+            return serialized[:4000]
+        return "\n".join(parts)[:12000]
+
+    async def _enqueue_graph_memory_jobs(
+        self,
+        *,
+        run_id: str,
+        tenant_id: str,
+        twin_id: str,
+        result_doc: Dict[str, Any],
+    ) -> None:
+        """
+        Enqueue graph_outbox operations on deep-research completion.
+        """
+        from modules.graph_memory_config import get_graph_memory_config
+        from modules.graph_outbox import GraphOperationType, get_graph_outbox
+
+        config = get_graph_memory_config()
+        if not config.is_write_allowed():
+            logger.info("name-research graph enqueue skipped: write disabled run_id=%s", run_id)
+            return
+
+        # Resolve canonical scope_id from twins.creator_id.
+        row_result = await asyncio.to_thread(
+            lambda: self.db.table("twins")
+            .select("tenant_id,creator_id")
+            .eq("id", twin_id)
+            .limit(1)
+            .execute()
+        )
+        row = row_result.data[0] if row_result.data else None
+        if not row:
+            logger.warning("name-research graph enqueue skipped: twin missing twin_id=%s", twin_id)
+            return
+
+        creator_id = str(row.get("creator_id") or f"tenant_{tenant_id}")
+        scope_id = config.make_scope_id(str(tenant_id), creator_id)
+        graph_text = self._build_graph_memory_text(result_doc)
+        if not graph_text.strip():
+            logger.warning("name-research graph enqueue skipped: empty graph text run_id=%s", run_id)
+            return
+
+        content_hash = hashlib.sha256(graph_text.encode("utf-8")).hexdigest()[:20]
+        outbox = get_graph_outbox()
+        correlation_id = f"name-deep-research:{run_id}"
+
+        episode_payload = {
+            "name": f"Deep Research: {str(result_doc.get('input', {}).get('name') or '')}".strip() or "Deep Research Result",
+            "body": graph_text,
+            "source_type": "name_deep_research",
+            "source_ref": run_id,
+            "scope_id": scope_id,
+            "creator_id": creator_id,
+            "metadata": {
+                "research_run_id": run_id,
+                "schema_version": "v1",
+                "content_hash": content_hash,
+            },
+        }
+        claims_payload = {
+            "text": graph_text,
+            "source_type": "name_deep_research",
+            "source_ref": run_id,
+            "scope_id": scope_id,
+            "creator_id": creator_id,
+            "run_id": run_id,
+            "content_hash": content_hash,
+        }
+        snapshot_payload = {
+            "source_type": "name_deep_research",
+            "source_ref": run_id,
+            "scope_id": scope_id,
+            "creator_id": creator_id,
+            "run_id": run_id,
+            "content_hash": content_hash,
+        }
+
+        episode_job_id = outbox.submit(
+            tenant_id=tenant_id,
+            twin_id=twin_id,
+            scope_id=scope_id,
+            creator_id=creator_id,
+            operation=GraphOperationType.CREATE_EPISODE,
+            idempotency_key=f"ndr:episode:{run_id}:{content_hash}",
+            payload=episode_payload,
+            priority=5,
+            correlation_id=correlation_id,
+        )
+        claims_job_id = outbox.submit(
+            tenant_id=tenant_id,
+            twin_id=twin_id,
+            scope_id=scope_id,
+            creator_id=creator_id,
+            operation=GraphOperationType.CREATE_CLAIMS,
+            idempotency_key=f"ndr:claims:{run_id}:{content_hash}",
+            payload=claims_payload,
+            priority=4,
+            correlation_id=correlation_id,
+        )
+        # Best-effort explicit snapshot refresh op for immediate chat readiness.
+        snapshot_job_id: Optional[str] = None
+        try:
+            snapshot_job_id = outbox.submit(
+                tenant_id=tenant_id,
+                twin_id=twin_id,
+                scope_id=scope_id,
+                creator_id=creator_id,
+                operation=GraphOperationType.REFRESH_SNAPSHOT,
+                idempotency_key=f"ndr:snapshot:{run_id}:{content_hash}",
+                payload=snapshot_payload,
+                priority=3,
+                correlation_id=correlation_id,
+            )
+        except Exception as snapshot_exc:
+            logger.warning(
+                "name-research snapshot enqueue skipped run_id=%s scope_id=%s error=%s",
+                run_id,
+                scope_id,
+                snapshot_exc,
+            )
+
+        logger.info(
+            "name-research graph jobs enqueued run_id=%s scope_id=%s jobs=%s",
+            run_id,
+            scope_id,
+            [episode_job_id, claims_job_id, snapshot_job_id],
+        )
+
     async def _execute_pipeline(self, *, run_id: str, tenant_id: str, user_id: str, twin_id: str) -> None:
         try:
             run = await self.get_run(run_id=run_id, tenant_id=tenant_id)
@@ -1009,6 +1115,21 @@ class NameDeepResearchService:
                     "Research completed but profile activation update failed; retry may be required."
                 )
             await self._update_run(run_id, **update_fields)
+
+            try:
+                await self._enqueue_graph_memory_jobs(
+                    run_id=run_id,
+                    tenant_id=tenant_id,
+                    twin_id=twin_id,
+                    result_doc=result_doc,
+                )
+            except Exception as graph_exc:
+                logger.warning(
+                    "name-research graph enqueue failed run_id=%s twin_id=%s error=%s",
+                    run_id,
+                    twin_id,
+                    graph_exc,
+                )
             
             logger.info("name-research run completed: run_id=%s twin_id=%s", run_id, twin_id)
         except Exception as exc:

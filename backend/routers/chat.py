@@ -1719,6 +1719,45 @@ async def chat(
             # Fetch graph stats for this twin
             from modules.graph_context import get_graph_stats
             graph_stats = get_graph_stats(twin_id)
+
+            graph_context_result = None
+            graph_debug_enabled = os.getenv("GRAPH_MEMORY_DEBUG_HEADERS", "false").lower() == "true"
+            graph_memory_enabled = os.getenv("GRAPH_MEMORY_ENABLED", "false").lower() == "true"
+            tenant_id_for_graph = user.get("tenant_id") if user else None
+
+            if graph_memory_enabled and tenant_id_for_graph:
+                try:
+                    from modules.graph_context_builder import get_graph_context_for_chat
+                    scope_hint = f"{tenant_id_for_graph}__tenant_{tenant_id_for_graph}"
+
+                    graph_context_result = await get_graph_context_for_chat(
+                        tenant_id=tenant_id_for_graph,
+                        twin_id=twin_id,
+                        query=query,
+                        correlation_id=conversation_id or "no-conversation",
+                        scope_id=scope_hint,
+                    )
+                except Exception as graph_err:
+                    print(f"[Chat] Graph context prefetch failed: {graph_err}")
+
+            if graph_debug_enabled:
+                debug_source = (
+                    graph_context_result.source
+                    if graph_context_result is not None
+                    else ("disabled" if not graph_memory_enabled else "unavailable")
+                )
+                debug_event = _normalize_json(
+                    {
+                        "type": "graph_debug",
+                        "scope_id": graph_context_result.scope_id if graph_context_result else None,
+                        "source": debug_source,
+                        "claims": graph_context_result.claim_count if graph_context_result else 0,
+                        "episodes": graph_context_result.episode_count if graph_context_result else 0,
+                        "latency_ms": int(graph_context_result.latency_ms) if graph_context_result else 0,
+                        "correlation_id": conversation_id,
+                    }
+                )
+                yield json.dumps(debug_event) + "\n"
             
             # Identity Confidence Gate (deterministic)
             history_for_gate = []
@@ -2032,7 +2071,17 @@ async def chat(
                 confidence_score = 0.0
             
             # Determine if graph was likely used (no external citations and has graph)
-            graph_used = any(str(c).startswith("graph-") for c in (citations or []))
+            graph_used_from_citations = any(str(c).startswith("graph-") for c in (citations or []))
+            graph_prefetch_has_data = bool(
+                graph_context_result
+                and (graph_context_result.episode_count > 0 or graph_context_result.claim_count > 0)
+            )
+            graph_prefetch_used = bool(
+                graph_context_result
+                and graph_context_result.source in {"snapshot", "graph"}
+                and (graph_context_result.context or graph_prefetch_has_data)
+            )
+            graph_used = graph_used_from_citations or graph_prefetch_used
             
             citation_details = _resolve_citation_details(citations, twin_id)
 
@@ -2199,9 +2248,18 @@ async def chat(
                 },
                 "module_ids": module_ids,
                 "graph_context": {
-                    "has_graph": graph_stats["has_graph"],
-                    "node_count": graph_stats["node_count"],
-                    "graph_used": graph_used
+                    "has_graph": graph_prefetch_has_data or graph_stats["has_graph"],
+                    "node_count": (
+                        graph_context_result.episode_count
+                        if graph_context_result is not None
+                        else graph_stats["node_count"]
+                    ),
+                    "graph_used": graph_used,
+                    "source": graph_context_result.source if graph_context_result else "legacy",
+                    "latency_ms": int(graph_context_result.latency_ms) if graph_context_result else None,
+                    "claims": graph_context_result.claim_count if graph_context_result else 0,
+                    "episodes": graph_context_result.episode_count if graph_context_result else 0,
+                    "scope_id": graph_context_result.scope_id if graph_context_result else None,
                 },
                 "decision_trace": decision_trace,
                 "identity_gate_mode": gate.get("gate_mode"),
