@@ -476,7 +476,10 @@ class CrawlJobProcessor:
     ) -> None:
         """Update crawl run status in database."""
         try:
-            update_data = {"status": status}
+            # Legacy deployments may still have crawl_runs.status as VARCHAR(20).
+            # Persist a compact status while keeping full status in-memory.
+            persisted_status = "completed" if status == CrawlJobStatus.COMPLETED_WITH_WARNINGS.value else status
+            update_data = {"status": persisted_status}
             
             if status == "running":
                 update_data["started_at"] = datetime.utcnow().isoformat()
@@ -700,7 +703,7 @@ class CrawlJobProcessor:
         artifact_path: Optional[str] = None
         if content and classification != PageClassification.UNCHANGED:
             artifact_path = self._store_content_artifact(
-                crawl_id, page_id, content, firecrawl_result.metadata
+                twin_id, crawl_id, page_id, content, firecrawl_result.metadata
             )
         
         # Persist page record
@@ -849,6 +852,7 @@ class CrawlJobProcessor:
     
     def _store_content_artifact(
         self,
+        twin_id: str,
         crawl_id: str,
         page_id: str,
         content: str,
@@ -856,16 +860,23 @@ class CrawlJobProcessor:
     ) -> str:
         """Store content in artifact store."""
         try:
-            # Build artifact path: crawls/{crawl_id}/pages/{page_id}/normalized.md
-            artifact_path = f"crawls/{crawl_id}/pages/{page_id}/normalized.md"
-            
-            # Store content
-            self.artifacts.write_artifact(artifact_path, content)
-            
-            # Store metadata alongside
-            metadata_path = f"crawls/{crawl_id}/pages/{page_id}/metadata.json"
-            self.artifacts.write_json(metadata_path, metadata)
-            
+            artifact_path = self.artifacts.write_artifact(
+                "crawl",
+                twin_id,
+                crawl_id,
+                f"pages/{page_id}/normalized.md",
+                content,
+                "text/markdown",
+            )
+
+            self.artifacts.write_json(
+                "crawl",
+                twin_id,
+                crawl_id,
+                f"pages/{page_id}/metadata.json",
+                metadata,
+            )
+
             return artifact_path
             
         except Exception as e:

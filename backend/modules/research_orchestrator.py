@@ -53,6 +53,15 @@ from modules.source_confirmation import (
 
 logger = logging.getLogger(__name__)
 
+# Backward-compat aliases for environments where research_runs.status
+# is still VARCHAR(20) and cannot store "awaiting_confirmation" (21 chars).
+_LEGACY_STATUS_TO_STORAGE: Dict[str, str] = {
+    "awaiting_confirmation": "awaiting_confirm",
+}
+_LEGACY_STATUS_FROM_STORAGE: Dict[str, str] = {
+    value: key for key, value in _LEGACY_STATUS_TO_STORAGE.items()
+}
+
 
 # ============================================================================
 # Research Run Status State Machine
@@ -394,6 +403,18 @@ class ResearchRepository:
     - Fetch by (research_run_id, twin_id)
     - Store timestamps
     """
+
+    @staticmethod
+    def _to_storage_status(status: str) -> str:
+        """Map canonical status to legacy-safe persisted alias when needed."""
+        return _LEGACY_STATUS_TO_STORAGE.get(status, status)
+
+    @staticmethod
+    def _from_storage_status(status: Optional[str]) -> str:
+        """Normalize persisted status aliases to canonical orchestrator status."""
+        if not status:
+            return ResearchRunStatus.PLANNING.value
+        return _LEGACY_STATUS_FROM_STORAGE.get(status, status)
     
     @staticmethod
     def create_research_run(
@@ -459,8 +480,11 @@ class ResearchRepository:
             response = supabase.table("research_runs").select("*").eq(
                 "id", research_run_id
             ).eq("twin_id", twin_id).single().execute()
-            
-            return response.data
+
+            row = response.data
+            if row and isinstance(row, dict):
+                row["status"] = ResearchRepository._from_storage_status(row.get("status"))
+            return row
         except Exception as e:
             logger.error(f"Error fetching research run: {e}")
             return None
@@ -474,8 +498,9 @@ class ResearchRepository:
     ) -> bool:
         """Update research run status and checkpoint."""
         try:
+            storage_status = ResearchRepository._to_storage_status(new_status)
             update_data = {
-                "status": new_status,
+                "status": storage_status,
                 "current_phase": new_status,
                 "updated_at": datetime.utcnow().isoformat(),
             }
@@ -505,7 +530,14 @@ class ResearchRepository:
             
             return True
         except Exception as e:
-            logger.error(f"Error updating research run status: {e}")
+            message = str(e)
+            if "value too long for type character varying(20)" in message:
+                logger.error(
+                    "Error updating research run status: %s. Apply migration_research_runs_status_varchar_50.sql",
+                    e,
+                )
+            else:
+                logger.error(f"Error updating research run status: {e}")
             return False
 
 
@@ -661,7 +693,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        current_status = ResearchRunStatus(run.get("status", "planning"))
+        current_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         
         # Must be in CRAWLING status
         if current_status != ResearchRunStatus.CRAWLING:
@@ -758,7 +792,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        current_status = ResearchRunStatus(run.get("status", "planning"))
+        current_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         
         # Can only be called from AWAITING_CONFIRMATION or TIMED_OUT
         if current_status not in (
@@ -841,7 +877,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        current_status = ResearchRunStatus(run.get("status", "planning"))
+        current_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         
         # Can only timeout from AWAITING_CONFIRMATION
         if current_status != ResearchRunStatus.AWAITING_CONFIRMATION:
@@ -934,7 +972,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        current_status = ResearchRunStatus(run.get("status", "planning"))
+        current_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         crawl_id = run.get("crawl_id")
         
         # Idempotent: already completed
@@ -1198,7 +1238,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        current_status = ResearchRunStatus(run.get("status", "planning"))
+        current_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         crawl_id = run.get("crawl_id")
         
         # Idempotent: already completed
@@ -1533,7 +1575,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        current_status = ResearchRunStatus(run.get("status", "planning"))
+        current_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         crawl_id = run.get("crawl_id")
         
         # Idempotent: already completed
@@ -1936,7 +1980,9 @@ class ResearchOrchestrator:
                 error="Research run not found",
             )
         
-        from_status = ResearchRunStatus(run.get("status", "planning"))
+        from_status = ResearchRunStatus(
+            ResearchRepository._from_storage_status(run.get("status", "planning"))
+        )
         
         # Validate transition (pass run context when supported by patched validator)
         try:
