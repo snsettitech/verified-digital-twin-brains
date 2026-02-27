@@ -109,5 +109,43 @@ class TestNoContentInDb:
         assert "url_hash" in call_args
 
 
+class TestRepositoryResponseSafety:
+    """Test null-safe handling of unexpected response shapes."""
+
+    def test_find_page_in_twin_history_none_response(self):
+        """Should return None if execute() unexpectedly returns None."""
+        with patch("backend.modules.crawl_repository.supabase") as mock_supabase:
+            query = MagicMock()
+            mock_supabase.table.return_value = query
+            query.select.return_value = query
+            query.eq.return_value = query
+            query.order.return_value = query
+            query.limit.return_value = query
+            query.neq.return_value = query
+            query.maybe_single.return_value = query
+            query.execute.return_value = None
+
+            result = CrawlRepository.find_page_in_twin_history(
+                twin_id="twin-1",
+                canonical_url="https://example.com",
+                exclude_crawl_id="crawl-1",
+            )
+
+            assert result is None
+
+    def test_get_crawl_run_none_response(self):
+        """Should return None if execute() unexpectedly returns None."""
+        with patch("backend.modules.crawl_repository.supabase") as mock_supabase:
+            query = MagicMock()
+            mock_supabase.table.return_value = query
+            query.select.return_value = query
+            query.eq.return_value = query
+            query.maybe_single.return_value = query
+            query.execute.return_value = None
+
+            result = CrawlRepository.get_crawl_run("crawl-1")
+            assert result is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

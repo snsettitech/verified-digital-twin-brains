@@ -23,6 +23,7 @@ Usage:
 import uuid
 import logging
 import sys
+import re
 from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -459,8 +460,9 @@ class CrawlJobProcessor:
         try:
             from modules.observability import supabase
             response = supabase.table("crawl_runs").select("*").eq("id", crawl_id).execute()
-            if response.data:
-                return response.data[0]
+            data = getattr(response, "data", None) if response is not None else None
+            if data:
+                return data[0]
             return None
         except Exception as e:
             logger.error(f"Error fetching crawl run {crawl_id}: {e}")
@@ -798,36 +800,49 @@ class CrawlJobProcessor:
                 if firecrawl_result.attempts:
                     insert_data["fetch_attempts"] = firecrawl_result.attempts
             
-            try:
-                supabase.table("crawl_pages").insert(insert_data).execute()
-            except Exception as insert_error:
-                # Backward compatibility for environments where newer crawl_pages
-                # columns are not yet present.
-                message = str(insert_error).lower()
-                if "could not find" in message and "crawl_pages" in message:
-                    optional_columns = (
-                        "classification",
-                        "content_quality",
-                        "identity_confidence_score",
-                        "confirmation_status",
-                        "submitted_root_url",
-                        "failure_type",
-                        "title",
-                        "http_status",
-                        "fetch_attempts",
-                    )
-                    fallback = dict(insert_data)
-                    removed = False
-                    for column in optional_columns:
-                        if column in message:
-                            fallback.pop(column, None)
-                            removed = True
-                    if removed:
-                        supabase.table("crawl_pages").insert(fallback).execute()
-                    else:
+            # Backward compatibility for environments where newer crawl_pages
+            # columns are not yet present. Retry progressively by stripping only
+            # the missing optional column(s) reported by PostgREST.
+            optional_columns = (
+                "classification",
+                "content_quality",
+                "identity_confidence_score",
+                "confirmation_status",
+                "submitted_root_url",
+                "failure_type",
+                "title",
+                "http_status",
+                "fetch_attempts",
+            )
+            fallback = dict(insert_data)
+            last_insert_error: Optional[Exception] = None
+
+            for _ in range(len(optional_columns) + 1):
+                try:
+                    supabase.table("crawl_pages").insert(fallback).execute()
+                    return
+                except Exception as insert_error:
+                    last_insert_error = insert_error
+                    message = str(insert_error)
+                    message_lower = message.lower()
+                    if "could not find" not in message_lower or "crawl_pages" not in message_lower:
                         raise
-                else:
+
+                    match = re.search(r"could not find the '([^']+)' column of 'crawl_pages'", message, re.IGNORECASE)
+                    if not match:
+                        raise
+
+                    missing_column = match.group(1)
+                    if missing_column not in optional_columns:
+                        raise
+
+                    if missing_column in fallback:
+                        fallback.pop(missing_column, None)
+                        continue
                     raise
+
+            if last_insert_error:
+                raise last_insert_error
             
         except Exception as e:
             logger.error(f"Error persisting page record: {e}")

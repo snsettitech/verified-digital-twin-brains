@@ -805,6 +805,39 @@ class TestCrawlJobProcessorEdgeCases:
                 assert result.status == CrawlJobStatus.COMPLETED
                 assert result.pages_discovered == 0
 
+    def test_persist_page_record_handles_multiple_missing_columns(self, processor):
+        """Should progressively drop missing optional columns and still persist."""
+        msg_content_quality = (
+            "Could not find the 'content_quality' column of 'crawl_pages' in the schema cache"
+        )
+        msg_failure_type = (
+            "Could not find the 'failure_type' column of 'crawl_pages' in the schema cache"
+        )
+
+        table_mock = MagicMock()
+        table_mock.insert.return_value = table_mock
+        table_mock.execute.side_effect = [
+            Exception(msg_content_quality),
+            Exception(msg_failure_type),
+            MagicMock(),
+        ]
+        supabase_mock = MagicMock()
+        supabase_mock.table.return_value = table_mock
+
+        with patch("modules.observability.supabase", supabase_mock):
+            with patch("modules.url_canonicalizer.get_url_hash", return_value="hash123"):
+                processor._persist_page_record(
+                    page_id="page-1",
+                    crawl_id="crawl-1",
+                    url="https://example.com",
+                    canonical_url="https://example.com",
+                    status="failed",
+                    content_quality=ContentQuality.FULL,
+                    failure_type=FailureType.NETWORK,
+                )
+
+        assert table_mock.execute.call_count == 3
+
 
 # ============================================================================
 # Convenience Function Test

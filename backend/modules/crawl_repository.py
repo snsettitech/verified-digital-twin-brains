@@ -22,6 +22,18 @@ elif __name__.startswith("backend.modules."):
 
 class CrawlRepository:
     """Repository for crawl-related database operations."""
+
+    @staticmethod
+    def _safe_response_data(response: Any, default: Any = None) -> Any:
+        """
+        Safely unwrap supabase-py response objects.
+
+        Some runtime/client error paths can yield None responses; callers should
+        treat those as empty results rather than raising AttributeError.
+        """
+        if response is None:
+            return default
+        return getattr(response, "data", default)
     
     @staticmethod
     def create_crawl_run(
@@ -211,16 +223,18 @@ class CrawlRepository:
         Returns:
             Page record or None
         """
-        response = (
-            supabase.table("crawl_pages")
-            .select("*")
-            .eq("crawl_id", crawl_id)
-            .eq("canonical_url", canonical_url)
-            .maybe_single()
-            .execute()
-        )
-        
-        return response.data
+        try:
+            response = (
+                supabase.table("crawl_pages")
+                .select("*")
+                .eq("crawl_id", crawl_id)
+                .eq("canonical_url", canonical_url)
+                .maybe_single()
+                .execute()
+            )
+            return CrawlRepository._safe_response_data(response)
+        except Exception:
+            return None
     
     @staticmethod
     def find_page_by_url_hash(
@@ -237,16 +251,18 @@ class CrawlRepository:
         Returns:
             Page record or None
         """
-        response = (
-            supabase.table("crawl_pages")
-            .select("*")
-            .eq("crawl_id", crawl_id)
-            .eq("url_hash", url_hash)
-            .maybe_single()
-            .execute()
-        )
-        
-        return response.data
+        try:
+            response = (
+                supabase.table("crawl_pages")
+                .select("*")
+                .eq("crawl_id", crawl_id)
+                .eq("url_hash", url_hash)
+                .maybe_single()
+                .execute()
+            )
+            return CrawlRepository._safe_response_data(response)
+        except Exception:
+            return None
     
     @staticmethod
     def find_page_in_twin_history(
@@ -279,8 +295,11 @@ class CrawlRepository:
         if exclude_crawl_id:
             query = query.neq("crawl_id", exclude_crawl_id)
         
-        response = query.maybe_single().execute()
-        return response.data
+        try:
+            response = query.maybe_single().execute()
+            return CrawlRepository._safe_response_data(response)
+        except Exception:
+            return None
     
     @staticmethod
     def get_pages_by_crawl(crawl_id: str) -> List[Dict[str, Any]]:
@@ -293,15 +312,17 @@ class CrawlRepository:
         Returns:
             List of page records
         """
-        response = (
-            supabase.table("crawl_pages")
-            .select("*")
-            .eq("crawl_id", crawl_id)
-            .order("created_at")
-            .execute()
-        )
-        
-        return response.data or []
+        try:
+            response = (
+                supabase.table("crawl_pages")
+                .select("*")
+                .eq("crawl_id", crawl_id)
+                .order("created_at")
+                .execute()
+            )
+            return CrawlRepository._safe_response_data(response, default=[]) or []
+        except Exception:
+            return []
     
     @staticmethod
     def get_crawl_run(crawl_id: str) -> Optional[Dict[str, Any]]:
@@ -314,15 +335,17 @@ class CrawlRepository:
         Returns:
             Crawl run record or None
         """
-        response = (
-            supabase.table("crawl_runs")
-            .select("*")
-            .eq("id", crawl_id)
-            .maybe_single()
-            .execute()
-        )
-        
-        return response.data
+        try:
+            response = (
+                supabase.table("crawl_runs")
+                .select("*")
+                .eq("id", crawl_id)
+                .maybe_single()
+                .execute()
+            )
+            return CrawlRepository._safe_response_data(response)
+        except Exception:
+            return None
     
     @staticmethod
     def update_crawl_status(
@@ -394,11 +417,13 @@ class CrawlRepository:
         Returns:
             List of page records
         """
-        response = (
-            supabase.table("crawl_pages")
-            .select("*")
-            .eq("crawl_id", previous_crawl_id)
-            .execute()
-        )
-        
-        return response.data or []
+        try:
+            response = (
+                supabase.table("crawl_pages")
+                .select("*")
+                .eq("crawl_id", previous_crawl_id)
+                .execute()
+            )
+            return CrawlRepository._safe_response_data(response, default=[]) or []
+        except Exception:
+            return []
