@@ -525,26 +525,38 @@ class CrawlIngestionBridge:
         Returns:
             Set of crawl_page_id strings that are confirmed
         """
+        response = None
         try:
-            # Query source_confirmations for confirmed statuses
             response = supabase.table("source_confirmations").select(
-                "crawl_page_id, status"
+                "crawl_page_id, confirmation_status"
             ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-                "status", ["confirmed", "auto_confirmed"]
+                "confirmation_status", ["confirmed", "auto_confirmed"]
             ).execute()
-            
-            if not response.data:
-                return set()
-            
-            confirmed_ids = {row["crawl_page_id"] for row in response.data if row.get("crawl_page_id")}
-            
-            logger.debug(f"Phase 3.5: Found {len(confirmed_ids)} confirmed pages for research run {research_run_id}")
-            return confirmed_ids
-            
+
         except Exception as e:
-            logger.error(f"Phase 3.5: Error fetching confirmed pages: {e}")
-            # Fail safe: return empty set (no pages will be ingested)
+            # Backward compatibility for legacy environments that still use `status`
+            if "confirmation_status" not in str(e):
+                logger.error(f"Phase 3.5: Error fetching confirmed pages: {e}")
+                # Fail safe: return empty set (no pages will be ingested)
+                return set()
+            try:
+                response = supabase.table("source_confirmations").select(
+                    "crawl_page_id, status"
+                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
+                    "status", ["confirmed", "auto_confirmed"]
+                ).execute()
+            except Exception as fallback_error:
+                logger.error(f"Phase 3.5: Error fetching confirmed pages: {fallback_error}")
+                # Fail safe: return empty set (no pages will be ingested)
+                return set()
+
+        if not response or not response.data:
             return set()
+
+        confirmed_ids = {row["crawl_page_id"] for row in response.data if row.get("crawl_page_id")}
+
+        logger.debug(f"Phase 3.5: Found {len(confirmed_ids)} confirmed pages for research run {research_run_id}")
+        return confirmed_ids
 
 
 # Convenience function

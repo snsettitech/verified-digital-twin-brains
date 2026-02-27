@@ -688,19 +688,29 @@ class SourceConfirmationManager:
         twin_id: str,
     ) -> Optional[Dict[str, Any]]:
         """Fetch a single confirmation with authorization checks."""
-        try:
-            response = supabase.table("source_confirmations").select(
-                "*"
-            ).eq("id", confirmation_id).eq(
-                "research_run_id", research_run_id
-            ).eq("twin_id", twin_id).execute()
-            
-            if response.data:
-                return response.data[0]
-            return None
-        except Exception as e:
-            logger.error(f"Error fetching confirmation: {e}")
-            return None
+        last_error: Optional[Exception] = None
+        for attempt in range(2):
+            try:
+                response = supabase.table("source_confirmations").select(
+                    "*"
+                ).eq("id", confirmation_id).eq(
+                    "research_run_id", research_run_id
+                ).eq("twin_id", twin_id).execute()
+
+                if response.data:
+                    return response.data[0]
+                return None
+            except Exception as e:
+                last_error = e
+                if "server disconnected" in str(e).lower() and attempt == 0:
+                    logger.warning("Transient disconnection fetching confirmation; retrying once")
+                    continue
+                logger.error(f"Error fetching confirmation: {e}")
+                raise
+
+        if last_error:
+            raise RuntimeError(f"Error fetching confirmation: {last_error}") from last_error
+        return None
     
     def _update_confirmation_status(
         self,

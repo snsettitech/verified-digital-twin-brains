@@ -1042,8 +1042,11 @@ async def resolve_confirmation_endpoint(
         
         if result.error:
             status_code = status.HTTP_400_BAD_REQUEST
-            if "not found" in result.error.lower():
+            error_text = result.error.lower()
+            if "not found" in error_text:
                 status_code = status.HTTP_404_NOT_FOUND
+            elif "server disconnected" in error_text or "connection" in error_text or "temporar" in error_text:
+                status_code = status.HTTP_503_SERVICE_UNAVAILABLE
             raise HTTPException(
                 status_code=status_code,
                 detail={
@@ -2088,7 +2091,7 @@ async def _get_sources_by_status(
             return sources
         
         for row in response.data:
-            status = row.get("status", "")
+            status = row.get("confirmation_status", row.get("status", ""))
             source_data = {
                 "confirmation_id": row.get("id"),
                 "crawl_page_id": row.get("crawl_page_id"),

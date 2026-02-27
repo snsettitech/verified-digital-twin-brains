@@ -1048,6 +1048,7 @@ class ResearchOrchestrator:
             
             # Update training metrics so mind score / answerable Qs are available
             try:
+                from modules.training_metrics import update_twin_training_metrics
                 update_twin_training_metrics(twin_id)
             except Exception as metrics_err:
                 logger.warning(f"Training metrics update failed (non-blocking): {metrics_err}")
@@ -1148,56 +1149,70 @@ class ResearchOrchestrator:
         Returns:
             List of canonical URLs (deduplicated, sorted by confidence desc, created_at asc)
         """
+        response = None
         try:
             # Query confirmed sources with their metadata
             response = supabase.table("source_confirmations").select(
-                "crawl_page_id, status, identity_confidence_score, created_at"
+                "crawl_page_id, confirmation_status, identity_confidence_score, created_at"
             ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-                "status", ["confirmed", "auto_confirmed"]
+                "confirmation_status", ["confirmed", "auto_confirmed"]
             ).order("identity_confidence_score", desc=True).order("created_at").execute()
-            
-            if not response.data:
+
+        except Exception as e:
+            # Backward compatibility for legacy environments that still use `status`
+            if "confirmation_status" not in str(e):
+                logger.error(f"Phase 4: Error fetching confirmed source URLs: {e}")
                 return []
-            
-            # Get crawl page IDs
-            page_ids = [row["crawl_page_id"] for row in response.data if row.get("crawl_page_id")]
-            
-            if not page_ids:
+            try:
+                response = supabase.table("source_confirmations").select(
+                    "crawl_page_id, status, identity_confidence_score, created_at"
+                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
+                    "status", ["confirmed", "auto_confirmed"]
+                ).order("identity_confidence_score", desc=True).order("created_at").execute()
+            except Exception as fallback_error:
+                logger.error(f"Phase 4: Error fetching confirmed source URLs: {fallback_error}")
                 return []
-            
-            # Fetch canonical URLs from crawl_pages
-            # Note: Using 'in' with a list - may need batching for large lists
+
+        if not response or not response.data:
+            return []
+
+        # Get crawl page IDs
+        page_ids = [row["crawl_page_id"] for row in response.data if row.get("crawl_page_id")]
+
+        if not page_ids:
+            return []
+
+        try:
             pages_response = supabase.table("crawl_pages").select(
                 "id, canonical_url"
             ).in_("id", page_ids).execute()
-            
-            if not pages_response.data:
-                return []
-            
-            # Build URL mapping preserving order from confirmation query
-            url_map = {p["id"]: p.get("canonical_url", "") for p in pages_response.data}
-            
-            # Deduplicate URLs while preserving order (highest confidence first)
-            seen_urls = set()
-            unique_urls = []
-            
-            for row in response.data:
-                page_id = row.get("crawl_page_id")
-                url = url_map.get(page_id, "")
-                
-                if url and url not in seen_urls:
-                    seen_urls.add(url)
-                    unique_urls.append(url)
-                    
-                    if len(unique_urls) >= max_urls:
-                        break
-            
-            logger.info(f"Phase 4: Selected {len(unique_urls)} confirmed URLs for bio generation (max: {max_urls})")
-            return unique_urls
-            
         except Exception as e:
-            logger.error(f"Phase 4: Error fetching confirmed source URLs: {e}")
+            logger.error(f"Phase 4: Error fetching crawl pages for confirmed URLs: {e}")
             return []
+
+        if not pages_response.data:
+            return []
+
+        # Build URL mapping preserving order from confirmation query
+        url_map = {p["id"]: p.get("canonical_url", "") for p in pages_response.data}
+
+        # Deduplicate URLs while preserving order (highest confidence first)
+        seen_urls = set()
+        unique_urls = []
+
+        for row in response.data:
+            page_id = row.get("crawl_page_id")
+            url = url_map.get(page_id, "")
+
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_urls.append(url)
+
+                if len(unique_urls) >= max_urls:
+                    break
+
+        logger.info(f"Phase 4: Selected {len(unique_urls)} confirmed URLs for bio generation (max: {max_urls})")
+        return unique_urls
     
     async def continue_to_bio_generation(
         self,

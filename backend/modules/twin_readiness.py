@@ -220,37 +220,46 @@ class TwinReadinessChecker:
         Returns:
             ReadinessCounts with breakdown by status
         """
+        response = None
         try:
-            # Query counts by status
             response = supabase.table("source_confirmations").select(
-                "status"
+                "confirmation_status"
             ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).execute()
-            
-            if not response.data:
-                return ReadinessCounts()
-            
-            # Count by status
-            counts = ReadinessCounts()
-            for row in response.data:
-                status = row.get("status", "")
-                if status == "confirmed":
-                    counts.confirmed += 1
-                elif status == "auto_confirmed":
-                    counts.auto_confirmed += 1
-                elif status == "pending":
-                    counts.pending += 1
-                elif status == "manual_review":
-                    counts.manual_review += 1
-                elif status == "rejected":
-                    counts.rejected += 1
-                elif status == "auto_rejected":
-                    counts.rejected += 1  # Count auto_rejected as rejected
-            
-            return counts
-            
+
         except Exception as e:
-            logger.error(f"Phase 5: Error getting confirmation counts: {e}")
+            # Backward compatibility for legacy environments that still use `status`
+            if "confirmation_status" not in str(e):
+                logger.error(f"Phase 5: Error getting confirmation counts: {e}")
+                return ReadinessCounts()
+            try:
+                response = supabase.table("source_confirmations").select(
+                    "status"
+                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).execute()
+            except Exception as fallback_error:
+                logger.error(f"Phase 5: Error getting confirmation counts: {fallback_error}")
+                return ReadinessCounts()
+
+        if not response or not response.data:
             return ReadinessCounts()
+
+        # Count by status
+        counts = ReadinessCounts()
+        for row in response.data:
+            status_value = row.get("confirmation_status", row.get("status", ""))
+            if status_value == "confirmed":
+                counts.confirmed += 1
+            elif status_value == "auto_confirmed":
+                counts.auto_confirmed += 1
+            elif status_value == "pending":
+                counts.pending += 1
+            elif status_value == "manual_review":
+                counts.manual_review += 1
+            elif status_value == "rejected":
+                counts.rejected += 1
+            elif status_value == "auto_rejected":
+                counts.rejected += 1  # Count auto_rejected as rejected
+
+        return counts
     
     async def _get_mind_score(self, twin_id: str) -> int:
         """
@@ -289,32 +298,52 @@ class TwinReadinessChecker:
         Returns:
             True if bio variant exists
         """
+        def _is_missing_table_error(exc: Exception, table_name: str) -> bool:
+            text = str(exc).lower()
+            return (
+                table_name.lower() in text and
+                ("could not find the table" in text or "does not exist" in text)
+            )
+
         try:
-            # Check for bio variants in the bios table
-            # This is the table used by persona_bio_generator
-            response = supabase.table("bios").select(
+            # Primary Phase 4 store used by persona_bio_generator.
+            response = supabase.table("persona_bio_variants").select(
                 "id"
             ).eq("twin_id", twin_id).limit(1).execute()
             
             if response.data and len(response.data) > 0:
                 return True
-            
-            # Fallback: Check twin profile for bio
+
+        except Exception as e:
+            if not _is_missing_table_error(e, "persona_bio_variants"):
+                logger.warning(f"Phase 5: Error checking persona_bio_variants: {e}")
+
+        # Legacy fallback for older environments.
+        try:
+            response = supabase.table("bios").select(
+                "id"
+            ).eq("twin_id", twin_id).limit(1).execute()
+
+            if response.data and len(response.data) > 0:
+                return True
+        except Exception as e:
+            if not _is_missing_table_error(e, "bios"):
+                logger.warning(f"Phase 5: Error checking bios table: {e}")
+
+        # Last fallback: check embedded profile fields.
+        try:
             response = supabase.table("twins").select(
                 "profile"
             ).eq("id", twin_id).single().execute()
-            
+
             if response.data:
                 profile = response.data.get("profile") or {}
-                # Check various bio fields
                 if profile.get("bio") or profile.get("generated_bio"):
                     return True
-            
-            return False
-            
         except Exception as e:
-            logger.error(f"Phase 5: Error checking bio variant: {e}")
-            return False
+            logger.error(f"Phase 5: Error checking twin profile bio fields: {e}")
+
+        return False
 
 
 # =============================================================================

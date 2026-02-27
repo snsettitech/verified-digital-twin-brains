@@ -88,12 +88,13 @@ class ResearchClaimService:
         try:
             result = self.db.table("research_claim_enrichment").select(
                 "*"
-            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).single().execute()
-            
-            if not result.data:
+            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).limit(1).execute()
+
+            rows = result.data or []
+            if not rows:
                 return None
-            
-            data = result.data
+
+            data = rows[0]
             return EnrichmentSummary(
                 research_run_id=data["research_run_id"],
                 status=EnrichmentStatus(data.get("status", "pending")),
@@ -226,41 +227,114 @@ class ResearchClaimService:
         Returns:
             List of source dicts with content, id, url, title
         """
-        # Get confirmed source confirmations
-        conf_result = self.db.table("source_confirmations").select(
-            "crawl_page_id, source_id, status"
-        ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
-            "status", ["confirmed", "auto_confirmed"]
-        ).execute()
-        
-        if not conf_result.data:
+        conf_result = None
+        try:
+            conf_result = self.db.table("source_confirmations").select(
+                "crawl_page_id, confirmation_status"
+            ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
+                "confirmation_status", ["confirmed", "auto_confirmed"]
+            ).execute()
+        except Exception as e:
+            # Backward compatibility for legacy environments that still use `status`
+            if "confirmation_status" not in str(e):
+                logger.error(f"Error fetching confirmed source confirmations: {e}")
+                return []
+            try:
+                conf_result = self.db.table("source_confirmations").select(
+                    "crawl_page_id, status"
+                ).eq("research_run_id", research_run_id).eq("twin_id", twin_id).in_(
+                    "status", ["confirmed", "auto_confirmed"]
+                ).execute()
+            except Exception as fallback_error:
+                logger.error(f"Error fetching confirmed source confirmations: {fallback_error}")
+                return []
+
+        if not conf_result or not conf_result.data:
             return []
-        
-        # Get source details from sources table
-        source_ids = [row.get("source_id") for row in conf_result.data if row.get("source_id")]
-        
-        if not source_ids:
+
+        confirmed_page_ids = [row.get("crawl_page_id") for row in conf_result.data if row.get("crawl_page_id")]
+        if not confirmed_page_ids:
             return []
-        
-        sources = []
-        for source_id in source_ids:
+
+        sources: List[Dict[str, Any]] = []
+        seen_source_ids = set()
+
+        def _append_source_row(row: Dict[str, Any]) -> None:
+            source_id = row.get("id")
+            if not source_id or source_id in seen_source_ids:
+                return
+            seen_source_ids.add(source_id)
+            sources.append({
+                "id": source_id,
+                "content": row.get("content_text", ""),
+                "url": row.get("citation_url", ""),
+                "title": row.get("filename", "Unknown"),
+            })
+
+        # Preferred mapping: sources.metadata.crawl_page_id == confirmation.crawl_page_id
+        unresolved_page_ids: List[str] = []
+        for page_id in confirmed_page_ids:
             try:
                 source_result = self.db.table("sources").select(
-                    "id, content_text, citation_url, filename"
-                ).eq("id", source_id).eq("twin_id", twin_id).single().execute()
-                
-                if source_result.data:
-                    data = source_result.data
-                    sources.append({
-                        "id": data["id"],
-                        "content": data.get("content_text", ""),
-                        "url": data.get("citation_url", ""),
-                        "title": data.get("filename", "Unknown"),
-                    })
+                    "id, content_text, citation_url, filename, created_at"
+                ).eq("twin_id", twin_id).contains(
+                    "metadata", {"crawl_page_id": page_id}
+                ).order("created_at", desc=True).limit(1).execute()
+                rows = source_result.data or []
+                if rows:
+                    _append_source_row(rows[0])
+                    continue
             except Exception as e:
-                logger.warning(f"Error fetching source {source_id}: {e}")
-                continue
-        
+                logger.debug(f"Metadata-based source lookup failed for page {page_id}: {e}")
+            unresolved_page_ids.append(page_id)
+
+        if not unresolved_page_ids:
+            return sources
+
+        # Fallback mapping: crawl_pages.canonical_url -> sources.citation_url
+        try:
+            pages_result = self.db.table("crawl_pages").select(
+                "id, canonical_url"
+            ).in_("id", unresolved_page_ids).execute()
+        except Exception as e:
+            logger.warning(f"Error fetching crawl pages for fallback source lookup: {e}")
+            return sources
+
+        page_rows = pages_result.data or []
+        ordered_urls: List[str] = []
+        seen_urls = set()
+        for page_id in unresolved_page_ids:
+            page_row = next((row for row in page_rows if row.get("id") == page_id), None)
+            url = (page_row or {}).get("canonical_url")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                ordered_urls.append(url)
+
+        if not ordered_urls:
+            return sources
+
+        try:
+            sources_result = self.db.table("sources").select(
+                "id, content_text, citation_url, filename, created_at"
+            ).eq("twin_id", twin_id).in_(
+                "citation_url", ordered_urls
+            ).order("created_at", desc=True).execute()
+        except Exception as e:
+            logger.warning(f"Error fetching fallback sources by citation_url: {e}")
+            return sources
+
+        source_rows = sources_result.data or []
+        source_by_url: Dict[str, Dict[str, Any]] = {}
+        for row in source_rows:
+            url = row.get("citation_url")
+            if url and url not in source_by_url:
+                source_by_url[url] = row
+
+        for url in ordered_urls:
+            row = source_by_url.get(url)
+            if row:
+                _append_source_row(row)
+
         return sources
     
     async def _persist_claims(self, results: List[VerificationResult]) -> None:
