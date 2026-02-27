@@ -30,6 +30,7 @@ from modules.crawl_job_processor import (
     ConfirmationStatus,
     map_identity_score_to_confirmation_status,
     process_crawl_job,
+    _AUTO_FIRECRAWL_CLIENT,
 )
 from modules.firecrawl_client import FirecrawlResult, ContentQuality
 from modules.crawl_failure_taxonomy import FailureType
@@ -832,6 +833,8 @@ class TestProcessCrawlJobConvenience:
             
             assert result.status == CrawlJobStatus.COMPLETED
             mock_processor_class.assert_called_once()
+            _, kwargs = mock_processor_class.call_args
+            assert kwargs["firecrawl_client"] is _AUTO_FIRECRAWL_CLIENT
 
 
 # ============================================================================
