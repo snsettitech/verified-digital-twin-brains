@@ -68,8 +68,10 @@ class CrawlIngestionBridge:
         Returns:
             Tuple of (should_skip, reason)
         """
-        status = page.get("status", "").lower()
-        classification = page.get("classification", "").lower()
+        # Some historical crawl_pages rows store nullable text fields.
+        # Normalize defensively so ingestion doesn't crash on None values.
+        status = str(page.get("status") or "").lower()
+        classification = str(page.get("classification") or "").lower()
         normalized_path = page.get("normalized_artifact_path")
         
         # Skip unchanged pages - they reference prior artifacts
@@ -178,7 +180,9 @@ class CrawlIngestionBridge:
         source_id = str(uuid.uuid4())
         
         # Build title from metadata or URL
-        metadata = page.get("metadata", {})
+        metadata = page.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
         title = metadata.get("title", "")
         if not title:
             # Use URL path as fallback title
@@ -209,7 +213,16 @@ class CrawlIngestionBridge:
         }
         
         try:
-            supabase.table("sources").insert(source_data).execute()
+            try:
+                supabase.table("sources").insert(source_data).execute()
+            except Exception as insert_error:
+                message = str(insert_error).lower()
+                if "staging_status" in message and "sources" in message:
+                    fallback = dict(source_data)
+                    fallback.pop("staging_status", None)
+                    supabase.table("sources").insert(fallback).execute()
+                else:
+                    raise
             logger.info(f"Created source {source_id} from page {page_id}")
             return source_id
         except Exception as e:
@@ -315,12 +328,22 @@ class CrawlIngestionBridge:
             logger.info(f"Indexed {len(vectors)} chunks for source {source_id}")
         
         # Update source status
-        supabase.table("sources").update({
+        source_update = {
             "status": "live",
             "staging_status": "live",
             "chunk_count": len(vectors)
-        }).eq("id", source_id).execute()
-        
+        }
+        try:
+            supabase.table("sources").update(source_update).eq("id", source_id).execute()
+        except Exception as update_error:
+            message = str(update_error).lower()
+            if "staging_status" in message and "sources" in message:
+                fallback = dict(source_update)
+                fallback.pop("staging_status", None)
+                supabase.table("sources").update(fallback).eq("id", source_id).execute()
+            else:
+                raise
+
         return len(vectors)
     
     async def process_page(

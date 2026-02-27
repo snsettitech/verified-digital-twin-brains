@@ -100,6 +100,25 @@ class TestShouldSkipIngestion:
         
         assert should_skip is False
 
+    def test_null_status_and_classification_do_not_crash(self):
+        """Nullable crawl page fields should not crash ingestion skip checks."""
+        page = {
+            "id": "page_123",
+            "status": None,
+            "classification": None,
+            "normalized_artifact_path": "crawl/twin_123/crawl_456/pages/page_123/normalized.md",
+            "crawl_id": "crawl_456",
+            "twin_id": "twin_123",
+        }
+
+        bridge = CrawlIngestionBridge()
+        bridge.artifact_store.artifact_exists = Mock(return_value=True)
+
+        should_skip, reason = bridge.should_skip_ingestion(page)
+
+        assert should_skip is False
+        assert reason == ""
+
 
 class TestLoadPageContent:
     """Test loading content from artifact store."""
@@ -213,6 +232,51 @@ class TestCreateSourceFromPage:
         
         call_args = mock_supabase.table.return_value.insert.call_args[0][0]
         assert "my-post" in call_args["filename"] or "Web:" in call_args["filename"]
+
+    @patch("modules.crawl_ingestion_bridge.supabase")
+    def test_create_source_handles_null_metadata(self, mock_supabase):
+        """Nullable metadata should not crash source creation."""
+        page = {
+            "id": "page_123",
+            "crawl_id": "crawl_456",
+            "canonical_url": "https://example.com/blog/my-post",
+            "metadata": None,
+        }
+
+        bridge = CrawlIngestionBridge()
+        bridge.load_page_content = Mock(return_value="Content")
+
+        source_id = bridge.create_source_from_page(page, "twin_123", "crawl_456")
+
+        assert source_id is not None
+        call_args = mock_supabase.table.return_value.insert.call_args[0][0]
+        assert call_args["filename"].startswith("Web:")
+
+    @patch("modules.crawl_ingestion_bridge.supabase")
+    def test_create_source_retries_without_staging_status(self, mock_supabase):
+        """Older sources schemas without staging_status should still accept crawl ingestion."""
+        page = {
+            "id": "page_123",
+            "crawl_id": "crawl_456",
+            "canonical_url": "https://example.com/blog/my-post",
+            "metadata": {"title": "My Post"},
+        }
+
+        insert_mock = mock_supabase.table.return_value.insert.return_value
+        insert_mock.execute.side_effect = [
+            Exception("Could not find the 'staging_status' column of 'sources' in the schema cache"),
+            Mock(),
+        ]
+
+        bridge = CrawlIngestionBridge()
+        bridge.load_page_content = Mock(return_value="Content")
+
+        source_id = bridge.create_source_from_page(page, "twin_123", "crawl_456")
+
+        assert source_id is not None
+        assert insert_mock.execute.call_count == 2
+        retry_payload = mock_supabase.table.return_value.insert.call_args_list[-1][0][0]
+        assert "staging_status" not in retry_payload
 
 
 class TestProcessPage:

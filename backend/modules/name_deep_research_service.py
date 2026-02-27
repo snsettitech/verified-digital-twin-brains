@@ -174,13 +174,22 @@ def _names_conflict(existing: Optional[str], requested: Optional[str]) -> bool:
 def _name_variants(full_name: str) -> List[str]:
     name = _normalize_name(full_name)
     parts = [p for p in name.split(" ") if p]
-    variants = {name}
+    variants: List[str] = []
+    seen: set[str] = set()
+
+    def _add(candidate: str) -> None:
+        normalized = _normalize_name(candidate)
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            variants.append(normalized)
+
+    _add(name)
     if len(parts) >= 2:
-        variants.add(f"{parts[0]} {parts[-1]}")
-        variants.add(f"{parts[0]} \"{parts[-1]}\"")
+        _add(f"{parts[0]} {parts[-1]}")
+        _add(f"{parts[0]} \"{parts[-1]}\"")
     if len(parts) >= 3 and len(parts[1]) == 1:
-        variants.add(f"{parts[0]} {parts[-1]}")
-    return [v for v in variants if v]
+        _add(f"{parts[0]} {parts[-1]}")
+    return variants
 
 
 class HintsModel(BaseModel):
@@ -753,28 +762,36 @@ class NameDeepResearchService:
         this_year = datetime.now(timezone.utc).year
         variants = _name_variants(full_name)
         queries: List[str] = []
-
-        for variant in variants:
-            queries.append(f"\"{variant}\"")
-            queries.append(f"{variant} biography")
-            queries.append(f"{variant} interviews podcast talks")
-            queries.append(f"{variant} profile linkedin")
-            queries.append(f"{variant} {this_year}")
-            queries.append(f"{variant} {this_year - 1}")
+        hint_queries: List[str] = []
+        generic_queries: List[str] = []
 
         location = (hints.get("location") or "").strip()
         company = (hints.get("company") or "").strip()
         website = (hints.get("website") or "").strip()
+        domain = website.replace("https://", "").replace("http://", "").split("/")[0] if website else ""
 
-        if location:
-            queries.append(f"\"{full_name}\" \"{location}\"")
-            queries.append(f"{full_name} {location} profile")
-        if company:
-            queries.append(f"\"{full_name}\" \"{company}\"")
-            queries.append(f"{full_name} {company} leadership")
-        if website:
-            domain = website.replace("https://", "").replace("http://", "").split("/")[0]
-            queries.append(f"\"{full_name}\" site:{domain}")
+        for variant in variants:
+            if location and company:
+                hint_queries.append(f"\"{variant}\" \"{location}\" \"{company}\"")
+            if location:
+                hint_queries.append(f"\"{variant}\" \"{location}\"")
+                hint_queries.append(f"{variant} {location} profile")
+            if company:
+                hint_queries.append(f"\"{variant}\" \"{company}\"")
+                hint_queries.append(f"{variant} {company} leadership")
+            if domain:
+                hint_queries.append(f"\"{variant}\" site:{domain}")
+                hint_queries.append(f"{variant} site:{domain} profile")
+
+            generic_queries.append(f"\"{variant}\"")
+            generic_queries.append(f"{variant} biography")
+            generic_queries.append(f"{variant} interviews podcast talks")
+            generic_queries.append(f"{variant} profile linkedin")
+            generic_queries.append(f"{variant} {this_year}")
+            generic_queries.append(f"{variant} {this_year - 1}")
+
+        queries.extend(hint_queries)
+        queries.extend(generic_queries)
 
         seen: set[str] = set()
         unique_queries: List[str] = []

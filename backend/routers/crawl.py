@@ -10,6 +10,7 @@ import logging
 import asyncio
 import uuid
 import re
+import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -32,6 +33,44 @@ def _check_feature_enabled():
 
 # Tracks in-flight research crawl tasks keyed by research_run_id.
 _ACTIVE_RESEARCH_CRAWL_TASKS: Dict[str, asyncio.Task[Any]] = {}
+
+
+def _get_env_int(name: str, default: int, *, minimum: int = 1, maximum: Optional[int] = None) -> int:
+    """Read an integer env var safely and clamp it to expected bounds."""
+    raw_value = os.getenv(name, str(default))
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = default
+    if value < minimum:
+        value = minimum
+    if maximum is not None and value > maximum:
+        value = maximum
+    return value
+
+
+def _onboarding_name_research_max_queries() -> int:
+    return _get_env_int("ONBOARDING_NAME_RESEARCH_MAX_QUERIES", 4, minimum=1, maximum=10)
+
+
+def _onboarding_name_research_max_discovered_urls() -> int:
+    return _get_env_int("ONBOARDING_NAME_RESEARCH_MAX_URLS", 12, minimum=1, maximum=25)
+
+
+def _onboarding_max_seed_urls() -> int:
+    return _get_env_int("ONBOARDING_RESEARCH_MAX_SEED_URLS", 12, minimum=1, maximum=25)
+
+
+def _onboarding_crawl_timeout_seconds() -> int:
+    return _get_env_int("ONBOARDING_RESEARCH_CRAWL_TIMEOUT_SECONDS", 180, minimum=30, maximum=600)
+
+
+def _onboarding_website_crawl_limit(default_limit: int) -> int:
+    return _get_env_int("ONBOARDING_RESEARCH_WEBSITE_CRAWL_LIMIT", min(default_limit, 8), minimum=1, maximum=25)
+
+
+def _onboarding_website_max_depth(default_depth: int) -> int:
+    return _get_env_int("ONBOARDING_RESEARCH_WEBSITE_MAX_DEPTH", min(default_depth, 2), minimum=1, maximum=3)
 
 
 async def _run_research_crawl_pipeline(
@@ -60,6 +99,7 @@ async def _run_research_crawl_pipeline(
             crawl_id=crawl_id,
             twin_id=twin_id,
             claimed_identity=claimed_identity or {},
+            max_duration_seconds=_onboarding_crawl_timeout_seconds(),
         )
 
         crawl_status = getattr(getattr(crawl_result, "status", None), "value", None) or str(
@@ -437,7 +477,7 @@ def _collect_seed_urls_from_request_inputs(
         candidates.append(submitted_links)
 
     candidates.extend(_collect_seed_urls_from_latest_link_compile_job(twin_id))
-    return _normalize_seed_urls(candidates, max_urls=60)
+    return _normalize_seed_urls(candidates, max_urls=_onboarding_max_seed_urls())
 
 
 def _build_name_research_hints(
@@ -492,8 +532,8 @@ async def _discover_seed_urls_with_name_research_tools(
         return await service.discover_urls_for_identity(
             name=full_name,
             hints=hints,
-            max_queries=8,
-            max_urls=50,
+            max_queries=_onboarding_name_research_max_queries(),
+            max_urls=_onboarding_name_research_max_discovered_urls(),
         )
     except Exception as exc:
         logger.warning("Name-research URL discovery failed for '%s': %s", full_name, exc)
@@ -1348,7 +1388,10 @@ async def create_research_run_endpoint(
         )
         if discovered_urls:
             before_count = len(seed_urls)
-            seed_urls = _normalize_seed_urls(seed_urls + discovered_urls, max_urls=60)
+            seed_urls = _normalize_seed_urls(
+                seed_urls + discovered_urls,
+                max_urls=_onboarding_max_seed_urls(),
+            )
             logger.info(
                 "Research seed URL expansion: twin_id=%s base=%s discovered=%s final=%s",
                 twin_id,
@@ -1404,11 +1447,13 @@ async def create_research_run_endpoint(
         # Create crawl run and transition research status to crawling immediately.
         # This ensures polling sees active progress instead of a queued dead-end.
         config = get_deep_research_config()
+        crawl_limit = _onboarding_website_crawl_limit(config.firecrawl.website_crawl_limit)
+        crawl_depth = _onboarding_website_max_depth(config.firecrawl.website_max_depth)
         crawl_id = _create_crawl_run(
             twin_id=twin_id,
             seed_urls=seed_urls,
-            max_pages=config.firecrawl.website_crawl_limit,
-            max_depth=config.firecrawl.website_max_depth,
+            max_pages=crawl_limit,
+            max_depth=crawl_depth,
             include_patterns=None,
             exclude_patterns=None,
         )

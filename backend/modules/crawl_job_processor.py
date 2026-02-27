@@ -27,6 +27,7 @@ import re
 import os
 import inspect
 import time
+import asyncio
 from typing import Optional, Dict, Any, List, Set, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -464,6 +465,7 @@ class CrawlJobProcessor:
         crawl_id: str,
         twin_id: Optional[str] = None,
         claimed_identity: Optional[Dict[str, Any]] = None,
+        max_duration_seconds: Optional[int] = None,
     ) -> CrawlJobResult:
         """
         Process a crawl job end-to-end.
@@ -508,27 +510,75 @@ class CrawlJobProcessor:
             
             # Process each seed URL
             metrics = CrawlMetricsAccumulator(detail_limit=self._result_detail_limit)
+            crawl_limit = self._coerce_positive_int(crawl_run.get("max_pages"), default=50)
+            crawl_max_depth = self._coerce_positive_int(crawl_run.get("max_depth"), default=3)
+            deadline = None
+            timed_out = False
+            timeout_message: Optional[str] = None
+            if max_duration_seconds and max_duration_seconds > 0:
+                deadline = time.monotonic() + max_duration_seconds
             self._log_memory_usage(f"crawl_start:{crawl_id}")
             self._flush_progress_metrics(crawl_id, metrics, force=True)
             
             for seed_url in seed_urls:
                 try:
+                    remaining_seconds = None
+                    if deadline is not None:
+                        remaining_seconds = deadline - time.monotonic()
+                        if remaining_seconds <= 0:
+                            timed_out = True
+                            timeout_message = (
+                                f"Crawl stopped after {max_duration_seconds} seconds time budget with partial results"
+                            )
+                            logger.warning(
+                                "Crawl job %s exceeded time budget before seed=%s crawl_id=%s",
+                                job_id,
+                                seed_url,
+                                crawl_id,
+                            )
+                            break
+
                     # Resolve strategy
                     strategy = SourceStrategyResolver.resolve(seed_url)
                     logger.info(f"Processing {seed_url} with strategy: {strategy.method}")
                     
                     # Execute based on strategy
+                    task = None
                     if strategy.method == "crawl":
-                        await self._process_crawl_strategy(
-                            seed_url, crawl_id, twin_id, strategy, claimed_identity, metrics
+                        task = self._process_crawl_strategy(
+                            seed_url,
+                            crawl_id,
+                            twin_id,
+                            strategy,
+                            claimed_identity,
+                            metrics,
+                            crawl_limit=crawl_limit,
+                            crawl_max_depth=crawl_max_depth,
                         )
                     else:
-                        await self._process_scrape_strategy(
+                        task = self._process_scrape_strategy(
                             seed_url, crawl_id, twin_id, strategy, claimed_identity, metrics
                         )
+                    if remaining_seconds is not None:
+                        await asyncio.wait_for(task, timeout=max(remaining_seconds, 0.001))
+                    else:
+                        await task
                     self._flush_progress_metrics(crawl_id, metrics, force=True)
                     self._log_memory_usage(f"after_seed:{seed_url}")
                     
+                except asyncio.TimeoutError:
+                    timed_out = True
+                    timeout_message = (
+                        f"Crawl stopped after {max_duration_seconds} seconds time budget with partial results"
+                    )
+                    logger.warning(
+                        "Crawl job %s timed out during seed=%s crawl_id=%s",
+                        job_id,
+                        seed_url,
+                        crawl_id,
+                    )
+                    self._flush_progress_metrics(crawl_id, metrics, force=True)
+                    break
                 except Exception as e:
                     logger.error(f"Error processing seed URL {seed_url}: {e}")
                     metrics.add(PageProcessingResult(
@@ -542,7 +592,12 @@ class CrawlJobProcessor:
             
             # Finalize crawl run
             result = self._finalize_job_result(
-                job_id, crawl_id, started_at, metrics
+                job_id,
+                crawl_id,
+                started_at,
+                metrics,
+                timed_out=timed_out,
+                timeout_message=timeout_message,
             )
             
             # Update crawl run with final status
@@ -556,6 +611,17 @@ class CrawlJobProcessor:
             self._update_crawl_status(crawl_id, "failed")
             self._last_progress_flush_by_crawl.pop(crawl_id, None)
             return self._create_failed_result(job_id, crawl_id, started_at, str(e))
+
+    @staticmethod
+    def _coerce_positive_int(value: Any, default: int) -> int:
+        """Convert a stored config value to a positive integer fallback."""
+        try:
+            parsed = int(value)
+            if parsed > 0:
+                return parsed
+        except (TypeError, ValueError):
+            pass
+        return default
     
     def _get_crawl_run(self, crawl_id: str) -> Optional[Dict[str, Any]]:
         """Fetch crawl run from repository."""
@@ -639,6 +705,8 @@ class CrawlJobProcessor:
         strategy: SourceStrategy,
         claimed_identity: Optional[Dict[str, Any]],
         metrics: CrawlMetricsAccumulator,
+        crawl_limit: Optional[int] = None,
+        crawl_max_depth: Optional[int] = None,
     ) -> None:
         """
         Process a crawl strategy (multi-page).
@@ -658,14 +726,21 @@ class CrawlJobProcessor:
             return
         
         try:
+            limit = strategy.firecrawl_params.get("limit", 50)
+            max_depth = strategy.firecrawl_params.get("max_depth", 3)
+            if crawl_limit is not None:
+                limit = min(limit, crawl_limit)
+            if crawl_max_depth is not None:
+                max_depth = min(max_depth, crawl_max_depth)
+
             # Execute crawl via Firecrawl without retaining full result sets in memory.
             crawl_iter = None
             iter_method = getattr(self.firecrawl, "crawl_with_polling_iter", None)
             if iter_method and inspect.isasyncgenfunction(iter_method):
                 crawl_iter = iter_method(
                     url=seed_url,
-                    limit=strategy.firecrawl_params.get("limit", 50),
-                    max_depth=strategy.firecrawl_params.get("max_depth", 3),
+                    limit=limit,
+                    max_depth=max_depth,
                 )
 
             if crawl_iter is not None:
@@ -682,8 +757,8 @@ class CrawlJobProcessor:
             else:
                 crawl_results = await self.firecrawl.crawl_with_polling(
                     url=seed_url,
-                    limit=strategy.firecrawl_params.get("limit", 50),
-                    max_depth=strategy.firecrawl_params.get("max_depth", 3),
+                    limit=limit,
+                    max_depth=max_depth,
                 )
                 for firecrawl_result in crawl_results:
                     page_result = await self._process_firecrawl_result(
@@ -1047,6 +1122,8 @@ class CrawlJobProcessor:
         crawl_id: str,
         started_at: datetime,
         metrics: CrawlMetricsAccumulator,
+        timed_out: bool = False,
+        timeout_message: Optional[str] = None,
     ) -> CrawlJobResult:
         """Finalize crawl job result with metrics."""
         completed_at = datetime.utcnow()
@@ -1059,6 +1136,7 @@ class CrawlJobProcessor:
             metrics.pages_failed > 0
             or metrics.pages_blocked > 0
             or metrics.pages_manual_needed > 0
+            or timed_out
         ):
             status = CrawlJobStatus.COMPLETED_WITH_WARNINGS
         
@@ -1083,6 +1161,7 @@ class CrawlJobProcessor:
             manual_review=metrics.manual_review,
             failures_by_type=metrics.failures_by_type,
             page_results=metrics.page_results_sample,
+            error_message=timeout_message if timed_out else None,
         )
     
     def _create_failed_result(
@@ -1112,6 +1191,7 @@ async def process_crawl_job(
     crawl_id: str,
     twin_id: Optional[str] = None,
     claimed_identity: Optional[Dict[str, Any]] = None,
+    max_duration_seconds: Optional[int] = None,
     firecrawl_client: Optional[FirecrawlClient] | object = _AUTO_FIRECRAWL_CLIENT,
     crawl_repository: Optional[CrawlRepository] = None,
     crawl_manager: Optional[CrawlManager] = None,
@@ -1149,4 +1229,5 @@ async def process_crawl_job(
         crawl_id=crawl_id,
         twin_id=twin_id,
         claimed_identity=claimed_identity,
+        max_duration_seconds=max_duration_seconds,
     )

@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 
 from modules.name_deep_research_service import NameDeepResearchService
 
@@ -85,6 +86,7 @@ def _minimal_valid_result() -> dict:
 class TestNameDeepResearchUnits:
     def test_build_queries_name_only_and_hints(self):
         service = NameDeepResearchService(db_client=object(), firecrawl_client=object())
+        current_year = datetime.now(timezone.utc).year
         queries = service.build_queries(
             name="Satya Nadella",
             hints={"location": "Seattle", "company": "Microsoft", "website": "https://microsoft.com"},
@@ -93,6 +95,9 @@ class TestNameDeepResearchUnits:
         assert any("Satya Nadella" in q for q in queries)
         assert any("Microsoft" in q for q in queries)
         assert len(queries) == len(set(queries))
+        assert queries[0] == "\"Satya Nadella\" \"Seattle\" \"Microsoft\""
+        assert queries.index("\"Satya Nadella\" \"Seattle\"") < queries.index("Satya Nadella biography")
+        assert queries.index("\"Satya Nadella\" site:microsoft.com") < queries.index(f"Satya Nadella {current_year}")
 
     def test_dedupe_urls_canonicalization(self):
         service = NameDeepResearchService(db_client=object(), firecrawl_client=object())

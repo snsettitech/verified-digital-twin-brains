@@ -15,6 +15,7 @@ Covers:
 
 import pytest
 import uuid
+import asyncio
 from datetime import datetime
 from typing import Dict, Any, List
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
@@ -352,9 +353,11 @@ class TestCrawlJobProcessorCrawlFlow:
                 quality=ContentQuality.FULL,
             ),
         ]
-        
+
         sample_crawl_run["seed_urls"] = ["https://example.com"]
-        
+        sample_crawl_run["max_pages"] = 7
+        sample_crawl_run["max_depth"] = 2
+
         with patch.object(processor, '_get_crawl_run', return_value=sample_crawl_run):
             with patch.object(processor, '_update_crawl_status'):
                 with patch.object(processor, '_persist_page_record'):
@@ -364,11 +367,15 @@ class TestCrawlJobProcessorCrawlFlow:
                         job_id="job-123",
                         crawl_id="crawl-123",
                     )
-                    
+
                     assert result.status == CrawlJobStatus.COMPLETED
                     assert result.pages_discovered == 2
                     assert result.pages_fetched == 2
-                    mock_firecrawl_client.crawl_with_polling.assert_called_once()
+                    mock_firecrawl_client.crawl_with_polling.assert_called_once_with(
+                        url="https://example.com",
+                        limit=7,
+                        max_depth=2,
+                    )
 
 
 class TestCrawlJobProcessorFailureHandling:
@@ -804,6 +811,50 @@ class TestCrawlJobProcessorEdgeCases:
                 # Should complete but with 0 pages
                 assert result.status == CrawlJobStatus.COMPLETED
                 assert result.pages_discovered == 0
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_completed_with_warnings(
+        self,
+        processor,
+        mock_firecrawl_client,
+    ):
+        """A crawl time budget expiry should preserve partial progress instead of failing the run."""
+        crawl_run = {
+            "id": "crawl-123",
+            "twin_id": "twin-456",
+            "status": "queued",
+            "seed_urls": [
+                "https://example.com/article/test-1",
+                "https://example.com/article/test-2",
+            ],
+            "max_pages": 5,
+            "max_depth": 2,
+        }
+
+        async def slow_scrape_with_retry(**kwargs):
+            await asyncio.sleep(0.05)
+            return FirecrawlResult(
+                success=True,
+                url=kwargs["url"],
+                content="Delayed content",
+                metadata={"title": "Delayed"},
+                quality=ContentQuality.FULL,
+            )
+
+        with patch.object(processor, '_get_crawl_run', return_value=crawl_run):
+            with patch.object(processor, '_update_crawl_status'):
+                with patch.object(processor, '_persist_page_record'):
+                    mock_firecrawl_client.scrape_with_retry.side_effect = slow_scrape_with_retry
+
+                    result = await processor.process_crawl_job(
+                        job_id="job-123",
+                        crawl_id="crawl-123",
+                        max_duration_seconds=0.01,
+                    )
+
+                    assert result.status == CrawlJobStatus.COMPLETED_WITH_WARNINGS
+                    assert "time budget" in (result.error_message or "").lower()
+                    assert result.pages_discovered == 0
 
     def test_persist_page_record_handles_multiple_missing_columns(self, processor):
         """Should progressively drop missing optional columns and still persist."""
