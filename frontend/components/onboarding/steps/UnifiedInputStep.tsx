@@ -57,7 +57,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
   const handleConnectLinkedIn = async () => {
     const supabase = getSupabaseClient();
     await supabase.auth.signInWithOAuth({
-      provider: 'linkedin',
+      provider: 'linkedin_oidc',
       options: { redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/onboarding` : '/onboarding' },
     });
   };

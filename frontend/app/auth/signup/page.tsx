@@ -77,7 +77,7 @@ export default function SignupPage() {
             ? new URLSearchParams(window.location.search).get('redirect') || '/dashboard'
             : '/dashboard';
         const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'linkedin',
+            provider: 'linkedin_oidc',
             options: {
                 redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectParam)}`,
             },

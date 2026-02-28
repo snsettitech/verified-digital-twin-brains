@@ -181,7 +181,7 @@ def _sync_connected_accounts(user_id: str, correlation_id: str) -> None:
             if not isinstance(ident, dict):
                 ident = _model_to_dict(ident) if hasattr(ident, "model_dump") else {}
             provider = (ident.get("provider") or "").strip().lower()
-            if provider != "linkedin":
+            if provider not in {"linkedin", "linkedin_oidc"}:
                 continue
             provider_user_id = ident.get("provider_id") or ident.get("id")
             identity_data = ident.get("identity_data") or {}

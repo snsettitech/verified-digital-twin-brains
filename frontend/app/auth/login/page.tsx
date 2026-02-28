@@ -137,7 +137,7 @@ function LoginForm() {
         setLoading(true);
         setError('');
         const { error } = await supabase.auth.signInWithOAuth({
-            provider: 'linkedin',
+            provider: 'linkedin_oidc',
             options: {
                 redirectTo: `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(redirectTo)}`,
             },
