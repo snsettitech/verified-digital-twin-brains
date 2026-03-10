@@ -43,3 +43,18 @@ def test_access_groups_compat_routes_exist():
 def test_link_compile_compat_routes_exist():
     assert _has_route("/persona/link-compile/twins/{twin_id}/claims/{claim_id}/verify", "POST")
     assert _has_route("/twins/{twin_id}/transition/{target_state}", "POST")
+
+
+def test_realtime_ingestion_routes_exist():
+    assert _has_route("/ingestion/realtime/health", "GET")
+    assert _has_route("/ingestion/realtime/config", "GET")
+
+
+def test_delphi_retrieval_routes_exist():
+    assert _has_route("/retrieval/query", "POST")
+    assert _has_route("/retrieval/query-across-twins", "POST")
+    assert _has_route("/retrieval/delete-twin", "DELETE")
+    assert _has_route("/retrieval/delete-creator", "DELETE")
+    assert _has_route("/retrieval/twins/{creator_id}", "GET")
+    assert _has_route("/retrieval/stats/{creator_id}", "GET")
+    assert _has_route("/retrieval/health", "GET")
