@@ -29,6 +29,21 @@ def _is_missing_column_error(error: Exception, column_name: str) -> bool:
     )
 
 
+def _is_creation_mode_constraint_error(error: Exception) -> bool:
+    """
+    Detect environments where twins.creation_mode CHECK still disallows `name_first`.
+    """
+    message = str(error).lower()
+    return (
+        "creation_mode" in message
+        and (
+            "twins_creation_mode_check" in message
+            or "violates check constraint" in message
+            or "23514" in message
+        )
+    )
+
+
 async def create_twin_for_name_research(
     db: Any,
     tenant_id: str,
@@ -112,6 +127,8 @@ async def create_twin_for_name_research(
         "description": f"{normalized_name}'s verified digital profile",
         "settings": settings,
         "status": "draft",  # name_first twins start as draft until research completes
+        # Keep name-first semantics in settings; fall back to link_first column value
+        # when older CHECK constraints don't allow name_first.
         "creation_mode": "name_first",
         "is_active": False,  # Not active until research completes
     }
@@ -140,24 +157,59 @@ async def create_twin_for_name_research(
                     "Legacy schema detected, retrying without column '%s'", removed_column
                 )
                 continue
+
+            if (
+                "creation_mode" in insert_data
+                and str(insert_data.get("creation_mode")).lower() == "name_first"
+                and _is_creation_mode_constraint_error(e)
+            ):
+                insert_data["creation_mode"] = "link_first"
+                logger.warning(
+                    "twins.creation_mode rejects 'name_first'; retrying with 'link_first' column value"
+                )
+                continue
             
             # Check for duplicate key race condition
             if "duplicate key" in error_msg or "already exists" in error_msg:
-                # Try to fetch the existing twin
-                race_check = (
+                # Try to fetch a user-owned twin only (avoid same-name cross-user collisions).
+                race_rows = (
                     db.table("twins")
-                    .select("id")
+                    .select("id, creator_id, settings, created_at")
                     .eq("tenant_id", tenant_id)
                     .eq("name", normalized_name)
-                    .limit(1)
+                    .is_("settings->>deleted_at", "null")
+                    .order("created_at", desc=True)
+                    .limit(10)
                     .execute()
-                )
-                if race_check.data:
-                    twin_id = race_check.data[0]["id"]
+                ).data or []
+
+                user_owned_rows = []
+                for row in race_rows:
+                    settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+                    owner_user_id = str(settings.get("owner_user_id") or "").strip()
+                    creator_id = str(row.get("creator_id") or "").strip()
+                    if owner_user_id == user_id or creator_id == user_id:
+                        user_owned_rows.append(row)
+
+                if not user_owned_rows and len(race_rows) == 1:
+                    # Legacy fallback: one unclaimed tenant-scoped profile.
+                    row = race_rows[0]
+                    settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+                    owner_user_id = str(settings.get("owner_user_id") or "").strip()
+                    creator_id = str(row.get("creator_id") or "").strip()
+                    if not owner_user_id and creator_id == f"tenant_{tenant_id}":
+                        user_owned_rows = [row]
+
+                if user_owned_rows:
+                    twin_id = user_owned_rows[0]["id"]
                     logger.info(
-                        "Race condition: reusing twin created by another request: %s", twin_id
+                        "Race condition: reusing user-owned twin created by another request: %s", twin_id
                     )
                     return twin_id
+
+                raise RuntimeError(
+                    "Failed to create twin: duplicate profile name exists for another user in this tenant"
+                )
             
             logger.exception("Failed to create twin for name-research: %s", e)
             raise RuntimeError(f"Failed to create twin: {e}")

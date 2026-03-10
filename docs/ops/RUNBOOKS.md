@@ -2,6 +2,12 @@
 
 > Build/deploy troubleshooting, env var checklist, and request tracing.
 
+## Production Research Canary
+
+- [PRODUCTION_RESEARCH_CANARY_RUNBOOK.md](./PRODUCTION_RESEARCH_CANARY_RUNBOOK.md)
+- Use this after deploys to run the production onboarding and deep-research smoke test with an isolated QA account.
+- It includes both the manual checklist and the automated Playwright canary flow.
+
 ## /auth/sync-user intermittent failures
 
 **Symptoms**

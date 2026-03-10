@@ -52,6 +52,7 @@ function OnboardingContent() {
     });
 
     setIsLoading(true);
+    let createdProfileInAttempt = false;
     try {
       const sources = data.sources ?? [];
       const hasOptionalSources = sources.length > 0 || Boolean(data.linkedInUrl?.trim());
@@ -81,6 +82,8 @@ function OnboardingContent() {
       }
 
       const profileData = await profileResponse.json();
+      const profileCreatedHeader = profileResponse.headers.get('x-profile-created');
+      createdProfileInAttempt = profileCreatedHeader === 'true';
       const twinData: Twin = {
         id: profileData.id,
         name: profileData.name,
@@ -156,7 +159,22 @@ function OnboardingContent() {
       setCurrentStep('research');
     } catch (error) {
       console.error('Failed to create twin:', error);
-      const message = error instanceof Error && error.message ? error.message : 'Failed to create twin. Please try again.';
+      let rollbackApplied = false;
+      if (createdProfileInAttempt) {
+        try {
+          const rollbackResponse = await authFetchStandalone('/profile/reset', { method: 'POST' });
+          rollbackApplied = rollbackResponse.ok;
+        } catch (rollbackError) {
+          console.error('Failed to rollback profile after onboarding error:', rollbackError);
+        }
+      }
+
+      let message = error instanceof Error && error.message ? error.message : 'Failed to create twin. Please try again.';
+      if (createdProfileInAttempt && rollbackApplied) {
+        message = `${message}\n\nWe reset the partial profile automatically so you can retry cleanly.`;
+      } else if (createdProfileInAttempt && !rollbackApplied) {
+        message = `${message}\n\nA partial profile may exist. Use Settings → Reset Profile before retrying if needed.`;
+      }
       alert(message);
     } finally {
       setIsLoading(false);

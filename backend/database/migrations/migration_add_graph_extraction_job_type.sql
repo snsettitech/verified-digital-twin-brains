@@ -14,7 +14,8 @@ ALTER TABLE jobs ADD CONSTRAINT valid_job_type CHECK (
         'realtime_ingestion',
         'graph_extraction',
         'content_extraction',
-        'feedback_learning'
+        'feedback_learning',
+        'graph_memory'
     )
 );
 

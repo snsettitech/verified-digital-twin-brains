@@ -40,6 +40,16 @@ export function ResearchProgress({
   isContinuing,
 }: ResearchProgressProps) {
   const currentStatus = status?.status;
+  const warningList = Array.isArray(status?.checkpoint_data?.warnings)
+    ? status.checkpoint_data.warnings
+    : [];
+  const ingestionErrors = Array.isArray(status?.checkpoint_data?.ingestion?.errors)
+    ? status.checkpoint_data.ingestion.errors
+    : [];
+  const failureReason =
+    warningList[warningList.length - 1] ||
+    ingestionErrors[0] ||
+    null;
   
   // Status badge colors
   const getStatusColor = (status: ResearchRunStatus) => {
@@ -510,11 +520,16 @@ export function ResearchProgress({
               ✕
             </div>
             <h3 className="text-xl font-bold text-red-400 mb-2">
-              Build Failed
+              Research Failed
             </h3>
             <p className="text-red-400/80 mb-4">
-              Something went wrong while building your digital twin.
+              The research pipeline stopped before your digital twin could finish processing.
             </p>
+            {failureReason && (
+              <div className="mb-4 rounded-lg border border-red-500/20 bg-slate-950/40 p-3 text-left text-sm text-slate-300">
+                {failureReason}
+              </div>
+            )}
             <button
               onClick={onRetry}
               className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl font-medium transition-colors"

@@ -7,6 +7,7 @@ TWIN-SCOPED:
 ADMIN-ONLY (tenant rollup):
 - GET /escalations: List ALL escalations across tenant (requires admin role)
 """
+import os
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
@@ -207,6 +208,24 @@ async def resolve_escalation(
                     group_id=None
                 )
         
+        # 3. Enqueue graph memory jobs (Phase 2 - async, non-blocking)
+        graph_jobs = {"enabled": False}
+        if os.getenv("GRAPH_MEMORY_ENABLED", "false").lower() == "true":
+            try:
+                from modules.escalation_graph_integration import enqueue_escalation_graph_jobs
+                graph_jobs = await enqueue_escalation_graph_jobs(
+                    tenant_id=tenant_id,
+                    twin_id=twin_id,
+                    escalation_id=escalation_id,
+                    question=original_question,
+                    answer=request.owner_answer,
+                    owner_id=user_id
+                )
+                graph_jobs["enabled"] = True
+            except Exception as e:
+                # Graph jobs are best-effort - don't fail escalation if they error
+                graph_jobs = {"enabled": True, "error": str(e)}
+        
         # Audit log
         AuditLogger.log(
             tenant_id=tenant_id,
@@ -214,13 +233,17 @@ async def resolve_escalation(
             event_type="CONFIGURATION_CHANGE",
             action="ESCALATION_RESOLVED",
             actor_id=user_id,
-            metadata={"escalation_id": escalation_id}
+            metadata={
+                "escalation_id": escalation_id,
+                "graph_jobs_enqueued": graph_jobs.get("enabled", False)
+            }
         )
 
         
         return {
             "status": "success", 
-            "message": "Escalation resolved and verified QnA created"
+            "message": "Escalation resolved and verified QnA created",
+            "graph_jobs": graph_jobs if graph_jobs.get("enabled") else None
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -283,19 +306,41 @@ async def resolve_escalation_legacy(
                     group_id=None
                 )
         
+        # 3. Enqueue graph memory jobs (Phase 2 - async, non-blocking)
+        graph_jobs = {"enabled": False}
+        if os.getenv("GRAPH_MEMORY_ENABLED", "false").lower() == "true":
+            try:
+                from modules.escalation_graph_integration import enqueue_escalation_graph_jobs
+                graph_jobs = await enqueue_escalation_graph_jobs(
+                    tenant_id=tenant_id,
+                    twin_id=twin_id,
+                    escalation_id=escalation_id,
+                    question=original_question,
+                    answer=request.owner_answer,
+                    owner_id=user_id
+                )
+                graph_jobs["enabled"] = True
+            except Exception as e:
+                graph_jobs = {"enabled": True, "error": str(e)}
+        
         AuditLogger.log(
             tenant_id=tenant_id,
             twin_id=twin_id,
             event_type="CONFIGURATION_CHANGE",
             action="ESCALATION_RESOLVED",
             actor_id=user_id,
-            metadata={"escalation_id": escalation_id, "legacy_endpoint": True}
+            metadata={
+                "escalation_id": escalation_id,
+                "legacy_endpoint": True,
+                "graph_jobs_enqueued": graph_jobs.get("enabled", False)
+            }
         )
 
         
         return {
             "status": "success", 
-            "message": "Escalation resolved and verified QnA created"
+            "message": "Escalation resolved and verified QnA created",
+            "graph_jobs": graph_jobs if graph_jobs.get("enabled") else None
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

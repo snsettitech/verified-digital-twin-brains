@@ -3019,20 +3019,32 @@ async def run_agent_stream(
             except Exception:
                 pass
 
-    # 3.5 Fetch Graph Snapshot (P0.2 - Bounded, query-relevant)
-    # Feature flag: GRAPH_RAG_ENABLED (default: false)
+    # 3.5 Fetch Graph Context (Phase 2 - Best effort with soft budget)
+    # Feature flag: GRAPH_MEMORY_ENABLED (default: false)
     graph_context = ""
-    graph_rag_enabled = os.getenv("GRAPH_RAG_ENABLED", "false").lower() == "true"
+    graph_memory_enabled = os.getenv("GRAPH_MEMORY_ENABLED", "false").lower() == "true"
+    graph_context_result = None
     
-    if graph_rag_enabled:
+    if graph_memory_enabled and tenant_id:
         try:
-            from modules.graph_context import get_graph_snapshot
-            snapshot = await get_graph_snapshot(twin_id, query=query)
-            graph_context = snapshot.get("context_text", "")
-            if not graph_context:
-                print(f"[GraphRAG] Enabled but returned empty context for twin {twin_id}, query: {query[:50]}")
+            from modules.graph_context_builder import get_graph_context_for_chat
+            # Use soft budget (default 500ms) - non-blocking for chat
+            graph_context_result = await get_graph_context_for_chat(
+                tenant_id=tenant_id,
+                twin_id=twin_id,
+                query=query,
+                correlation_id=conversation_id or "no-conversation"
+            )
+            if graph_context_result.context:
+                graph_context = graph_context_result.context
+                print(f"[GraphMemory] Context retrieved: {graph_context_result.episode_count} episodes "
+                      f"in {graph_context_result.latency_ms:.0f}ms")
+            elif graph_context_result.source == "timeout":
+                print(f"[GraphMemory] Soft budget timeout ({graph_context_result.latency_ms:.0f}ms), continuing without context")
+            else:
+                print(f"[GraphMemory] No context available (source: {graph_context_result.source})")
         except Exception as e:
-            print(f"[GraphRAG] Retrieval failed, falling back to RAG-lite. Error: {e}")
+            print(f"[GraphMemory] Retrieval failed gracefully: {e}")
 
     effective_group_id = group_id if enforce_group_filtering else None
 

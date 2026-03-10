@@ -52,6 +52,12 @@
         "OPENAPI_SPEC_PATH": "d:/verified-digital-twin-brains/backend/openapi.json",
         "OPENAPI_BASE_URL": "http://localhost:8000"
       }
+    },
+    "graphiti": {
+      "url": "http://127.0.0.1:8001/mcp/"
+    },
+    "zep": {
+      "url": "https://docs-mcp.getzep.com/mcp"
     }
   }
 }

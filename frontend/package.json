@@ -13,6 +13,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "test:e2e:prod-canary": "playwright test tests/e2e/prod_research_canary.spec.ts --project=chromium",
+    "test:e2e:prod-canary:headed": "playwright test tests/e2e/prod_research_canary.spec.ts --project=chromium --headed",
     "prepare": "husky",
     "enforce:ui:single": "node scripts/enforce-single-twin.js --mode single-twin",
     "enforce:ui:strict": "node scripts/enforce-single-twin.js --mode strict"

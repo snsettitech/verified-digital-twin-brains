@@ -49,20 +49,13 @@ def ensure_twin_owner_or_403(twin_id: str, user: dict) -> Dict[str, Any]:
     """
     Strict ownership check:
     - 404 if twin does not exist
-    - 403 if twin exists but belongs to different tenant
+    - 403 if twin exists but caller does not own the profile
     Returns the twin record.
     """
-    tenant_id = user.get("tenant_id")
-    if not tenant_id:
-        raise HTTPException(status_code=403, detail="User has no tenant association")
-    
+    verify_twin_ownership(twin_id, user)
     twin_res = supabase.table("twins").select("*").eq("id", twin_id).single().execute()
     if not twin_res.data:
         raise HTTPException(status_code=404, detail="Twin not found")
-    
-    if twin_res.data.get("tenant_id") != tenant_id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
     return twin_res.data
 
 
@@ -356,12 +349,36 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
                 .eq("tenant_id", tenant_id)
                 .eq("name", requested_name)
                 .order("created_at", desc=True)
-                .limit(1)
+                .limit(25)
                 .execute()
             )
+
+            active_rows: List[Dict[str, Any]] = []
             for row in existing_res.data or []:
                 if not (row.get("settings") or {}).get("deleted_at"):
-                    return row
+                    active_rows.append(row)
+            if not active_rows:
+                return None
+
+            user_owned_rows: List[Dict[str, Any]] = []
+            for row in active_rows:
+                settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+                owner_user_id = str(settings.get("owner_user_id") or "").strip()
+                creator_id = str(row.get("creator_id") or "").strip()
+                if owner_user_id == str(user_id) or creator_id == str(user_id):
+                    user_owned_rows.append(row)
+
+            if user_owned_rows:
+                return user_owned_rows[0]
+
+            # Legacy fallback for tenant-scoped old rows.
+            if len(active_rows) == 1:
+                only = active_rows[0]
+                settings = only.get("settings") if isinstance(only.get("settings"), dict) else {}
+                owner_user_id = str(settings.get("owner_user_id") or "").strip()
+                creator_id = str(only.get("creator_id") or "").strip()
+                if not owner_user_id and creator_id == f"tenant_{tenant_id}":
+                    return only
             return None
 
         # Idempotency guard: retries from onboarding/network should not create duplicates.
@@ -444,6 +461,13 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
                             f"{existing_after_race.get('id')}"
                         )
                         return _normalize_twin_status_shape(existing_after_race)
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "A twin with this name already exists for another profile in your tenant. "
+                            "Use a distinct name or reuse your existing profile."
+                        ),
+                    )
                 raise
         
         if response.data:

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 interface DeleteTwinModalProps {
   isOpen: boolean;
@@ -52,10 +53,9 @@ export default function DeleteTwinModal({
   const fetchDataVolume = async () => {
     setDataVolume((prev) => ({ ...prev, isLoading: true, error: null }));
     try {
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const [knowledgeRes, conversationsRes] = await Promise.all([
-        fetch(`${apiBase}/sources/${twinId}`, { credentials: 'include' }),
-        fetch(`${apiBase}/conversations/${twinId}`, { credentials: 'include' }),
+        authFetchStandalone(`/sources/${twinId}`),
+        authFetchStandalone(`/conversations/${twinId}`),
       ]);
 
       const knowledgeCount = knowledgeRes.ok ? (await knowledgeRes.json()).length || 0 : 0;

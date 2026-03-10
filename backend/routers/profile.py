@@ -5,7 +5,7 @@ Abstraction layer over twins that enforces "one profile per user" semantics.
 All endpoints return "profile" terminology externally while using twin_id internally.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from typing import Dict, Any, Optional, List
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -13,7 +13,10 @@ import logging
 
 from modules.auth_guard import get_current_user, require_tenant
 from modules.observability import supabase
-from modules.tenant_guard import derive_creator_ids
+from modules.profile_selection import (
+    build_creator_candidates,
+    select_profile_twin_from_rows,
+)
 from modules.person_completeness_pipeline import run_person_completeness_pipeline
 
 logger = logging.getLogger(__name__)
@@ -160,27 +163,6 @@ def _names_conflict(existing_name: Optional[str], requested_name: Optional[str])
     return existing != requested
 
 
-def _score_profile_candidate(twin: Dict[str, Any], user: Dict[str, Any], creator_candidates: set[str]) -> int:
-    score = 0
-    user_id = str(user.get("user_id") or "").strip()
-    creator_id = str(twin.get("creator_id") or "").strip()
-    settings = twin.get("settings") or {}
-    owner_user_id = str(settings.get("owner_user_id") or "").strip()
-    status = str(twin.get("status") or "").strip().lower()
-
-    if owner_user_id and user_id and owner_user_id == user_id:
-        score += 100
-    if creator_id and user_id and creator_id == user_id:
-        score += 80
-    if creator_id and creator_id in creator_candidates:
-        score += 40
-    if status == "active":
-        score += 20
-    if status == "persona_built":
-        score += 10
-    return score
-
-
 def _select_profile_twin_for_user(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     tenant_id = user.get("tenant_id")
     user_id = user.get("user_id")
@@ -198,56 +180,17 @@ def _select_profile_twin_for_user(user: Dict[str, Any]) -> Optional[Dict[str, An
         .execute()
     )
     twins = result.data or []
-    if not twins:
-        return None
-
-    # Ignore archived/deleted twins.
-    twins = [t for t in twins if not ((t.get("settings") or {}).get("deleted_at"))]
-    if not twins:
-        return None
-
-    creator_candidates = set(derive_creator_ids(user) or [])
-    if user_id:
-        creator_candidates.add(str(user_id))
-    creator_candidates.add(f"tenant_{tenant_id}")
-
-    strong_matches: List[Dict[str, Any]] = []
-    for twin in twins:
-        settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
-        owner_user_id = str(settings.get("owner_user_id") or "").strip()
-        creator_id = str(twin.get("creator_id") or "").strip()
-        if (user_id and owner_user_id == user_id) or (user_id and creator_id == user_id):
-            strong_matches.append(twin)
-
-    # Legacy fallback: allow ambiguous tenant-level ownership only when
-    # there is exactly one unclaimed legacy candidate.
-    if strong_matches:
-        candidate_twins = strong_matches
-    else:
-        legacy_candidates: List[Dict[str, Any]] = []
-        for twin in twins:
-            settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
-            owner_user_id = str(settings.get("owner_user_id") or "").strip()
-            creator_id = str(twin.get("creator_id") or "").strip()
-            if owner_user_id:
-                continue
-            if creator_id in creator_candidates:
-                legacy_candidates.append(twin)
-        if len(legacy_candidates) != 1:
-            return None
-        candidate_twins = legacy_candidates
-
-    ranked = sorted(
-        candidate_twins,
-        key=lambda twin: (
-            _score_profile_candidate(twin, user, creator_candidates),
-            str(twin.get("created_at") or ""),
-        ),
-        reverse=True,
+    creator_candidates = build_creator_candidates(
+        user=user,
+        user_id=str(user_id or ""),
+        tenant_id=str(tenant_id or ""),
     )
-    if not ranked:
-        return None
-    return ranked[0]
+    return select_profile_twin_from_rows(
+        rows=twins,
+        user_id=str(user_id or ""),
+        creator_candidates=creator_candidates,
+        allow_single_legacy_fallback=True,
+    )
 
 
 def get_or_create_profile_for_user(user: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -433,7 +376,8 @@ async def get_profile(user: dict = Depends(require_tenant)):
 @router.post("/profile", response_model=ProfileResponse)
 async def create_profile(
     request: CreateProfileRequest,
-    user: dict = Depends(require_tenant)
+    user: dict = Depends(require_tenant),
+    response: Response = None,
 ):
     """
     Idempotent profile creation.
@@ -445,6 +389,8 @@ async def create_profile(
     # Check for existing profile (idempotency)
     existing = get_or_create_profile_for_user(user)
     if existing:
+        if response is not None:
+            response.headers["x-profile-created"] = "false"
         # Prevent/repair identity drift on stale drafts.
         requested_name = _normalize_name(request.full_name)
         existing_name = _normalize_name(existing.get("name"))
@@ -481,6 +427,8 @@ async def create_profile(
                             existing_name,
                             requested_name,
                         )
+                        if response is not None:
+                            response.headers["x-profile-created"] = "false"
                         return refreshed
                 except Exception as e:
                     logger.warning("Failed to update stale draft identity: %s", e)
@@ -524,6 +472,8 @@ async def create_profile(
     
     try:
         twin = _safe_insert_profile_twin(twin_data)
+        if response is not None:
+            response.headers["x-profile-created"] = "true"
         
         logger.info(f"Created profile {twin['id']} for user {user_id}")
         

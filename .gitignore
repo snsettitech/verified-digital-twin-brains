@@ -1,4 +1,6 @@
-# Secrets and Environment Variables
+# =============================================================================
+# SECRETS AND ENVIRONMENT VARIABLES
+# =============================================================================
 .env
 .env.local
 .env.development.local
@@ -6,13 +8,24 @@
 .env.production.local
 .env*.local
 
-# Backend
+# =============================================================================
+# PYTHON / BACKEND
+# =============================================================================
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+.pytest_cache/
+
+# Virtual environments
 env/
+venv/
+ENV/
+.venv/
+
+# Build artifacts
 build/
 develop-eggs/
 dist/
@@ -28,22 +41,122 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-temp_uploads/
-.pytest_cache/
-.venv/
-venv/
-ENV/
 
-# Frontend
+# Backend specific
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/temp_uploads/
+temp_uploads/
+
+# =============================================================================
+# NODE / FRONTEND
+# =============================================================================
+# Dependencies
 node_modules/
+
+# Build outputs
 .next/
 out/
 build/
 .vercel
+
+# Cache
 .npm
 .eslintcache
 
-# OS Files
+# =============================================================================
+# LOGS AND TEMPORARY FILES
+# =============================================================================
+# Log files
+*.log
+logs/
+*.err.log
+*.out.log
+
+# Temporary directories
+tmp/
+.tmp/
+temp/
+*.tmp
+
+# =============================================================================
+# CACHE DIRECTORIES
+# =============================================================================
+.cache/
+cache/
+.model_cache/
+**/.model_cache/
+
+# =============================================================================
+# GENERATED ARTIFACTS AND OUTPUTS
+# =============================================================================
+# Artifacts directory
+artifacts/
+**/artifacts/
+
+# Test results and coverage
+test-results/
+test-results-temp/
+coverage/
+.nyc_output/
+htmlcov/
+
+# Playwright
+playwright-report/
+playwright-test-results/
+frontend/playwright-report/
+frontend/playwright-test-results/
+frontend/test-results/
+frontend/test-results-temp/
+
+# Eval results
+backend/eval/results_*.json
+
+# Debug outputs
+**/retrieval_debug_output.json
+**/eval_debug.log
+**/devserver.log
+
+# =============================================================================
+# PROOF AND VERIFICATION ARTIFACTS
+# =============================================================================
+proof/
+**/proof/*.json
+**/proof/*.log
+**/proof/*.png
+**/proof/*.txt
+**/proof/*.html
+
+# =============================================================================
+# TEST DATA AND RESULTS
+# =============================================================================
+# Root-level test result files
+/live_chat_history.json
+/live_conversation_results.json
+/phase1_*_results.json
+/pinecone_results.json
+
+# Screenshots and generated images
+/deployment_success.png
+*.screenshot.png
+
+# =============================================================================
+# PACKAGES AND DISTRIBUTION
+# =============================================================================
+package/
+*.tgz
+supabase-mcp-server-*.tgz
+
+# =============================================================================
+# MCP AND TOOL CONFIGURATIONS
+# =============================================================================
+.mcp/
+.agent/mcp.json
+
+# =============================================================================
+# OS FILES
+# =============================================================================
 .DS_Store
 .DS_Store?
 ._*
@@ -52,25 +165,24 @@ build/
 ehthumbs.db
 Thumbs.db
 
-# IDEs
+# =============================================================================
+# IDE AND EDITOR FILES
+# =============================================================================
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 .cursor/
 
-# YouTube
+# =============================================================================
+# PROJECT SPECIFIC
+# =============================================================================
+# YouTube cookies
 youtube_cookies.txt
 
-# Generated artifacts and local diagnostics
-frontend/playwright-report/
-frontend/playwright-test-results/
-frontend/test-results-temp/
-frontend/lint_errors.json
-frontend/lint-full.txt
-frontend/lint_results.txt
-artifacts/simulator/
-artifacts/supabase_jwt.txt
+# Backend test token file
 backend/test_token.txt
-package/
-supabase-mcp-server-supabase-*.tgz
+
+# Supabase JWT artifacts
+artifacts/supabase_jwt.txt

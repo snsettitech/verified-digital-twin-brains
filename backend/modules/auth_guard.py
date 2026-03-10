@@ -728,7 +728,7 @@ def verify_twin_ownership(twin_id: str, user: Dict[str, Any]) -> bool:
 
         result = (
             supabase.table("twins")
-            .select("id, tenant_id")
+            .select("id, tenant_id, creator_id, settings")
             .eq("id", twin_id)
             .eq("tenant_id", tenant_id)
             .single()
@@ -740,6 +740,36 @@ def verify_twin_ownership(twin_id: str, user: Dict[str, Any]) -> bool:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Twin not found or access denied"
             )
+
+        # Single-profile hardening: if ownership metadata exists, enforce user-level access.
+        twin_row = result.data
+        settings = twin_row.get("settings") if isinstance(twin_row.get("settings"), dict) else {}
+        owner_user_id = str(settings.get("owner_user_id") or "").strip()
+        creator_id = str(twin_row.get("creator_id") or "").strip()
+        user_id_str = str(user_id or "").strip()
+        role_value = str(user.get("actual_role") or user.get("role") or "").lower()
+        is_admin = role_value in {"owner", "admin", "support", "superadmin"}
+
+        if not is_admin:
+            if owner_user_id and user_id_str and owner_user_id != user_id_str:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to this profile",
+                )
+
+            creator_candidates = {user_id_str, f"tenant_{tenant_id}"}
+            creator_ids = user.get("creator_ids")
+            if isinstance(creator_ids, list):
+                creator_candidates.update(str(c) for c in creator_ids if c)
+            creator_id_single = user.get("creator_id")
+            if creator_id_single:
+                creator_candidates.add(str(creator_id_single))
+
+            if creator_id and creator_id not in creator_candidates:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to this profile",
+                )
         
         return True
         

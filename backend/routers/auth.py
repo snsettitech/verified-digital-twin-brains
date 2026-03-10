@@ -17,7 +17,11 @@ from modules.user_management import (
     accept_invitation,
 )
 from modules.observability import supabase
-from modules.tenant_guard import derive_creator_ids
+from modules.profile_selection import (
+    build_creator_candidates,
+    normalize_twin_status_shape,
+    select_profile_twin_from_rows,
+)
 from supabase import create_client as create_supabase_client
 from supabase_auth.errors import AuthApiError
 
@@ -46,20 +50,44 @@ def _model_to_dict(value: Any) -> Dict[str, Any]:
 
 def _normalize_twin_status_shape(twin: Dict[str, Any]) -> Dict[str, Any]:
     """Keep API status field stable for legacy twins schemas without `status`."""
-    if not isinstance(twin, dict):
-        return twin
-    if twin.get("status"):
-        return twin
+    return normalize_twin_status_shape(twin)
 
-    settings = twin.get("settings") if isinstance(twin.get("settings"), dict) else {}
-    derived_status = (
-        settings.get("link_first_state")
-        or ("active" if twin.get("is_active") is True else None)
-        or ("draft" if settings.get("creation_mode") == "link_first" else None)
+
+def _select_profile_twin_for_user(
+    *,
+    user: Dict[str, Any],
+    tenant_id: str,
+    twins: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Select canonical single profile twin for a user inside tenant.
+    """
+    user_id = user.get("user_id")
+    creator_candidates = build_creator_candidates(
+        user=user,
+        user_id=str(user_id or ""),
+        tenant_id=str(tenant_id or ""),
     )
-    if derived_status:
-        twin["status"] = derived_status
-    return twin
+
+    rows = twins
+    if rows is None:
+        query = (
+            supabase.table("twins")
+            .select("*")
+            .eq("tenant_id", tenant_id)
+            .order("created_at", desc=True)
+        )
+        if hasattr(query, "limit"):
+            query = query.limit(50)
+        result = query.execute()
+        rows = result.data if result.data else []
+
+    return select_profile_twin_from_rows(
+        rows=rows or [],
+        user_id=str(user_id or ""),
+        creator_candidates=creator_candidates,
+        allow_single_legacy_fallback=True,
+    )
 
 
 def _get_anon_supabase_client():
@@ -254,12 +282,13 @@ async def sync_user(request: Request, response: Response, user=Depends(get_curre
             except Exception as e:
                 print(f"[SYNC {correlation_id}] ERROR recovering tenant: {e}")
         
-        # Check if they have any twins (onboarding complete if yes)
+        # Single-profile mode: onboarding complete only if canonical profile twin exists.
+        has_twins = False
         if tenant_id:
-            twins_check = supabase.table("twins").select("id").eq("tenant_id", tenant_id).limit(1).execute()
-            has_twins = bool(twins_check.data)
-        else:
-            has_twins = False
+            has_twins = _select_profile_twin_for_user(
+                user=user,
+                tenant_id=tenant_id,
+            ) is not None
 
         _sync_connected_accounts(user_id, correlation_id)
 
@@ -309,8 +338,10 @@ async def sync_user(request: Request, response: Response, user=Depends(get_curre
         print(f"[SYNC {correlation_id}] ERROR creating user: {e}")
         raise
     
-    twins_check = supabase.table("twins").select("id").eq("tenant_id", tenant_id).limit(1).execute()
-    has_twins = bool(twins_check.data)
+    has_twins = _select_profile_twin_for_user(
+        user=user,
+        tenant_id=tenant_id,
+    ) is not None
 
     _sync_connected_accounts(user_id, correlation_id)
 
@@ -386,12 +417,13 @@ async def get_current_user_profile(user=Depends(get_current_user)):
     if user_data.get("tenants"):
         tenant_id = user_data["tenants"].get("id") if isinstance(user_data["tenants"], dict) else None
     
-    # Check onboarding status - use tenant_id to find twins
+    # Single-profile mode: onboarding complete only if canonical profile twin exists.
+    has_twins = False
     if tenant_id:
-        twins_check = supabase.table("twins").select("id").eq("tenant_id", tenant_id).limit(1).execute()
-        has_twins = bool(twins_check.data)
-    else:
-        has_twins = False
+        has_twins = _select_profile_twin_for_user(
+            user=user,
+            tenant_id=tenant_id,
+        ) is not None
     
     return UserProfile(
         id=user_id,
@@ -439,89 +471,21 @@ async def get_my_twins(user=Depends(get_current_user)):
     result = twins_query.execute()
     twins = result.data if result.data else []
     
-    # AUTO-REPAIR: Check for orphaned twins if none found
-    # Orphaned twins have tenant_id = user_id (wrong value from old frontend bug)
-    if len(twins) == 0 and user_id:
-        print(f"[MY-TWINS DEBUG] No twins found, checking for orphaned twins with tenant_id={user_id}")
-        orphan_check = supabase.table("twins").select("*").eq("tenant_id", user_id).execute()
-        orphan_twins = orphan_check.data if orphan_check.data else []
-        
-        if len(orphan_twins) > 0:
-            print(f"[MY-TWINS REPAIR] Found {len(orphan_twins)} orphaned twin(s)! Reassigning to correct tenant_id={tenant_id}")
-            
-            # Repair each orphaned twin
-            for orphan in orphan_twins:
-                try:
-                    supabase.table("twins").update({
-                        "tenant_id": tenant_id
-                    }).eq("id", orphan["id"]).execute()
-                    print(f"[MY-TWINS REPAIR] Fixed twin {orphan['id']} ({orphan.get('name', 'unnamed')})")
-                except Exception as e:
-                    print(f"[MY-TWINS REPAIR ERROR] Failed to fix twin {orphan['id']}: {e}")
-            
-            # Return the orphaned twins (now repaired)
-            for twin in orphan_twins:
-                twin["tenant_id"] = tenant_id
-            twins = orphan_twins
+    # NOTE: orphaned-twin repair is intentionally NOT performed in this read API.
+    # Use backend/scripts/check_orphaned_twins.py and explicit migration scripts for repair.
     
-    # Filter out archived/deleted twins (settings.deleted_at)
-    twins = [t for t in twins if not (t.get("settings") or {}).get("deleted_at")]
-    creator_candidates = set(derive_creator_ids(user) or [])
-    if user_id:
-        creator_candidates.add(str(user_id))
-    creator_candidates.add(f"tenant_{tenant_id}")
-
-    strong_matches: List[Dict[str, Any]] = []
-    for t in twins:
-        settings = t.get("settings") if isinstance(t.get("settings"), dict) else {}
-        owner_user_id = str(settings.get("owner_user_id") or "")
-        creator_id = str(t.get("creator_id") or "")
-        if (user_id and owner_user_id == user_id) or (user_id and creator_id == user_id):
-            strong_matches.append(t)
-
-    # Legacy fallback for pre-owner_user_id records: only keep tenant-scoped
-    # rows when there is exactly one unclaimed candidate.
-    if strong_matches:
-        twins = strong_matches
-    else:
-        legacy_candidates: List[Dict[str, Any]] = []
-        for t in twins:
-            settings = t.get("settings") if isinstance(t.get("settings"), dict) else {}
-            owner_user_id = str(settings.get("owner_user_id") or "")
-            creator_id = str(t.get("creator_id") or "")
-            if owner_user_id:
-                continue
-            if creator_id in creator_candidates:
-                legacy_candidates.append(t)
-        twins = legacy_candidates if len(legacy_candidates) == 1 else []
-
-    def _score_twin(t: Dict[str, Any]) -> int:
-        score = 0
-        creator_id = str(t.get("creator_id") or "")
-        settings = t.get("settings") if isinstance(t.get("settings"), dict) else {}
-        owner_user_id = str(settings.get("owner_user_id") or "")
-        status = str(t.get("status") or "").lower()
-        if owner_user_id and user_id and owner_user_id == user_id:
-            score += 100
-        if creator_id and user_id and creator_id == user_id:
-            score += 80
-        if creator_id and creator_id in creator_candidates:
-            score += 40
-        if status == "active":
-            score += 20
-        if status == "persona_built":
-            score += 10
-        return score
-
-    twins = sorted(
-        twins,
-        key=lambda t: (_score_twin(t), str(t.get("created_at") or "")),
-        reverse=True,
+    # Single-profile mode: return canonical twin only.
+    canonical = _select_profile_twin_for_user(
+        user=user,
+        tenant_id=tenant_id,
+        twins=twins,
     )
-    twins = [_normalize_twin_status_shape(t) for t in twins]
+    if not canonical:
+        print(f"[MY-TWINS DEBUG] Returning 0 twins for tenant {tenant_id}")
+        return []
 
-    print(f"[MY-TWINS DEBUG] Returning {len(twins)} twins for tenant {tenant_id}")
-    return twins
+    print(f"[MY-TWINS DEBUG] Returning canonical twin {canonical.get('id')} for tenant {tenant_id}")
+    return [canonical]
 
 
 @router.get("/connectors")

@@ -1,21 +1,119 @@
 """
 Namespace resolution helpers for Delphi-style creator namespaces.
 
-Primary format:
-    creator_{creator_id}_twin_{twin_id}
+Single-Profile Scope Migration:
+- scope_id: "{tenant_id}__{creator_id}"
+- namespace format: "scope_{scope_id}" (normalized for Pinecone)
 
-Legacy format:
-    {twin_id}
+Legacy formats (kept for backward compatibility):
+- Primary: creator_{creator_id}_twin_{twin_id}
+- Legacy: {twin_id}
 
 These helpers keep reads backward compatible during migration while allowing
-new writes to creator-based namespaces.
+new writes to scope-based namespaces.
 """
 import os
+import re
 import time
 from typing import List, Optional, Dict
 
 from modules.observability import supabase
 
+
+# =============================================================================
+# Single-Profile Scope Namespace Helpers
+# =============================================================================
+
+def _base64url_encode(input_str: str) -> str:
+    """
+    Base64url encode a string (URL-safe, no padding).
+    
+    This ensures the encoded string is:
+    - Deterministic
+    - Alphanumeric only (safe for Pinecone)
+    - No collision risk from special characters
+    """
+    import base64
+    encoded = base64.urlsafe_b64encode(input_str.encode()).decode()
+    return encoded.rstrip('=')  # Remove padding
+
+
+def build_scope_namespace(scope_id: str) -> str:
+    """
+    Build single-profile namespace for a scope.
+    
+    Format: scope_{base64url(scope_id)}
+    
+    Uses base64url encoding to ensure:
+    - No collision risk (tenantA__creatorX vs tenantA_creatorX)
+    - Pinecone-safe characters (alphanumeric + _ -)
+    - Deterministic encoding
+    
+    Args:
+        scope_id: Scope ID (format: "{tenant_id}__{creator_id}")
+        
+    Returns:
+        Namespace string for Pinecone
+    """
+    encoded = _base64url_encode(scope_id)
+    return f"scope_{encoded}"
+
+
+def normalize_scope_for_pinecone(scope_id: str) -> str:
+    """
+    Normalize scope_id for Pinecone namespace using base64url encoding.
+    
+    This is LOSSLESS and COLLISION-FREE compared to string replacement.
+    
+    Pinecone namespaces have restrictions on special characters.
+    Max namespace length in Pinecone: 512 characters.
+    """
+    encoded = _base64url_encode(scope_id)
+    
+    # Pinecone has 512 char limit for namespaces
+    # Base64 encoding increases length by ~33%, so check limits
+    if len(encoded) > 500:  # Leave margin for "scope_" prefix
+        # Fall back to hash for extremely long scope_ids
+        import hashlib
+        encoded = hashlib.sha256(scope_id.encode()).hexdigest()[:64]
+    
+    return encoded
+
+
+def parse_scope_id(scope_id: str) -> tuple:
+    """
+    Parse scope_id into tenant_id and creator_id.
+    
+    Args:
+        scope_id: Scope ID (format: "{tenant_id}__{creator_id}")
+        
+    Returns:
+        Tuple of (tenant_id, creator_id)
+    """
+    if "__" in scope_id:
+        parts = scope_id.split("__", 1)
+        return parts[0], parts[1]
+    # Legacy format or no separator
+    return scope_id, None
+
+
+def make_scope_id(tenant_id: str, creator_id: str) -> str:
+    """
+    Create scope_id from tenant_id and creator_id.
+    
+    Args:
+        tenant_id: Tenant identifier
+        creator_id: Creator identifier
+        
+    Returns:
+        Scope ID (format: "{tenant_id}__{creator_id}")
+    """
+    return f"{tenant_id}__{creator_id}"
+
+
+# =============================================================================
+# Legacy Namespace Helpers (Backward Compatibility)
+# =============================================================================
 
 def build_creator_namespace(creator_id: str, twin_id: str) -> str:
     """Build Delphi-style namespace for a creator/twin pair."""
@@ -155,3 +253,89 @@ def get_namespace_candidates_for_twin(
             out.append(ns)
     return out
 
+
+# =============================================================================
+# Single-Profile Namespace Resolution
+# =============================================================================
+
+def get_scope_namespace(
+    tenant_id: str,
+    creator_id: str,
+    twin_id: Optional[str] = None
+) -> str:
+    """
+    Get namespace for single-profile scope.
+    
+    Args:
+        tenant_id: Tenant identifier
+        creator_id: Creator identifier
+        twin_id: Optional twin ID (for backward compatibility during rollout)
+        
+    Returns:
+        Namespace string for Pinecone
+    """
+    scope_id = make_scope_id(tenant_id, creator_id)
+    return build_scope_namespace(scope_id)
+
+
+def get_namespace_candidates_for_scope(
+    scope_id: str,
+    include_legacy: Optional[bool] = None
+) -> List[str]:
+    """
+    Return namespace candidates for a scope (dual-read compatibility).
+    
+    Args:
+        scope_id: Scope ID (format: "{tenant_id}__{creator_id}")
+        include_legacy: Whether to include legacy namespaces
+        
+    Returns:
+        List of namespace candidates
+    """
+    if include_legacy is None:
+        include_legacy = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
+    
+    primary = build_scope_namespace(scope_id)
+    namespaces = [primary]
+    
+    if include_legacy:
+        # Include legacy creator namespace if we can parse the scope
+        tenant_id, creator_id = parse_scope_id(scope_id)
+        if creator_id and tenant_id:
+            # Try to find twin_id for this creator (simplified - in practice would query DB)
+            # For now, just add tenant-scoped fallback
+            legacy_ns = f"tenant_{tenant_id}"
+            if legacy_ns not in namespaces:
+                namespaces.append(legacy_ns)
+    
+    return namespaces
+
+
+def resolve_scope_from_twin(twin_id: str) -> Optional[str]:
+    """
+    Resolve scope_id from twin_id by looking up creator_id.
+    
+    Args:
+        twin_id: Twin identifier
+        
+    Returns:
+        Scope ID or None if not found
+    """
+    try:
+        res = (
+            supabase.table("twins")
+            .select("tenant_id,creator_id")
+            .eq("id", twin_id)
+            .limit(1)
+            .execute()
+        )
+        row = res.data[0] if res.data else None
+        if not row:
+            return None
+        
+        tenant_id = row.get("tenant_id")
+        creator_id = row.get("creator_id") or f"tenant_{tenant_id}"
+        
+        return make_scope_id(tenant_id, creator_id)
+    except Exception:
+        return None

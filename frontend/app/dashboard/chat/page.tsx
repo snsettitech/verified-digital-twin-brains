@@ -45,8 +45,18 @@ function DashboardChatPageContent() {
   const requestedTwinId = searchParams.get('twinId');
   const twinId = activeTwin?.id;
   const effectiveTwinId = canonicalProfileId || twinId;
+  const effectiveTwin = useMemo(() => {
+    if (!effectiveTwinId) return null;
+    return twins.find((t) => t.id === effectiveTwinId) || (activeTwin?.id === effectiveTwinId ? activeTwin : null);
+  }, [effectiveTwinId, twins, activeTwin]);
   const chatSource = searchParams.get('source');
   const seededQuestion = searchParams.get('q');
+  const canChat = useMemo(() => {
+    const status = String(effectiveTwin?.status || '').toLowerCase();
+    const byStatus = status === 'active' || status === 'persona_built' || status === 'live';
+    const byLegacyFlag = !status && Boolean(effectiveTwin?.is_active);
+    return byStatus || byLegacyFlag;
+  }, [effectiveTwin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,6 +203,17 @@ function DashboardChatPageContent() {
       );
     }
 
+    if (!canChat) {
+      return (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8">
+          <h2 className="text-xl font-bold text-amber-900">Profile Still Building</h2>
+          <p className="mt-2 text-sm text-amber-800">
+            Chat unlocks after research and ingestion complete for this profile.
+          </p>
+        </div>
+      );
+    }
+
     return (
       <div className="flex flex-col gap-4 xl:flex-row">
         <div className="min-h-[620px] flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -218,6 +239,7 @@ function DashboardChatPageContent() {
   }, [
     isLoading,
     effectiveTwinId,
+    canChat,
     activeTwin?.tenant_id,
     conversationId,
     handleStreamEvent,

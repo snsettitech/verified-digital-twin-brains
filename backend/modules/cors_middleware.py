@@ -103,7 +103,12 @@ def get_allowed_origins() -> List[str]:
     if origins_raw:
         origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
     else:
-        origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+        origins = [
+            "https://digitalbrains.vercel.app",
+            "https://*.vercel.app",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
     
     return origins
 

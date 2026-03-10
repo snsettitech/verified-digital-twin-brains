@@ -6,6 +6,7 @@
 |----------|-------------|
 | **TROUBLESHOOTING_METHODOLOGY.md** | Any time debugging something |
 | **AUTH_TROUBLESHOOTING.md** | 401/403 errors, JWT issues |
+| **PRODUCTION_RESEARCH_CANARY_RUNBOOK.md** | Post-deploy production smoke test for onboarding + deep research |
 | **AGENT_BRIEF.md** | Project overview, workflows |
 | **.agent/workflows/** | Step-by-step procedures |
 
