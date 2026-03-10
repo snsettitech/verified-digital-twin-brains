@@ -1,1 +1,0 @@
-https://digitalbrains.vercel.app/dashboard/simulator
