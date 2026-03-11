@@ -86,8 +86,6 @@ ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").low
 DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
-# Deep Research routes are always enabled.
-DEEP_RESEARCH_ENABLED = True
 # Name-only deep research flow (enabled by default; can be disabled explicitly)
 NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true"
 
