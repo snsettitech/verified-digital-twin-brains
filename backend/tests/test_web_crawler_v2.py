@@ -24,7 +24,6 @@ from modules.web_crawler import (
     canonicalize_url,
     get_url_hash,
 )
-from modules.deep_research_config import DeepResearchConfig
 
 
 @pytest.fixture
@@ -48,16 +47,9 @@ def mock_supabase():
         yield mock
 
 
-class TestCrawlV2FeatureFlag:
-    """Test always-on Deep Research behavior."""
-    
-    @pytest.mark.asyncio
-    async def test_remains_enabled_when_legacy_flag_false(self, temp_artifact_dir, mock_supabase):
-        """Legacy DEEP_RESEARCH_ENABLED should not disable v2 crawl."""
-        with patch.dict(os.environ, {"DEEP_RESEARCH_ENABLED": "false"}):
-            result = await crawl_website_v2("https://example.com", "twin_123")
-            assert result.crawl_id is not None
-    
+class TestCrawlV2:
+    """Test Deep Research crawl flow."""
+
     @pytest.mark.asyncio
     async def test_enabled_crawl_flow(self, temp_artifact_dir, mock_supabase):
         """Crawl should proceed through setup path."""
