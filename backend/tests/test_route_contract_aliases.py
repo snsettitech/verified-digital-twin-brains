@@ -1,3 +1,6 @@
+from fastapi.testclient import TestClient
+
+
 def _has_route(path: str, method: str) -> bool:
     from main import app
 
@@ -43,3 +46,30 @@ def test_access_groups_compat_routes_exist():
 def test_link_compile_compat_routes_exist():
     assert _has_route("/persona/link-compile/twins/{twin_id}/claims/{claim_id}/verify", "POST")
     assert _has_route("/twins/{twin_id}/transition/{target_state}", "POST")
+
+
+def test_always_on_realtime_ingestion_routes_exist():
+    assert _has_route("/ingestion/realtime/health", "GET")
+    assert _has_route("/ingestion/realtime/config", "GET")
+
+
+def test_always_on_delphi_retrieval_routes_exist():
+    assert _has_route("/retrieval/query", "POST")
+    assert _has_route("/retrieval/query-across-twins", "POST")
+    assert _has_route("/retrieval/delete-twin", "DELETE")
+    assert _has_route("/retrieval/delete-creator", "DELETE")
+
+
+def test_realtime_ingestion_diagnostics_report_enabled():
+    from main import app
+
+    client = TestClient(app)
+    response = client.get("/ingestion/realtime/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "feature": "realtime_ingestion",
+        "enabled": True,
+        "mode": "compat",
+    }
