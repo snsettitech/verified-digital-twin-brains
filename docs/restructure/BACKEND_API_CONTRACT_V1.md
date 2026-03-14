@@ -110,7 +110,7 @@
 - Escalations endpoints (`backend/routers/escalations.py`).
 - Cognitive, interview, reasoning, audio endpoints (`backend/routers/cognitive.py`, `backend/routers/interview.py`, `backend/routers/reasoning.py`, `backend/routers/audio.py`).
 - Enhanced ingestion endpoints (`backend/routers/enhanced_ingestion.py`).
-- Specializations + VC endpoints (`backend/routers/specializations.py`, `backend/api/vc_routes.py`).
+- Specializations endpoints (`backend/routers/specializations.py`).
 
 ## Compatibility Strategy
 - Keep old paths for one release window where frontend already calls them.
