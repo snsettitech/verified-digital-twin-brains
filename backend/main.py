@@ -84,8 +84,6 @@ REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "true").lowe
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
 # Delphi retrieval is now enabled by default. Set ENABLE_DELPHI_RETRIEVAL=false to disable.
 DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
-# VC routes remain opt-in
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 # Deep Research routes are always enabled.
 DEEP_RESEARCH_ENABLED = True
 # Name-only deep research flow (enabled by default; can be disabled explicitly)
@@ -98,7 +96,6 @@ def print_feature_flag_summary():
     print(f"  Realtime Ingestion: {'ENABLED' if REALTIME_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
-    print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
     print("  Deep Research:      ENABLED")
     print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
