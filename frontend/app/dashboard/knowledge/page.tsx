@@ -78,7 +78,7 @@ const KnowledgeInsights = ({ profile }: { profile: KnowledgeProfile | null }) =>
         </div>
         <p className="text-xs text-slate-500 mt-4 leading-relaxed font-medium">
           Across <span className="text-slate-900 font-bold">{profile.total_sources}</span> distinct sources,
-          your twin has processed {profile.total_chunks} memory segments.
+          your persona has processed {profile.total_chunks} memory segments.
         </p>
       </div>
     </div>
@@ -175,7 +175,7 @@ export default function KnowledgePage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500">Loading your twin...</p>
+          <p className="text-slate-500">Loading your persona...</p>
         </div>
       </div>
     );
@@ -193,13 +193,13 @@ export default function KnowledgePage() {
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
           <p className="text-slate-500 mb-6">
-            Create a digital twin first to upload knowledge sources.
+            Create your persona first to upload knowledge sources.
           </p>
           <a
             href="/dashboard/right-brain"
             className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
           >
-            Create Your Twin
+            Create Your Persona
           </a>
         </div>
       </div>
@@ -211,7 +211,7 @@ export default function KnowledgePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-black tracking-tight text-slate-900">Left Brain</h1>
-          <p className="text-slate-500 mt-2 font-medium">Quantify the raw knowledge (Sources) that powers your Digital Twin.</p>
+          <p className="text-slate-500 mt-2 font-medium">Quantify the raw knowledge (Sources) that powers your Persona.</p>
         </div>
       </div>
 

@@ -179,9 +179,9 @@ export default function InsightsPage() {
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
-                    <p className="text-slate-500 mb-6">Create a digital twin first to view insights.</p>
+                    <p className="text-slate-500 mb-6">Create your persona first to view insights.</p>
                     <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
-                        Create Your Twin
+                        Create Your Persona
                     </a>
                 </div>
             </div>
@@ -194,7 +194,7 @@ export default function InsightsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">Insights</h1>
-                    <p className="text-slate-500 mt-1">Understand how people interact with your twin</p>
+                    <p className="text-slate-500 mt-1">Understand how people interact with your persona</p>
                 </div>
                 <div className="flex items-center gap-2 bg-white rounded-xl border border-slate-200 p-1">
                     {(['7d', '30d', '90d'] as const).map((range) => (

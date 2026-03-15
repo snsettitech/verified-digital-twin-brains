@@ -250,7 +250,7 @@ export default function UsersPage() {
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">No Team Members Yet</h3>
             <p className="text-slate-500 mb-6 max-w-md mx-auto">
-              Start building your team by inviting collaborators to help manage your digital twin.
+              Start building your team by inviting collaborators to help manage your persona.
             </p>
             <button
               onClick={() => setShowInviteModal(true)}

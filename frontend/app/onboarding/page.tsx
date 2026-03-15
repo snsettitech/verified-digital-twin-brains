@@ -310,7 +310,7 @@ function OnboardingContent() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p>Creating your twin…</p>
+          <p>Creating your persona…</p>
         </div>
       </div>
     );
@@ -321,7 +321,7 @@ function OnboardingContent() {
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white">Create Digital Twin</h1>
+            <h1 className="text-xl font-bold text-white">Create Your Persona</h1>
             <p className="text-sm text-slate-400">
               {currentStep === 'input' ? 'Get started in 2 minutes' : 'Research in progress'}
             </p>

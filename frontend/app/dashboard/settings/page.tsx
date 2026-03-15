@@ -693,7 +693,7 @@ export default function SettingsPage() {
               rows={4}
               className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
             />
-            <p className="text-xs text-slate-400 mt-2">This prompt guides how your twin responds</p>
+            <p className="text-xs text-slate-400 mt-2">This prompt guides how your persona responds</p>
           </div>
         </div>
       )}
@@ -817,7 +817,7 @@ export default function SettingsPage() {
             <div className="p-4 border border-red-200 rounded-xl flex items-center justify-between">
               <div>
                 <p className="font-medium text-slate-900">Export Data</p>
-                <p className="text-sm text-slate-500">Download all your twin&apos;s data</p>
+                <p className="text-sm text-slate-500">Download all your persona&apos;s data</p>
               </div>
               <button
                 onClick={handleExportTwin}

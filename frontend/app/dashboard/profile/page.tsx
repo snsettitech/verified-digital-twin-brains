@@ -269,7 +269,7 @@ function ProfilePageContent() {
       (typeof profile.display_name === 'string' && profile.display_name.trim()) ||
       effectiveTwin?.name ||
       user?.full_name ||
-      'Digital Twin';
+      'Persona';
 
     const organization =
       (typeof profile.organization === 'string' && profile.organization.trim()) || '';
@@ -577,7 +577,7 @@ function ProfilePageContent() {
                 <p className="max-w-3xl text-xl leading-relaxed text-slate-700">{draft.bio}</p>
                 <div className="hidden rounded-3xl bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white shadow-lg shadow-orange-500/20 xl:absolute xl:bottom-0 xl:right-0 xl:block xl:w-64">
                   <p className="text-2xl font-bold">Call {firstName(draft.displayName)}</p>
-                  <p className="mt-1 text-sm text-orange-100">Have a live conversation with your digital twin.</p>
+                  <p className="mt-1 text-sm text-orange-100">Have a live conversation with your persona.</p>
                   <button
                     onClick={() => handleOpenChat()}
                     className="mt-4 w-full rounded-full bg-white/20 px-4 py-2 text-sm font-semibold backdrop-blur transition hover:bg-white/30"

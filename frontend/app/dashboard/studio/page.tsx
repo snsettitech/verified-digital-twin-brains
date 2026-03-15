@@ -65,7 +65,7 @@ export default function StudioPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-500">Loading your Twin's profile...</p>
+          <p className="text-slate-500">Loading your persona's profile...</p>
         </div>
       </div>
     );
@@ -80,8 +80,8 @@ export default function StudioPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
-          <p className="text-slate-500 mb-6">Create a digital twin first to access the Persona Studio.</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">No Persona Found</h2>
+          <p className="text-slate-500 mb-6">Create your persona first to access the Persona Studio.</p>
           <a href="/dashboard" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
             Go to Dashboard
           </a>
@@ -94,7 +94,7 @@ export default function StudioPage() {
     <div className="max-w-4xl space-y-10">
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Persona Studio</h1>
-        <p className="text-slate-500 mt-2">Refine how your Digital Twin communicates and presents itself.</p>
+        <p className="text-slate-500 mt-2">Refine how your Persona communicates and presents itself.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-8">
@@ -122,12 +122,12 @@ export default function StudioPage() {
         <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           <h3 className="font-bold text-slate-800 flex items-center gap-2">
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-            Twin Identity
+            Persona Identity
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Twin Name</label>
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Persona Name</label>
               <input
                 type="text"
                 value={settings.name}
@@ -172,10 +172,10 @@ export default function StudioPage() {
                 ...settings,
                 settings: { ...settings.settings, system_prompt: e.target.value }
               })}
-              placeholder="You are the AI Digital Twin of..."
+              placeholder="You are the AI Persona of..."
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-xs"
             />
-            <p className="text-[10px] text-slate-400 italic">Leave blank to use the default Verified Digital Twin prompt.</p>
+            <p className="text-[10px] text-slate-400 italic">Leave blank to use the default Verified Persona prompt.</p>
           </div>
 
           <div className="flex justify-end pt-4">

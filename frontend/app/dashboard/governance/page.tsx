@@ -212,9 +212,9 @@ export default function GovernancePage() {
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
-                    <p className="text-slate-400 mb-6">Create a digital twin first to access governance features.</p>
+                    <p className="text-slate-400 mb-6">Create your persona first to access governance features.</p>
                     <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
-                        Create Your Twin
+                        Create Your Persona
                     </a>
                 </div>
             </div>
@@ -469,8 +469,8 @@ export default function GovernancePage() {
                     <div className="p-4 bg-indigo-950/30 border border-indigo-500/20 rounded-2xl">
                         <h4 className="text-sm font-bold text-indigo-300 mb-2">What is Identity Verification?</h4>
                         <p className="text-xs text-slate-400 leading-relaxed">
-                            Verification confirms that this Digital Twin authentically represents you.
-                            Once verified, your twin will display a trust badge on all responses,
+                            Verification confirms that this Persona authentically represents you.
+                            Once verified, your persona will display a trust badge on all responses,
                             increasing credibility with users who interact with it.
                         </p>
                     </div>
@@ -488,7 +488,7 @@ export default function GovernancePage() {
                             <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-xs font-black">2</div>
                             <div>
                                 <p className="text-sm font-bold text-slate-300">Manual Review</p>
-                                <p className="text-xs text-slate-500">Our team will review your twin within 48 hours</p>
+                                <p className="text-xs text-slate-500">Our team will review your persona within 48 hours</p>
                             </div>
                         </div>
                         <div className="flex items-start gap-3 p-3 bg-white/5 rounded-xl">

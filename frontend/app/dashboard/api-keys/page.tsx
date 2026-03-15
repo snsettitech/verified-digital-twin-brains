@@ -141,11 +141,11 @@ export default function ApiKeysPage() {
             </div>
             <div>
               <h1 className="text-3xl font-bold">API Keys</h1>
-              <p className="text-white/80 text-sm">Secure access to your digital twin</p>
+              <p className="text-white/80 text-sm">Secure access to your persona</p>
             </div>
           </div>
           <p className="text-white/70 max-w-xl">
-            Create and manage API keys for widget authentication. Each key provides secure, scoped access to your twin's capabilities.
+            Create and manage API keys for widget authentication. Each key provides secure, scoped access to your persona's capabilities.
           </p>
         </div>
         <button
@@ -214,7 +214,7 @@ export default function ApiKeysPage() {
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">No API Keys Yet</h3>
             <p className="text-slate-500 mb-6 max-w-md mx-auto">
-              Create your first API key to start embedding your digital twin on websites and applications.
+              Create your first API key to start embedding your persona on websites and applications.
             </p>
             <button
               onClick={() => setShowCreateModal(true)}

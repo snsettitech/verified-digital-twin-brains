@@ -30,7 +30,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             {/* Footer */}
             <div className="absolute bottom-6 left-0 right-0 text-center">
                 <p className="text-slate-500 text-sm">
-                    © 2024 Verified Digital Twin. All rights reserved.
+                    © 2025 PersonaOn AI. All rights reserved.
                 </p>
             </div>
         </div>

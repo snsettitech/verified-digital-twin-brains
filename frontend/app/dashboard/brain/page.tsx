@@ -113,7 +113,7 @@ export default function BrainGraphPage() {
             <div className="flex items-center justify-center h-[calc(100vh-theme(spacing.16))]">
                 <div className="text-center">
                     <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-slate-500">Loading your twin...</p>
+                    <p className="text-slate-500">Loading your persona...</p>
                 </div>
             </div>
         );
@@ -131,7 +131,7 @@ export default function BrainGraphPage() {
                     </div>
                     <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
                     <p className="text-slate-500 mb-6">
-                        Create a digital twin first to explore your brain graph.
+                        Create your persona first to explore your brain graph.
                     </p>
                     <Link
                         href="/dashboard/right-brain"
@@ -140,7 +140,7 @@ export default function BrainGraphPage() {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                         </svg>
-                        Create Your Twin
+                        Create Your Persona
                     </Link>
                 </div>
             </div>

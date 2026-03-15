@@ -149,9 +149,9 @@ export default function InboxPage() {
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
-                    <p className="text-slate-400 mb-6">Create a digital twin first to access the approval inbox.</p>
+                    <p className="text-slate-400 mb-6">Create your persona first to access the approval inbox.</p>
                     <a href="/dashboard/right-brain" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
-                        Create Your Twin
+                        Create Your Persona
                     </a>
                 </div>
             </div>

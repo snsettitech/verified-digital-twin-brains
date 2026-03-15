@@ -5,8 +5,8 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/lib/context/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "Verified Digital Twin",
-  description: "Your AI-powered digital twin for knowledge sharing and scaling expertise",
+  title: "PersonaOn AI",
+  description: "Your AI-powered digital persona — always on, always you",
 };
 
 export default function RootLayout({

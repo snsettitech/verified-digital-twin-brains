@@ -123,7 +123,7 @@ export default function SignupPage() {
                     </svg>
                 </div>
                 <h1 className="text-2xl font-bold text-white">Create your account</h1>
-                <p className="text-slate-400 mt-1">Start building your Digital Twin</p>
+                <p className="text-slate-400 mt-1">Start building your AI persona</p>
             </div>
 
             {/* Auth Card */}

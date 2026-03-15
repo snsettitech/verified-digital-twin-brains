@@ -180,7 +180,7 @@ function LoginForm() {
                     </svg>
                 </div>
                 <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-                <p className="text-slate-400 mt-1">Sign in to your Digital Twin</p>
+                <p className="text-slate-400 mt-1">Sign in to PersonaOn AI</p>
             </div>
 
             {/* Auth Card */}

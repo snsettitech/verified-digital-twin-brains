@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
-// Digital Brains Landing Page - New Design
+// PersonaOn AI Landing Page
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
@@ -112,7 +112,7 @@ export default function Home() {
                   </defs>
                 </svg>
               </div>
-              <span className="text-lg font-bold">Digital Brains</span>
+              <span className="text-lg font-bold">PersonaOn AI</span>
             </Link>
 
             {/* Desktop Nav */}
@@ -215,7 +215,7 @@ export default function Home() {
               <h1 className="text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
                 Create Your{' '}
                 <span className="bg-gradient-to-r from-white via-[#A5B4FC] to-[#C4B5FD] bg-clip-text text-transparent">
-                  Digital Twin
+                  AI Persona
                 </span>
               </h1>
               
@@ -239,7 +239,7 @@ export default function Home() {
                     href="/auth/login?redirect=/onboarding"
                     className="group px-8 py-4 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2"
                   >
-                    Build Your Twin Free
+                    Build Your Persona Free
                     <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                     </svg>
@@ -297,7 +297,7 @@ export default function Home() {
                   <div className="flex gap-2.5">
                     <div className="w-7 h-7 bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] rounded-lg flex items-center justify-center text-xs font-bold shrink-0">LR</div>
                     <div className="bg-[#4F46E5]/20 rounded-xl rounded-tl-sm px-3 py-2 text-sm text-slate-200 max-w-[80%]">
-                      Hi! I'm Lenny's digital twin. Ask me anything about product management, growth, or startup advice.
+                      Hi! I'm Lenny's AI persona. Ask me anything about product management, growth, or startup advice.
                     </div>
                   </div>
                   <div className="flex gap-2.5 justify-end">
@@ -334,7 +334,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 lg:px-12">
           <div className="text-center mb-16 animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
             <div className="text-xs text-[#A5B4FC] uppercase tracking-[0.2em] mb-4">How It Works</div>
-            <h2 className="text-4xl lg:text-5xl font-extrabold mb-4">Three steps to your AI twin</h2>
+            <h2 className="text-4xl lg:text-5xl font-extrabold mb-4">Three steps to your AI persona</h2>
             <p className="text-lg text-slate-400">From content to conversation in minutes, not months</p>
           </div>
 
@@ -368,7 +368,7 @@ export default function Home() {
           <div className="text-center mb-16 animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
             <div className="text-xs text-[#A5B4FC] uppercase tracking-[0.2em] mb-4">Features</div>
             <h2 className="text-4xl lg:text-5xl font-extrabold mb-4">Built for trust, designed for scale</h2>
-            <p className="text-lg text-slate-400">Everything you need to create a reliable AI twin</p>
+            <p className="text-lg text-slate-400">Everything you need to create your AI persona</p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
@@ -389,10 +389,10 @@ export default function Home() {
 
             {/* Feature Cards */}
             {[
-              { icon: '✓', title: 'Confidence Scoring', desc: 'See exactly how confident your twin is in each response. Low confidence triggers automatic clarification.' },
-              { icon: '🎭', title: 'Voice Consistency', desc: 'Your twin learns your unique writing style, tone, and decision-making patterns from training.' },
+              { icon: '✓', title: 'Confidence Scoring', desc: 'See exactly how confident your persona is in each response. Low confidence triggers automatic clarification.' },
+              { icon: '🎭', title: 'Voice Consistency', desc: 'Your persona learns your unique writing style, tone, and decision-making patterns from training.' },
               { icon: '🚨', title: 'Human Escalation', desc: 'Questions outside your expertise are automatically escalated to you with suggested responses.' },
-              { icon: '🔒', title: 'Access Control', desc: 'Control who can chat with your twin. Public links, password protection, or invite-only access.' },
+              { icon: '🔒', title: 'Access Control', desc: 'Control who can chat with your persona. Public links, password protection, or invite-only access.' },
             ].map((feature, i) => (
               <div 
                 key={i}
@@ -421,9 +421,9 @@ export default function Home() {
 
           <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
             {[
-              { name: 'Starter', price: 'Free', period: '', desc: 'Perfect for trying out your first twin', features: ['1 digital twin', '100 messages/month', '3 knowledge sources', 'Basic embed widget', 'Community support'], cta: 'Get Started', featured: false },
-              { name: 'Pro', price: '$29', period: '/month', desc: 'For creators ready to scale', features: ['3 digital twins', 'Unlimited messages', 'Unlimited sources', 'Custom branding', 'API access', 'Priority support'], cta: 'Start 14-Day Trial', featured: true },
-              { name: 'Enterprise', price: 'Custom', period: '', desc: 'For teams with advanced needs', features: ['Unlimited twins', 'SSO / SAML', 'Custom integrations', 'SLA guarantee', 'Dedicated support', 'Audit logs'], cta: 'Contact Sales', featured: false },
+              { name: 'Starter', price: 'Free', period: '', desc: 'Perfect for creating your first persona', features: ['1 persona', '100 messages/month', '3 knowledge sources', 'Basic embed widget', 'Community support'], cta: 'Get Started', featured: false },
+              { name: 'Pro', price: '$29', period: '/month', desc: 'For creators ready to scale', features: ['3 personas', 'Unlimited messages', 'Unlimited sources', 'Custom branding', 'API access', 'Priority support'], cta: 'Start 14-Day Trial', featured: true },
+              { name: 'Enterprise', price: 'Custom', period: '', desc: 'For teams with advanced needs', features: ['Unlimited personas', 'SSO / SAML', 'Custom integrations', 'SLA guarantee', 'Dedicated support', 'Audit logs'], cta: 'Contact Sales', featured: false },
             ].map((plan, i) => (
               <div 
                 key={i}
@@ -526,7 +526,7 @@ export default function Home() {
             href={user ? "/dashboard" : "/auth/login?redirect=/onboarding"}
             className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 delay-200 inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all hover:-translate-y-0.5"
           >
-            Build Your Digital Twin Free →
+            Build Your Persona Free →
           </Link>
           <p className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 delay-300 text-xs text-slate-500 mt-4">
             No credit card • 2-minute setup • Cancel anytime
@@ -556,10 +556,10 @@ export default function Home() {
                     </linearGradient>
                   </defs>
                 </svg>
-                <span className="font-bold">Digital Brains</span>
+                <span className="font-bold">PersonaOn AI</span>
               </div>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Creating AI twins that actually know things—trained on your expertise, speaking with your voice.
+                Your digital persona — always on, always you. Trained on your expertise, speaking with your voice.
               </p>
             </div>
 
@@ -602,7 +602,7 @@ export default function Home() {
 
           {/* Bottom */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t border-white/[0.05]">
-            <p className="text-sm text-slate-500">© 2026 Digital Brains. All rights reserved.</p>
+            <p className="text-sm text-slate-500">© 2026 PersonaOn AI. All rights reserved.</p>
             <div className="flex gap-3">
               {['Twitter', 'GitHub', 'Discord'].map((social) => (
                 <a 

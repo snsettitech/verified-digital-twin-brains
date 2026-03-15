@@ -164,7 +164,7 @@ export default function WidgetPage() {
                   AI
                 </div>
                 <div className="text-white">
-                  <p className="font-semibold">Your Twin</p>
+                  <p className="font-semibold">Your Persona</p>
                   <p className="text-xs opacity-80">Online</p>
                 </div>
               </div>

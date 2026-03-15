@@ -69,6 +69,9 @@ from routers import (
     profile,
     profile_person_data,
     profile_public,
+
+    # Products: keyword-matched product promotion in chat
+    products,
 )
 from modules.specializations import get_specialization
 
@@ -250,6 +253,10 @@ app.include_router(profile.router)
 app.include_router(profile_person_data.router)
 app.include_router(profile_public.router)
 print("[INFO] Profile routes enabled (Person Completeness v1)")
+
+# Products: keyword-matched product promotion in chat
+app.include_router(products.router)
+print("[INFO] Products routes enabled")
 
 # Print feature flag summary after all routers loaded
 print_feature_flag_summary()

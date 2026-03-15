@@ -78,7 +78,7 @@ export default function SharePage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-black tracking-tight text-slate-900">Share Your Twin</h1>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Share Your Persona</h1>
         <p className="text-slate-500 mt-1">Manage public access and sharing for {activeTwin.name}</p>
       </div>
 
@@ -94,8 +94,8 @@ export default function SharePage() {
             </div>
             <p className={`${isPublic ? 'text-indigo-100' : 'text-slate-400'} text-sm max-w-md`}>
               {isPublic
-                ? 'Anyone with this link can interact with your digital twin. Perfect for your website or social bio.'
-                : 'Sharing is currently disabled. Enable it to allow others to chat with your twin.'}
+                ? 'Anyone with this link can interact with your persona. Perfect for your website or social bio.'
+                : 'Sharing is currently disabled. Enable it to allow others to chat with your persona.'}
             </p>
           </div>
           <button
@@ -180,7 +180,7 @@ export default function SharePage() {
                 </div>
               )}
             </div>
-            <p className="text-slate-500 font-medium">Scan to chat with {activeTwin?.name || 'your twin'}</p>
+            <p className="text-slate-500 font-medium">Scan to chat with {activeTwin?.name || 'your persona'}</p>
           </div>
         )}
       </div>
@@ -224,7 +224,7 @@ export default function SharePage() {
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900">Developer Access</h3>
-            <p className="text-slate-500 text-sm">Integrate your twin into custom applications via our API.</p>
+            <p className="text-slate-500 text-sm">Integrate your persona into custom applications via our API.</p>
           </div>
         </div>
         <div className="flex gap-4">
