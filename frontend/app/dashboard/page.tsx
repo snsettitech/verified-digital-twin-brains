@@ -296,7 +296,7 @@ export default function DashboardPage() {
       {/* Quick Actions */}
       <div className="grid md:grid-cols-3 gap-6">
         {/* Interview Twin - ISSUE-001: Changed from "Train" to "Interview" for clarity */}
-        <Link href="/dashboard/interview" className="group">
+        <Link href="/dashboard/simulator" className="group">
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-2xl text-white shadow-xl shadow-indigo-200 hover:shadow-2xl transition-all duration-300 h-full relative overflow-hidden">
             <div className="absolute top-0 right-0 p-6 opacity-10">
               <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20">

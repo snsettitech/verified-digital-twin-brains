@@ -203,7 +203,7 @@ export function EmptyDashboard({ onCreateTwin }: { onCreateTwin?: () => void }) 
       description="Train an AI that answers questions in your voice with verified sources."
       primaryAction={{
         label: 'Get Started',
-        href: '/dashboard/right-brain',
+        href: '/dashboard/studio',
       }}
       secondaryAction={onCreateTwin ? {
         label: 'Learn More',

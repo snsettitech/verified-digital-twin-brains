@@ -134,7 +134,7 @@ export default function BrainGraphPage() {
                         Create your persona first to explore your brain graph.
                     </p>
                     <Link
-                        href="/dashboard/right-brain"
+                        href="/dashboard/studio"
                         className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

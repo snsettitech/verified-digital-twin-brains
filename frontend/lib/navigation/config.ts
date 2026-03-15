@@ -1,100 +1,72 @@
 /**
  * Navigation Configuration
- * 
+ *
  * SINGLE SOURCE OF TRUTH for sidebar structure.
- * 
- * This is static configuration - it does NOT depend on:
- * - Twin selection
- * - API calls
- * - User authentication state
- * 
+ *
+ * Subscription tiers (future gate):
+ *   free    — Home, Profile, Knowledge, Studio, Share
+ *   pro     — + Chat, Escalations, Verified Q&A, Widget, API Keys
+ *   team    — + Access Groups, Privacy & Data, Publish Controls
+ *   admin   — all pages accessible via /admin (not surfaced here)
+ *
  * To add a new sidebar item:
  * 1. Add the route in app/dashboard/[route]/page.tsx
  * 2. Add the item here in the appropriate section
  * 3. Add the icon to Sidebar.tsx getIcon() if needed
+ *
+ * Pages that exist but are intentionally NOT in the nav:
+ *   /dashboard/deep-research      — "Rebuild Persona" tool (access via Settings > Rebuild)
+ *   /dashboard/brain              — Knowledge graph visualizer (dev/power user)
+ *   /dashboard/memory             — Graph memory explorer (feature-gated)
+ *   /dashboard/simulator/*        — QA testing tools (dev only)
+ *   /dashboard/training-jobs      — Background job monitor (dev/ops)
+ *   /dashboard/metrics            — System health (dev/ops)
+ *   /dashboard/insights           — Analytics (future paid feature)
+ *   /dashboard/access-groups      — Team access control (team tier)
+ *   /dashboard/governance         — Compliance/policy (enterprise tier)
+ *   /dashboard/users              — User management (admin)
+ *   /dashboard/jobs               — Job queue (admin/ops)
+ *   /dashboard/actions            — Automation connectors (not yet built)
+ *   /dashboard/products           — Products catalog (not yet built)
  */
 
 import type { SidebarConfig } from './types';
 
 export const SIDEBAR_CONFIG: SidebarConfig = [
     {
-        title: 'Build',
+        title: '',
         items: [
-            { name: 'Dashboard', href: '/dashboard', icon: 'home' },
-            { name: 'Deep Research', href: '/dashboard/deep-research', icon: 'activity' },
-            { name: 'Profile', href: '/dashboard/profile', icon: 'profile' },
-            { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book' },
-            { name: 'Memory Center', href: '/dashboard/memory', icon: 'memory', featureFlag: 'memoryCenter' },
-            { name: 'Studio', href: '/dashboard/studio', icon: 'studio' },
-            { name: 'Ingestion Jobs', href: '/dashboard/training-jobs', icon: 'history' },
-            { name: 'Brain Graph', href: '/dashboard/brain', icon: 'activity' },
+            { name: 'Home',      href: '/dashboard',           icon: 'home'    },
+            { name: 'Profile',   href: '/dashboard/profile',   icon: 'profile' },
+            { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book'    },
+            { name: 'Chat',      href: '/dashboard/chat',      icon: 'chat', featureFlag: 'dashboardChat' },
         ]
     },
     {
-        title: 'Interact',
+        title: 'Persona',
         items: [
-            { name: 'Chat', href: '/dashboard/chat', icon: 'chat', featureFlag: 'dashboardChat' },
-            { name: 'Actions', href: '/dashboard/actions', icon: 'actions' },
-            { name: 'Products', href: '/dashboard/products', icon: 'products' },
-            { name: 'Share', href: '/dashboard/share', icon: 'share' },
+            { name: 'Studio',       href: '/dashboard/studio',       icon: 'studio'     },
+            { name: 'Escalations',  href: '/dashboard/escalations',  icon: 'escalations' },
+            { name: 'Verified Q&A', href: '/dashboard/verified-qna', icon: 'check'      },
         ]
     },
     {
-        title: 'Test & Review',
+        title: 'Publish',
         items: [
-            { name: 'Simulator Hub', href: '/dashboard/simulator', icon: 'chat' },
-            { name: 'Simulator Owner', href: '/dashboard/simulator/owner', icon: 'chat' },
-            { name: 'Simulator Training', href: '/dashboard/simulator/training', icon: 'training' },
-            { name: 'Simulator Public', href: '/dashboard/simulator/public', icon: 'share' },
-            { name: 'Simulator Workflow', href: '/dashboard/simulator/workflow', icon: 'history' },
-            { name: 'Retrieval Debug', href: '/dashboard/simulator/retrieval-debug', icon: 'activity' },
-            { name: 'Escalations', href: '/dashboard/escalations', icon: 'escalations' },
-            { name: 'Verified QnA', href: '/dashboard/verified-qna', icon: 'check' },
+            { name: 'Share',    href: '/dashboard/share',    icon: 'share' },
+            { name: 'Widget',   href: '/dashboard/widget',   icon: 'code'  },
+            { name: 'API Keys', href: '/dashboard/api-keys', icon: 'key'   },
         ]
     },
     {
-        title: 'Insights',
+        title: 'Account',
         items: [
-            { name: 'Metrics', href: '/dashboard/metrics', icon: 'chart' },
-            { name: 'Insights', href: '/dashboard/insights', icon: 'activity' },
-        ]
-    },
-    {
-        title: 'Share & Access',
-        items: [
-            { name: 'Access Groups', href: '/dashboard/access-groups', icon: 'group' },
-            { name: 'Widget', href: '/dashboard/widget', icon: 'code' },
-            { name: 'API Keys', href: '/dashboard/api-keys', icon: 'key' },
-        ]
-    },
-    {
-        title: 'Automation',
-        items: [
-            { name: 'Actions', href: '/dashboard/actions', icon: 'actions' },
-            { name: 'Jobs', href: '/dashboard/jobs', icon: 'history' },
-        ]
-    },
-    {
-        title: 'Settings',
-        items: [
-            { name: 'Settings', href: '/dashboard/settings', icon: 'settings' },
-            { name: 'Privacy & Data', href: '/dashboard/privacy', icon: 'privacy', featureFlag: 'privacyControls' },
+            { name: 'Settings',       href: '/dashboard/settings',         icon: 'settings' },
+            { name: 'Privacy & Data', href: '/dashboard/privacy',          icon: 'privacy',  featureFlag: 'privacyControls'  },
             { name: 'Publish Controls', href: '/dashboard/publish-controls', icon: 'publish', featureFlag: 'publishControls' },
-            { name: 'Users', href: '/dashboard/users', icon: 'users' },
-            { name: 'Governance', href: '/dashboard/governance', icon: 'governance' },
         ]
     },
-    {
-        title: 'System',
-        items: [
-            { name: 'Admin', href: '/admin', icon: 'shield' },
-        ]
-    }
 ];
 
-/**
- * Get the display name for the app.
- * This can be customized per deployment if needed.
- */
-export const APP_NAME = 'VT-BRAIN';
-export const APP_TAGLINE = 'Verified Profile';
+export const APP_NAME = 'PersonaOn';
+export const APP_TAGLINE = 'Your AI Persona';

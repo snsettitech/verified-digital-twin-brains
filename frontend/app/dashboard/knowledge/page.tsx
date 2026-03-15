@@ -196,7 +196,7 @@ export default function KnowledgePage() {
             Create your persona first to upload knowledge sources.
           </p>
           <a
-            href="/dashboard/right-brain"
+            href="/dashboard/studio"
             className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
           >
             Create Your Persona
