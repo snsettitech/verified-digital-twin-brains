@@ -28,6 +28,7 @@ from modules.owner_memory_store import format_owner_memory_context
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from modules.grounding_policy import get_grounding_policy
 from modules.deepagents_policy import classify_deepagents_intent
+import modules.inference_router as inference_router
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
     persist_response_audit,
@@ -560,8 +561,8 @@ async def _run_identity_gate_passthrough(
     allow_clarify: bool = False,
 ) -> Dict[str, Any]:
     """
-    Identity gate is restricted to context/safety interpretation.
-    Clarification decisions are planner-only.
+    Identity gate can short-circuit to clarification before retrieval when the
+    caller explicitly enables it.
     """
     policy = get_grounding_policy(query)
     if bool(policy.get("is_smalltalk")):
@@ -1704,6 +1705,11 @@ def _iter_stream_events(chunk_text: str):
         line = raw_line.strip()
         if not line:
             continue
+        if line.startswith("data:"):
+            line = line[5:].strip()
+        if line == "[DONE]":
+            yield {"type": "done"}
+            continue
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
@@ -1754,8 +1760,8 @@ async def _consume_streaming_chat_response(
             "conversation_id": metadata.get("conversation_id"),
             "clarification_hint": metadata.get("clarification_hint"),
             "clarification_options": metadata.get("clarification_options") or [],
-            "model_used": metadata.get("model_used") or metadata.get("inference_model"),
-            "provider_used": metadata.get("provider_used") or metadata.get("inference_provider"),
+            "model_used": metadata.get("model_used") or metadata.get("inference_model") or inference_router.get_active_model(),
+            "provider_used": metadata.get("provider_used") or metadata.get("inference_provider") or inference_router.get_active_provider(),
         }
     )
 
@@ -1768,19 +1774,38 @@ def _wrap_streaming_chat_response(
     async def wrapped_stream():
         session_bound = False
         async for chunk_text in _iter_stream_chunks(response):
-            if not session_bound:
-                for payload in _iter_stream_events(chunk_text):
-                    if str(payload.get("type") or "").strip().lower() == "metadata":
-                        _bind_session_id_to_conversation(payload.get("conversation_id"), session_id)
-                        session_bound = True
-                        break
-            yield chunk_text
+            payloads = list(_iter_stream_events(chunk_text))
+            if not payloads:
+                continue
+            for payload in payloads:
+                if (
+                    not session_bound
+                    and str(payload.get("type") or "").strip().lower() == "metadata"
+                ):
+                    _bind_session_id_to_conversation(payload.get("conversation_id"), session_id)
+                    session_bound = True
 
+                event_type = str(payload.get("type") or "").strip().lower()
+                if event_type == "done":
+                    yield "data: [DONE]\n\n"
+                    continue
+
+                payload_json = json.dumps(_normalize_json(payload))
+                yield f"data: {payload_json}\n\n"
+
+    headers = dict(response.headers)
+    headers.update(
+        {
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
     return StreamingResponse(
         wrapped_stream(),
-        media_type=response.media_type,
+        media_type="text/event-stream",
         status_code=response.status_code,
-        headers=dict(response.headers),
+        headers=headers,
     )
 
 
@@ -1977,7 +2002,7 @@ async def chat(
             decision_trace = None
             teaching_questions = []
             planning_output = {}
-            dialogue_mode = "ANSWER"
+            dialogue_mode = None
             intent_label = None
             workflow_intent = None
             module_ids = []
@@ -2053,7 +2078,7 @@ async def chat(
                 tenant_id=user.get("tenant_id") if user else None,
                 group_id=group_id,
                 mode=mode,
-                allow_clarify=False,
+                allow_clarify=True,
             )
             clarification_hint = gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None
 
@@ -2090,6 +2115,11 @@ async def chat(
                             "clarification_options": clarification_payload["clarification_options"],
                             "response_type": clarification_payload["response_type"],
                             "requires_user_input": clarification_payload["requires_user_input"],
+                            "dialogue_mode": "CLARIFY",
+                            "provider_used": inference_router.get_active_provider(),
+                            "model_used": inference_router.get_active_model(),
+                            "inference_provider": inference_router.get_active_provider(),
+                            "inference_model": inference_router.get_active_model(),
                             "routing_decision": {
                                 "intent": "clarification",
                                 "action": "clarify",
@@ -2961,7 +2991,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         tenant_id=None,
         group_id=group_id,
         mode=identity_gate_mode_for_context(resolved_context.context),
-        allow_clarify=False,
+        allow_clarify=True,
     )
 
     if str(gate.get("decision") or "").upper() == "CLARIFY":
@@ -2974,11 +3004,14 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "response": clarification_payload["message"],
             "response_type": clarification_payload["response_type"],
             "requires_user_input": clarification_payload["requires_user_input"],
+            "dialogue_mode": "CLARIFY",
             "clarification_hint": clarification_payload["clarification_hint"],
             "clarification_options": clarification_payload["clarification_options"],
             "conversation_id": conversation_id,
             "citations": [],
             "confidence_score": 0.0,
+            "model_used": inference_router.get_active_model(),
+            "provider_used": inference_router.get_active_provider(),
             "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
         }
@@ -3453,7 +3486,7 @@ async def public_chat_endpoint(
         tenant_id=None,
         group_id=group_id,
         mode=identity_gate_mode_for_context(resolved_context.context),
-        allow_clarify=False,
+        allow_clarify=True,
     )
 
     if str(gate.get("decision") or "").upper() == "CLARIFY":
@@ -3466,11 +3499,14 @@ async def public_chat_endpoint(
             "response": clarification_payload["message"],
             "response_type": clarification_payload["response_type"],
             "requires_user_input": clarification_payload["requires_user_input"],
+            "dialogue_mode": "CLARIFY",
             "clarification_hint": clarification_payload["clarification_hint"],
             "clarification_options": clarification_payload["clarification_options"],
             "conversation_id": conversation_id,
             "citations": [],
             "confidence_score": 0.0,
+            "model_used": inference_router.get_active_model(),
+            "provider_used": inference_router.get_active_provider(),
             "identity_gate_mode": gate.get("gate_mode"),
             **context_trace,
         }

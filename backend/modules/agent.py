@@ -41,7 +41,12 @@ from modules.fastpath_intent_router import (
     is_persona_draft_profile_allowed,
 )
 from modules.fastpath_response_builder import build_fastpath_response
-from modules.inference_router import invoke_json, invoke_text
+from modules.inference_router import (
+    get_active_model,
+    get_active_provider,
+    invoke_json,
+    invoke_text,
+)
 from modules.routing_decision import build_routing_decision
 from modules.response_policy import UNCERTAINTY_RESPONSE
 from modules.grounding_policy import get_grounding_policy
@@ -2278,12 +2283,22 @@ def _build_source_faithful_response_text(
 
     partial_summary = " ".join(points[:2]).strip() or fallback_text
     if len(context_data) < 2 or top_score < 0.65:
+        query_text = latest_query or "a question about the current topic"
         return (
-            "I want to give you a reliable answer, but I don't have enough information "
-            "in my knowledge base to do that confidently on this topic. Here is what I "
-            f"can tell you based on what I do have: {partial_summary} "
-            "For a fully reliable answer, you would need more directly relevant verified "
-            "material in the knowledge base."
+            "SITUATION - You asked: {query}\n\n"
+            "EVIDENCE - My knowledge base does not contain enough relevant information "
+            "to answer this question reliably. Retrieved {chunk_count} chunk(s) with a "
+            "top score of {top_score:.2f}, which is below the threshold required for a "
+            "confident answer.\n\n"
+            "ASSESSMENT - I cannot draw a reliable conclusion from the available evidence.\n\n"
+            "RECOMMENDATION - To get a useful answer, the knowledge base would need "
+            "content specifically covering this topic. Consider adding relevant "
+            "documents or verified Q&A pairs for this twin.\n\n"
+            "CONFIDENCE - INSUFFICIENT EVIDENCE"
+        ).format(
+            query=query_text,
+            chunk_count=len(context_data),
+            top_score=top_score if top_score else 0.0,
         ).strip()
 
     evidence_lines: List[str] = []
@@ -3117,9 +3132,11 @@ def _build_realizer_message(
         msg.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
     if state.get("persona_prompt_variant"):
         msg.additional_kwargs["persona_prompt_variant"] = state.get("persona_prompt_variant")
+    provider = (route_meta or {}).get("provider") or get_active_provider()
+    model = (route_meta or {}).get("model") or get_active_model()
+    msg.additional_kwargs["inference_provider"] = provider
+    msg.additional_kwargs["inference_model"] = model
     if route_meta:
-        msg.additional_kwargs["inference_provider"] = route_meta.get("provider")
-        msg.additional_kwargs["inference_model"] = route_meta.get("model")
         msg.additional_kwargs["inference_latency_ms"] = route_meta.get("latency_ms")
     return msg
 

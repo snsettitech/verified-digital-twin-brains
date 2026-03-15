@@ -38,6 +38,17 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-7-sonnet-latest")
 PROVIDER_TIMEOUT_SECONDS = float(os.getenv("INFERENCE_PROVIDER_TIMEOUT_SECONDS", "25"))
 
 
+def get_active_provider() -> str:
+    return os.getenv("INFERENCE_PROVIDER", "openai").lower()
+
+
+def get_active_model() -> str:
+    provider = get_active_provider()
+    if provider == "gemini":
+        return os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    return os.getenv("MODEL_CHAT") or os.getenv("OPENAI_MODEL", "gpt-4o")
+
+
 def _provider_available(provider: str) -> bool:
     if provider == "openai":
         return bool(os.getenv("OPENAI_API_KEY"))

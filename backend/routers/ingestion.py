@@ -578,9 +578,10 @@ async def ingest_text(
             "message": "This content has already been uploaded. Returning existing source.",
         }
 
-    source_id = request.source_id or f"manual-{uuid4()}"
+    internal_source_id = str(uuid4())
+    external_source_id = request.source_id or internal_source_id
     _insert_source_with_schema_fallback({
-        "id": source_id,
+        "id": internal_source_id,
         "twin_id": request.twin_id,
         "filename": f"{request.source_type or 'manual'}.txt",
         "file_size": len(content.encode("utf-8")),
@@ -592,22 +593,24 @@ async def ingest_text(
         "extracted_text_length": len(content),
     })
     _persist_source_metadata(
-        source_id,
+        internal_source_id,
         {
             **(request.metadata or {}),
+            "external_source_id": external_source_id,
             "source_type": request.source_type or "manual",
             "ingest_kind": "text",
         },
     )
     job_id = _queue_ingestion_job(
-        source_id=source_id,
+        source_id=internal_source_id,
         twin_id=request.twin_id,
         provider=request.source_type or "manual",
         url=None,
         correlation_id=None,
     )
     return {
-        "source_id": source_id,
+        "source_id": internal_source_id,
+        "external_source_id": external_source_id,
         "job_id": job_id,
         "status": "processing",
         "duplicate": False,
