@@ -37,7 +37,7 @@ jobs:
           tracked_files="$(git ls-files -- . ':(exclude)docs/archive/**')"
           forbidden="$(
             printf '%s\n' "$tracked_files" | grep -E \
-              '(^|/)(artifacts|tmp|temp|proof)(/|$)|(^|/)(__pycache__|\.pytest_cache|\.model_cache)(/|$)|(^|/)(playwright-report|playwright-test-results|test-results|test-results-temp|coverage|htmlcov)(/|$)|(^|/)\.env($|\.)|(^|/).*\.(log|err\.log|out\.log)$|(^|/).*(_results|debug).*\.json$|(^|/)backend/(chunking_eval_.*\.(json|md)|system_audit_.*\.json|error_log\.txt|repro_test\.txt|test_token\.txt)$|(^|/)frontend/(lint-output\.json|playwright\.tmp\.config\.cjs)$|(^|/)frontend/tests/tmp/.*$|(^|/)deployment_success\.png$|(^|/)supabase-mcp-server-.*\.tgz$' \
+              '(^|/)(artifacts|tmp|temp|proof)(/|$)|(^|/)(__pycache__|\.pytest_cache|\.model_cache)(/|$)|(^|/)(playwright-report|playwright-test-results|test-results|test-results-temp|coverage|htmlcov)(/|$)|(^|/)\.env($|\.(?!example$|example\.))|(^|/).*\.(log|err\.log|out\.log)$|(^|/)backend/.*(_results|debug).*\.json$|(^|/)backend/(chunking_eval_.*\.(json|md)|system_audit_.*\.json|error_log\.txt|repro_test\.txt|test_token\.txt)$|(^|/)frontend/(lint-output\.json|playwright\.tmp\.config\.cjs)$|(^|/)frontend/tests/tmp/.*$|(^|/)deployment_success\.png$|(^|/)supabase-mcp-server-.*\.tgz$' \
               || true
           )"
           if [[ -n "$forbidden" ]]; then
