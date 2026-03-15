@@ -633,7 +633,23 @@ async def _process_job_impl(job_id: str):
         all_claims = await claim_store.get_claims_for_twin(twin_id)
         
         bio_result = await generate_and_store_bios(twin_id, all_claims, supabase)
-        
+
+        # Publish short bio to twin's public profile settings
+        short_variant = bio_result.get("variants", {}).get("short")
+        if short_variant and short_variant.bio_text:
+            twin_row = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+            current_settings = (twin_row.data or {}).get("settings") or {}
+            current_public_profile = current_settings.get("public_profile") or {}
+            supabase.table("twins").update({
+                "settings": {
+                    **current_settings,
+                    "public_profile": {
+                        **current_public_profile,
+                        "bio": short_variant.bio_text,
+                    },
+                }
+            }).eq("id", twin_id).execute()
+
         # Update job with results
         supabase.table("link_compile_jobs").update({
             "status": "completed",
@@ -642,7 +658,7 @@ async def _process_job_impl(job_id: str):
             "result_claim_ids": extraction_result["claim_ids"],
             "result_bio_variants": {k: v.bio_text for k, v in bio_result.get("variants", {}).items()},
         }).eq("id", job_id).execute()
-        _set_twin_status(twin_id, "claims_ready")
+        _set_twin_status(twin_id, "persona_built")
         
         return {
             "job_id": job_id,
