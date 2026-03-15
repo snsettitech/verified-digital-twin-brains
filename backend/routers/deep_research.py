@@ -9,19 +9,25 @@ Endpoints:
 
 from __future__ import annotations
 
+import hashlib
 import logging
+import uuid as _uuid
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from modules.auth_guard import require_tenant
+from modules.auth_guard import require_tenant, verify_twin_ownership
+from modules.ingestion import process_and_index_text
 from modules.name_deep_research_service import (
     NameDeepResearchService,
     get_name_deep_research_service,
     is_name_only_deep_research_enabled,
 )
+from modules.observability import supabase
+from modules.persona_claim_extractor import ClaimCitation, ClaimStore, PersonaClaim
+from modules.persona_claim_inference import PersonaFromClaimsCompiler
 
 logger = logging.getLogger(__name__)
 
@@ -264,3 +270,186 @@ async def get_deep_research_result_json(
             "Content-Disposition": f'attachment; filename=\"deep-research-{run_id}.json\"'
         },
     )
+
+
+# -----------------------------------------------------------------------------
+# Deep Research → Twin Compilation
+# -----------------------------------------------------------------------------
+
+_DR_CLAIM_TYPE_MAP: Dict[str, str] = {
+    "credential": "belief",
+    "experience": "experience",
+    "role": "belief",
+    "preference": "preference",
+    "opinion": "belief",
+    "project": "experience",
+    "contact": "uncertain",
+    "other": "uncertain",
+}
+
+
+class CompileToTwinRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    twin_id: str = Field(..., min_length=1)
+
+
+@router.post("/deep-research/runs/{run_id}/compile-to-twin")
+async def compile_deep_research_to_twin(
+    run_id: str,
+    request: CompileToTwinRequest,
+    user: dict = Depends(require_tenant),
+    service: NameDeepResearchService = Depends(get_name_deep_research_service),
+) -> Dict[str, Any]:
+    """
+    Ingest a completed deep research run into the twin's knowledge base.
+
+    1. Builds a text document from the result and indexes it to Pinecone.
+    2. Maps structured claims directly to persona_claims (no LLM re-extraction).
+    3. Compiles persona from those claims.
+    4. Writes the bio from the deep research result to the twin's public profile.
+    5. Advances twin status to persona_built, which unlocks chat.
+    """
+    _check_feature_enabled()
+    twin_id = request.twin_id
+    tenant_id = user["tenant_id"]
+
+    run = await service.get_run(run_id=run_id, tenant_id=tenant_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": f"No run found for id={run_id}"},
+        )
+    if run.get("status") != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": f"Run not yet completed (status={run.get('status')})"},
+        )
+
+    verify_twin_ownership(twin_id, user)
+
+    result = await service.get_result(run_id=run_id, tenant_id=tenant_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "No result artifact found for this run"},
+        )
+
+    # ------------------------------------------------------------------
+    # 1. Build a natural-language text document for Pinecone indexing
+    # ------------------------------------------------------------------
+    lines: list[str] = []
+    bio = result.get("bio") or {}
+    if bio.get("medium"):
+        lines.append(bio["medium"])
+
+    profile_summary = result.get("profile_summary") or {}
+    if profile_summary.get("what_they_do"):
+        lines.append("What they do: " + "; ".join(profile_summary["what_they_do"]))
+    if profile_summary.get("public_roles"):
+        lines.append("Public roles: " + ", ".join(profile_summary["public_roles"]))
+    if profile_summary.get("organizations"):
+        lines.append("Organizations: " + ", ".join(profile_summary["organizations"]))
+
+    for item in result.get("timeline") or []:
+        if item.get("event"):
+            lines.append(f"{item.get('date_or_range', '')}: {item['event']}")
+
+    for claim in result.get("claims") or []:
+        if claim.get("text"):
+            lines.append(claim["text"])
+
+    for qa in result.get("prepared_question_answers") or []:
+        if qa.get("question") and qa.get("answer"):
+            lines.append(f"Q: {qa['question']}\nA: {qa['answer']}")
+
+    text_doc = "\n\n".join(lines).strip()
+    if not text_doc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "Deep research result contains no indexable content"},
+        )
+
+    # ------------------------------------------------------------------
+    # 2. Register source and index to Pinecone
+    # ------------------------------------------------------------------
+    input_name = (result.get("input") or {}).get("name", "Profile")
+    source_id = str(_uuid.uuid4())
+    supabase.table("sources").upsert({
+        "id": source_id,
+        "twin_id": twin_id,
+        "filename": f"Deep Research: {input_name}"[:240],
+        "file_size": len(text_doc),
+        "content_text": text_doc,
+        "status": "processing",
+    }).execute()
+
+    await process_and_index_text(
+        source_id=source_id,
+        twin_id=twin_id,
+        text=text_doc,
+        provider="deep_research",
+    )
+
+    supabase.table("sources").update({"status": "live"}).eq("id", source_id).execute()
+
+    # ------------------------------------------------------------------
+    # 3. Map deep research claims → PersonaClaim and store
+    # ------------------------------------------------------------------
+    claims_to_store: list[PersonaClaim] = []
+    for item in result.get("claims") or []:
+        text = (item.get("text") or "").strip()
+        if not text:
+            continue
+        content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        claims_to_store.append(PersonaClaim(
+            twin_id=twin_id,
+            claim_text=text,
+            claim_type=_DR_CLAIM_TYPE_MAP.get(item.get("claim_type", "other"), "uncertain"),
+            confidence=float(item.get("confidence", 0.7)),
+            authority="extracted",
+            citation=ClaimCitation(
+                source_id=source_id,
+                chunk_id=f"dr_{item.get('claim_id', '')}",
+                span_start=0,
+                span_end=len(text),
+                quote=text[:120],
+                content_hash=content_hash,
+            ),
+            extraction_version="dr-1.0",
+        ))
+
+    claim_store = ClaimStore(supabase)
+    await claim_store.save_claims(claims_to_store)
+
+    # ------------------------------------------------------------------
+    # 4. Compile persona from stored claims
+    # ------------------------------------------------------------------
+    compiler = PersonaFromClaimsCompiler(supabase)
+    await compiler.compile_persona(twin_id)
+
+    # ------------------------------------------------------------------
+    # 5. Publish bio from deep research result to twin's public profile
+    # ------------------------------------------------------------------
+    bio_text = bio.get("short") or bio.get("medium") or ""
+    if bio_text:
+        twin_row = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
+        current_settings = (twin_row.data or {}).get("settings") or {}
+        current_public_profile = current_settings.get("public_profile") or {}
+        supabase.table("twins").update({
+            "settings": {
+                **current_settings,
+                "public_profile": {**current_public_profile, "bio": bio_text},
+            }
+        }).eq("id", twin_id).execute()
+
+    # ------------------------------------------------------------------
+    # 6. Advance status to persona_built (unlocks chat gate)
+    # ------------------------------------------------------------------
+    supabase.table("twins").update({"status": "persona_built"}).eq("id", twin_id).execute()
+
+    return {
+        "status": "completed",
+        "twin_id": twin_id,
+        "claims_ingested": len(claims_to_store),
+        "bio_written": bool(bio_text),
+    }

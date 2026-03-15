@@ -128,26 +128,14 @@ function OnboardingContent() {
     // 2. Poll to completion
     await pollDeepResearch(runId);
 
-    // 3. Fetch result JSON
-    const resultRes = await authFetchStandalone(`/deep-research/runs/${runId}/result.json`);
-    if (!resultRes.ok) {
-      const payload = await resultRes.json().catch(() => ({}));
-      throw new Error(payload?.detail?.message ?? `Failed to fetch research result (${resultRes.status})`);
-    }
-    const resultJson = await resultRes.json();
-
-    // 4. Feed result into persona via Mode B
-    const modeBRes = await authFetchStandalone('/persona/link-compile/jobs/mode-b', {
+    // 3. Compile deep research result into twin (index to Pinecone, store claims, build persona, write bio)
+    const compileRes = await authFetchStandalone(`/deep-research/runs/${runId}/compile-to-twin`, {
       method: 'POST',
-      body: JSON.stringify({
-        twin_id: twinId,
-        content: JSON.stringify(resultJson),
-        title: `Deep Research: ${identity.displayName}`,
-      }),
+      body: JSON.stringify({ twin_id: twinId }),
     });
-    if (!modeBRes.ok) {
-      const payload = await modeBRes.json().catch(() => ({}));
-      throw new Error(payload?.detail?.message ?? `Failed to submit research content (${modeBRes.status})`);
+    if (!compileRes.ok) {
+      const payload = await compileRes.json().catch(() => ({}));
+      throw new Error(payload?.detail?.message ?? `Failed to compile research (${compileRes.status})`);
     }
   }, [pollDeepResearch]);
 
