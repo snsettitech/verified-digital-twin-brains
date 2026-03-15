@@ -41,13 +41,15 @@ class PineconeAdvisorClient:
             index_name: Pinecone index name (default: digital-twin-brain)
         """
         resolved_index_name = index_name or os.getenv("PINECONE_INDEX_NAME", "digital-twin-brain")
-        resolved_api_key = api_key or os.getenv("PINECONE_API_KEY")
-        if not resolved_api_key and os.getenv("PYTEST_CURRENT_TEST"):
-            resolved_api_key = "test"
-        if not resolved_api_key:
-            raise ValueError("PINECONE_API_KEY not found in environment")
 
-        self.pc = Pinecone(api_key=resolved_api_key)
+        if api_key:
+            # Explicit key provided (tests or multi-account) — create dedicated client
+            self.pc = Pinecone(api_key=api_key)
+        else:
+            # Use the shared singleton from clients.py to avoid duplicate connections
+            from modules.clients import get_pinecone_client
+            self.pc = get_pinecone_client()
+
         self.index = self.pc.Index(resolved_index_name)
         self.index_name = resolved_index_name
         
