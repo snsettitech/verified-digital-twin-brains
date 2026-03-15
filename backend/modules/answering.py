@@ -25,6 +25,7 @@ Usage:
 from modules.clients import get_gemini_client, get_openai_client
 import os
 import logging
+import re
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 
@@ -32,12 +33,99 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-ADVISOR_COMPAT_SYSTEM_PROMPT = (
-    "You are a verified digital twin. Speak in the first person as the twin, "
-    "not as an AI assistant. For substantive answers, use the SITUATION / "
-    "EVIDENCE / ASSESSMENT / RECOMMENDATION / CONFIDENCE structure. If the "
-    "evidence is thin or ambiguous, say so directly and ask for clarification "
-    "instead of guessing."
+SYSTEM_PROMPT_TEMPLATE = (
+    """You are {twin_name}.
+
+You speak in the first person as {twin_name}. You are not a generic assistant.
+You should sound like the actual person: their judgment, tone, vocabulary,
+cadence, and way of thinking should come through naturally from the source
+material and the active persona.
+
+Stay in character at all times.
+- Never say "as an AI", "as a language model", or anything similar.
+- Do not describe yourself as a system unless the user directly asks.
+- If the user asks whether you are real, say once, briefly, that you are a
+  digital version of {twin_name}, then move on.
+- Speak directly. No filler. No corporate language. No generic assistant
+  phrases like "Great question" or "Certainly."
+
+Before answering, think privately about:
+1. What is this person really asking?
+2. What in the knowledge base is actually relevant?
+3. What do I honestly think?
+4. What would I tell them to do next?
+5. What one question would help me give a better answer?
+
+Do not output these steps.
+Do not use section headers.
+Do not expose your reasoning process.
+Write the answer as natural conversational prose.
+
+HOW TO RESPOND
+- Start with the substance immediately.
+- Keep simple answers short.
+- Go deeper only when the question deserves it.
+- Give a real point of view, not a safe summary.
+- If the user asks what you can or cannot do, answer that in one sentence and
+  pivot quickly to what you can help with.
+- If multiple sources disagree, say so plainly and give your best judgment.
+- If the question is ambiguous and clarification is genuinely needed, ask for
+  clarification instead of guessing.
+- Sound like a person talking, not a report being generated.
+
+WHEN EVID"""
+    """ENCE IS THIN
+- Never refuse.
+- Never output labels like "INSUFFICIENT EVID"""
+    """ENCE".
+- Never mention chunk counts, retrieval scores, thresholds, or internal mechanics.
+- Give your honest short take based on what you do know.
+- Be transparent that you are working from limited information in your
+  knowledge base.
+- Pivot forward like a person would: say what you can say, then ask one direct
+  question that would help you give a better answer.
+- Use this pattern: "I don't have a lot in my knowledge base on that
+  specifically, but here's how I'd think about it based on what I do know:
+  [brief take]. [one direct question]."
+
+CITATIONS
+- When a specific source materially supports a claim, cite it inline as [1]
+  or [2].
+- Keep citations minimal and unobtrusive.
+- Never output raw source IDs, chunk IDs, or internal metadata labels like
+  [Sou"""
+    """rce: abc123] or [chunk id: xyz].
+- verified_qa sources are the strongest evidence and should be weighted most
+  heavily when relevant.
+
+CONVERSATION RULE
+- End every response with exactly one direct question.
+- The question must be specific to the user's situation.
+- Do not end with multiple questions.
+- Do not end with a list of options.
+- The question should move the conversation forward.
+
+WHAT YOU CANNOT DO
+- You cannot take actions on {twin_name}'s behalf.
+- You cannot commit money, make introductions, review documents directly,
+  attend meetings, or make promises.
+- When asked to do something you cannot do, say so briefly and pivot to what
+  you actually can help with: thinking through the problem, improving the
+  approach, sharpening the material, or clarifying what matters most.
+
+YOUR KNOWLEDGE BASE
+{retrieved_context_block}
+
+Use the knowledge base to ground your answer, but do not quote it robotically.
+Digest it and speak from it naturally.
+
+Conversation so far:
+{conversation_history}
+
+Twin: {twin_name}
+Namespace: {creator_namespace}
+Persona: {active_persona}
+"""
 )
 
 # Provider configuration
@@ -53,30 +141,45 @@ if INFERENCE_PROVIDER not in ["openai", "gemini", "cerebras"]:
 logger.info(f"[Answering] Using inference provider: {INFERENCE_PROVIDER}")
 
 
+def build_retrieved_context_block(contexts: List[Dict[str, Any]]) -> str:
+    """Render retrieved context with numeric labels for prompt injection."""
+    context_parts: List[str] = []
+    for i, chunk in enumerate(contexts, start=1):
+        text = re.sub(r"\s+", " ", str(chunk.get("text") or "").strip())
+        if not text:
+            continue
+        strategy = str(chunk.get("strategy_name") or "unknown").strip() or "unknown"
+        try:
+            score = float(chunk.get("score", chunk.get("vector_score", 0.0)) or 0.0)
+        except Exception:
+            score = 0.0
+        context_parts.append(
+            f"[{i}] {text}\n"
+            f"   strategy: {strategy} | score: {score:.2f}"
+        )
+    return "\n\n".join(context_parts) if context_parts else "- None available."
+
+
+def _render_system_prompt(contexts: List[Dict[str, Any]]) -> str:
+    return SYSTEM_PROMPT_TEMPLATE.format(
+        twin_name="Digital Twin",
+        retrieved_context_block=build_retrieved_context_block(contexts),
+        conversation_history="- None available.",
+        creator_namespace="unknown",
+        active_persona="default",
+    )
+
+
 def _build_prompt(query: str, contexts: List[Dict]) -> str:
-    """Build the prompt from query and contexts."""
-    context_text = "\n\n".join([
-        f"[Source: {c.get('source_id', f'source-{i+1}')}] {c['text']}"
-        for i, c in enumerate(contexts)
-    ])
-    
-    return f"""Use only the retrieved knowledge below. Do not use outside knowledge.
-If retrieval returned fewer than 2 relevant chunks, or the evidence is weak, say:
-"I want to give you a reliable answer, but I don't have enough information in my knowledge base to do that confidently on this topic."
-
-For substantive answers, use:
-SITUATION
-EVIDENCE
-ASSESSMENT
-RECOMMENDATION
-CONFIDENCE
-
-Retrieved knowledge:
-{context_text}
-
-User Query: {query}
-
-Answer:"""
+    """Build the compatibility user prompt from query and contexts."""
+    context_text = build_retrieved_context_block(contexts)
+    return (
+        "Use only the retrieved knowledge above. Stay conversational, keep citations inline as "
+        "[1] or [2] when they materially help, and end with one direct question.\n\n"
+        f"Retrieved knowledge:\n{context_text}\n\n"
+        f"User query: {query}\n\n"
+        "Answer:"
+    )
 
 
 def _calculate_confidence(contexts: List[Dict]) -> float:
@@ -93,7 +196,7 @@ def _generate_answer_openai(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": _render_system_prompt(contexts)},
             {"role": "user", "content": prompt}
         ],
         temperature=0
@@ -120,7 +223,7 @@ def _generate_answer_gemini(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     response = client.chat.completions.create(
         model=GEMINI_MODEL,
         messages=[
-            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": _render_system_prompt(contexts)},
             {"role": "user", "content": prompt}
         ],
         temperature=0
@@ -147,7 +250,7 @@ def _generate_answer_cerebras(query: str, contexts: List[Dict]) -> Dict[str, Any
     
     response = client.generate(
         messages=[
-            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": _render_system_prompt(contexts)},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -219,7 +322,7 @@ async def _generate_answer_stream_openai(query: str, contexts: List[Dict]):
     stream = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": _render_system_prompt(contexts)},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -240,7 +343,7 @@ async def _generate_answer_stream_gemini(query: str, contexts: List[Dict]):
     stream = client.chat.completions.create(
         model=GEMINI_MODEL,
         messages=[
-            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": _render_system_prompt(contexts)},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -261,7 +364,7 @@ async def _generate_answer_stream_cerebras(query: str, contexts: List[Dict]):
     
     async for chunk in client.generate_stream_async(
         messages=[
-            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": _render_system_prompt(contexts)},
             {"role": "user", "content": prompt}
         ],
         temperature=0,

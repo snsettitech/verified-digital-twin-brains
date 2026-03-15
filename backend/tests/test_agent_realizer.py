@@ -26,7 +26,9 @@ async def test_realizer_returns_generated_text_without_shadowing_ai_message():
         result = await realizer_node(state)
 
     assert "messages" in result
-    assert result["messages"][0].content == "Hello from twin."
+    assert result["messages"][0].content == (
+        "Hello from twin. What aspect of this would be most useful to go deeper on?"
+    )
     assert result["messages"][0].additional_kwargs["dialogue_mode"] == "QA_FACT"
     assert result["messages"][0].additional_kwargs["intent_label"] == "test_intent"
     assert result["messages"][0].additional_kwargs["render_strategy"] == "conversational_realizer"
@@ -50,7 +52,9 @@ async def test_realizer_fallback_message_on_invoke_failure():
         result = await realizer_node(state)
 
     assert "messages" in result
-    assert result["messages"][0].content == "Fallback answer point."
+    assert result["messages"][0].content == (
+        "Fallback answer point. What aspect of this would be most useful to go deeper on?"
+    )
     assert result["messages"][0].additional_kwargs["render_strategy"] == "source_faithful"
     assert result["confidence_score"] == pytest.approx(0.41)
 
