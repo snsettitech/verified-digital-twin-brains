@@ -588,11 +588,34 @@ async def _run_identity_gate_passthrough(
     )
     gate_decision = str(gate.get("decision") or "").upper()
     gate_reason = str(gate.get("reason") or "").lower()
+    normalized_query = f" {re.sub(r'\\s+', ' ', str(query or '').lower()).strip()} "
+    ambiguous_markers = (
+        " the decision ",
+        " the project ",
+        " this ",
+        " that ",
+        " these ",
+        " those ",
+        " it ",
+        " they ",
+        " them ",
+    )
+    owner_specific_markers = (
+        " my ",
+        " our ",
+        " we ",
+        " me ",
+        " us ",
+    )
     if (
         allow_clarify
         and gate_decision != "CLARIFY"
         and gate_reason in {"auto_approve_mode_owner", "clarification_disabled"}
         and not (gate.get("owner_memory") or [])
+        and (
+            any(marker in normalized_query for marker in ambiguous_markers)
+            or any(marker in normalized_query for marker in owner_specific_markers)
+        )
     ):
         clarification = build_clarification(
             query,
