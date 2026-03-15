@@ -497,25 +497,24 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
                     persona_spec = bootstrap_persona_from_onboarding(onboarding_data)
                     
                     # Store in persona_specs table as ACTIVE
-                    persona_record = create_persona_spec_v2(
+                    persona_record = await create_persona_spec_v2(
                         twin_id=twin_id,
                         tenant_id=tenant_id,
                         created_by=user_id,
-                        spec=persona_spec.model_dump(mode="json"),
+                        spec=persona_spec,
                         status="active",  # Auto-publish
                         source="onboarding_v2",
-                        metadata={
-                            "onboarding_version": "2.0",
-                            "specialization": request.specialization,
-                            "auto_published": True,
-                        }
+                        notes=(
+                            f"onboarding_version=2.0; specialization={request.specialization}; "
+                            "auto_published=true"
+                        ),
                     )
                     
-                    print(f"[TWINS] 5-Layer Persona Spec v2 created and activated: {persona_record.get('id')}")
+                    print(f"[TWINS] 5-Layer Persona Spec v2 created and activated: {(persona_record or {}).get('id')}")
                     
                     # Add persona info to twin response
                     twin["persona_v2"] = {
-                        "id": persona_record.get("id"),
+                        "id": (persona_record or {}).get("id"),
                         "version": "2.0.0",
                         "status": "active",
                         "auto_created": True,

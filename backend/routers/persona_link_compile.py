@@ -1051,17 +1051,17 @@ async def activate_twin(
     
     # Create active persona spec
     try:
-        persona_record = create_persona_spec_v2(
+        persona_record = await create_persona_spec_v2(
             twin_id=twin_id,
             tenant_id=twin.get("tenant_id"),
             created_by=user.get("user_id"),
             spec=persona_spec,
             status="active",
             source="link-compile",
-            metadata={
-                "compiled_from_job": job["id"],
-                "activation_time": datetime.utcnow().isoformat(),
-            }
+            notes=(
+                f"compiled_from_job={job['id']}; "
+                f"activation_time={datetime.utcnow().isoformat()}"
+            ),
         )
     except Exception as e:
         print(f"[Activate] Warning: Failed to create persona spec: {e}")

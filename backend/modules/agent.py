@@ -16,6 +16,7 @@ from modules.persona_compiler import (
     render_prompt_plan_with_options,
 )
 from modules.persona_intents import classify_query_intent
+from modules.identity_gate import classify_query
 from modules.persona_module_store import list_runtime_modules_for_intent
 from modules.persona_prompt_variant_store import (
     DEFAULT_PERSONA_PROMPT_VARIANT,
@@ -289,6 +290,165 @@ class TwinState(TypedDict):
     persona_v2_overall_score: Optional[float]
     persona_v2_reasoning_steps: Optional[List[str]]
     persona_v2_values_prioritized: Optional[List[str]]
+
+
+DELPHI_ADVISOR_PROMPT_TEMPLATE = """You are {twin_name}, a verified digital twin. You speak in the first person
+as if you are the real person whose knowledge, experience, and perspective
+has been encoded into this system. You do not refer to yourself as an AI,
+a model, or an assistant. You are the twin.
+
+Your role is to function as a trusted personal advisor - the kind of
+advisor who gives calibrated, evidence-grounded, honest assessments.
+You reason like a seasoned expert who has seen many situations, not like
+a generic assistant trying to be helpful. You say "I don't know" when you
+don't know. You say "the evidence is thin" when it is. You give your
+actual view when asked, with the reasoning behind it.
+
+RESPONSE STRUCTURE
+------------------
+Every substantive answer must follow this structure. Do not skip sections.
+Do not merge them. Do not add decorative headers or bullet points unless
+the content is genuinely list-like.
+
+1. SITUATION - One or two sentences restating the question in your own
+   words to confirm you understood it correctly. Be specific. If the
+   question is ambiguous, state your interpretation.
+
+2. EVIDENCE - What the knowledge base actually says about this topic.
+   Cite specific sources by name using [Source: <source_id>] notation.
+   Do not paraphrase loosely. Represent the source accurately.
+   If multiple sources agree, say so. If they conflict, say so and
+   explain why they might conflict.
+
+3. ASSESSMENT - Your synthesis of the evidence. This is where you reason.
+   Connect the evidence to the question. Draw conclusions that the evidence
+   supports. Be explicit about what the evidence does and does not support.
+
+4. RECOMMENDATION - What you would do or advise, based on the assessment.
+   Be direct. "Based on this, I would..." not "You might want to consider..."
+   If you cannot make a recommendation because evidence is insufficient,
+   say that explicitly. Do not manufacture a recommendation.
+
+5. CONFIDENCE - A single sentence stating your confidence in this answer
+   and the main reason for that confidence level. Use one of these:
+     HIGH CONFIDENCE - multiple sources align, evidence is specific
+     MODERATE CONFIDENCE - sources partially cover the question, some
+                           inference required
+     LOW CONFIDENCE - limited sources, significant inference required
+     INSUFFICIENT EVIDENCE - the knowledge base does not cover this topic
+                             reliably enough to answer
+
+WHEN EVIDENCE IS THIN
+---------------------
+If retrieval returned fewer than 2 relevant chunks, or the highest
+retrieval score is below 0.65, respond as follows:
+
+"I want to give you a reliable answer, but I don't have enough information
+in my knowledge base to do that confidently on this topic. Here is what I
+can tell you based on what I do have: [brief summary of any partial
+evidence]. For a fully reliable answer, you would need [describe what
+additional information would help]."
+
+Do not fabricate evidence. Do not hallucinate sources. Do not fill gaps
+with general knowledge unless you explicitly flag it as general knowledge
+rather than evidence from the knowledge base.
+
+WHEN THE QUESTION IS AMBIGUOUS
+------------------------------
+If the question could mean more than one thing, ask for clarification
+before answering. Do not guess at the meaning and answer confidently.
+State which interpretations you see and ask which one the person meant.
+
+Example: "I want to make sure I answer the right question. Are you asking
+about X or about Y? Once I know which direction you mean, I can give you
+a more useful answer."
+
+TONE AND STYLE
+--------------
+- Speak as the person, not about the person.
+- Be direct. Avoid hedging language like "it might be the case that" or
+  "you could perhaps consider". Say what you think.
+- Be honest about uncertainty. Calibrated honesty builds more trust than
+  confident-sounding vagueness.
+- Do not use corporate language, buzzwords, or filler phrases.
+- Do not start responses with "Great question!" or "Certainly!" or any
+  acknowledgement phrase. Start directly with the substance.
+- Keep responses concise. Long responses are only appropriate for complex
+  multi-part questions. For simple questions, answer simply.
+- Use the SITUATION / EVIDENCE / ASSESSMENT / RECOMMENDATION / CONFIDENCE
+  structure for substantive questions. For simple conversational exchanges,
+  respond naturally without the structure.
+
+WHAT YOU MUST NEVER DO
+----------------------
+- Never claim to know something your knowledge base does not contain.
+- Never fabricate a source citation.
+- Never answer confidently when confidence is not warranted.
+- Never suppress a clarification request by guessing at intent.
+- Never refer to yourself as an AI, language model, or assistant.
+- Never say "As an AI, I cannot..." - you are the twin, not a model.
+
+CONTEXT AVAILABLE TO YOU
+------------------------
+You have been provided with the following retrieved knowledge:
+
+{retrieved_context_block}
+
+Current conversation history:
+{conversation_history}
+
+Twin metadata:
+  Name: {twin_name}
+  Creator namespace: {creator_namespace}
+  Active persona: {active_persona}"""
+
+
+def _format_prompt_history(messages: List[BaseMessage], max_turns: int = 5) -> str:
+    history = _extract_conversation_history(messages, max_turns=max_turns)
+    if not history:
+        return "- None available."
+    rendered: List[str] = []
+    for item in history:
+        role = str(item.get("role") or "user").strip().lower() or "user"
+        content = re.sub(r"\s+", " ", str(item.get("content") or "").strip())
+        if content:
+            rendered.append(f"{role}: {content}")
+    return "\n".join(rendered) if rendered else "- None available."
+
+
+def _resolve_creator_namespace_label(twin_id: str) -> str:
+    try:
+        from modules.delphi_namespace import get_primary_namespace_for_twin
+
+        return get_primary_namespace_for_twin(twin_id)
+    except Exception:
+        return str(twin_id or "unknown")
+
+
+def _build_delphi_system_prompt(
+    *,
+    twin_name: str,
+    creator_namespace: str,
+    active_persona: str,
+    retrieved_context_block: str,
+    conversation_history: str,
+    additional_context_blocks: Optional[List[str]] = None,
+) -> str:
+    prompt = DELPHI_ADVISOR_PROMPT_TEMPLATE.format(
+        twin_name=twin_name,
+        creator_namespace=creator_namespace,
+        active_persona=active_persona,
+        retrieved_context_block=retrieved_context_block or "- None available.",
+        conversation_history=conversation_history or "- None available.",
+    )
+    extras = [
+        block.strip()
+        for block in (additional_context_blocks or [])
+        if isinstance(block, str) and block.strip()
+    ]
+    if extras:
+        prompt += "\n\nADDITIONAL TWIN CONTEXT\n-----------------------\n" + "\n\n".join(extras)
+    return prompt
     persona_v2_value_conflicts: Optional[List[Dict[str, Any]]]
     persona_v2_heuristics_applied: Optional[List[str]]
     persona_v2_memory_anchors: Optional[List[str]]
@@ -434,29 +594,31 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
         if intent_lines:
             intent_block = "INTENT PROFILE:\n" + "\n".join(intent_lines) + "\n"
 
-    prompt = f"""You are the AI Digital Twin of the owner (ID: {twin_id}).
-YOUR PRINCIPLES (Immutable):
-- Use first-person ("I", "my").
-- Owner-specific factual claims MUST be supported by retrieved context.
-- If context is missing for owner-specific claims, say you don't know.
-- For greetings/general coaching without owner-specific claims, stay conversational and helpful.
-- Be concise by default.
-- PUBLIC INTRO and INTENT PROFILE are owner-provided facts and may be used for self-description.
-
-{custom_instructions_block}
-{public_intro_block}
-{intent_block}
-{persona_section}
-
-{final_graph_context}
-
-{owner_memory_block}
-
-AGENTIC RAG OPERATING PROCEDURES:
-1. Use `search_knowledge_base` to find specific facts or beliefs.
-2. If multiple searches are needed for global reasoning (e.g. "What are my principles?"), perform them.
-3. If you find contradictions, acknowledge them.
-"""
+    twin_name = str(full_settings.get("name") or "Digital Twin").strip() or "Digital Twin"
+    prompt = _build_delphi_system_prompt(
+        twin_name=twin_name,
+        creator_namespace=_resolve_creator_namespace_label(twin_id),
+        active_persona=str(
+            persona_trace.get("persona_prompt_variant")
+            or persona_trace.get("persona_spec_version")
+            or DEFAULT_PERSONA_PROMPT_VARIANT
+        ).strip(),
+        retrieved_context_block="\n\n".join(
+            [
+                block.strip()
+                for block in [final_graph_context, owner_memory_block]
+                if isinstance(block, str) and block.strip()
+            ]
+        )
+        or "- None available.",
+        conversation_history=_format_prompt_history(messages, max_turns=5),
+        additional_context_blocks=[
+            custom_instructions_block,
+            public_intro_block,
+            intent_block,
+            persona_section,
+        ],
+    )
     return prompt, persona_trace
 
 
@@ -1179,6 +1341,7 @@ async def router_node(state: TwinState):
     execution_lane = bool(deepagents_plan.get("is_action_or_control"))
     dialogue_mode = "SMALLTALK" if is_smalltalk else "QA_FACT"
     requires_evidence = bool(query_policy.get("requires_evidence")) and not execution_lane
+    target_owner_scope = bool(classify_query(effective_query).get("requires_owner"))
     
     # STEP 3: Resolve pronouns (use effective query)
     resolved_query = _resolve_twin_pronoun_query(effective_query) if requires_evidence else ""
@@ -1195,7 +1358,7 @@ async def router_node(state: TwinState):
         mode=dialogue_mode,
         intent_label=intent_label,
         interaction_context=interaction_context,
-        target_owner_scope=False,
+        target_owner_scope=target_owner_scope,
         requires_evidence=requires_evidence,
         knowledge_available=knowledge_available,
         pinned_context=None,
@@ -1217,7 +1380,7 @@ async def router_node(state: TwinState):
         "router_mode": dialogue_mode,
         "router_intent_label": intent_label,
         "router_requires_evidence": bool(requires_evidence),
-        "router_target_owner_scope": False,
+        "router_target_owner_scope": bool(target_owner_scope),
         "router_interaction_context": interaction_context,
         "router_knowledge_available": bool(knowledge_available),
         "router_reason": (router_reason or "")[:500],
@@ -1251,7 +1414,7 @@ async def router_node(state: TwinState):
     return {
         "dialogue_mode": dialogue_mode,
         "intent_label": intent_label,
-        "target_owner_scope": False,
+        "target_owner_scope": target_owner_scope,
         "requires_evidence": requires_evidence,
         "sub_queries": [resolved_query] if requires_evidence and isinstance(resolved_query, str) and resolved_query.strip() else [],
         "router_reason": router_reason,
@@ -2030,6 +2193,24 @@ def _should_use_conversational_realizer(
     quote_intent: bool,
     strict_grounding: bool,
 ) -> bool:
+    context_data = [
+        row
+        for row in ((state.get("retrieved_context") or {}).get("results") or [])
+        if isinstance(row, dict)
+    ]
+    top_score = max(
+        (float(row.get("score", row.get("vector_score", 0.0)) or 0.0) for row in context_data),
+        default=0.0,
+    )
+    latest_query = next(
+        (m.content for m in reversed(state.get("messages") or []) if isinstance(m, HumanMessage)),
+        "",
+    )
+    owner_directed = bool(state.get("target_owner_scope"))
+    if not owner_directed and latest_query:
+        owner_directed = bool(classify_query(latest_query).get("requires_owner"))
+    namespace_resolved = any(str(row.get("namespace") or "").strip() for row in context_data)
+
     if not CONVERSATIONAL_REALIZER_ENABLED:
         return False
     if str(state.get("interaction_context") or "").strip().lower() != "owner_chat":
@@ -2042,6 +2223,14 @@ def _should_use_conversational_realizer(
         return False
     if quote_intent or strict_grounding:
         return False
+    if len(context_data) < 2:
+        return False
+    if top_score <= 0.72:
+        return False
+    if not owner_directed:
+        return False
+    if not namespace_resolved:
+        return False
     action = ""
     if isinstance(state.get("routing_decision"), dict):
         action = str((state.get("routing_decision") or {}).get("action") or "").strip().lower()
@@ -2051,6 +2240,7 @@ def _should_use_conversational_realizer(
 def _build_source_faithful_response_text(
     plan: Optional[Dict[str, Any]],
     *,
+    state: TwinState,
     fallback_text: str,
 ) -> str:
     points = []
@@ -2059,13 +2249,84 @@ def _build_source_faithful_response_text(
             points.append(p.strip())
 
     follow_up = (plan.get("follow_up_question") if isinstance(plan, dict) else None) or ""
-    response_lines: List[str] = []
-    response_lines.extend(points[:3])
-    if isinstance(follow_up, str) and follow_up.strip():
-        response_lines.append(follow_up.strip())
+    context_data = [
+        row
+        for row in ((state.get("retrieved_context") or {}).get("results") or [])
+        if isinstance(row, dict)
+    ]
+    latest_query = next(
+        (m.content for m in reversed(state.get("messages") or []) if isinstance(m, HumanMessage)),
+        "",
+    ).strip()
+    top_score = max(
+        (float(row.get("score", row.get("vector_score", 0.0)) or 0.0) for row in context_data),
+        default=0.0,
+    )
+    citations = [
+        str(source_id).strip()
+        for source_id in (plan.get("citations", []) if isinstance(plan, dict) else [])
+        if str(source_id).strip()
+    ]
 
-    realized_text = "\n".join(response_lines).strip()
-    return realized_text or fallback_text
+    response_lines: List[str] = []
+    if not bool(state.get("requires_evidence", False)):
+        response_lines.extend(points[:3])
+        if isinstance(follow_up, str) and follow_up.strip():
+            response_lines.append(follow_up.strip())
+        realized_text = "\n".join(response_lines).strip()
+        return realized_text or fallback_text
+
+    partial_summary = " ".join(points[:2]).strip() or fallback_text
+    if len(context_data) < 2 or top_score < 0.65:
+        return (
+            "I want to give you a reliable answer, but I don't have enough information "
+            "in my knowledge base to do that confidently on this topic. Here is what I "
+            f"can tell you based on what I do have: {partial_summary} "
+            "For a fully reliable answer, you would need more directly relevant verified "
+            "material in the knowledge base."
+        ).strip()
+
+    evidence_lines: List[str] = []
+    used_ids = set(citations[:3])
+    for row in context_data[:5]:
+        source_id = str(row.get("source_id") or "").strip()
+        if citations and source_id not in used_ids:
+            continue
+        snippet = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
+        if not source_id or not snippet:
+            continue
+        evidence_lines.append(f"[Source: {source_id}] {snippet[:260]}")
+        if len(evidence_lines) >= 3:
+            break
+    if not evidence_lines:
+        for row in context_data[:3]:
+            source_id = str(row.get("source_id") or "").strip() or "unknown"
+            snippet = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
+            if snippet:
+                evidence_lines.append(f"[Source: {source_id}] {snippet[:260]}")
+
+    if top_score >= 0.85 and len(context_data) >= 2:
+        confidence_line = "HIGH CONFIDENCE - multiple sources align, and the evidence is specific."
+    elif top_score >= 0.72 and len(context_data) >= 2:
+        confidence_line = "MODERATE CONFIDENCE - the sources cover the question, though some inference was required."
+    else:
+        confidence_line = "LOW CONFIDENCE - the available sources are limited, and significant inference was required."
+
+    assessment = " ".join(points[:3]).strip() or fallback_text
+    recommendation = (
+        follow_up.strip()
+        if isinstance(follow_up, str) and follow_up.strip()
+        else "Based on this, I would stay close to the evidence above and avoid stronger claims than the sources support."
+    )
+    situation = latest_query or "You asked a substantive question about the current topic."
+
+    return (
+        f"SITUATION\n{situation}\n\n"
+        f"EVIDENCE\n" + ("\n".join(evidence_lines) if evidence_lines else fallback_text) + "\n\n"
+        f"ASSESSMENT\n{assessment}\n\n"
+        f"RECOMMENDATION\n{recommendation}\n\n"
+        f"CONFIDENCE\n{confidence_line}"
+    ).strip()
 
 
 def _classify_grounding_policy(
@@ -2661,7 +2922,8 @@ async def planner_node(state: TwinState):
             ],
         }
 
-    planner_prompt = f"""
+    planner_prompt = f"""{_system_msg}
+
 You are a grounded answer composer.
 Use only the provided evidence. Do not use outside knowledge.
 
@@ -2870,8 +3132,14 @@ async def realizer_node(state: TwinState):
     render_strategy = str(plan.get("render_strategy", "")).strip().lower() if isinstance(plan, dict) else ""
     confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
     citations = plan.get("citations", []) if isinstance(plan, dict) else []
+    context_data = [
+        row
+        for row in ((state.get("retrieved_context") or {}).get("results") or [])
+        if isinstance(row, dict)
+    ]
     deterministic_text = _build_source_faithful_response_text(
         plan if isinstance(plan, dict) else {},
+        state=state,
         fallback_text=UNCERTAINTY_RESPONSE,
     )
 
@@ -2898,19 +3166,40 @@ async def realizer_node(state: TwinState):
             ],
         }
     
-    realizer_prompt = f"""You are the Voice Realizer for a Digital Twin. 
-    Take the structured plan and rewrite it into a short, natural, conversational response.
-    
-    PLAN:
-    {json.dumps(plan, indent=2)}
-    
-    CONSTRAINTS:
-    - 1 to 3 sentences total.
-    - Sound like a real person, not a bot.
-    - Include follow-up question ONLY if `follow_up_question` is non-empty and needed.
-    - If teaching: explain briefly that you need their input to be certain.
-    - NO FAKE SOURCES. Use citations provided in the plan if any.
-    """
+    realizer_prompt = f"""{_build_delphi_system_prompt(
+        twin_name=str((state.get("full_settings") or {}).get("name") or "Digital Twin").strip() or "Digital Twin",
+        creator_namespace=_resolve_creator_namespace_label(str(state.get("twin_id") or "")),
+        active_persona=str(
+            state.get("persona_prompt_variant")
+            or state.get("persona_spec_version")
+            or DEFAULT_PERSONA_PROMPT_VARIANT
+        ).strip(),
+        retrieved_context_block="\n\n".join(
+            [
+                f"[Source: {row.get('source_id', 'unknown')}] "
+                + re.sub(r"\\s+", " ", str(row.get("text") or "").strip())[:400]
+                for row in context_data[:5]
+                if str(row.get("text") or "").strip()
+            ]
+        )
+        or "- None available.",
+        conversation_history=_format_prompt_history(
+            [m for m in (state.get("messages") or []) if isinstance(m, BaseMessage)],
+            max_turns=5,
+        ),
+        additional_context_blocks=[],
+    )}
+
+Take the structured plan below and rewrite it into the final answer.
+
+PLAN:
+{json.dumps(plan, indent=2)}
+
+CONSTRAINTS:
+- Keep explicit section headers for substantive answers.
+- Do not fabricate sources or certainty.
+- If the evidence is thin, preserve that limitation plainly.
+"""
     
     try:
         realized_text, route_meta = await invoke_text(

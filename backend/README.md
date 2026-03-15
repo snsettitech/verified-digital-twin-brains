@@ -6,9 +6,9 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
 - **FastAPI**: REST API framework.
 - **Pinecone**: Vector database for knowledge retrieval (vector + integrated modes).
 - **OpenAI**: Embeddings (`text-embedding-3-large`) plus primary JSON/text inference (`gpt-4o`, `gpt-4o-mini`).
-- **Gemini**: Optional text-generation provider for conversational realizer flows (`gemini-2.5-flash`).
+- **Gemini**: Optional text-generation provider for conversational realizer flows (`gemini-2.0-flash`).
 - **Supabase**: PostgreSQL for relational data and Auth.
-- **Deep Research**: Core deep-research routes are always registered; only the name-only JSON flow is gated by `NAME_ONLY_DEEP_RESEARCH_ENABLED`.
+- **Deep Research**: Core deep-research routes are gated by `DEEP_RESEARCH_ENABLED`; the name-only JSON flow is further gated by `NAME_ONLY_DEEP_RESEARCH_ENABLED`.
 
 ## Project Structure
 - `main.py`: Entry point and API route definitions.
@@ -75,16 +75,22 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    INFERENCE_PROVIDER=openai
    OPENAI_MODEL=gpt-4o
    OPENAI_JSON_MODEL=gpt-4o-mini
-   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_MODEL=gemini-2.0-flash
    GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
    CONVERSATIONAL_REALIZER_ENABLED=false
+   QUERY_REWRITE_ENABLED=true
+   QUERY_REWRITING_ENABLED=true
+   RUNTIME_CONFIDENCE_GATE_ENABLED=false
    GOOGLE_API_KEY=...
+   RETRIEVAL_HYDE_ENABLED=true
+   DEEP_RESEARCH_ENABLED=false
 
    # Reranking
    ENABLE_FLASHRANK=true
    ENABLE_COHERE_RERANK=true
    COHERE_RERANK_MODEL=rerank-v3.5
    COHERE_API_KEY=...
+   COHERE_RERANK_STRICT=false
    ```
 
 ### Pinecone Index Modes

@@ -32,11 +32,19 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+DELPHI_COMPAT_SYSTEM_PROMPT = (
+    "You are a verified digital twin. Speak in the first person as the twin, "
+    "not as an AI assistant. For substantive answers, use the SITUATION / "
+    "EVIDENCE / ASSESSMENT / RECOMMENDATION / CONFIDENCE structure. If the "
+    "evidence is thin or ambiguous, say so directly and ask for clarification "
+    "instead of guessing."
+)
+
 # Provider configuration
 INFERENCE_PROVIDER = os.getenv("INFERENCE_PROVIDER", "openai").lower()
 INFERENCE_FALLBACK_ENABLED = os.getenv("INFERENCE_FALLBACK_ENABLED", "true").lower() == "true"
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
 if INFERENCE_PROVIDER not in ["openai", "gemini", "cerebras"]:
     logger.warning(f"[Answering] Unknown provider '{INFERENCE_PROVIDER}', using 'openai'")
@@ -48,16 +56,22 @@ logger.info(f"[Answering] Using inference provider: {INFERENCE_PROVIDER}")
 def _build_prompt(query: str, contexts: List[Dict]) -> str:
     """Build the prompt from query and contexts."""
     context_text = "\n\n".join([
-        f"Source {i+1}: {c['text']}" 
+        f"[Source: {c.get('source_id', f'source-{i+1}')}] {c['text']}"
         for i, c in enumerate(contexts)
     ])
     
-    return f"""You are a Verified Digital Twin Brain. Your goal is to provide accurate answers based ONLY on the provided context.
-If the answer is not in the context, say "I don't have enough information to answer this based on my knowledge base."
+    return f"""Use only the retrieved knowledge below. Do not use outside knowledge.
+If retrieval returned fewer than 2 relevant chunks, or the evidence is weak, say:
+"I want to give you a reliable answer, but I don't have enough information in my knowledge base to do that confidently on this topic."
 
-Always provide citations in the format [Source N] where N is the number of the source.
+For substantive answers, use:
+SITUATION
+EVIDENCE
+ASSESSMENT
+RECOMMENDATION
+CONFIDENCE
 
-Context:
+Retrieved knowledge:
 {context_text}
 
 User Query: {query}
@@ -75,10 +89,11 @@ def _generate_answer_openai(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     client = get_openai_client()
     prompt = _build_prompt(query, contexts)
     
+    # Intentional legacy bypass: this compatibility surface is kept for older tests/callers.
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful and accurate digital twin."},
+            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0
@@ -101,10 +116,11 @@ def _generate_answer_gemini(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     client = get_gemini_client()
     prompt = _build_prompt(query, contexts)
 
+    # Intentional legacy bypass: this compatibility surface is kept for older tests/callers.
     response = client.chat.completions.create(
         model=GEMINI_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful and accurate digital twin."},
+            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0
@@ -131,7 +147,7 @@ def _generate_answer_cerebras(query: str, contexts: List[Dict]) -> Dict[str, Any
     
     response = client.generate(
         messages=[
-            {"role": "system", "content": "You are a helpful and accurate digital twin."},
+            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -199,10 +215,11 @@ async def _generate_answer_stream_openai(query: str, contexts: List[Dict]):
     client = get_openai_client()
     prompt = _build_prompt(query, contexts)
     
+    # Intentional legacy bypass: this compatibility surface is kept for older tests/callers.
     stream = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful and accurate digital twin."},
+            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -219,10 +236,11 @@ async def _generate_answer_stream_gemini(query: str, contexts: List[Dict]):
     client = get_gemini_client()
     prompt = _build_prompt(query, contexts)
 
+    # Intentional legacy bypass: this compatibility surface is kept for older tests/callers.
     stream = client.chat.completions.create(
         model=GEMINI_MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful and accurate digital twin."},
+            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -243,7 +261,7 @@ async def _generate_answer_stream_cerebras(query: str, contexts: List[Dict]):
     
     async for chunk in client.generate_stream_async(
         messages=[
-            {"role": "system", "content": "You are a helpful and accurate digital twin."},
+            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,

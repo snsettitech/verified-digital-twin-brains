@@ -86,8 +86,8 @@ ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").low
 DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
-# Deep Research routes are always enabled.
-DEEP_RESEARCH_ENABLED = True
+# Deep Research routes remain env-gated for safer staged rollouts.
+DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 # Name-only deep research flow (enabled by default; can be disabled explicitly)
 NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true"
 
@@ -99,7 +99,7 @@ def print_feature_flag_summary():
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
-    print("  Deep Research:      ENABLED")
+    print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
     sys.stdout.flush()
@@ -232,16 +232,18 @@ app.include_router(cost_tracking.router)
 app.include_router(synthetic_monitoring.router)
 print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare, playground, ab-testing, costs, monitoring)")
 
-# Deep Research crawl + claims routes (always enabled)
-app.include_router(crawl.router)
-print("[INFO] Deep Research crawl routes enabled")
-app.include_router(research_claims.router)
-print("[INFO] Deep Research claims routes enabled")
-app.include_router(deep_research.router)
-if NAME_ONLY_DEEP_RESEARCH_ENABLED:
-    print("[INFO] Name-only deep research routes enabled")
+if DEEP_RESEARCH_ENABLED:
+    app.include_router(crawl.router)
+    print("[INFO] Deep Research crawl routes enabled")
+    app.include_router(research_claims.router)
+    print("[INFO] Deep Research claims routes enabled")
+    app.include_router(deep_research.router)
+    if NAME_ONLY_DEEP_RESEARCH_ENABLED:
+        print("[INFO] Name-only deep research routes enabled")
+    else:
+        print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
 else:
-    print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
+    print("[INFO] Deep Research routes disabled (DEEP_RESEARCH_ENABLED=false)")
 
 # Person Completeness v1: Profile abstraction layer
 app.include_router(profile.router)
@@ -278,11 +280,40 @@ async def health_check():
     external systems (Supabase/Pinecone/etc.) during transient saturation.
     """
     uptime_seconds = int(time.time() - APP_STARTED_AT)
+    dependencies = {}
+    try:
+        from modules.clients import (
+            get_cohere_client,
+            get_gemini_client,
+            get_openai_client,
+            get_pinecone_index,
+        )
+        from modules.observability import get_supabase_client
+
+        dependency_checks = {
+            "supabase": lambda: get_supabase_client(),
+            "pinecone": lambda: get_pinecone_index(),
+            "cohere": lambda: get_cohere_client(required=False) if os.getenv("COHERE_API_KEY") else None,
+            "openai": lambda: get_openai_client() if os.getenv("OPENAI_API_KEY") else None,
+            "gemini": lambda: get_gemini_client() if os.getenv("GOOGLE_API_KEY") else None,
+        }
+        for name, checker in dependency_checks.items():
+            try:
+                client = checker()
+                if client is not None or name == "supabase":
+                    dependencies[name] = "ok"
+                else:
+                    dependencies[name] = "not_configured"
+            except Exception as dep_error:
+                dependencies[name] = f"error: {dep_error}"
+    except Exception as e:
+        dependencies["health_probe"] = f"error: {e}"
     return {
         "status": "healthy",
         "service": "verified-digital-twin-brain-api",
         "version": "1.0.0",
         "uptime_seconds": uptime_seconds,
+        "dependencies": dependencies,
     }
 
 @app.head("/health", tags=["health"])

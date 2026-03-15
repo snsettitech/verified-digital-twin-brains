@@ -32,7 +32,10 @@ except ImportError:
     METRICS_AVAILABLE = False
 
 # Configuration
-QUERY_REWRITING_ENABLED = os.getenv("QUERY_REWRITING_ENABLED", "false").lower() == "true"
+QUERY_REWRITING_ENABLED = (
+    os.getenv("QUERY_REWRITE_ENABLED", os.getenv("QUERY_REWRITING_ENABLED", "false")).lower()
+    == "true"
+)
 
 # LLM Model Selection - Using Latest OpenAI Models
 # Available options (latest to older):

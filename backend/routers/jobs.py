@@ -14,6 +14,7 @@ from modules.jobs import (
     start_job, complete_job, fail_job, append_log
 )
 from modules.observability import supabase
+from modules.training_jobs import get_training_job
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -155,7 +156,25 @@ async def get_job_details(
     
     job = get_job(job_id)
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+        legacy_job = get_training_job(job_id)
+        if not legacy_job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if legacy_job.get("twin_id") and legacy_job["twin_id"] not in user_twin_ids:
+            raise HTTPException(status_code=403, detail="Not authorized to view this job")
+        return JobResponse(
+            id=legacy_job["id"],
+            twin_id=legacy_job.get("twin_id"),
+            source_id=legacy_job.get("source_id"),
+            status=str(legacy_job.get("status") or ""),
+            job_type=str(legacy_job.get("job_type") or ""),
+            priority=int(legacy_job.get("priority") or 0),
+            error_message=legacy_job.get("error_message"),
+            metadata=legacy_job.get("metadata") or {},
+            created_at=str(legacy_job.get("created_at") or ""),
+            updated_at=str(legacy_job.get("updated_at") or ""),
+            started_at=legacy_job.get("started_at"),
+            completed_at=legacy_job.get("completed_at"),
+        )
     
     # Check authorization
     if job.twin_id and job.twin_id not in user_twin_ids:

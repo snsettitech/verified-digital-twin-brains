@@ -76,7 +76,7 @@ services:
       - key: COHERE_API_KEY
         sync: false
       - key: COHERE_RERANK_STRICT
-        value: "true"
+        value: "false"
       - key: ENABLE_FLASHRANK
         value: "true"
       - key: COHERE_RERANK_TIMEOUT_SECONDS
@@ -94,14 +94,18 @@ services:
       - key: OPENAI_JSON_MODEL
         value: "gpt-4o-mini"
       - key: GEMINI_MODEL
-        value: "gemini-2.5-flash"
+        value: "gemini-2.0-flash"
       - key: GEMINI_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: CONVERSATIONAL_REALIZER_ENABLED
         value: "false"
+      - key: INFERENCE_PROVIDER_TIMEOUT_SECONDS
+        value: "30"
       # Query Rewriting for Conversational Context
+      - key: QUERY_REWRITE_ENABLED
+        value: "true"
       - key: QUERY_REWRITING_ENABLED
-        value: "false"  # Set to "true" after testing
+        value: "true"
       # LLM Model Selection (Latest: gpt-4o, Cost-effective: gpt-4o-mini)
       - key: QUERY_REWRITING_MODEL
         value: "gpt-4o"  # Latest OpenAI model (gpt-4o, gpt-4o-mini, o1-preview, o1-mini)
@@ -116,7 +120,11 @@ services:
         value: "false"
       - key: QUERY_REWRITE_ROLLOUT_PERCENT
         value: "0"  # Gradually increase: 10, 25, 50, 100
+      - key: RETRIEVAL_HYDE_ENABLED
+        value: "true"
       # Deep Research Runtime Controls
+      - key: DEEP_RESEARCH_ENABLED
+        value: "false"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
         value: "true"
       - key: NAME_RESEARCH_METRICS_QA_ENABLED
@@ -135,6 +143,8 @@ services:
         value: "false"
       - key: OPENAI_DEEP_RESEARCH_MODEL
         value: "o3"
+      - key: RUNTIME_CONFIDENCE_GATE_ENABLED
+        value: "false"
 
     # Ephemeral disk for temp files
     disk:
@@ -202,7 +212,7 @@ services:
       - key: COHERE_API_KEY
         sync: false
       - key: COHERE_RERANK_STRICT
-        value: "true"
+        value: "false"
       - key: ENABLE_FLASHRANK
         value: "true"
       - key: INFERENCE_PROVIDER
@@ -212,20 +222,28 @@ services:
       - key: OPENAI_JSON_MODEL
         value: "gpt-4o-mini"
       - key: GEMINI_MODEL
-        value: "gemini-2.5-flash"
+        value: "gemini-2.0-flash"
       - key: GEMINI_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: CONVERSATIONAL_REALIZER_ENABLED
         value: "false"
+      - key: INFERENCE_PROVIDER_TIMEOUT_SECONDS
+        value: "30"
       # Query Rewriting for Conversational Context
+      - key: QUERY_REWRITE_ENABLED
+        value: "true"
       - key: QUERY_REWRITING_ENABLED
-        value: "false"
+        value: "true"
       - key: QUERY_REWRITING_MODEL
         value: "gpt-4o"  # Latest OpenAI model
       - key: QUERY_REWRITING_MAX_HISTORY
         value: "5"
       - key: QUERY_REWRITING_MIN_CONFIDENCE
         value: "0.7"
+      - key: RETRIEVAL_HYDE_ENABLED
+        value: "true"
+      - key: DEEP_RESEARCH_ENABLED
+        value: "false"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
         value: "true"
       - key: NAME_RESEARCH_METRICS_QA_ENABLED

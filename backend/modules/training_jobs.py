@@ -12,6 +12,23 @@ from modules.delphi_namespace import get_namespace_candidates_for_twin
 # Note: process_and_index_text is imported inside process_training_job to avoid circular import
 
 
+def _update_source_row(source_id: str, payload: Dict[str, Any]) -> None:
+    """
+    Update a source row while tolerating deployments that already dropped
+    the legacy `staging_status` column.
+    """
+    try:
+        supabase.table("sources").update(payload).eq("id", source_id).execute()
+    except Exception as update_error:
+        message = str(update_error).lower()
+        if "staging_status" in message and "sources" in message:
+            fallback = dict(payload)
+            fallback.pop("staging_status", None)
+            supabase.table("sources").update(fallback).eq("id", source_id).execute()
+        else:
+            raise
+
+
 def _schedule_metrics_update(twin_id: str) -> None:
     """
     Schedule training metrics update as a background task.
@@ -279,12 +296,12 @@ async def process_training_job(job_id: str) -> bool:
             )
 
             # Update source with chunk count and extracted text length
-            supabase.table("sources").update({
+            _update_source_row(source_id, {
                 "chunk_count": num_chunks,
                 "extracted_text_length": len(extracted_text),
                 "staging_status": "live",
                 "status": "live"
-            }).eq("id", source_id).execute()
+            })
 
             # Emit terminal "live" step event for UI.
             live_event_id = start_step(
@@ -319,11 +336,11 @@ async def process_training_job(job_id: str) -> bool:
             from modules.ingestion import process_and_index_text
             num_chunks = await process_and_index_text(source_id, twin_id, extracted_text)
 
-            supabase.table("sources").update({
+            _update_source_row(source_id, {
                 "chunk_count": num_chunks,
                 "staging_status": "live",
                 "status": "live"
-            }).eq("id", source_id).execute()
+            })
 
             update_job_status(job_id, "complete", metadata={"chunks_created": num_chunks})
             

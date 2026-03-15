@@ -71,6 +71,8 @@ ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS = max(0, int(os.getenv("ONLINE_EVAL_POLICY_
 ONLINE_EVAL_POLICY_STRICT_ONLY = os.getenv("ONLINE_EVAL_POLICY_STRICT_ONLY", "false").lower() == "true"
 ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FALLBACK_POINTS", "3")))
 ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE = float(os.getenv("ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE", "0.2"))
+# Set to true in staging to enforce fallback on low-confidence retrieval. Benchmark before enabling
+# in production - expect ~15% of queries to return uncertainty responses.
 RUNTIME_CONFIDENCE_GATE_ENABLED = os.getenv("RUNTIME_CONFIDENCE_GATE_ENABLED", "false").lower() == "true"
 
 _GROUNDING_STOPWORDS = {
@@ -139,6 +141,30 @@ def _build_identity_gate_clarification_hint(gate: Dict[str, Any]) -> Optional[Di
     if reason:
         hint["reason"] = reason
     return hint
+
+
+def _build_clarification_response_payload(
+    clarification_hint: Optional[Dict[str, Any]],
+    clarification_options: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    hint = dict(clarification_hint or {})
+    options = clarification_options if isinstance(clarification_options, list) else hint.get("options") or []
+    question = re.sub(r"\s+", " ", str(hint.get("question") or "").strip())
+    if not question:
+        question = (
+            "I want to make sure I answer the right question. "
+            "Could you clarify what you mean?"
+        )
+        hint["question"] = question
+    if "source" not in hint:
+        hint["source"] = "identity_gate"
+    return {
+        "message": question,
+        "response_type": "clarification",
+        "requires_user_input": True,
+        "clarification_hint": hint,
+        "clarification_options": options,
+    }
 
 
 def _extract_runtime_gate_topic(planning_output: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -562,8 +588,8 @@ async def _run_identity_gate_passthrough(
         clarification_hint = _build_identity_gate_clarification_hint(gate)
         return {
             **gate,
-            "decision": "ANSWER",
-            "reason": f"clarification_hint_forwarded:{gate.get('reason') or 'identity_gate'}",
+            "decision": "CLARIFY",
+            "reason": gate.get("reason") or "identity_gate_clarification",
             "clarification_hint": clarification_hint,
             "owner_memory": gate.get("owner_memory") or [],
             "owner_memory_refs": gate.get("owner_memory_refs") or [],
@@ -1832,6 +1858,49 @@ async def chat(
                     })
             owner_memory_topics = [s.get("topic") for s in owner_memory_summaries if s.get("topic")]
 
+            if str(gate.get("decision") or "").upper() == "CLARIFY":
+                clarification_payload = _build_clarification_response_payload(
+                    clarification_hint,
+                    gate.get("options") if isinstance(gate.get("options"), list) else None,
+                )
+                yield json.dumps(
+                    _normalize_json(
+                        {
+                            "type": "metadata",
+                            "citations": [],
+                            "citation_details": [],
+                            "confidence_score": 0.0,
+                            "conversation_id": conversation_id,
+                            "owner_memory_refs": owner_memory_refs,
+                            "owner_memory_topics": owner_memory_topics,
+                            "owner_memory_summaries": owner_memory_summaries,
+                            "clarification_hint": clarification_payload["clarification_hint"],
+                            "clarification_options": clarification_payload["clarification_options"],
+                            "response_type": clarification_payload["response_type"],
+                            "requires_user_input": clarification_payload["requires_user_input"],
+                            "routing_decision": {
+                                "intent": "clarification",
+                                "action": "clarify",
+                                "confidence": 0.0,
+                            },
+                            "render_strategy": "source_faithful",
+                            "identity_gate_mode": gate.get("gate_mode"),
+                            **context_trace,
+                        }
+                    )
+                ) + "\n"
+                yield json.dumps(
+                    _normalize_json(
+                        {
+                            "type": "content",
+                            "token": clarification_payload["message"],
+                            "content": clarification_payload["message"],
+                        }
+                    )
+                ) + "\n"
+                yield json.dumps({"type": "done"}) + "\n"
+                return
+
             # DETECT REASONING INTENT (Simple Heuristic for now)
             # In production, use a classifier model
             is_reasoning_query = any(phrase in query.lower() for phrase in [
@@ -2568,15 +2637,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         raise HTTPException(status_code=422, detail="query is required")
     group_id = key_info.get("group_id")
     
-    # Load publish controls for widget safety parity with public-share (PR6-A)
-    publish_controls = _load_public_publish_controls(twin_id)
-    published_identity_topics = publish_controls.get("published_identity_topics", set())
-    published_policy_topics = publish_controls.get("published_policy_topics", set())
-    published_source_ids = publish_controls.get("published_source_ids", set())
-    context_trace["published_identity_topics_count"] = len(published_identity_topics)
-    context_trace["published_policy_topics_count"] = len(published_policy_topics)
-    context_trace["published_source_ids_count"] = len(published_source_ids)
-    
     resolved_context = resolve_widget_context()
     context_trace = trace_fields(resolved_context)
     context_trace.update(
@@ -2592,6 +2652,15 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
     active_spec = get_active_persona_spec(twin_id=twin_id)
     if active_spec:
         context_trace["persona_spec_version"] = active_spec.get("version")
+
+    # Load publish controls for widget safety parity with public-share (PR6-A)
+    publish_controls = _load_public_publish_controls(twin_id)
+    published_identity_topics = publish_controls.get("published_identity_topics", set())
+    published_policy_topics = publish_controls.get("published_policy_topics", set())
+    published_source_ids = publish_controls.get("published_source_ids", set())
+    context_trace["published_identity_topics_count"] = len(published_identity_topics)
+    context_trace["published_policy_topics_count"] = len(published_policy_topics)
+    context_trace["published_source_ids_count"] = len(published_source_ids)
     
     # Langfuse trace propagation for widget endpoint
     import os
@@ -2671,6 +2740,25 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         mode=identity_gate_mode_for_context(resolved_context.context),
         allow_clarify=False,
     )
+
+    if str(gate.get("decision") or "").upper() == "CLARIFY":
+        clarification_payload = _build_clarification_response_payload(
+            gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None,
+            gate.get("options") if isinstance(gate.get("options"), list) else None,
+        )
+        return {
+            "status": "clarification",
+            "response": clarification_payload["message"],
+            "response_type": clarification_payload["response_type"],
+            "requires_user_input": clarification_payload["requires_user_input"],
+            "clarification_hint": clarification_payload["clarification_hint"],
+            "clarification_options": clarification_payload["clarification_options"],
+            "conversation_id": conversation_id,
+            "citations": [],
+            "confidence_score": 0.0,
+            "identity_gate_mode": gate.get("gate_mode"),
+            **context_trace,
+        }
 
     # Filter owner memories by publish controls (parity with public-share) (PR6-A)
     owner_memory_candidates = _filter_public_owner_memory_candidates(
@@ -3144,6 +3232,25 @@ async def public_chat_endpoint(
         mode=identity_gate_mode_for_context(resolved_context.context),
         allow_clarify=False,
     )
+
+    if str(gate.get("decision") or "").upper() == "CLARIFY":
+        clarification_payload = _build_clarification_response_payload(
+            gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None,
+            gate.get("options") if isinstance(gate.get("options"), list) else None,
+        )
+        return {
+            "status": "clarification",
+            "response": clarification_payload["message"],
+            "response_type": clarification_payload["response_type"],
+            "requires_user_input": clarification_payload["requires_user_input"],
+            "clarification_hint": clarification_payload["clarification_hint"],
+            "clarification_options": clarification_payload["clarification_options"],
+            "conversation_id": conversation_id,
+            "citations": [],
+            "confidence_score": 0.0,
+            "identity_gate_mode": gate.get("gate_mode"),
+            **context_trace,
+        }
 
     owner_memory_candidates = _filter_public_owner_memory_candidates(
         gate.get("owner_memory") or [],

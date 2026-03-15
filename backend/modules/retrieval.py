@@ -909,10 +909,10 @@ if _flashrank_enabled:
         print("[FlashRank] Package not installed. Run: pip install flashrank")
         _flashrank_available = False
 
-# Cohere reranking - STRICT MODE: Required for production
+# Cohere reranking - strict mode remains opt-in so missing Cohere does not kill startup.
 _cohere_rerank_enabled = os.getenv("ENABLE_COHERE_RERANK", "true").lower() == "true"
 _cohere_rerank_model = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5")
-_cohere_strict_mode = os.getenv("COHERE_RERANK_STRICT", "true").lower() == "true"
+_cohere_strict_mode = os.getenv("COHERE_RERANK_STRICT", "false").lower() == "true"
 _cohere_rerank_timeout = float(os.getenv("COHERE_RERANK_TIMEOUT_SECONDS", "5.0"))
 
 # Hybrid reranking ensemble weights
@@ -1488,7 +1488,8 @@ def _format_verified_match_context(verified_match: Dict[str, Any]) -> Dict[str, 
     Returns:
         Formatted context dictionary
     """
-    return {
+    twin_id = str(verified_match.get("twin_id") or "").strip()
+    return _normalize_context_contract({
         "text": verified_match["answer"],
         "score": 1.0,  # Perfect confidence for verified answers
         "source_id": f"verified_qna_{verified_match['id']}",
@@ -1497,8 +1498,16 @@ def _format_verified_match_context(verified_match: Dict[str, Any]) -> Dict[str, 
         "question": verified_match["question"],
         "category": "FACT",
         "tone": "Assertive",
-        "citations": verified_match.get("citations", [])
-    }
+        "citations": verified_match.get("citations", []),
+    },
+        namespace=get_primary_namespace_for_twin(twin_id) if twin_id else twin_id,
+        strategy_name="verified_qa",
+        metadata={
+            "question": verified_match.get("question"),
+            "citations": verified_match.get("citations", []),
+            "twin_id": twin_id,
+        },
+    )
 
 
 def _format_owner_memory_match_context(owner_memory_match: Dict[str, Any]) -> Dict[str, Any]:
@@ -1507,7 +1516,8 @@ def _format_owner_memory_match_context(owner_memory_match: Dict[str, Any]) -> Di
     This has highest precedence because it is directly owner-authored.
     """
     memory_id = owner_memory_match.get("id")
-    return {
+    twin_id = str(owner_memory_match.get("twin_id") or "").strip()
+    return _normalize_context_contract({
         "text": owner_memory_match.get("value", ""),
         "score": 1.0,
         "source_id": f"owner_memory_{memory_id}" if memory_id else "owner_memory",
@@ -1519,7 +1529,15 @@ def _format_owner_memory_match_context(owner_memory_match: Dict[str, Any]) -> Di
         "category": "FACT",
         "tone": "Assertive",
         "citations": [],
-    }
+    },
+        namespace=get_primary_namespace_for_twin(twin_id) if twin_id else twin_id,
+        strategy_name="owner_memory",
+        metadata={
+            "memory_type": owner_memory_match.get("memory_type"),
+            "topic_normalized": owner_memory_match.get("topic_normalized"),
+            "twin_id": twin_id,
+        },
+    )
 
 
 def _match_owner_memory(query: str, twin_id: str) -> Optional[Dict[str, Any]]:
@@ -1769,6 +1787,13 @@ async def _execute_pinecone_queries(
                 continue
             
             matches = _exclude_tombstoned(_extract_matches(ns_result))
+            for match in matches:
+                metadata = match.get("metadata") or {}
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                if not metadata.get("namespace"):
+                    metadata["namespace"] = ns
+                match["metadata"] = metadata
             if matches:
                 success_count += 1
                 print(f"[Retrieval] Namespace {ns}: {len(matches)} matches")
@@ -1900,6 +1925,43 @@ def _resolve_section_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_context_contract(
+    context: Dict[str, Any],
+    *,
+    namespace: Optional[str],
+    strategy_name: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    normalized = dict(context or {})
+    merged_metadata = dict(metadata or {})
+    existing_metadata = normalized.get("metadata")
+    if isinstance(existing_metadata, dict):
+        merged_metadata.update(existing_metadata)
+
+    text = re.sub(r"\s+", " ", str(normalized.get("text") or merged_metadata.get("text") or "").strip())
+    normalized["text"] = text
+    normalized["source_id"] = str(
+        normalized.get("source_id") or merged_metadata.get("source_id") or "unknown"
+    ).strip() or "unknown"
+    normalized["score"] = float(normalized.get("score", normalized.get("vector_score", 0.0)) or 0.0)
+    resolved_namespace = str(
+        normalized.get("namespace")
+        or merged_metadata.get("namespace")
+        or namespace
+        or ""
+    ).strip()
+    normalized["namespace"] = resolved_namespace
+    normalized["strategy_name"] = str(
+        normalized.get("strategy_name") or merged_metadata.get("strategy_name") or strategy_name
+    ).strip() or strategy_name
+    if resolved_namespace and "namespace" not in merged_metadata:
+        merged_metadata["namespace"] = resolved_namespace
+    if "strategy_name" not in merged_metadata:
+        merged_metadata["strategy_name"] = normalized["strategy_name"]
+    normalized["metadata"] = merged_metadata
+    return normalized
+
+
 def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Process verified vector matches into context entries.
@@ -1918,7 +1980,7 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
             continue
         section_meta = _resolve_section_metadata(metadata)
         if match["score"] > 0.3:
-            contexts.append({
+            contexts.append(_normalize_context_contract({
                 "text": text,
                 "score": 1.0,  # Boost verified
                 "vector_score": 1.0,
@@ -1937,7 +1999,11 @@ def _process_verified_matches(verified_results: Dict[str, Any]) -> List[Dict[str
                 "chunk_type": metadata.get("chunk_type"),
                 "block_type": metadata.get("block_type"),
                 "is_answer_text": _to_bool(metadata.get("is_answer_text"), default=True),
-            })
+            },
+                namespace=str(metadata.get("namespace") or "").strip(),
+                strategy_name="vector",
+                metadata=metadata,
+            ))
     return contexts
 
 
@@ -1968,7 +2034,7 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
             rrf_score = float(raw_rrf_score)
         except Exception:
             rrf_score = 0.0
-        raw_general_chunks.append({
+        raw_general_chunks.append(_normalize_context_contract({
             "text": text,
             "score": score,
             "vector_score": score,
@@ -1989,7 +2055,11 @@ def _process_general_matches(merged_general_hits: List[Dict[str, Any]]) -> List[
             "chunk_type": metadata.get("chunk_type"),
             "block_type": metadata.get("block_type"),
             "is_answer_text": _to_bool(metadata.get("is_answer_text"), default=True),
-        })
+        },
+            namespace=str(metadata.get("namespace") or "").strip(),
+            strategy_name="vector",
+            metadata=metadata,
+        ))
     return raw_general_chunks
 
 
@@ -2178,7 +2248,7 @@ async def retrieve_context_with_verified_first(
                     use_exact=True,
                     use_semantic=True,
                     exact_threshold=0.80,
-                    semantic_threshold=0.84,
+                    semantic_threshold=0.80,
                 ),
                 timeout=2.0
             )
@@ -2192,7 +2262,7 @@ async def retrieve_context_with_verified_first(
     if verified_match:
         match_type = str(verified_match.get("match_type") or "semantic")
         similarity = float(verified_match.get("similarity_score", 0.0) or 0.0)
-        min_similarity = 0.80 if match_type == "exact" else 0.84
+        min_similarity = 0.80
         if similarity < min_similarity:
             print(
                 f"[Retrieval] Verified QnA rejected: type={match_type} "
@@ -2565,6 +2635,13 @@ async def retrieve_context_vectors(
     # Add verified_qna_match flag (False since we didn't find verified match)
     for c in final_contexts:
         c["verified_qna_match"] = False
+        c.setdefault("strategy_name", "vector")
+        if not isinstance(c.get("metadata"), dict):
+            c["metadata"] = {}
+        if c.get("namespace") and "namespace" not in c["metadata"]:
+            c["metadata"]["namespace"] = c["namespace"]
+        if "strategy_name" not in c["metadata"]:
+            c["metadata"]["strategy_name"] = c["strategy_name"]
         c["retrieval_stats"] = retrieval_stats
     
     # Log RAG metrics to Langfuse
