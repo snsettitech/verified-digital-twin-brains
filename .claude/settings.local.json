@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_api_integration.py tests/test_reasoning_integration.py \"tests/test_phase3_snapshot_manager.py::TestSnapshotReads::test_get_snapshot_from_supabase\" -v --tb=short)",
+      "Bash(python -m pytest tests/ -x --tb=short -q)",
+      "Bash(python -m pytest \"tests/test_agent_planner_routing_decision.py::test_planner_enables_conversational_realizer_for_grounded_owner_chat\" -v --tb=long)",
+      "Bash(gh run:*)",
+      "Bash(python -m flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics)",
+      "Bash(python -m flake8 routers/profile.py --select=F823 --show-source)",
+      "Bash(python -m flake8 routers/profile.py --select=F821,F823,F824)"
+    ]
+  }
+}

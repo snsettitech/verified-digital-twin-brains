@@ -398,7 +398,7 @@ export default function DashboardPage() {
               { name: 'Embed Widget', href: '/dashboard/widget', icon: '📱' },
               { name: 'Escalations', href: '/dashboard/escalations', icon: '📬', badge: stats.escalationRate > 0 ? Math.ceil(stats.escalationRate) : undefined },
               { name: 'Verified Q&A', href: '/dashboard/verified-qna', icon: '✅' },
-              { name: 'Access Groups', href: '/dashboard/access-groups', icon: '👥' },
+              { name: 'Analytics', href: '/dashboard/insights', icon: '📊' },
               { name: 'Settings', href: '/dashboard/settings', icon: '⚙️' },
             ].map((link) => (
               <Link
