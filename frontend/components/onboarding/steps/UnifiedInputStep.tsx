@@ -112,7 +112,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
   return (
     <div className="space-y-8">
       <div className="text-center">
-        <h2 className="text-3xl font-bold text-white mb-3">Create Your Digital Twin</h2>
+        <h2 className="text-3xl font-bold text-white mb-3">Create Your Persona</h2>
         <p className="text-slate-400 max-w-md mx-auto">
           Enter your name and we&apos;ll search the web for your public content. More context helps us find better matches.
         </p>
@@ -278,7 +278,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
             Creating...
           </>
         ) : (
-          <>Create My Digital Twin</>
+          <>Create My Persona</>
         )}
       </button>
     </div>

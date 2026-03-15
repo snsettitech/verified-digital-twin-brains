@@ -72,7 +72,7 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
                     <p className="text-sm text-slate-500 font-medium">
                         {mode === 'training'
                             ? 'Test responses in owner training context.'
-                            : "Test your Digital Twin's responses as a guest."}
+                            : "Test your persona's responses as a guest."}
                     </p>
                 </div>
                 <div className="flex items-center gap-2">

@@ -199,7 +199,7 @@ export function EmptyDashboard({ onCreateTwin }: { onCreateTwin?: () => void }) 
   return (
     <EmptyState
       illustration="robot-building"
-      title="Create your first digital twin"
+      title="Create your first persona"
       description="Train an AI that answers questions in your voice with verified sources."
       primaryAction={{
         label: 'Get Started',

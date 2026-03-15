@@ -101,7 +101,7 @@ export function ResearchProgress({
       {/* Header */}
       <div className="text-center">
         <h2 className="text-2xl font-bold text-white mb-2">
-          Building Your Digital Twin
+          Building Your Persona
         </h2>
         <p className="text-slate-400">
           We&apos;re processing your sources and creating your personalized AI.
@@ -411,7 +411,7 @@ export function ResearchProgress({
             <div>
               <h3 className="font-medium text-white">Generating Your Bio</h3>
               <p className="text-sm text-slate-400">
-                Creating your digital twin&apos;s personality and voice...
+                Creating your persona's personality and voice...
               </p>
             </div>
           </div>
@@ -473,7 +473,7 @@ export function ResearchProgress({
               🎉
             </div>
             <h3 className="text-xl font-bold text-white mb-2">
-              Your Digital Twin is Ready!
+              Your Persona is Ready!
             </h3>
             <p className="text-slate-400 mb-6">
               Here&apos;s a summary of what we built:
@@ -523,7 +523,7 @@ export function ResearchProgress({
               Research Failed
             </h3>
             <p className="text-red-400/80 mb-4">
-              The research pipeline stopped before your digital twin could finish processing.
+              The research pipeline stopped before your persona could finish processing.
             </p>
             {failureReason && (
               <div className="mb-4 rounded-lg border border-red-500/20 bg-slate-950/40 p-3 text-left text-sm text-slate-300">

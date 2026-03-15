@@ -51,7 +51,7 @@ export default function ChatInterface({
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+      content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
       timestamp: Date.now(),
     }
   ]);
@@ -273,7 +273,7 @@ export default function ChatInterface({
         if (!restored) {
           setMessages([{
             role: 'assistant',
-            content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+            content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
             timestamp: Date.now(),
           }]);
         }
@@ -297,7 +297,7 @@ export default function ChatInterface({
           }));
           setMessages(history.length > 0 ? history : [{
             role: 'assistant',
-            content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+            content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
             timestamp: Date.now(),
           }]);
         }
@@ -321,7 +321,7 @@ export default function ChatInterface({
     }
     setMessages([{
       role: 'assistant',
-      content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+      content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
       timestamp: Date.now(),
     }]);
     setLastError(null);
@@ -451,7 +451,7 @@ export default function ChatInterface({
           const last = [...prev];
           last[last.length - 1] = {
             role: 'assistant',
-            content: 'Please sign in to chat with your digital twin.',
+            content: 'Please sign in to chat with this persona.',
             timestamp: Date.now(),
           };
           return last;
@@ -616,7 +616,7 @@ export default function ChatInterface({
     }
     setMessages([{
       role: 'assistant',
-      content: "Hello! I am your Verified Digital Twin. Ask me anything about your uploaded documents.",
+      content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
       timestamp: Date.now(),
     }]);
     setLastError(null);
@@ -635,7 +635,7 @@ export default function ChatInterface({
             <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-4 border-white rounded-full"></div>
           </div>
           <div>
-            <div className="font-black text-slate-800 tracking-tight">Verified Digital Twin</div>
+            <div className="font-black text-slate-800 tracking-tight">PersonaOn AI</div>
             <div className="text-[10px] uppercase font-bold text-slate-400 tracking-widest flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
               Live Knowledge Base

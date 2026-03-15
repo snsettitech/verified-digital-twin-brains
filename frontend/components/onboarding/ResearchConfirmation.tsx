@@ -240,7 +240,7 @@ export function ResearchConfirmation({
               All Sources Reviewed
             </h3>
             <p className="text-slate-400 text-sm">
-              You&apos;ve confirmed all sources. Continue to build your digital twin.
+              You&apos;ve confirmed all sources. Continue to build your persona.
             </p>
           </Card>
         ) : (

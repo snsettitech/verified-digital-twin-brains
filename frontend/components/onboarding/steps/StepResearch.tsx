@@ -249,7 +249,7 @@ export function StepResearch({
       <div className="space-y-6">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-white mb-2">Starting Research</h2>
-          <p className="text-slate-400">Initializing your digital twin build...</p>
+          <p className="text-slate-400">Initializing your persona build...</p>
         </div>
         <Card className="p-12 bg-slate-900 border-slate-700 text-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
