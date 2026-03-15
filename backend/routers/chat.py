@@ -2403,7 +2403,10 @@ async def chat(
                                 print("[Chat] Fallback override: extracted exact line from context")
                     except Exception as e:
                         print(f"[Chat] Fallback override failed: {e}")
-            if full_response.strip() == fallback_message and not citations:
+            if (
+                (not full_response or not full_response.strip() or full_response.strip() == fallback_message)
+                and not citations
+            ):
                 try:
                     if not retrieved_context_snippets:
                         from modules.retrieval import retrieve_context_with_verified_first
