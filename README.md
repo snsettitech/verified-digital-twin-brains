@@ -1,31 +1,27 @@
 # Verified Digital Twin Brains
 
-A high-fidelity Digital Twin system designed to replicate a user's voice, knowledge, and reasoning capabilities.
+Enterprise AI platform for building auditable digital twins with tenant isolation, governed knowledge ingestion, retrieval, and agentic workflows.
 
-## 📖 Documentation
+## Canonical Docs
 
-The project documentation has been consolidated into a high-signal set for AI context and developer onboarding:
+- [DEBUG_RUNBOOK.md](DEBUG_RUNBOOK.md): fastest path to run the stack locally and smoke-test it.
+- [REPO_MAP.md](REPO_MAP.md): top-level repo layout, runtime surfaces, and cleanup notes.
+- [RUNTIME_ENTRYPOINTS.md](RUNTIME_ENTRYPOINTS.md): actual startup paths, route groups, automation entrypoints.
+- [docs/quick-start.md](docs/quick-start.md): short setup overview and canonical doc index.
+- [docs/architecture/system-overview.md](docs/architecture/system-overview.md): architecture reference.
+- [docs/architecture/api_contracts.md](docs/architecture/api_contracts.md): API contract reference.
+- [docs/ai/agent-manual.md](docs/ai/agent-manual.md): AI-agent operating guidance.
 
-- **[Quick Start](file:///c:/Users/saina/verified-digital-twin-brain/docs/quick-start.md)**: Essential setup and 1-hour path to production.
-- **[System Overview](file:///c:/Users/saina/verified-digital-twin-brain/docs/architecture/system-overview.md)**: Master architecture analysis and current system state.
-- **[API Contracts](file:///c:/Users/saina/verified-digital-twin-brain/docs/architecture/api-contracts.md)**: Full REST API specification.
-- **[AI Operating Manual](file:///c:/Users/saina/verified-digital-twin-brain/docs/ai/agent-manual.md)**: Instructions and patterns for AI agents working in this repo.
-- **[Vision](file:///c:/Users/saina/verified-digital-twin-brain/docs/VISION.md)**: Foundational product principles.
+## Runtime
 
----
+- Backend API: `backend/main.py`
+- Worker: `backend/worker.py`
+- Frontend app: `frontend/app/`
+- Frontend auth gate: `frontend/proxy.ts`
+- Deployment blueprint: `render.yaml`
 
-## 🌟 Core Features
+## Cleanup Notes
 
-- **Personalized Voice**: Clone and generate lifelike speech via ElevenLabs.
-- **Cognitive Graph**: Structured knowledge retrieval beyond simple RAG.
-- **Multi-Tenant Isolation**: Enterprise-grade security and permissions.
-- **Verified Reasoning**: Goal-oriented "Advisor Mode" with decision traces.
-
-## 🛠️ Status
-
-The system is currently in **Phase 9/10** of the core build. All foundational multi-tenancy, auth, and retrieval paths are verified and production-ready.
-
----
-
-## License
-Proprietary.
+- Historical reports and proof artifacts belong under `docs/archive/`.
+- Manual verification utilities belong under `tools/manual_verify/`.
+- Local secrets belong in `.env` and `frontend/.env.local`; do not commit them.

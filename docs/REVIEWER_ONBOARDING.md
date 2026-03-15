@@ -82,7 +82,7 @@ These files are **foundation** - changes here affect everything:
 | `backend/modules/observability.py` | DB singleton | 🔴 Very strict |
 | `backend/modules/clients.py` | API clients | 🔴 Very strict |
 | `backend/main.py` | CORS & middleware | 🟠 Strict |
-| `frontend/middleware.ts` | Auth redirects | 🟠 Strict |
+| `frontend/proxy.ts` | Auth redirects | 🟠 Strict |
 
 **Rule**: If a PR changes these, notify lead architect immediately.
 

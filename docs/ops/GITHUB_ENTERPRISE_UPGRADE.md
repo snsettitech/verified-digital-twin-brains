@@ -52,7 +52,7 @@
 /backend/database/schema/ @database-team
 
 # Frontend auth
-/frontend/middleware.ts @core-team
+/frontend/proxy.ts @core-team
 /frontend/lib/supabase/ @core-team
 
 # API contracts

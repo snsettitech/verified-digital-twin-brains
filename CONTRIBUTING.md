@@ -92,7 +92,7 @@ These settings make the workflow actually work. Configure in **Settings → Bran
 /backend/modules/auth_guard.py @your-github-handle
 /backend/modules/observability.py @your-github-handle
 /backend/routers/ @your-github-handle
-/frontend/middleware.ts @your-github-handle
+/frontend/proxy.ts @your-github-handle
 ```
 
 ## What To Do Next

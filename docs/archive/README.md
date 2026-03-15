@@ -9,6 +9,7 @@ docs/archive/
 ├── audits/           # Historical audit reports
 ├── implementation/   # Completed implementation summaries
 ├── plans/           # Historical planning documents
+├── repo-cleanup/     # Intermediate cleanup working notes
 ├── proof/           # Verification and proof artifacts
 │   ├── logs/        # Proof logs
 │   ├── json/        # Proof JSON outputs
@@ -25,6 +26,7 @@ The documents in this archive represent:
 2. **Historical audits** - Security, performance, and code audits from past phases
 3. **Planning documents** - Plans and specifications for completed or superseded features
 4. **Proof artifacts** - Verification outputs, test results, and manual testing evidence
+5. **Cleanup working notes** - Intermediate repository-cleanup drafts superseded by root deliverables
 
 ## Current Documentation
 

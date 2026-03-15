@@ -1,62 +1,46 @@
-# Quick Start Guide
+# Quick Start
 
-This guide provides the essential steps and references to get the Digital Brain platform running and verified.
+Use this repo in three passes:
 
-## 🚀 The Path to Production (1 Hour)
+1. Read [DEBUG_RUNBOOK.md](../DEBUG_RUNBOOK.md) for local setup and smoke testing.
+2. Read [RUNTIME_ENTRYPOINTS.md](../RUNTIME_ENTRYPOINTS.md) for the actual startup and route surfaces.
+3. Use the deeper references only as needed:
+   - [docs/architecture/system-overview.md](architecture/system-overview.md)
+   - [docs/architecture/api_contracts.md](architecture/api_contracts.md)
+   - [docs/ai/agent-manual.md](ai/agent-manual.md)
+   - [docs/ops/README.md](ops/README.md)
 
-### Step 1: Fix Critical Blockers (30 min)
-| Blocker | Symptom | Action |
-| :--- | :--- | :--- |
-| **Missing Column** | `POST /twins` or User Sync 500 | `ALTER TABLE users ADD COLUMN avatar_url TEXT;` |
-| **Missing RPC** | Interviews fail with 500 | Apply `migration_interview_sessions.sql` in Supabase. |
-| **Worker Process** | Jobs stuck in `pending` | Deploy `worker.py` as a separate service on Render/Railway. |
-| **Vector Dimension** | Vector search fails | Recreate Pinecone index with **3072** dimensions. |
+## Short Setup
 
-### Step 2: Configure Environment (15 min)
-Ensure these 8 critical variables are set in your backend `.env`:
-- `OPENAI_API_KEY`
-- `SUPABASE_URL` & `SUPABASE_SERVICE_ROLE_KEY`
-- `PINECONE_API_KEY` & `PINECONE_INDEX_NAME`
-- `JWT_SECRET` (Must match Supabase exactly)
-- `ALLOWED_ORIGINS`
-- `ELEVENLABS_API_KEY` (for Voice)
-
-### Step 3: Deployment (15 min)
-- **Frontend**: Vercel (Auto-deploys on push to `main`)
-- **Backend API**: Render/Railway (`uvicorn main:app`)
-- **Worker**: Render/Railway (`python worker.py`)
-
----
-
-## 🔍 Daily health Verification
-Run this command every morning to catch regressions early:
+### Backend
 
 ```bash
-# Backend
-python scripts/verify_features.py
-
-# Frontend
-npm run lint
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
+copy .env.example .env
 ```
 
-### Success Metrics
-- ✅ 8+ features WORKING
-- ✅ <1 feature NOT_WORKING
-- ✅ Response time <1s
-- ✅ Error rate <1%
+### Frontend
 
----
+```bash
+cd frontend
+npm ci
+copy .env.example .env.local
+```
 
-## 🎯 Golden Rules for AI Agents
-1. **Context First**: Always check `COMPLETE_ARCHITECTURE_ANALYSIS.md` before significant changes.
-2. **Filters**: Every query MUST filter by `tenant_id` or `twin_id`.
-3. **Auth**: Use `Depends(get_current_user)` and `verify_owner()`.
-4. **Singleton**: Import `supabase` from `modules.observability`.
-5. **No Placeholders**: Never use placeholder URLs or keys in PRs.
+### Run
 
----
+```bash
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-## 📞 Support & Documentation
-- **Architecture**: [architecture/system-overview.md](file:///c/Users/saina/verified-digital-twin-brain/docs/architecture/system-overview.md)
-- **API Contracts**: [architecture/api-contracts.md](file:///c/Users/saina/verified-digital-twin-brain/docs/architecture/api-contracts.md)
-- **AI Operating Manual**: [ai/agent-manual.md](file:///c/Users/saina/verified-digital-twin-brain/docs/ai/agent-manual.md)
+```bash
+cd frontend
+npm run dev
+```
+
+For the full env checklist, worker startup, common failures, and smoke-test flow, use [DEBUG_RUNBOOK.md](../DEBUG_RUNBOOK.md).

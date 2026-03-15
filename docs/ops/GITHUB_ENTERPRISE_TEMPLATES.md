@@ -20,7 +20,7 @@ These templates are ready to implement. Just update with your details.
 /backend/database/schema/ @yourusername
 
 # Frontend auth - require frontend lead
-/frontend/middleware.ts @yourusername
+/frontend/proxy.ts @yourusername
 /frontend/lib/supabase/ @yourusername
 
 # Documentation

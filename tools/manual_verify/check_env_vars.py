@@ -9,18 +9,18 @@ from pathlib import Path
 
 def check_backend_env():
     """Check backend environment variables"""
-    backend_env = Path("backend/.env")
+    backend_env = Path(".env")
     
     print("=" * 60)
     print("BACKEND ENVIRONMENT VARIABLES CHECK")
     print("=" * 60)
     
     if not backend_env.exists():
-        print("[X] backend/.env file NOT FOUND")
-        print("   Create it from backend/.env.example (if exists)")
+        print("[X] .env file NOT FOUND")
+        print("   Create it from .env.example")
         return False
     
-    print("[OK] backend/.env file exists")
+    print("[OK] .env file exists")
     
     # Read .env file
     env_vars = {}
@@ -84,7 +84,7 @@ def check_frontend_env():
     
     if not frontend_env.exists():
         print("[X] frontend/.env.local file NOT FOUND")
-        print("   Create it from frontend/.env.local.example (if exists)")
+        print("   Create it from frontend/.env.example")
         return False
     
     print("[OK] frontend/.env.local file exists")

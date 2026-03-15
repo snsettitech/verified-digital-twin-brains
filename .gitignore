@@ -60,6 +60,7 @@ node_modules/
 out/
 build/
 .vercel
+*.tsbuildinfo
 
 # Cache
 .npm
@@ -112,11 +113,19 @@ frontend/test-results-temp/
 
 # Eval results
 backend/eval/results_*.json
+backend/chunking_eval_*.json
+backend/chunking_eval_*.md
+backend/system_audit_*.json
+backend/error_log.txt
+backend/repro_test.txt
 
 # Debug outputs
 **/retrieval_debug_output.json
 **/eval_debug.log
 **/devserver.log
+frontend/lint-output.json
+frontend/tests/tmp/
+frontend/playwright.tmp.config.cjs
 
 # =============================================================================
 # PROOF AND VERIFICATION ARTIFACTS

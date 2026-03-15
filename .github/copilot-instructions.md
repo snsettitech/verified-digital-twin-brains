@@ -36,7 +36,7 @@ These modules are foundation—modify only to extend, never to replace:
 5. **`backend/main.py`**: CORS and middleware order
    - Middleware order matters; never reorder or remove
    
-6. **`frontend/middleware.ts`** and **`frontend/lib/`**: Auth patterns
+6. **`frontend/proxy.ts`** and **`frontend/lib/`**: Auth patterns
    - Do not modify Supabase client initialization
 
 ---
@@ -168,7 +168,7 @@ raise HTTPException(
 1. Add component in `frontend/components/`
 2. Use Next.js App Router conventions
 3. Auth patterns already in `frontend/lib/`
-4. Never modify `frontend/middleware.ts`
+4. Never modify `frontend/proxy.ts`
 
 ### Debugging a Bug
 1. Check `.cursorrules` for debugging protocol

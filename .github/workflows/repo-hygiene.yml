@@ -1,4 +1,4 @@
-name: Repo Hygiene Check
+name: Repo Hygiene
 
 on:
   pull_request:
@@ -7,173 +7,72 @@ on:
     branches: [main, master]
 
 jobs:
-  hygiene-check:
-    name: Check Repository Hygiene
+  hygiene:
+    name: Enforce Repository Hygiene
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check for log files
+      - name: Fail on tracked files that match .gitignore
+        shell: bash
         run: |
-          echo "Checking for log files..."
-          LOG_FILES=$(find . -type f -name "*.log" ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./venv/*" ! -path "./.venv/*" | head -20)
-          if [ -n "$LOG_FILES" ]; then
-            echo "❌ Found log files that should not be committed:"
-            echo "$LOG_FILES"
+          set -euo pipefail
+          tracked_ignored="$(git ls-files -ci --exclude-standard || true)"
+          if [[ -n "$tracked_ignored" ]]; then
+            echo "Tracked files still match .gitignore patterns:"
+            echo "$tracked_ignored"
+            echo ""
+            echo "Remove them from version control with: git rm --cached <path>"
             exit 1
           fi
-          echo "✅ No log files found"
 
-      - name: Check for temp directories
+      - name: Fail on committed junk outside docs/archive
+        shell: bash
         run: |
-          echo "Checking for temp directories..."
-          TEMP_DIRS=$(find . -type d \( -name "tmp" -o -name ".tmp" -o -name "temp" -o -name ".temp" \) ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./.next/*" | head -20)
-          if [ -n "$TEMP_DIRS" ]; then
-            echo "❌ Found temp directories that should not be committed:"
-            echo "$TEMP_DIRS"
+          set -euo pipefail
+          tracked_files="$(git ls-files -- . ':(exclude)docs/archive/**')"
+          forbidden="$(
+            printf '%s\n' "$tracked_files" | grep -E \
+              '(^|/)(artifacts|tmp|temp|proof)(/|$)|(^|/)(__pycache__|\.pytest_cache|\.model_cache)(/|$)|(^|/)(playwright-report|playwright-test-results|test-results|test-results-temp|coverage|htmlcov)(/|$)|(^|/)\.env($|\.)|(^|/).*\.(log|err\.log|out\.log)$|(^|/).*(_results|debug).*\.json$|(^|/)backend/(chunking_eval_.*\.(json|md)|system_audit_.*\.json|error_log\.txt|repro_test\.txt|test_token\.txt)$|(^|/)frontend/(lint-output\.json|playwright\.tmp\.config\.cjs)$|(^|/)frontend/tests/tmp/.*$|(^|/)deployment_success\.png$|(^|/)supabase-mcp-server-.*\.tgz$' \
+              || true
+          )"
+          if [[ -n "$forbidden" ]]; then
+            echo "Forbidden committed junk detected:"
+            echo "$forbidden"
             exit 1
           fi
-          echo "✅ No temp directories found"
 
-      - name: Check for cache directories
+      - name: Warn on hardcoded local or deployment URLs in source
+        shell: bash
         run: |
-          echo "Checking for cache directories..."
-          CACHE_DIRS=$(find . -type d \( -name ".cache" -o -name "cache" -o -name ".model_cache" -o -name "model_cache" \) ! -path "./.git/*" ! -path "./node_modules/*" ! -path "./.next/*" | head -20)
-          if [ -n "$CACHE_DIRS" ]; then
-            echo "❌ Found cache directories that should not be committed:"
-            echo "$CACHE_DIRS"
+          set -euo pipefail
+          findings="$(
+            grep -RInE '(http://localhost:[0-9]+|https://[^"[:space:]]+\.onrender\.com|https://[^"[:space:]]+\.vercel\.app)' \
+              backend frontend \
+              --include='*.py' --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
+              --exclude-dir='tests' \
+              --exclude='next.config.ts' \
+              --exclude='vercel.json' \
+              || true
+          )"
+          if [[ -n "$findings" ]]; then
+            echo "Hardcoded URLs detected in source. Review whether these belong in config:"
+            echo "$findings" | head -20
+          fi
+
+      - name: Warn on root markdown clutter
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowed='^(README\.md|CONTRIBUTING\.md|AGENTS\.md|DEBUG_RUNBOOK\.md|REPO_MAP\.md|RUNTIME_ENTRYPOINTS\.md|UNUSED_CODE_AUDIT\.md|REPO_HYGIENE_PLAN\.md|ENV_AUDIT\.md|DEPENDENCY_AND_REFERENCE_NOTES\.md|CLEANUP_CHANGELOG\.md)$'
+          root_md="$(find . -maxdepth 1 -type f -name '*.md' -printf '%f\n' | grep -Ev "$allowed" || true)"
+          if [[ -n "$root_md" ]]; then
+            echo "Unexpected root-level markdown files detected:"
+            echo "$root_md"
+            echo "Archive or relocate non-canonical reports under docs/archive/."
             exit 1
           fi
-          echo "✅ No cache directories found"
-
-      - name: Check for test result directories
-        run: |
-          echo "Checking for test result directories..."
-          TEST_DIRS=$(find . -type d \( -name "test-results" -o -name "test-results-temp" -o -name "playwright-report" -o -name "playwright-test-results" -o -name "coverage" -o -name ".nyc_output" -o -name "htmlcov" \) ! -path "./.git/*" ! -path "./node_modules/*" | head -20)
-          if [ -n "$TEST_DIRS" ]; then
-            echo "❌ Found test result directories that should not be committed:"
-            echo "$TEST_DIRS"
-            exit 1
-          fi
-          echo "✅ No test result directories found"
-
-      - name: Check for Python cache
-        run: |
-          echo "Checking for Python cache..."
-          PYCACHE=$(find . -type d -name "__pycache__" ! -path "./.git/*" ! -path "./node_modules/*" | head -20)
-          if [ -n "$PYCACHE" ]; then
-            echo "❌ Found __pycache__ directories that should not be committed:"
-            echo "$PYCACHE"
-            exit 1
-          fi
-          
-          PYCFILES=$(find . -type f -name "*.pyc" ! -path "./.git/*" ! -path "./node_modules/*" | head -20)
-          if [ -n "$PYCFILES" ]; then
-            echo "❌ Found .pyc files that should not be committed:"
-            echo "$PYCFILES"
-            exit 1
-          fi
-          echo "✅ No Python cache found"
-
-      - name: Check for debug artifacts
-        run: |
-          echo "Checking for debug artifacts..."
-          # Check for debug JSON files in root
-          DEBUG_JSON=$(find . -maxdepth 1 -type f \( -name "*results.json" -o -name "*debug*.json" -o -name "*chat_history.json" \) | head -20)
-          if [ -n "$DEBUG_JSON" ]; then
-            echo "❌ Found debug JSON files that should not be committed:"
-            echo "$DEBUG_JSON"
-            exit 1
-          fi
-          echo "✅ No debug artifacts found"
-
-      - name: Check for artifacts directory
-        run: |
-          echo "Checking for artifacts directory..."
-          if [ -d "artifacts" ]; then
-            echo "❌ Found 'artifacts' directory that should not be committed"
-            exit 1
-          fi
-          echo "✅ No artifacts directory found"
-
-      - name: Check for proof directory at root
-        run: |
-          echo "Checking for proof directory at root..."
-          if [ -d "proof" ]; then
-            echo "❌ Found 'proof' directory at root that should not be committed"
-            exit 1
-          fi
-          echo "✅ No proof directory at root"
-
-      - name: Check for .env files
-        run: |
-          echo "Checking for .env files..."
-          ENV_FILES=$(find . -maxdepth 1 -type f -name ".env*" ! -name ".env.example" | head -20)
-          if [ -n "$ENV_FILES" ]; then
-            echo "❌ Found .env files that should not be committed:"
-            echo "$ENV_FILES"
-            echo "Use .env.example as a template and keep actual .env files out of git"
-            exit 1
-          fi
-          echo "✅ No .env files found"
-
-      - name: Check for forbidden patterns in code
-        run: |
-          echo "Checking for forbidden patterns..."
-          
-          # Check for hardcoded localhost in non-test Python files
-          LOCALHOST_ISSUES=$(grep -r "http://localhost:8000" --include="*.py" . 2>/dev/null | grep -v "test" | grep -v "__pycache__" | head -10)
-          if [ -n "$LOCALHOST_ISSUES" ]; then
-            echo "⚠️ Warning: Found hardcoded localhost URLs in Python files:"
-            echo "$LOCALHOST_ISSUES"
-            echo "These should use environment variables or config"
-          fi
-          
-          # Check for potential secrets (basic patterns)
-          SECRET_PATTERNS="(api[_-]?key|secret[_-]?key|password|token)\s*=\s*['\"][^'\"]{10,}['\"]"
-          POTENTIAL_SECRETS=$(grep -riE "$SECRET_PATTERNS" --include="*.py" --include="*.ts" --include="*.tsx" --include="*.js" . 2>/dev/null | grep -v "__pycache__" | grep -v "node_modules" | grep -v "example" | grep -v "test" | head -10)
-          if [ -n "$POTENTIAL_SECRETS" ]; then
-            echo "⚠️ Warning: Potential hardcoded secrets detected:"
-            echo "$POTENTIAL_SECRETS"
-            echo "Review these to ensure they are not actual secrets"
-          fi
-          
-          echo "✅ Forbidden pattern check complete"
-
-      - name: Check gitignore effectiveness
-        run: |
-          echo "Checking .gitignore effectiveness..."
-          
-          # Check if any ignored files are tracked
-          TRACKED_IGNORED=$(git ls-files -i --exclude-standard 2>/dev/null | head -20)
-          if [ -n "$TRACKED_IGNORED" ]; then
-            echo "⚠️ Warning: Some files match .gitignore patterns but are still tracked:"
-            echo "$TRACKED_IGNORED"
-            echo "Run 'git rm --cached <file>' to stop tracking them"
-          else
-            echo "✅ No tracked files match .gitignore patterns"
-          fi
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "=========================================="
-          echo "Repository Hygiene Check Complete"
-          echo "=========================================="
-          echo ""
-          echo "This check ensures the repository stays clean by:"
-          echo "- Blocking log files from being committed"
-          echo "- Blocking temp and cache directories"
-          echo "- Blocking test results and generated artifacts"
-          echo "- Blocking Python cache files"
-          echo "- Blocking debug output files"
-          echo "- Warning about potential hardcoded secrets"
-          echo ""
-          echo "If this check fails:"
-          echo "1. Remove the offending files from your commit"
-          echo "2. Add them to .gitignore if needed"
-          echo "3. If already tracked, run: git rm --cached <file>"

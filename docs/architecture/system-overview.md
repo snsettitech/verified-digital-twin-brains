@@ -17,6 +17,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 - **AI Stack**: GPT-4o, Pinecone vectors, LangGraph agents
 - **Deployment**: Vercel (frontend) + Render/Railway (backend)
 - **Phase Completion**: 9/10 major phases complete
+- **Deep Research Routing**: Core deep-research routes are always registered; only the name-only JSON flow is gated by `NAME_ONLY_DEEP_RESEARCH_ENABLED`
 
 ---
 
@@ -36,7 +37,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 └──────────────────────┬──────────────────────────────────────────┘
                        │ (REST API + WebSockets)
 ┌──────────────────────▼──────────────────────────────────────────┐
-│              BACKEND (FastAPI + Python 3.12)                    │
+│              BACKEND (FastAPI + Python 3.11)                    │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ API Router Layer (17 Routers)                      │        │
 │  ├─ auth.py (JWT, user sync, sessions)              │        │

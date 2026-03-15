@@ -456,7 +456,7 @@ verified-digital-twin-brain/
 |------|---------|-------|
 | `backend/main.py` | FastAPI app entry | 166 |
 | `backend/worker.py` | Background worker | - |
-| `frontend/middleware.ts` | Auth middleware | - |
+| `frontend/proxy.ts` | Auth middleware | - |
 | `frontend/app/page.tsx` | Landing page | - |
 | `frontend/app/dashboard/page.tsx` | Main dashboard | 26KB |
 

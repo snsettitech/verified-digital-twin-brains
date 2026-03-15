@@ -21,7 +21,7 @@ class PRQualityChecker:
         'backend/modules/observability.py',
         'backend/modules/clients.py',
         'backend/main.py',
-        'frontend/middleware.ts',
+        'frontend/proxy.ts',
         'frontend/lib/supabase/',
         '.github/workflows/',
     ]

@@ -1,0 +1,63 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": ["-y", "@supabase/mcp-server-supabase@latest"],
+      "env": {
+        "SUPABASE_URL": "https://jvtffdbuwyhmcynauety.supabase.co",
+        "SUPABASE_SERVICE_ROLE_KEY": "sb_secret_N2McacLzfKHALYLAgg01Xw_uEvGllKO"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-fs@latest"],
+      "env": {
+        "ALLOWED_DIRECTORIES": "d:/verified-digital-twin-brains"
+      }
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git@latest", "d:/verified-digital-twin-brains"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "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"
+      }
+    },
+    "grep": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-grep@latest"],
+      "env": {
+        "SEARCH_ROOT": "d:/verified-digital-twin-brains"
+      }
+    },
+    "vercel": {
+      "command": "npx",
+      "args": ["-y", "@vercel/mcp-server@latest"],
+      "env": {
+        "VERCEL_TOKEN": "Fp1WNq8mao7fkmmzC2gHWkpe",
+        "VERCEL_PROJECT_ID": "prj_tye8zjjKLvhdjH2pyBXno8JaylYk"
+      }
+    },
+    "render": {
+      "command": "npx",
+      "args": ["-y", "@render/mcp-server@latest"],
+      "env": {
+        "RENDER_API_KEY": "rnd_2njPj7KJhySujgCtTBBI2e3zMhgr",
+        "RENDER_SERVICE_ID": "srv-d55qmb95pdvs73cagk60"
+      }
+    },
+    "openapi": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-openapi@latest"],
+      "env": {
+        "OPENAPI_SPEC_PATH": "d:/verified-digital-twin-brains/backend/openapi.json",
+        "OPENAPI_BASE_URL": "http://localhost:8000"
+      }
+    },
+    "graphiti": {
+      "url": "http://127.0.0.1:8001/mcp/"
+    },
+    "zep": {
+      "url": "https://docs-mcp.getzep.com/mcp"
+    }
+  }
+}

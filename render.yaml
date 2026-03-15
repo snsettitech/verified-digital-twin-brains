@@ -46,6 +46,8 @@ services:
         value: https://cloud.langfuse.com
       - key: OPENAI_API_KEY
         sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
       - key: EXA_API_KEY
         sync: false
       - key: FIRECRAWL_API_KEY
@@ -58,6 +60,10 @@ services:
         sync: false
       - key: PINECONE_INDEX_NAME
         sync: false
+      - key: PINECONE_INDEX_MODE
+        value: "integrated"
+      - key: PINECONE_TEXT_FIELD
+        value: "chunk_text"
       - key: DATABASE_URL
         sync: false
       - key: CEREBRAS_API_KEY
@@ -81,6 +87,18 @@ services:
         value: "0.75"
       - key: RERANK_CACHE_ENABLED
         value: "true"
+      - key: INFERENCE_PROVIDER
+        value: "openai"
+      - key: OPENAI_MODEL
+        value: "gpt-4o"
+      - key: OPENAI_JSON_MODEL
+        value: "gpt-4o-mini"
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      - key: CONVERSATIONAL_REALIZER_ENABLED
+        value: "false"
       # Query Rewriting for Conversational Context
       - key: QUERY_REWRITING_ENABLED
         value: "false"  # Set to "true" after testing
@@ -156,6 +174,8 @@ services:
         sync: false
       - key: OPENAI_API_KEY
         sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
       - key: EXA_API_KEY
         sync: false
       - key: FIRECRAWL_API_KEY
@@ -164,6 +184,10 @@ services:
         sync: false
       - key: PINECONE_INDEX_NAME
         sync: false
+      - key: PINECONE_INDEX_MODE
+        value: "integrated"
+      - key: PINECONE_TEXT_FIELD
+        value: "chunk_text"
       - key: DATABASE_URL
         sync: false
       - key: CEREBRAS_API_KEY
@@ -181,6 +205,18 @@ services:
         value: "true"
       - key: ENABLE_FLASHRANK
         value: "true"
+      - key: INFERENCE_PROVIDER
+        value: "openai"
+      - key: OPENAI_MODEL
+        value: "gpt-4o"
+      - key: OPENAI_JSON_MODEL
+        value: "gpt-4o-mini"
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
+      - key: GEMINI_BASE_URL
+        value: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      - key: CONVERSATIONAL_REALIZER_ENABLED
+        value: "false"
       # Query Rewriting for Conversational Context
       - key: QUERY_REWRITING_ENABLED
         value: "false"

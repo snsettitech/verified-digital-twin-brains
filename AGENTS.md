@@ -242,7 +242,7 @@ The following files/modules have critical patterns that must not be modified:
 
 ### Frontend
 - **`frontend/lib/supabase/client.ts`** - Supabase client initialization
-- **`frontend/middleware.ts`** - Auth redirects and middleware chain
+- **`frontend/proxy.ts`** - Auth redirects and proxy chain
 
 ### Database
 - **`backend/database/migrations/`** - SQL migrations; test in Supabase SQL Editor first

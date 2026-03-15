@@ -19,7 +19,7 @@
 
 # Frontend auth context
 /frontend/lib/supabase/ @sainathsetti
-/frontend/middleware.ts @sainathsetti
+/frontend/proxy.ts @sainathsetti
 
 # ============================================================================
 # API CONTRACTS: Routes, schemas, clients (prevent FE/BE drift)

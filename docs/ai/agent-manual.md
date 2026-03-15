@@ -36,7 +36,7 @@ verified-digital-twin-brain/
 - **`backend/modules/clients.py`**: OpenAI/Pinecone clients - MUST use centralized initialization
 - **`backend/main.py`**: Middleware order is critical - DO NOT reorder CORS/auth middleware
 - **`frontend/lib/`**: Auth patterns - DO NOT change Supabase client initialization
-- **`frontend/middleware.ts`**: Auth redirects - DO NOT modify without understanding full flow
+- **`frontend/proxy.ts`**: Auth redirects - DO NOT modify without understanding full flow
 
 ## Do-Not-Touch Zones
 
@@ -51,7 +51,7 @@ verified-digital-twin-brain/
 - `backend/modules/auth_guard.py`
 - `backend/routers/auth.py`
 - `frontend/lib/supabase/client.ts`
-- `frontend/middleware.ts`
+- `frontend/proxy.ts`
 
 **Rule**: Follow existing patterns exactly. Do not:
 - Change JWT validation logic

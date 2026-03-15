@@ -45,7 +45,7 @@ Use this to require review from specific people on sensitive files:
 /backend/modules/auth_guard.py @your-github-handle
 /backend/modules/observability.py @your-github-handle
 /backend/routers/ @your-github-handle
-/frontend/middleware.ts @your-github-handle
+/frontend/proxy.ts @your-github-handle
 
 # Database and migrations
 /backend/database/migrations/ @your-github-handle

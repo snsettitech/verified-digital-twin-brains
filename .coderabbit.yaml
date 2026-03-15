@@ -29,7 +29,7 @@ reviews:
     - "backend/routers/**"
     - "backend/database/migrations/**"
     - "frontend/lib/**"
-    - "frontend/middleware.ts"
+    - "frontend/proxy.ts"
 
   # File patterns to review carefully
   patterns:
