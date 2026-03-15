@@ -5,12 +5,19 @@ import { Card } from '@/components/ui/Card';
 import { getConnectedAccounts } from '@/lib/api/auth';
 import { getSupabaseClient } from '@/lib/supabase/client';
 
+export interface LinkedInIdentity {
+  displayName: string;
+  location?: string;
+  headline?: string;
+}
+
 export interface UnifiedInputData {
   fullName: string;
   headline?: string;
   location?: string;
   linkedInUrl?: string;
   consent: boolean;
+  linkedInIdentity?: LinkedInIdentity;
   /** Optional: user-provided sources */
   sources?: {
     type: 'export' | 'link' | 'paste';
@@ -28,28 +35,31 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
   const [fullName, setFullName] = useState('');
   const [headline, setHeadline] = useState('');
   const [location, setLocation] = useState('');
-  const [linkedInUrl, setLinkedInUrl] = useState('');
   const [consent, setConsent] = useState(false);
   const [showOptionalSources, setShowOptionalSources] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Optional sources (collapsible)
   const [files, setFiles] = useState<File[]>([]);
   const [links, setLinks] = useState<{ url: string }[]>([]);
   const [pasteContent, setPasteContent] = useState('');
   const [pasteTitle, setPasteTitle] = useState('');
   const [linkedInConnected, setLinkedInConnected] = useState(false);
-  const [linkedInProfileUrl, setLinkedInProfileUrl] = useState<string | null>(null);
+  const [linkedInIdentity, setLinkedInIdentity] = useState<LinkedInIdentity | null>(null);
 
   useEffect(() => {
     getConnectedAccounts().then(({ accounts }) => {
       const linkedIn = accounts.find(a => a.provider === 'linkedin');
-      if (linkedIn?.profile_snapshot?.profile_url) {
+      if (linkedIn?.profile_snapshot?.display_name) {
+        const identity: LinkedInIdentity = {
+          displayName: linkedIn.profile_snapshot.display_name,
+          headline: linkedIn.profile_snapshot.headline ?? undefined,
+        };
         setLinkedInConnected(true);
-        const url = linkedIn.profile_snapshot.profile_url;
-        setLinkedInProfileUrl(url);
-        setLinkedInUrl(url);
-        setLinks(prev => (prev.some(l => l.url === url) ? prev : [{ url }, ...prev]));
+        setLinkedInIdentity(identity);
+        setFullName(prev => prev.trim() ? prev : identity.displayName);
+        if (identity.headline) {
+          setHeadline(prev => prev.trim() ? prev : identity.headline!);
+        }
       }
     });
   }, []);
@@ -85,18 +95,12 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
       sources.push({ type: 'paste', value: pasteContent, category: pasteTitle || 'Pasted Content' });
     }
 
-    // If user entered LinkedIn URL manually, add as link
-    const manualLinkedIn = linkedInUrl.trim();
-    if (manualLinkedIn && manualLinkedIn.startsWith('http') && !sources.some(s => s.type === 'link' && s.value === manualLinkedIn)) {
-      sources.push({ type: 'link', value: manualLinkedIn });
-    }
-
     await onSubmit({
       fullName: fullName.trim(),
       headline: headline.trim() || undefined,
       location: location.trim() || undefined,
-      linkedInUrl: linkedInUrl.trim() || undefined,
       consent,
+      linkedInIdentity: linkedInIdentity ?? undefined,
       sources: sources.length > 0 ? sources : undefined,
     });
     setIsSubmitting(false);
@@ -159,29 +163,21 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
             <label className="block text-sm font-medium text-slate-300 mb-2">
               LinkedIn <span className="text-slate-500">(optional)</span>
             </label>
-            {linkedInConnected ? (
-              <p className="text-sm text-green-400">Connected: {linkedInProfileUrl}</p>
+            {linkedInConnected && linkedInIdentity ? (
+              <p className="text-sm text-green-400">
+                Connected as: {linkedInIdentity.displayName}
+              </p>
             ) : (
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  value={linkedInUrl}
-                  onChange={(e) => setLinkedInUrl(e.target.value)}
-                  placeholder="https://linkedin.com/in/yourprofile"
-                  className="flex-1 px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={handleConnectLinkedIn}
-                  className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
-                >
-                  Connect
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleConnectLinkedIn}
+                className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
+              >
+                Connect LinkedIn
+              </button>
             )}
           </div>
 
-          {/* Collapsible: I have files or links */}
           <div className="border-t border-slate-800 pt-6">
             <button
               type="button"

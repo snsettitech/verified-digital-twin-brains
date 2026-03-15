@@ -10,7 +10,7 @@ import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 // Types
 // =============================================================================
 
-type OnboardingStep = 'input' | 'research';
+type OnboardingStep = 'input' | 'deep-research' | 'research';
 
 interface Twin {
   id: string;
@@ -18,6 +18,35 @@ interface Twin {
   status: string;
   specialization?: string;
   settings?: Record<string, unknown>;
+}
+
+// =============================================================================
+// Deep Research Progress (inline component)
+// =============================================================================
+
+function DeepResearchProgress({ status, name }: { status: string; name: string }) {
+  const statusLabels: Record<string, string> = {
+    created: 'Starting research…',
+    searching: 'Searching the web…',
+    crawling: 'Reading public content…',
+    extracting: 'Extracting information…',
+    synthesizing: 'Synthesizing profile…',
+    completed: 'Research complete!',
+    failed: 'Research failed.',
+  };
+  const label = statusLabels[status] ?? status;
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
+      <div className="text-center max-w-md">
+        {status !== 'failed' && (
+          <div className="w-14 h-14 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+        )}
+        <h2 className="text-2xl font-bold mb-2">Researching {name}</h2>
+        <p className="text-slate-400">{label}</p>
+      </div>
+    </div>
+  );
 }
 
 // =============================================================================
@@ -34,6 +63,8 @@ function OnboardingContent() {
   const [twin, setTwin] = useState<Twin | null>(null);
   const [submittedUrls, setSubmittedUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [deepResearchStatus, setDeepResearchStatus] = useState('created');
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const trackEvent = useCallback((event: string, properties?: Record<string, unknown>) => {
     if (typeof window !== 'undefined' && (window as unknown as { posthog?: { capture: (e: string, p?: Record<string, unknown>) => void } }).posthog) {
@@ -42,12 +73,94 @@ function OnboardingContent() {
     console.log(`[Telemetry] ${event}`, properties);
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Deep research polling helper
+  // ---------------------------------------------------------------------------
+  const pollDeepResearch = useCallback(async (runId: string): Promise<void> => {
+    const TERMINAL = new Set(['completed', 'failed']);
+    for (;;) {
+      await new Promise(r => setTimeout(r, 3000));
+      const res = await authFetchStandalone(`/deep-research/runs/${runId}`);
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.detail?.message ?? `Research status check failed (${res.status})`);
+      }
+      const data = await res.json();
+      setDeepResearchStatus(data.status);
+      if (TERMINAL.has(data.status)) {
+        if (data.status === 'failed') {
+          throw new Error(data.error_message ?? 'Deep research run failed');
+        }
+        return;
+      }
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // LinkedIn deep research path
+  // ---------------------------------------------------------------------------
+  const runLinkedInDeepResearch = useCallback(async (
+    twinId: string,
+    data: UnifiedInputData,
+  ): Promise<void> => {
+    const identity = data.linkedInIdentity!;
+
+    // 1. Start deep research run
+    const runRes = await authFetchStandalone('/deep-research/runs', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: identity.displayName,
+        hints: {
+          location: data.location ?? undefined,
+          company: identity.headline ?? undefined,
+        },
+      }),
+    });
+    if (!runRes.ok) {
+      const payload = await runRes.json().catch(() => ({}));
+      throw new Error(payload?.detail?.message ?? `Failed to start deep research (${runRes.status})`);
+    }
+    const { run_id: runId } = await runRes.json();
+
+    setCurrentStep('deep-research');
+    setDeepResearchStatus('created');
+
+    // 2. Poll to completion
+    await pollDeepResearch(runId);
+
+    // 3. Fetch result JSON
+    const resultRes = await authFetchStandalone(`/deep-research/runs/${runId}/result.json`);
+    if (!resultRes.ok) {
+      const payload = await resultRes.json().catch(() => ({}));
+      throw new Error(payload?.detail?.message ?? `Failed to fetch research result (${resultRes.status})`);
+    }
+    const resultJson = await resultRes.json();
+
+    // 4. Feed result into persona via Mode B
+    const modeBRes = await authFetchStandalone('/persona/link-compile/jobs/mode-b', {
+      method: 'POST',
+      body: JSON.stringify({
+        twin_id: twinId,
+        content: JSON.stringify(resultJson),
+        title: `Deep Research: ${identity.displayName}`,
+      }),
+    });
+    if (!modeBRes.ok) {
+      const payload = await modeBRes.json().catch(() => ({}));
+      throw new Error(payload?.detail?.message ?? `Failed to submit research content (${modeBRes.status})`);
+    }
+  }, [pollDeepResearch]);
+
+  // ---------------------------------------------------------------------------
+  // Main submit handler
+  // ---------------------------------------------------------------------------
   const handleInputSubmit = async (data: UnifiedInputData) => {
     setInputData(data);
+    setSubmitError(null);
     trackEvent('onboarding_started', {
       has_headline: !!data.headline,
       has_location: !!data.location,
-      has_linkedin: !!data.linkedInUrl,
+      has_linkedin: !!data.linkedInIdentity,
       has_sources: !!(data.sources && data.sources.length > 0),
     });
 
@@ -55,9 +168,10 @@ function OnboardingContent() {
     let createdProfileInAttempt = false;
     try {
       const sources = data.sources ?? [];
-      const hasOptionalSources = sources.length > 0 || Boolean(data.linkedInUrl?.trim());
-      const buildMode: 'with_links' | 'name_only' = hasOptionalSources ? 'with_links' : 'name_only';
+      const hasOptionalSources = sources.length > 0;
+      const buildMode: 'with_links' | 'name_only' = (hasOptionalSources || data.linkedInIdentity) ? 'with_links' : 'name_only';
 
+      // Step 1: create profile
       const profileResponse = await authFetchStandalone('/profile', {
         method: 'POST',
         body: JSON.stringify({
@@ -68,16 +182,19 @@ function OnboardingContent() {
       });
 
       if (!profileResponse.ok) {
+        if (profileResponse.status === 409) {
+          const payload = await profileResponse.json().catch(() => ({}));
+          const msg = payload?.detail?.message ?? payload?.detail ?? 'You already have a profile.';
+          setSubmitError(`${msg} Go to your dashboard or reset your profile first.`);
+          return;
+        }
         let detailMessage = `Failed to create profile (${profileResponse.status})`;
         try {
           const payload = await profileResponse.json();
           const detail = payload?.detail;
           if (typeof detail === 'string' && detail.trim()) detailMessage = detail.trim();
-          else if (detail && typeof detail?.message === 'string' && detail.message.trim()) detailMessage = detail.message.trim();
-          else if (typeof payload?.message === 'string' && payload.message.trim()) detailMessage = payload.message.trim();
-        } catch {
-          // Ignore
-        }
+          else if (detail && typeof detail?.message === 'string') detailMessage = detail.message.trim();
+        } catch { /* ignore */ }
         throw new Error(detailMessage);
       }
 
@@ -93,15 +210,21 @@ function OnboardingContent() {
       };
       setTwin(twinData);
 
-      const urls: string[] = [];
+      // Step 2a: LinkedIn path — deep research
+      if (data.linkedInIdentity) {
+        await runLinkedInDeepResearch(twinData.id, data);
+        trackEvent('onboarding_deep_research_completed', { twin_id: twinData.id });
+        try { localStorage.setItem('activeTwinId', twinData.id); } catch { /* non-blocking */ }
+        router.push(returnTo ?? `/dashboard/profile?from=onboarding`);
+        return;
+      }
 
+      // Step 2b: Standard path — Mode A/B/C + StepResearch
+      const urls: string[] = [];
       for (const s of sources) {
         if (s.type === 'link' && s.value.trim() && s.value.startsWith('http')) {
           urls.push(s.value.trim());
         }
-      }
-      if (data.linkedInUrl?.trim() && data.linkedInUrl.startsWith('http') && !urls.includes(data.linkedInUrl.trim())) {
-        urls.push(data.linkedInUrl.trim());
       }
       const allUrls = [...new Set(urls)].filter(Boolean);
       setSubmittedUrls(allUrls);
@@ -148,10 +271,8 @@ function OnboardingContent() {
             const payload = await modeCResponse.json();
             const detail = payload?.detail;
             if (typeof detail === 'string' && detail.trim()) detailMessage = detail.trim();
-            else if (detail && typeof detail?.message === 'string' && detail.message.trim()) detailMessage = detail.message.trim();
-          } catch {
-            // Ignore
-          }
+            else if (detail && typeof detail?.message === 'string') detailMessage = detail.message.trim();
+          } catch { /* ignore */ }
           throw new Error(detailMessage);
         }
       }
@@ -165,17 +286,16 @@ function OnboardingContent() {
           const rollbackResponse = await authFetchStandalone('/profile/reset', { method: 'POST' });
           rollbackApplied = rollbackResponse.ok;
         } catch (rollbackError) {
-          console.error('Failed to rollback profile after onboarding error:', rollbackError);
+          console.error('Failed to rollback profile:', rollbackError);
         }
       }
-
       let message = error instanceof Error && error.message ? error.message : 'Failed to create twin. Please try again.';
       if (createdProfileInAttempt && rollbackApplied) {
-        message = `${message}\n\nWe reset the partial profile automatically so you can retry cleanly.`;
+        message = `${message}\n\nProfile reset automatically — you can retry.`;
       } else if (createdProfileInAttempt && !rollbackApplied) {
-        message = `${message}\n\nA partial profile may exist. Use Settings → Reset Profile before retrying if needed.`;
+        message = `${message}\n\nA partial profile may exist. Use Settings → Reset Profile before retrying.`;
       }
-      alert(message);
+      setSubmitError(message);
     } finally {
       setIsLoading(false);
     }
@@ -184,11 +304,7 @@ function OnboardingContent() {
   const handleResearchComplete = (researchRunId?: string) => {
     trackEvent('onboarding_research_completed', { twin_id: twin?.id, research_run_id: researchRunId });
     if (twin?.id) {
-      try {
-        localStorage.setItem('activeTwinId', twin.id);
-      } catch {
-        // Non-blocking
-      }
+      try { localStorage.setItem('activeTwinId', twin.id); } catch { /* non-blocking */ }
       const params = new URLSearchParams();
       params.set('from', 'onboarding');
       if (researchRunId) params.set('researchRunId', researchRunId);
@@ -200,12 +316,13 @@ function OnboardingContent() {
     setCurrentStep('input');
   };
 
-  if (isLoading) {
+  // Loading spinner while initial profile call is in flight
+  if (isLoading && currentStep === 'input') {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p>Creating your twin...</p>
+          <p>Creating your twin…</p>
         </div>
       </div>
     );
@@ -263,7 +380,24 @@ function OnboardingContent() {
       )}
 
       <main className="max-w-3xl mx-auto px-4 pb-32 pt-8">
-        {currentStep === 'input' && <UnifiedInputStep onSubmit={handleInputSubmit} />}
+        {currentStep === 'input' && (
+          <>
+            {submitError && (
+              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+                <p className="text-red-400 text-sm whitespace-pre-line">{submitError}</p>
+                {submitError.includes('already have a profile') && (
+                  <a href="/dashboard" className="mt-2 inline-block text-sm text-indigo-400 hover:text-indigo-300 underline">
+                    Go to dashboard →
+                  </a>
+                )}
+              </div>
+            )}
+            <UnifiedInputStep onSubmit={handleInputSubmit} />
+          </>
+        )}
+        {currentStep === 'deep-research' && inputData && (
+          <DeepResearchProgress status={deepResearchStatus} name={inputData.fullName} />
+        )}
         {currentStep === 'research' && inputData && twin && (
           <StepResearch
             twinId={twin.id}

@@ -218,10 +218,16 @@ def _sync_connected_accounts(user_id: str, correlation_id: str) -> None:
                 profile_url = f"https://www.linkedin.com/in/{provider_user_id}"
             display_name = identity_data.get("name") or identity_data.get("full_name")
             image_url = identity_data.get("picture") or identity_data.get("avatar_url") or identity_data.get("image_url")
+            headline = (
+                identity_data.get("headline")
+                or identity_data.get("title")
+                or identity_data.get("position")
+            )
             profile_snapshot = {
                 "profile_url": profile_url,
                 "display_name": display_name,
                 "image_url": image_url,
+                "headline": headline,
             }
             supabase.table("connected_accounts").upsert(
                 {

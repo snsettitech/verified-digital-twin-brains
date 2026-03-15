@@ -18,6 +18,7 @@ export interface ConnectedAccount {
     profile_url?: string;
     display_name?: string;
     image_url?: string;
+    headline?: string;
   };
   created_at: string;
   updated_at: string;
