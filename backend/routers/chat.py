@@ -25,6 +25,7 @@ from modules.interaction_context import (
 from modules.persona_auditor import audit_persona_response
 from modules.persona_spec_store import get_active_persona_spec
 from modules.owner_memory_store import format_owner_memory_context
+from modules.clarification_manager import build_clarification
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from modules.grounding_policy import get_grounding_policy
 from modules.deepagents_policy import classify_deepagents_intent
@@ -585,6 +586,27 @@ async def _run_identity_gate_passthrough(
         mode=mode,
         allow_clarify=allow_clarify,
     )
+    gate_decision = str(gate.get("decision") or "").upper()
+    gate_reason = str(gate.get("reason") or "").lower()
+    if (
+        allow_clarify
+        and gate_decision != "CLARIFY"
+        and gate_reason in {"auto_approve_mode_owner", "clarification_disabled"}
+        and not (gate.get("owner_memory") or [])
+    ):
+        clarification = build_clarification(
+            query,
+            str(gate.get("topic") or "this topic"),
+            str(gate.get("memory_type") or "stance"),
+        )
+        gate = {
+            **gate,
+            "decision": "CLARIFY",
+            "reason": "identity_gate_owner_clarification",
+            "question": clarification["question"],
+            "options": clarification["options"],
+            "memory_write_proposal": clarification["memory_write_proposal"],
+        }
     if str(gate.get("decision") or "").upper() == "CLARIFY":
         clarification_hint = _build_identity_gate_clarification_hint(gate)
         return {
