@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 from datetime import datetime
 from typing import List, Dict, Any
+from unittest.mock import AsyncMock, patch
 
 # Test imports
 import sys
@@ -152,22 +153,49 @@ class TestClaimExtraction:
     async def test_extract_from_text_returns_claims(self):
         """Extractor should return claims from valid text."""
         extractor = ClaimExtractor()
-        
+
         text = """
         I always look for strong technical teams when evaluating startups.
         My priority is team quality over market size.
         I don't invest in crypto projects.
         """
-        
-        claims = await extractor.extract_from_text(
-            text=text,
-            source_id="src_test",
-            twin_id="twin_test",
-        )
-        
+
+        mock_result = {
+            "claims": [
+                {
+                    "claim_text": "I always look for strong technical teams when evaluating startups.",
+                    "claim_type": "heuristic",
+                    "confidence": 0.9,
+                    "authority": "owner_direct",
+                    "span_start": 9,
+                    "span_end": 73,
+                    "quote": "I always look for strong technical teams when evaluating startups.",
+                    "time_scope": None,
+                },
+                {
+                    "claim_text": "My priority is team quality over market size.",
+                    "claim_type": "value",
+                    "confidence": 0.85,
+                    "authority": "owner_direct",
+                    "span_start": 82,
+                    "span_end": 126,
+                    "quote": "My priority is team quality over market size.",
+                    "time_scope": None,
+                },
+            ]
+        }
+
+        with patch("modules.persona_claim_extractor.invoke_json", new_callable=AsyncMock) as mock_invoke:
+            mock_invoke.return_value = (mock_result, {"tokens": 100})
+            claims = await extractor.extract_from_text(
+                text=text,
+                source_id="src_test",
+                twin_id="twin_test",
+            )
+
         # Should extract at least some claims
         assert len(claims) > 0
-        
+
         # Each claim should have required fields
         for claim in claims:
             assert claim.claim_text
@@ -447,7 +475,7 @@ class TestPrivacy:
 async def test_full_flow_integration():
     """
     Integration test: Full Link-First flow.
-    
+
     This is a mock integration - in production would use test DB.
     """
     # Phase 1: Ingest (mock)
@@ -458,10 +486,27 @@ async def test_full_flow_integration():
             "chunk_id": "chunk_001",
         }
     ]
-    
-    # Phase 2: Extract claims
+
+    # Phase 2: Extract claims (mock inference)
+    mock_result = {
+        "claims": [
+            {
+                "claim_text": "I prefer B2B startups over B2C.",
+                "claim_type": "preference",
+                "confidence": 0.88,
+                "authority": "owner_direct",
+                "span_start": 0,
+                "span_end": 31,
+                "quote": "I prefer B2B startups over B2C.",
+                "time_scope": None,
+            }
+        ]
+    }
+
     extractor = ClaimExtractor()
-    claims = await extractor.extract_from_chunks(chunks, "twin_integration_test")
+    with patch("modules.persona_claim_extractor.invoke_json", new_callable=AsyncMock) as mock_invoke:
+        mock_invoke.return_value = (mock_result, {"tokens": 50})
+        claims = await extractor.extract_from_chunks(chunks, "twin_integration_test")
     
     assert len(claims) > 0
     

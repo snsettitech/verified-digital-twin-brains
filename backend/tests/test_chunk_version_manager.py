@@ -150,9 +150,12 @@ class TestChunkVersionManager:
     @pytest.mark.asyncio
     async def test_get_current_chunks_returns_empty(self):
         """get_current_chunks returns empty list (stub)."""
-        manager = ChunkVersionManager()
-        chunks = await manager.get_current_chunks("page_123", "twin_456")
-        assert chunks == []
+        mock_index = Mock()
+        mock_index.query.return_value = Mock(matches=[])
+        with patch("modules.chunk_version_manager.get_pinecone_index", return_value=mock_index):
+            manager = ChunkVersionManager()
+            chunks = await manager.get_current_chunks("page_123", "twin_456")
+            assert chunks == []
 
 
 class TestTombstoneFilterEdgeCases:

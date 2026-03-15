@@ -62,17 +62,21 @@ class TestHFEmbeddings:
         assert len(embeddings) == 3
         assert all(len(emb) == client.dimension for emb in embeddings)
     
+    @pytest.mark.skipif(
+        not os.getenv("HF_TEST_ENABLED"),
+        reason="Set HF_TEST_ENABLED=1 to run HF tests (requires sentence-transformers)"
+    )
     def test_hf_singleton_pattern(self):
         """Test HF client is singleton."""
         from modules.embeddings_hf import HFEmbeddingClient
-        
+
         # Reset singleton
         HFEmbeddingClient.reset()
-        
+
         # Create two instances
         client1 = HFEmbeddingClient()
         client2 = HFEmbeddingClient()
-        
+
         # Should be same instance
         assert client1 is client2
 
@@ -236,19 +240,25 @@ class TestBackwardCompatibility:
     @patch("modules.embeddings.get_openai_client")
     def test_existing_embedding_code(self, mock_get_client):
         """Test existing code calling get_embedding still works."""
+        import modules.embeddings as emb_module
+        from modules.embeddings import CircuitBreaker
+
         mock_client = MagicMock()
         mock_response = MagicMock()
         mock_response.data = [MagicMock(embedding=[0.1] * 3072)]
         mock_client.embeddings.create.return_value = mock_response
         mock_get_client.return_value = mock_client
-        
+
+        # Reset circuit breaker so previous test failures don't bleed in
+        emb_module._embedding_circuit_breaker.state = CircuitBreaker.STATE_CLOSED
+        emb_module._embedding_circuit_breaker.failure_count = 0
+
         with patch.dict(os.environ, {"EMBEDDING_PROVIDER": "openai"}):
-            from modules import embeddings
-            embeddings.EMBEDDING_PROVIDER = "openai"
-            
+            emb_module.EMBEDDING_PROVIDER = "openai"
+
             from modules.embeddings import get_embedding
             result = get_embedding("test query")
-            
+
             assert len(result) == 3072
             mock_client.embeddings.create.assert_called_once()
     
