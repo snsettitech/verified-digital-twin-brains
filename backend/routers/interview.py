@@ -192,31 +192,38 @@ def _map_interview_memory_type(mem_type: str) -> str:
     return "belief"
 
 
-async def _get_user_context(user_id: str, task: str = "interview", twin_id: Optional[str] = None) -> str:
+async def _get_user_context(
+    user_id: str,
+    task: str = "interview",
+    twin_id: Optional[str] = None,
+    tenant_id: Optional[str] = None,
+) -> str:
     """
-    Retrieve prioritized context bundle for the user from Zep/Graphiti.
-    
+    Retrieve prioritized context bundle for the user from graph memory.
+
     Priority order: boundaries > constraints > active goals > stable preferences > recent intent
+    Falls back to owner memory rows when graph memory is unavailable.
     """
+    # Graph memory read (primary path)
     try:
-        from modules.zep_memory import get_zep_client
-        zep_client = get_zep_client()
-        
-        # This will query Graphiti for prioritized context facts
-        context = await zep_client.get_user_context(
-            user_id=user_id,
-            task=task,
-            max_tokens=2000
-        )
-        
-        if context:
-            print(f"[Interview] Retrieved {len(context)} chars of context for user {user_id}")
-        
-        if context:
-            return context
-        
+        from modules.graph_memory_config import get_graph_memory_config
+        from modules.graph_memory_core import GraphMemoryCoreFactory
+        config = get_graph_memory_config()
+        if config.is_read_allowed() and tenant_id:
+            gm = GraphMemoryCoreFactory.create(
+                tenant_id=tenant_id,
+                twin_id=twin_id,
+                creator_id=user_id,
+            )
+            results = await gm.search(task, num_results=15)
+            if results:
+                lines = [r["content"] for r in results if r.get("content")]
+                if lines:
+                    context = "\n".join(f"- {line}" for line in lines)
+                    print(f"[Interview] Graph memory: {len(results)} results for user {user_id}")
+                    return context
     except Exception as e:
-        print(f"Error fetching user context from Zep: {e}")
+        print(f"[Interview] Graph memory read error: {e}")
 
     # Fallback when graph memory is unavailable: use owner memory rows for this twin.
     if twin_id:
@@ -385,7 +392,7 @@ async def create_interview_session(
             )
     
     # Get context from prior sessions
-    context_bundle = await _get_user_context(user_id, "interview", twin_id=twin_id)
+    context_bundle = await _get_user_context(user_id, "interview", twin_id=twin_id, tenant_id=user.get("tenant_id"))
 
     # Load intent profile + public intro from twin settings if available
     intent_profile = {}
@@ -535,22 +542,35 @@ async def finalize_interview_session(
     elif not extracted_memories:
         notes.append("No memories were extracted from transcript.")
     
-    # Upsert memories to Zep/Graphiti
+    # Write episodes to graph memory (async via outbox — non-blocking)
     write_count = 0
     try:
-        from modules.zep_memory import get_zep_client
-        zep_client = get_zep_client()
-        
-        for memory in extracted_memories:
-            result = await zep_client.upsert_memory(
-                user_id,
-                memory.model_dump()
+        from modules.graph_memory_config import get_graph_memory_config
+        from modules.graph_memory_core import GraphMemoryCoreFactory
+        config = get_graph_memory_config()
+        if config.is_write_allowed() and twin_id:
+            tenant_id_val = user.get("tenant_id")
+            gm = GraphMemoryCoreFactory.create(
+                tenant_id=tenant_id_val,
+                twin_id=twin_id,
+                creator_id=user_id,
+                correlation_id=session_id,
             )
-            if result.get("status") in ["created", "fallback"]:
-                write_count += 1
+            for memory in extracted_memories:
+                if memory.confidence < INTERVIEW_MEMORY_MIN_CONFIDENCE:
+                    continue
+                job_id = await gm.create_episode(
+                    name=f"interview:{memory.type}:{session_id[:8]}",
+                    body=memory.value,
+                    source_type="interview",
+                    source_ref=session_id,
+                    async_write=True,
+                )
+                if job_id:
+                    write_count += 1
     except Exception as e:
-        print(f"Error upserting memories to Zep: {e}")
-        # Continue anyway - transcript storage is more important
+        print(f"[Interview] Graph memory write error: {e}")
+        # Continue anyway — transcript storage is more important
     
     session_metadata = dict(request.metadata or {})
     session_metadata.update({
@@ -621,7 +641,7 @@ async def create_realtime_session(
     # Get user context if no system prompt provided
     system_prompt = request.system_prompt
     if not system_prompt:
-        context_bundle = await _get_user_context(user_id, "interview", twin_id=request.twin_id)
+        context_bundle = await _get_user_context(user_id, "interview", twin_id=request.twin_id, tenant_id=tenant_id)
         system_prompt = _build_system_prompt(context_bundle)
     
     # Create ephemeral session via OpenAI
@@ -666,7 +686,7 @@ async def get_user_context(
     if not user_id:
         raise HTTPException(status_code=401, detail="User not authenticated")
     
-    context_bundle = await _get_user_context(user_id, task)
+    context_bundle = await _get_user_context(user_id, task, tenant_id=user.get("tenant_id"))
     
     return ContextBundleResponse(
         context_bundle=context_bundle,

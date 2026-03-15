@@ -366,9 +366,8 @@ def score_memory_importance(memory: ExtractedMemory) -> float:
     - Confidence level
     - Value specificity
     """
-    from modules.zep_memory import MEMORY_PRIORITY
-    
-    type_weight = 1.0 / MEMORY_PRIORITY.get(memory.type, 5)
+    _MEMORY_PRIORITY = {"boundary": 1, "constraint": 2, "goal": 3, "preference": 4, "intent": 5}
+    type_weight = 1.0 / _MEMORY_PRIORITY.get(memory.type, 5)
     confidence_weight = memory.confidence
     
     # Specificity heuristic: longer, more detailed values are more specific

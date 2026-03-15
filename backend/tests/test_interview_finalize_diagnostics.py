@@ -58,12 +58,15 @@ class _FakeZep:
 @pytest.mark.asyncio
 async def test_finalize_reports_proposal_failures(monkeypatch):
     from routers import interview
-    import modules.zep_memory as zep_memory
+    from modules.graph_memory_config import get_graph_memory_config, reset_config
+    import os
 
     sink = {}
     monkeypatch.setattr(interview, "AUTO_APPROVE_OWNER_MEMORY", True)
     monkeypatch.setattr(interview, "supabase", _Supabase(sink))
-    monkeypatch.setattr(zep_memory, "get_zep_client", lambda: _FakeZep())
+    # Keep graph memory disabled so the write path is a no-op in unit tests
+    monkeypatch.setenv("GRAPH_MEMORY_ENABLED", "false")
+    reset_config()
 
     async def _extract(_transcript, session_id):  # noqa: ANN001
         return [

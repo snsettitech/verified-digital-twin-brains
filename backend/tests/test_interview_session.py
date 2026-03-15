@@ -355,11 +355,10 @@ async def test_finalize_rejects_other_users_session(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_user_context_falls_back_to_owner_memories(monkeypatch):
     from routers import interview
-    import modules.zep_memory as zep_memory
+    from modules.graph_memory_config import reset_config
 
-    class _NoContextZep:
-        async def get_user_context(self, *_args, **_kwargs):
-            return ""
+    # Graph memory disabled — test exercises the owner memory fallback path
+    reset_config()
 
     def _list_owner_memories(_twin_id, status="active", limit=200):
         if status == "active":
@@ -382,7 +381,6 @@ async def test_get_user_context_falls_back_to_owner_memories(monkeypatch):
             ]
         return []
 
-    monkeypatch.setattr(zep_memory, "get_zep_client", lambda: _NoContextZep())
     monkeypatch.setattr(interview, "list_owner_memories", _list_owner_memories)
     monkeypatch.setattr(interview, "AUTO_APPROVE_OWNER_MEMORY", False)
 
