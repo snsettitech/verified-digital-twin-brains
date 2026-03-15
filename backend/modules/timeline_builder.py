@@ -165,7 +165,7 @@ class TimelineBuilder:
             # Try full ISO date
             dt = date_parser.parse(date_str)
             return dt.strftime("%Y-%m-%d"), "day"
-        except:
+        except (ValueError, TypeError, OverflowError):
             pass
         
         # Try year only

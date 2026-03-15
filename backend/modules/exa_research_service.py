@@ -645,7 +645,7 @@ class ExaResearchService:
             from urllib.parse import urlparse
             parsed = urlparse(url)
             return parsed.netloc.lower().replace('www.', '')
-        except:
+        except (ValueError, AttributeError):
             return ""
     
     def _assess_domain_quality(self, domain: str) -> str:

@@ -573,12 +573,11 @@ async def get_detailed_health(user=Depends(verify_owner)):
         health["status"] = "degraded"
         log_service_health("supabase", "unhealthy", error_message=str(e))
     
-    # Check Pinecone
+    # Check Pinecone (use singleton client from clients.py)
     try:
-        from pinecone import Pinecone
+        from modules.clients import get_pinecone_index
         start = time.time()
-        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-        index = pc.Index(os.getenv("PINECONE_INDEX_NAME", "digital-twin"))
+        index = get_pinecone_index()
         stats = index.describe_index_stats()
         response_ms = (time.time() - start) * 1000
         health["services"]["pinecone"] = {

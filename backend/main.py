@@ -347,14 +347,25 @@ async def health_check():
     except Exception as e:
         dependencies["health_probe"] = f"error: {e}"
     environment = "production" if os.getenv("DEV_MODE", "true").lower() == "false" else "development"
-    return {
-        "status": "healthy",
-        "service": "verified-digital-twin-brain-api",
-        "version": "1.0.0",
-        "uptime_seconds": uptime_seconds,
-        "environment": environment,
-        "dependencies": dependencies,
-    }
+    # Determine overall status from dependency results
+    has_critical_error = any(
+        isinstance(v, str) and v.startswith("error:")
+        for k, v in dependencies.items()
+        if k in ("supabase", "pinecone", "openai")  # critical deps
+    )
+    overall_status = "degraded" if has_critical_error else "healthy"
+    status_code = 503 if has_critical_error else 200
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": overall_status,
+            "service": "verified-digital-twin-brain-api",
+            "version": "1.0.0",
+            "uptime_seconds": uptime_seconds,
+            "environment": environment,
+            "dependencies": dependencies,
+        },
+    )
 
 @app.head("/health", tags=["health"])
 async def health_check_head():
