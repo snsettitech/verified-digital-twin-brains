@@ -5,8 +5,10 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
 ## Core Services
 - **FastAPI**: REST API framework.
 - **Pinecone**: Vector database for knowledge retrieval (vector + integrated modes).
-- **OpenAI**: Embeddings (`text-embedding-3-large`) and Chat (`gpt-4o`).
+- **OpenAI**: Embeddings (`text-embedding-3-large`) plus primary JSON/text inference (`gpt-4o`, `gpt-4o-mini`).
+- **Gemini**: Optional text-generation provider for conversational realizer flows (`gemini-2.5-flash`).
 - **Supabase**: PostgreSQL for relational data and Auth.
+- **Deep Research**: Core deep-research routes are always registered; only the name-only JSON flow is gated by `NAME_ONLY_DEEP_RESEARCH_ENABLED`.
 
 ## Project Structure
 - `main.py`: Entry point and API route definitions.
@@ -14,7 +16,9 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
   - `clients.py`: Centralized singleton-style clients for external services.
   - `ingestion.py`: Document processing, chunking, and vectorization.
   - `retrieval.py`: Context retrieval from Pinecone.
-  - `answering.py`: Prompt engineering and LLM response generation.
+  - `agent.py`: Authoritative LangGraph chat/runtime orchestration.
+  - `inference_router.py`: Active multi-provider text/JSON inference routing.
+  - `answering.py`: Legacy compatibility answer generation surface.
   - `auth_guard.py`: JWT verification and role-based access control.
   - `escalation.py`: Logic for flagging low-confidence responses.
 
@@ -63,11 +67,18 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    PINECONE_INDEX_MODE=integrated
    PINECONE_TEXT_FIELD=chunk_text
    SUPABASE_URL=...
-   SUPABASE_KEY=...
+   SUPABASE_SERVICE_KEY=...
    JWT_SECRET=...
    LANGFUSE_PUBLIC_KEY=...
    LANGFUSE_SECRET_KEY=...
    LANGFUSE_HOST=https://cloud.langfuse.com
+   INFERENCE_PROVIDER=openai
+   OPENAI_MODEL=gpt-4o
+   OPENAI_JSON_MODEL=gpt-4o-mini
+   GEMINI_MODEL=gemini-2.5-flash
+   GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+   CONVERSATIONAL_REALIZER_ENABLED=false
+   GOOGLE_API_KEY=...
 
    # Reranking
    ENABLE_FLASHRANK=true

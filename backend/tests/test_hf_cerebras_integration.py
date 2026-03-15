@@ -195,7 +195,7 @@ class TestAnsweringProviderSwitching:
                 "confidence_score": 0.8,
                 "citations": ["src-1"],
                 "provider": "openai",
-                "model": "gpt-4-turbo-preview"
+                "model": "gpt-4o"
             }
             
             with patch.dict(os.environ, {"INFERENCE_PROVIDER": "openai"}):

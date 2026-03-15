@@ -14,6 +14,8 @@ _pc_client = None
 _pinecone_index = None
 _openai_client = None
 _async_openai_client = None
+_gemini_client = None
+_async_gemini_client = None
 _cohere_client = None
 
 def get_cohere_client(required: bool = False):
@@ -125,6 +127,32 @@ def get_async_openai_client():
             raise ValueError("OPENAI_API_KEY not found in environment")
         _async_openai_client = AsyncOpenAI(api_key=api_key)
     return _async_openai_client
+
+def get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not found in environment")
+        base_url = os.getenv(
+            "GEMINI_BASE_URL",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        _gemini_client = OpenAI(api_key=api_key, base_url=base_url)
+    return _gemini_client
+
+def get_async_gemini_client():
+    global _async_gemini_client
+    if _async_gemini_client is None:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GOOGLE_API_KEY not found in environment")
+        base_url = os.getenv(
+            "GEMINI_BASE_URL",
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        _async_gemini_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+    return _async_gemini_client
 
 def get_pinecone_client():
     global _pc_client

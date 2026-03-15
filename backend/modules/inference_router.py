@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from modules.clients import get_async_openai_client
+from modules.clients import get_async_gemini_client, get_async_openai_client
 from modules.inference_cerebras import CerebrasClient
 from modules.langfuse_sdk import langfuse_context, observe
 
@@ -30,6 +30,7 @@ FALLBACK_ENABLED = os.getenv("INFERENCE_FALLBACK_ENABLED", "true").lower() == "t
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 OPENAI_JSON_MODEL = os.getenv("OPENAI_JSON_MODEL", "gpt-4o-mini")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 CEREBRAS_MODEL = os.getenv("CEREBRAS_MODEL", "llama-3.3-70b")
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-3-7-sonnet-latest")
 
@@ -40,6 +41,8 @@ PROVIDER_TIMEOUT_SECONDS = float(os.getenv("INFERENCE_PROVIDER_TIMEOUT_SECONDS",
 def _provider_available(provider: str) -> bool:
     if provider == "openai":
         return bool(os.getenv("OPENAI_API_KEY"))
+    if provider == "gemini":
+        return bool(os.getenv("GOOGLE_API_KEY"))
     if provider == "cerebras":
         return bool(os.getenv("CEREBRAS_API_KEY"))
     if provider == "anthropic":
@@ -47,31 +50,46 @@ def _provider_available(provider: str) -> bool:
     return False
 
 
-def _candidate_providers(task: str, preferred_provider: Optional[str] = None) -> List[str]:
+def _candidate_providers(
+    task: str,
+    preferred_provider: Optional[str] = None,
+    *,
+    json_mode: bool = False,
+) -> List[str]:
     task = (task or "general").lower()
     preferred = (preferred_provider or "").lower()
+    supported = {"openai", "cerebras", "anthropic"}
+    if not json_mode:
+        supported.add("gemini")
+
+    def _prepend_default(chain: List[str]) -> List[str]:
+        if DEFAULT_PROVIDER not in supported:
+            return chain
+        if DEFAULT_PROVIDER in chain:
+            return [DEFAULT_PROVIDER] + [p for p in chain if p != DEFAULT_PROVIDER]
+        return [DEFAULT_PROVIDER, *chain]
 
     # Optional hard pin for rollout safety.
     if ROUTING_MODE in {"single", "forced"}:
         chain = [preferred or DEFAULT_PROVIDER]
         if FALLBACK_ENABLED:
-            chain += ["openai", "cerebras", "anthropic"]
+            chain += ["openai", "gemini", "cerebras", "anthropic"]
     else:
         if preferred:
             chain = [preferred]
         elif task in {"realizer", "fast"}:
-            chain = ["cerebras", "openai", "anthropic"]
+            chain = _prepend_default(["cerebras", "openai", "anthropic", "gemini"])
         elif task in {"deep_reasoning"}:
-            chain = ["anthropic", "openai", "cerebras"]
+            chain = _prepend_default(["anthropic", "openai", "cerebras", "gemini"])
         else:
             # JSON-heavy planner/router/verifier and default general tasks.
-            chain = ["openai", "anthropic", "cerebras"]
+            chain = _prepend_default(["openai", "anthropic", "cerebras", "gemini"])
         if FALLBACK_ENABLED:
-            chain += ["openai", "cerebras", "anthropic"]
+            chain += ["openai", "gemini", "cerebras", "anthropic"]
 
     out: List[str] = []
     for p in chain:
-        if p in {"openai", "cerebras", "anthropic"} and p not in out and _provider_available(p):
+        if p in supported and p not in out and _provider_available(p):
             out.append(p)
     return out
 
@@ -139,6 +157,23 @@ async def _call_openai(
         kwargs["response_format"] = {"type": "json_object"}
     resp = await client.chat.completions.create(**kwargs)
     return (resp.choices[0].message.content or "").strip(), model
+
+
+async def _call_gemini(
+    messages: List[Dict[str, str]],
+    *,
+    temperature: float,
+    max_tokens: int,
+) -> Tuple[str, str]:
+    client = get_async_gemini_client()
+    resp = await client.chat.completions.create(
+        model=GEMINI_MODEL,
+        messages=list(messages),
+        temperature=temperature,
+        max_tokens=max_tokens,
+        timeout=PROVIDER_TIMEOUT_SECONDS,
+    )
+    return (resp.choices[0].message.content or "").strip(), GEMINI_MODEL
 
 
 async def _call_cerebras(
@@ -230,6 +265,14 @@ async def _call_provider(
             temperature=temperature,
             max_tokens=max_tokens,
         )
+    if provider == "gemini":
+        if json_mode:
+            raise ValueError("Gemini is not enabled for JSON tasks in this rollout")
+        return await _call_gemini(
+            messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
     if provider == "cerebras":
         return await _call_cerebras(
             messages,
@@ -257,7 +300,7 @@ async def invoke_text(
     Invoke text generation with hybrid routing + fallback.
     """
     attempts: List[Dict[str, Any]] = []
-    candidates = _candidate_providers(task, preferred_provider=preferred_provider)
+    candidates = _candidate_providers(task, preferred_provider=preferred_provider, json_mode=False)
     if not candidates:
         raise RuntimeError("No configured inference providers available")
 
@@ -308,7 +351,7 @@ async def invoke_json(
     Invoke structured generation with hybrid routing + fallback.
     """
     attempts: List[Dict[str, Any]] = []
-    candidates = _candidate_providers(task, preferred_provider=preferred_provider)
+    candidates = _candidate_providers(task, preferred_provider=preferred_provider, json_mode=True)
     if not candidates:
         raise RuntimeError("No configured inference providers available")
 

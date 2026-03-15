@@ -235,7 +235,7 @@ def test_visitor_cannot_spoof_owner_training():
         app.dependency_overrides = {}
 
 
-def test_public_share_clarify_is_suppressed_and_routes_to_agent():
+def test_public_share_clarify_is_exposed_in_response_metadata():
     gate_mock = AsyncMock(
         return_value={
             "decision": "CLARIFY",
@@ -246,13 +246,32 @@ def test_public_share_clarify_is_suppressed_and_routes_to_agent():
     )
 
     async def fake_public_agent_stream(*_args, **_kwargs):
-        msg = AIMessage(content="Grounded response")
+        assert _kwargs["identity_gate_clarification_hint"]["question"] == "Can you clarify?"
+        msg = AIMessage(content="Can you clarify?\n1. A\n2. B")
         msg.additional_kwargs = {
             "dialogue_mode": "QA_FACT",
             "intent_label": "factual_with_evidence",
             "module_ids": [],
-            "routing_decision": {"action": "answer", "intent": "answer"},
-            "planning_output": {"answerability": {"answerability": "direct"}},
+            "routing_decision": {
+                "action": "clarify",
+                "intent": "answer",
+                "clarifying_questions": ["Can you clarify?"],
+            },
+            "planning_output": {
+                "answerability": {"answerability": "insufficient"},
+                "render_strategy": "source_faithful",
+                "clarification_hint": {
+                    "source": "identity_gate",
+                    "question": "Can you clarify?",
+                },
+                "clarification_options": [{"label": "A"}, {"label": "B"}],
+            },
+            "render_strategy": "source_faithful",
+            "clarification_hint": {
+                "source": "identity_gate",
+                "question": "Can you clarify?",
+            },
+            "clarification_options": [{"label": "A"}, {"label": "B"}],
         }
         yield {"agent": {"messages": [msg]}}
 
@@ -275,10 +294,96 @@ def test_public_share_clarify_is_suppressed_and_routes_to_agent():
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "answer"
+        assert body["status"] == "clarify"
         assert body["interaction_context"] == "public_share"
         assert body["share_link_id"] == "token-ab"
+        assert body["clarification_hint"]["question"] == "Can you clarify?"
+        assert len(body["clarification_options"]) == 2
         assert gate_mock.await_args.kwargs["mode"] == "public"
+
+
+def test_owner_chat_clarify_metadata_is_exposed_when_identity_gate_forwards_hint():
+    app.dependency_overrides[get_current_user] = _owner_user
+    gate_mock = AsyncMock(
+        return_value={
+            "decision": "CLARIFY",
+            "question": "Which company are you asking about?",
+            "options": [{"label": "OpenAI"}, {"label": "Anthropic"}],
+            "owner_memory": [],
+            "owner_memory_refs": [],
+            "owner_memory_context": "",
+        }
+    )
+
+    async def fake_agent_stream(*_args, **_kwargs):
+        assert _kwargs["identity_gate_clarification_hint"]["question"] == "Which company are you asking about?"
+        msg = AIMessage(content="Which company are you asking about?\n1. OpenAI\n2. Anthropic")
+        msg.additional_kwargs = {
+            "dialogue_mode": "QA_FACT",
+            "intent_label": "factual_with_evidence",
+            "module_ids": [],
+            "routing_decision": {"action": "clarify", "intent": "answer"},
+            "planning_output": {
+                "answerability": {"answerability": "insufficient"},
+                "render_strategy": "source_faithful",
+                "clarification_hint": {
+                    "source": "identity_gate",
+                    "question": "Which company are you asking about?",
+                },
+                "clarification_options": [{"label": "OpenAI"}, {"label": "Anthropic"}],
+            },
+            "render_strategy": "source_faithful",
+            "clarification_hint": {
+                "source": "identity_gate",
+                "question": "Which company are you asking about?",
+            },
+            "clarification_options": [{"label": "OpenAI"}, {"label": "Anthropic"}],
+        }
+        yield {"agent": {"messages": [msg]}}
+
+    try:
+        with patch("routers.chat.verify_twin_ownership"), patch(
+            "routers.chat.ensure_twin_active"
+        ), patch(
+            "routers.chat.get_user_group", new=AsyncMock(return_value=None)
+        ), patch(
+            "routers.chat.get_default_group", new=AsyncMock(return_value={"id": "group-1"})
+        ), patch(
+            "routers.chat._fetch_conversation_record",
+            return_value={
+                "id": "conv-1",
+                "twin_id": "twin-1",
+                "group_id": "group-1",
+                "interaction_context": "owner_chat",
+                "training_session_id": None,
+            },
+        ), patch(
+            "routers.chat.get_messages", return_value=[]
+        ), patch(
+            "routers.chat.log_interaction"
+        ), patch(
+            "routers.chat.run_identity_gate", gate_mock
+        ), patch(
+            "routers.chat.run_agent_stream", fake_agent_stream
+        ), patch(
+            "modules.graph_context.get_graph_stats", return_value={"has_graph": False, "node_count": 0}
+        ):
+            resp = client.post(
+                "/chat/twin-1",
+                json={"query": "What do they think?", "conversation_id": "conv-1"},
+            )
+            assert resp.status_code == 200
+            blocks = _parse_sse_blocks(resp.text)
+            metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
+            content = next((b for b in blocks if b.get("type") == "content"), None)
+            assert metadata is not None
+            assert content is not None
+            assert metadata["routing_decision"]["action"] == "clarify"
+            assert metadata["clarification_hint"]["question"] == "Which company are you asking about?"
+            assert len(metadata["clarification_options"]) == 2
+            assert content["content"].startswith("Which company are you asking about?")
+    finally:
+        app.dependency_overrides = {}
 
 
 def test_public_share_answer_includes_persona_audit_fields():

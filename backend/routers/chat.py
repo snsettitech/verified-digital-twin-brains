@@ -110,6 +110,37 @@ def _uncertainty_message(interaction_context: Optional[str]) -> str:
     return f"{UNCERTAINTY_RESPONSE}{owner_guidance_suffix(interaction_context)}"
 
 
+def _build_identity_gate_clarification_hint(gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(gate, dict):
+        return None
+    question = re.sub(r"\s+", " ", str(gate.get("question") or "").strip())
+    options: List[Dict[str, str]] = []
+    raw_options = gate.get("options")
+    if isinstance(raw_options, list):
+        for item in raw_options[:3]:
+            if isinstance(item, dict):
+                label = str(item.get("label") or "").strip()
+                description = str(item.get("description") or "").strip()
+            else:
+                label = str(item or "").strip()
+                description = ""
+            if not label:
+                continue
+            row: Dict[str, str] = {"label": label}
+            if description:
+                row["description"] = description
+            options.append(row)
+    reason = re.sub(r"\s+", " ", str(gate.get("reason") or "").strip())
+    if not question and not options:
+        return None
+    hint: Dict[str, Any] = {"source": "identity_gate", "options": options}
+    if question:
+        hint["question"] = question
+    if reason:
+        hint["reason"] = reason
+    return hint
+
+
 def _extract_runtime_gate_topic(planning_output: Optional[Dict[str, Any]]) -> Optional[str]:
     if not isinstance(planning_output, dict):
         return None
@@ -528,13 +559,12 @@ async def _run_identity_gate_passthrough(
         allow_clarify=allow_clarify,
     )
     if str(gate.get("decision") or "").upper() == "CLARIFY":
+        clarification_hint = _build_identity_gate_clarification_hint(gate)
         return {
             **gate,
             "decision": "ANSWER",
-            "reason": f"clarify_suppressed:{gate.get('reason') or 'identity_gate'}",
-            "question": "",
-            "options": [],
-            "memory_write_proposal": {},
+            "reason": f"clarification_hint_forwarded:{gate.get('reason') or 'identity_gate'}",
+            "clarification_hint": clarification_hint,
             "owner_memory": gate.get("owner_memory") or [],
             "owner_memory_refs": gate.get("owner_memory_refs") or [],
             "owner_memory_context": gate.get("owner_memory_context") or "",
@@ -1135,6 +1165,14 @@ def _merge_citations(existing: List[str], incoming: Optional[List[str]]) -> List
         return normalized
     return existing
 
+
+def _resolve_chat_status(routing_decision: Optional[Dict[str, Any]]) -> str:
+    if isinstance(routing_decision, dict):
+        action = str(routing_decision.get("action") or "").strip().lower()
+        if action in {"clarify", "answer", "refuse", "escalate"}:
+            return action
+    return "answer"
+
 @router.get("/share/resolve/{handle}")
 async def resolve_share_handle(handle: str):
     """
@@ -1709,6 +1747,8 @@ async def chat(
             workflow_intent = None
             module_ids = []
             render_strategy = None
+            clarification_hint: Optional[Dict[str, Any]] = None
+            clarification_options: List[Dict[str, Any]] = []
             retrieved_context_snippets: List[Dict[str, Any]] = []
             requires_evidence = None
             target_owner_scope = None
@@ -1777,6 +1817,7 @@ async def chat(
                 mode=mode,
                 allow_clarify=False,
             )
+            clarification_hint = gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None
 
             owner_memory_context = gate.get("owner_memory_context", "")
             owner_memory_refs = gate.get("owner_memory_refs", [])
@@ -1915,6 +1956,7 @@ async def chat(
                     enforce_group_filtering=(resolved_context.is_public or bool(requested_group_id)),
                     actor_user_id=user.get("user_id") if user else None,
                     tenant_id=user.get("tenant_id") if user else None,
+                    identity_gate_clarification_hint=clarification_hint,
                 ).__aiter__()
 
                 pending_task = None
@@ -1969,6 +2011,10 @@ async def chat(
                                         plan_render = planning_output.get("render_strategy")
                                         if isinstance(plan_render, str) and plan_render.strip():
                                             render_strategy = plan_render
+                                        plan_hint = planning_output.get("clarification_hint")
+                                        clarification_hint = _normalize_json(plan_hint) if isinstance(plan_hint, dict) else None
+                                        plan_options = planning_output.get("clarification_options")
+                                        clarification_options = _normalize_json(plan_options) if isinstance(plan_options, list) else []
                                 if "dialogue_mode" in msg.additional_kwargs:
                                     dialogue_mode = msg.additional_kwargs["dialogue_mode"]
                                 if "intent_label" in msg.additional_kwargs:
@@ -1983,6 +2029,14 @@ async def chat(
                                     raw_render = msg.additional_kwargs["render_strategy"]
                                     if isinstance(raw_render, str) and raw_render.strip():
                                         render_strategy = raw_render
+                                if "clarification_hint" in msg.additional_kwargs:
+                                    raw_hint = msg.additional_kwargs["clarification_hint"]
+                                    if isinstance(raw_hint, dict):
+                                        clarification_hint = _normalize_json(raw_hint)
+                                if "clarification_options" in msg.additional_kwargs:
+                                    raw_options = msg.additional_kwargs["clarification_options"]
+                                    if isinstance(raw_options, list):
+                                        clarification_options = _normalize_json(raw_options)
                                 if "requires_evidence" in msg.additional_kwargs:
                                     raw_requires = msg.additional_kwargs["requires_evidence"]
                                     if isinstance(raw_requires, bool):
@@ -2176,6 +2230,8 @@ async def chat(
                 confidence_score = min(confidence_score, 0.2)
             elif online_eval_result.get("action") == "fallback_source_faithful":
                 confidence_score = min(confidence_score, 0.6)
+                render_strategy = "source_faithful"
+                context_trace["rewrite_applied"] = False
             context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
@@ -2218,6 +2274,8 @@ async def chat(
                 "owner_memory_topics": owner_memory_topics,
                 "owner_memory_summaries": owner_memory_summaries,
                 "teaching_questions": teaching_questions,
+                "clarification_hint": clarification_hint,
+                "clarification_options": clarification_options,
                 "planning_output": planning_output,
                 "dialogue_mode": dialogue_mode,
                 "intent_label": intent_label,
@@ -2637,6 +2695,10 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         workflow_intent = None
         module_ids = []
         render_strategy = None
+        clarification_hint: Optional[Dict[str, Any]] = (
+            gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None
+        )
+        clarification_options: List[Dict[str, Any]] = []
         planning_output = {}
         routing_decision: Optional[Dict[str, Any]] = None
         retrieved_context_snippets: List[Dict[str, Any]] = []
@@ -2652,6 +2714,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             interaction_context=resolved_context.context.value,
             actor_user_id=None,
             tenant_id=None,
+            identity_gate_clarification_hint=clarification_hint,
         ):
             tools_payload, agent_payload = _extract_stream_payload(event)
 
@@ -2690,6 +2753,16 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                             plan_render = planning_output.get("render_strategy")
                             if isinstance(plan_render, str) and plan_render.strip():
                                 render_strategy = plan_render
+                            plan_hint = planning_output.get("clarification_hint")
+                            clarification_hint = _normalize_json(plan_hint) if isinstance(plan_hint, dict) else None
+                            plan_options = planning_output.get("clarification_options")
+                            clarification_options = _normalize_json(plan_options) if isinstance(plan_options, list) else []
+                        raw_hint = msg.additional_kwargs.get("clarification_hint")
+                        if isinstance(raw_hint, dict):
+                            clarification_hint = _normalize_json(raw_hint)
+                        raw_options = msg.additional_kwargs.get("clarification_options")
+                        if isinstance(raw_options, list):
+                            clarification_options = _normalize_json(raw_options)
                         if msg.additional_kwargs.get("persona_spec_version"):
                             context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                         if msg.additional_kwargs.get("persona_prompt_variant"):
@@ -2785,6 +2858,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             confidence_score = min(confidence_score, 0.2)
         elif online_eval_result.get("action") == "fallback_source_faithful":
             confidence_score = min(confidence_score, 0.6)
+            render_strategy = "source_faithful"
+            context_trace["rewrite_applied"] = False
         context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
         context_trace["online_eval_action"] = online_eval_result.get("action")
         context_trace["online_eval_score"] = online_eval_result.get("overall_score")
@@ -2824,6 +2899,8 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "conversation_id": conversation_id,
             "owner_memory_refs": owner_memory_refs,
             "owner_memory_topics": owner_memory_topics,
+            "clarification_hint": clarification_hint,
+            "clarification_options": clarification_options,
             "dialogue_mode": dialogue_mode,
             "intent_label": intent_label,
             "workflow_intent": workflow_intent,
@@ -3091,6 +3168,10 @@ async def public_chat_endpoint(
             workflow_intent = None
             module_ids = []
             render_strategy = None
+            clarification_hint: Optional[Dict[str, Any]] = (
+                gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None
+            )
+            clarification_options: List[Dict[str, Any]] = []
             planning_output = {}
             routing_decision: Optional[Dict[str, Any]] = None
             retrieved_context_snippets: List[Dict[str, Any]] = []
@@ -3104,6 +3185,7 @@ async def public_chat_endpoint(
                 interaction_context=resolved_context.context.value,
                 actor_user_id=None,
                 tenant_id=None,
+                identity_gate_clarification_hint=clarification_hint,
             ):
                 tools_payload, agent_payload = _extract_stream_payload(event)
                 if tools_payload:
@@ -3140,6 +3222,16 @@ async def public_chat_endpoint(
                                 plan_render = planning_output.get("render_strategy")
                                 if isinstance(plan_render, str) and plan_render.strip():
                                     render_strategy = plan_render
+                                plan_hint = planning_output.get("clarification_hint")
+                                clarification_hint = _normalize_json(plan_hint) if isinstance(plan_hint, dict) else None
+                                plan_options = planning_output.get("clarification_options")
+                                clarification_options = _normalize_json(plan_options) if isinstance(plan_options, list) else []
+                            raw_hint = msg.additional_kwargs.get("clarification_hint")
+                            if isinstance(raw_hint, dict):
+                                clarification_hint = _normalize_json(raw_hint)
+                            raw_options = msg.additional_kwargs.get("clarification_options")
+                            if isinstance(raw_options, list):
+                                clarification_options = _normalize_json(raw_options)
                             if msg.additional_kwargs.get("persona_spec_version"):
                                 context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                             if msg.additional_kwargs.get("persona_prompt_variant"):
@@ -3279,6 +3371,8 @@ async def public_chat_endpoint(
                 confidence_score = min(confidence_score, 0.2)
             elif online_eval_result.get("action") == "fallback_source_faithful":
                 confidence_score = min(confidence_score, 0.6)
+                render_strategy = "source_faithful"
+                context_trace["rewrite_applied"] = False
             context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
@@ -3372,13 +3466,15 @@ async def public_chat_endpoint(
                 logger.debug(f"Public runtime audit persistence failed (non-blocking): {audit_err}")
 
             return {
-                "status": "answer",
+                "status": _resolve_chat_status(routing_decision),
                 "response": final_response,
                 "citations": citations,
                 "citation_details": citation_details,
                 "confidence_score": confidence_score,
                 "owner_memory_refs": owner_memory_refs,
                 "owner_memory_topics": owner_memory_topics,
+                "clarification_hint": clarification_hint,
+                "clarification_options": clarification_options,
                 "dialogue_mode": dialogue_mode,
                 "intent_label": intent_label,
                 "workflow_intent": workflow_intent,

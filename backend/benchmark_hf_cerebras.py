@@ -22,6 +22,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+
 
 class PerformanceBenchmark:
     """Benchmark HF+Cerebras vs OpenAI."""
@@ -134,7 +136,7 @@ class PerformanceBenchmark:
     def benchmark_openai_inference(self, iterations: int = 5) -> Dict:
         """Benchmark OpenAI inference latency."""
         print("\n" + "="*70)
-        print("BENCHMARKING: OpenAI Inference (GPT-4)")
+        print(f"BENCHMARKING: OpenAI Inference ({OPENAI_MODEL})")
         print("="*70)
         
         from modules.clients import get_openai_client
@@ -151,7 +153,7 @@ class PerformanceBenchmark:
         for i in range(iterations):
             start = time.perf_counter()
             response = client.chat.completions.create(
-                model="gpt-4-turbo-preview",
+                model=OPENAI_MODEL,
                 messages=messages,
                 max_tokens=150,
                 temperature=0.7
@@ -164,7 +166,7 @@ class PerformanceBenchmark:
         
         return {
             "provider": "openai",
-            "model": "gpt-4-turbo-preview",
+            "model": OPENAI_MODEL,
             "latencies_ms": latencies,
             "avg_ms": statistics.mean(latencies),
             "p50_ms": statistics.median(latencies),

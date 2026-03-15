@@ -93,6 +93,12 @@ ADAPTIVE_GROUNDING_HIGH_MARGIN = float(os.getenv("ADAPTIVE_GROUNDING_HIGH_MARGIN
 ADAPTIVE_GROUNDING_MID_SCORE = float(os.getenv("ADAPTIVE_GROUNDING_MID_SCORE", "0.65"))
 ADAPTIVE_GROUNDING_MID_OVERLAP = float(os.getenv("ADAPTIVE_GROUNDING_MID_OVERLAP", "0.12"))
 PLANNER_SECOND_PASS_RETRIEVAL_TOP_K = max(8, int(os.getenv("PLANNER_SECOND_PASS_RETRIEVAL_TOP_K", "12")))
+CONVERSATIONAL_REALIZER_ENABLED = (
+    os.getenv("CONVERSATIONAL_REALIZER_ENABLED", "false").lower() == "true"
+)
+CONVERSATIONAL_REALIZER_MIN_CONFIDENCE = float(
+    os.getenv("CONVERSATIONAL_REALIZER_MIN_CONFIDENCE", "0.65")
+)
 
 def get_checkpointer():
     """
@@ -274,6 +280,7 @@ class TwinState(TypedDict):
     mem0_preferences_source: Optional[str]
     system_prompt_override: Optional[str]
     interaction_context: Optional[str]
+    identity_gate_clarification_hint: Optional[Dict[str, Any]]
     
     # 5-Layer Persona State (Phase 4)
     persona_v2_enabled: Optional[bool]
@@ -1961,6 +1968,106 @@ def _collect_source_faithful_points(
     return answer_points, citation_ids[:3], max_score
 
 
+def _normalize_clarification_options(
+    raw_options: Any,
+    *,
+    limit: int = 3,
+) -> List[Dict[str, str]]:
+    if not isinstance(raw_options, list):
+        return []
+
+    normalized: List[Dict[str, str]] = []
+    seen_labels: set[str] = set()
+    for item in raw_options:
+        if isinstance(item, dict):
+            label = str(item.get("label") or "").strip()
+            description = str(item.get("description") or "").strip()
+        else:
+            label = str(item or "").strip()
+            description = ""
+        if not label:
+            continue
+        dedupe = label.lower()
+        if dedupe in seen_labels:
+            continue
+        seen_labels.add(dedupe)
+        row: Dict[str, str] = {"label": label}
+        if description:
+            row["description"] = description
+        normalized.append(row)
+        if len(normalized) >= max(1, int(limit or 3)):
+            break
+    return normalized
+
+
+def _normalize_identity_gate_clarification_hint(raw_hint: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(raw_hint, dict):
+        return None
+
+    question = re.sub(r"\s+", " ", str(raw_hint.get("question") or "").strip())
+    options = _normalize_clarification_options(raw_hint.get("options") or [])
+    reason = re.sub(r"\s+", " ", str(raw_hint.get("reason") or "").strip())
+    if not question and not options:
+        return None
+
+    hint: Dict[str, Any] = {
+        "source": str(raw_hint.get("source") or "identity_gate"),
+        "options": options,
+    }
+    if question:
+        hint["question"] = question
+    if reason:
+        hint["reason"] = reason
+    return hint
+
+
+def _should_use_conversational_realizer(
+    *,
+    state: TwinState,
+    answerability_state: str,
+    citations: List[str],
+    confidence: float,
+    quote_intent: bool,
+    strict_grounding: bool,
+) -> bool:
+    if not CONVERSATIONAL_REALIZER_ENABLED:
+        return False
+    if str(state.get("interaction_context") or "").strip().lower() != "owner_chat":
+        return False
+    if answerability_state not in {"direct", "derivable"}:
+        return False
+    if not citations:
+        return False
+    if float(confidence or 0.0) < CONVERSATIONAL_REALIZER_MIN_CONFIDENCE:
+        return False
+    if quote_intent or strict_grounding:
+        return False
+    action = ""
+    if isinstance(state.get("routing_decision"), dict):
+        action = str((state.get("routing_decision") or {}).get("action") or "").strip().lower()
+    return action in {"", "answer"}
+
+
+def _build_source_faithful_response_text(
+    plan: Optional[Dict[str, Any]],
+    *,
+    fallback_text: str,
+) -> str:
+    points = []
+    for p in (plan.get("answer_points", []) if isinstance(plan, dict) else []):
+        if isinstance(p, str) and p.strip():
+            points.append(p.strip())
+
+    follow_up = (plan.get("follow_up_question") if isinstance(plan, dict) else None) or ""
+    response_lines: List[str] = []
+    response_lines.extend(points[:3])
+    if isinstance(follow_up, str) and follow_up.strip():
+        response_lines.append(follow_up.strip())
+
+    realized_text = "\n".join(response_lines).strip()
+    return realized_text or fallback_text
+
+
 def _classify_grounding_policy(
     context_data: List[Dict[str, Any]],
     user_query: str,
@@ -2205,9 +2312,13 @@ async def planner_node(state: TwinState):
     selection_recovery_failed = bool(selection_reply and not intent_recovered)
     query_class = str(state.get("query_class") or "factual").strip().lower() or "factual"
     quote_intent = bool(state.get("quote_intent"))
+    strict_grounding = bool(get_grounding_policy(effective_query).get("strict_grounding"))
     mem0_preferences_context = _prepare_mem0_preferences_for_prompt(state=state, query_class=query_class)
     _system_msg, persona_trace = build_system_prompt_with_trace(state)
     valid_source_ids: List[str] = _collect_valid_source_ids(context_data)
+    identity_gate_clarification_hint = _normalize_identity_gate_clarification_hint(
+        state.get("identity_gate_clarification_hint")
+    )
 
     def _sanitize_answer_points(values: Any) -> List[str]:
         if not isinstance(values, list):
@@ -2473,20 +2584,38 @@ async def planner_node(state: TwinState):
 
     if answerability_state == "insufficient":
         missing_information = answerability.get("missing_information") or []
-        clarification_questions = build_targeted_clarification_questions(
-            effective_query,
-            missing_information,
-            evidence_chunks=context_data,
-            limit=3,
-        )
+        clarification_questions = []
+        clarification_options: List[Dict[str, str]] = []
+        clarification_hint = None
+        if identity_gate_clarification_hint:
+            clarification_hint = identity_gate_clarification_hint
+            question = str(identity_gate_clarification_hint.get("question") or "").strip()
+            if question:
+                clarification_questions = [question]
+            clarification_options = list(identity_gate_clarification_hint.get("options") or [])
+        if not clarification_questions:
+            clarification_questions = build_targeted_clarification_questions(
+                effective_query,
+                missing_information,
+                evidence_chunks=context_data,
+                limit=3,
+            )
         insufficient_confidence = _calibrate_confidence_score(
             raw_confidence=float(answerability.get("confidence") or 0.0),
             answerability_state=answerability_state,
             context_data=context_data,
         )
-        answer_points = [UNCERTAINTY_RESPONSE]
-        for idx, question in enumerate(clarification_questions, 1):
-            answer_points.append(f"{idx}. {question}")
+        answer_points = []
+        if clarification_hint and clarification_questions:
+            answer_points.append(clarification_questions[0])
+            for idx, option in enumerate(clarification_options, 1):
+                label = str(option.get("label") or "").strip()
+                if label:
+                    answer_points.append(f"{idx}. {label}")
+        else:
+            answer_points = [UNCERTAINTY_RESPONSE]
+            for idx, question in enumerate(clarification_questions, 1):
+                answer_points.append(f"{idx}. {question}")
 
         updated_routing_decision = {
             **routing_decision,
@@ -2512,6 +2641,8 @@ async def planner_node(state: TwinState):
                 "follow_up_question": "",
                 "confidence": insufficient_confidence,
                 "teaching_questions": clarification_questions[:3],
+                "clarification_options": clarification_options,
+                "clarification_hint": clarification_hint,
                 "render_strategy": "source_faithful",
                 "reasoning_trace": str(answerability.get("reasoning") or ""),
                 "answerability": answerability,
@@ -2621,6 +2752,18 @@ Rules:
         answerability_state=answerability_state,
         context_data=context_data,
     )
+    render_strategy = (
+        "conversational_realizer"
+        if _should_use_conversational_realizer(
+            state=state,
+            answerability_state=answerability_state,
+            citations=citations,
+            confidence=confidence,
+            quote_intent=quote_intent,
+            strict_grounding=strict_grounding,
+        )
+        else "source_faithful"
+    )
 
     updated_routing_decision = {
         **routing_decision,
@@ -2647,7 +2790,9 @@ Rules:
             "follow_up_question": "",
             "confidence": confidence,
             "teaching_questions": [],
-            "render_strategy": "source_faithful",
+            "clarification_options": [],
+            "clarification_hint": None,
+            "render_strategy": render_strategy,
             "reasoning_trace": str(plan.get("reasoning_trace") or answerability.get("reasoning") or ""),
             "answerability": answerability,
             "telemetry": planner_telemetry,
@@ -2673,57 +2818,76 @@ Rules:
         result["reasoning_history"][-1] += " (5-Layer Persona enriched)."
     
     return result
+
+
+def _build_realizer_message(
+    *,
+    content: str,
+    plan: Optional[Dict[str, Any]],
+    state: TwinState,
+    mode: str,
+    render_strategy: str,
+    confidence_score: float,
+    route_meta: Optional[Dict[str, Any]] = None,
+) -> AIMessage:
+    msg = AIMessage(content=content)
+    teaching_questions = plan.get("teaching_questions", []) if isinstance(plan, dict) else []
+    clarification_options = plan.get("clarification_options", []) if isinstance(plan, dict) else []
+    clarification_hint = plan.get("clarification_hint") if isinstance(plan, dict) else None
+
+    msg.additional_kwargs["teaching_questions"] = teaching_questions
+    msg.additional_kwargs["clarification_options"] = clarification_options
+    msg.additional_kwargs["clarification_hint"] = clarification_hint
+    msg.additional_kwargs["planning_output"] = plan if isinstance(plan, dict) else {}
+    msg.additional_kwargs["dialogue_mode"] = mode
+    msg.additional_kwargs["intent_label"] = state.get("intent_label")
+    msg.additional_kwargs["module_ids"] = state.get("persona_module_ids") or []
+    msg.additional_kwargs["requires_evidence"] = bool(state.get("requires_evidence", False))
+    msg.additional_kwargs["target_owner_scope"] = bool(state.get("target_owner_scope", False))
+    msg.additional_kwargs["router_reason"] = state.get("router_reason")
+    msg.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
+    msg.additional_kwargs["render_strategy"] = render_strategy
+    msg.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
+    msg.additional_kwargs["confidence_score"] = confidence_score
+    if isinstance(state.get("routing_decision"), dict):
+        msg.additional_kwargs["routing_decision"] = state.get("routing_decision")
+    if state.get("persona_spec_version"):
+        msg.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
+    if state.get("persona_prompt_variant"):
+        msg.additional_kwargs["persona_prompt_variant"] = state.get("persona_prompt_variant")
+    if route_meta:
+        msg.additional_kwargs["inference_provider"] = route_meta.get("provider")
+        msg.additional_kwargs["inference_model"] = route_meta.get("model")
+        msg.additional_kwargs["inference_latency_ms"] = route_meta.get("latency_ms")
+    return msg
+
+
 @observe(name="realizer_node")
 async def realizer_node(state: TwinState):
     """Pass B: Conversational Reification (Human-like Output)"""
     plan = state.get("planning_output", {})
     mode = state.get("dialogue_mode", "QA_FACT")
     render_strategy = str(plan.get("render_strategy", "")).strip().lower() if isinstance(plan, dict) else ""
+    confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
+    citations = plan.get("citations", []) if isinstance(plan, dict) else []
+    deterministic_text = _build_source_faithful_response_text(
+        plan if isinstance(plan, dict) else {},
+        fallback_text=UNCERTAINTY_RESPONSE,
+    )
 
     print(f"[Realizer DEBUG] dialogue_mode={mode}, render_strategy={render_strategy}, plan_keys={list(plan.keys()) if isinstance(plan, dict) else 'N/A'}")
     
     if render_strategy == "source_faithful":
-        confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
-        points = []
-        for p in (plan.get("answer_points", []) if isinstance(plan, dict) else []):
-            if isinstance(p, str) and p.strip():
-                points.append(p.strip())
-
-        follow_up = (plan.get("follow_up_question") if isinstance(plan, dict) else None) or ""
-        response_lines: List[str] = []
-        response_lines.extend(points[:3])
-        if isinstance(follow_up, str) and follow_up.strip():
-            response_lines.append(follow_up.strip())
-
         # Source-faithful mode intentionally avoids LLM rewrite/paraphrase.
-        realized_text = "\n".join(response_lines).strip()
-        print(f"[Realizer DEBUG] points={points}, realized_text='{realized_text[:50]}...' if realized_text else '(empty)'")
-        if not realized_text:
-            realized_text = UNCERTAINTY_RESPONSE
-            print(f"[Realizer DEBUG] Empty realized_text, using UNCERTAINTY_RESPONSE")
-
-        res = AIMessage(content=realized_text)
-        citations = plan.get("citations", []) if isinstance(plan, dict) else []
-        teaching_questions = plan.get("teaching_questions", []) if isinstance(plan, dict) else []
-
-        res.additional_kwargs["teaching_questions"] = teaching_questions
-        res.additional_kwargs["planning_output"] = plan
-        res.additional_kwargs["dialogue_mode"] = mode
-        res.additional_kwargs["intent_label"] = state.get("intent_label")
-        res.additional_kwargs["module_ids"] = state.get("persona_module_ids") or []
-        res.additional_kwargs["requires_evidence"] = bool(state.get("requires_evidence", False))
-        res.additional_kwargs["target_owner_scope"] = bool(state.get("target_owner_scope", False))
-        res.additional_kwargs["router_reason"] = state.get("router_reason")
-        res.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
-        res.additional_kwargs["render_strategy"] = "source_faithful"
-        res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
-        res.additional_kwargs["confidence_score"] = confidence_score
-        if isinstance(state.get("routing_decision"), dict):
-            res.additional_kwargs["routing_decision"] = state.get("routing_decision")
-        if state.get("persona_spec_version"):
-            res.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
-        if state.get("persona_prompt_variant"):
-            res.additional_kwargs["persona_prompt_variant"] = state.get("persona_prompt_variant")
+        print(f"[Realizer DEBUG] source-faithful_text='{deterministic_text[:50]}...'")
+        res = _build_realizer_message(
+            content=deterministic_text,
+            plan=plan if isinstance(plan, dict) else {},
+            state=state,
+            mode=mode,
+            render_strategy="source_faithful",
+            confidence_score=confidence_score,
+        )
 
         return {
             "messages": [res],
@@ -2755,41 +2919,23 @@ async def realizer_node(state: TwinState):
             temperature=0.7,
             max_tokens=500,
         )
-        res = AIMessage(content=realized_text)
-        
-        # Post-process for citations and teaching metadata (Phase 4)
-        citations = plan.get("citations", [])
-        teaching_questions = plan.get("teaching_questions", [])
-        confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
-        
-        # Enrich message with metadata for the UI
-        res.additional_kwargs["teaching_questions"] = teaching_questions
-        res.additional_kwargs["planning_output"] = plan
-        res.additional_kwargs["dialogue_mode"] = mode
-        res.additional_kwargs["intent_label"] = state.get("intent_label")
-        res.additional_kwargs["module_ids"] = state.get("persona_module_ids") or []
-        res.additional_kwargs["requires_evidence"] = bool(state.get("requires_evidence", False))
-        res.additional_kwargs["target_owner_scope"] = bool(state.get("target_owner_scope", False))
-        res.additional_kwargs["router_reason"] = state.get("router_reason")
-        res.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
-        res.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
-        res.additional_kwargs["confidence_score"] = confidence_score
-        if isinstance(state.get("routing_decision"), dict):
-            res.additional_kwargs["routing_decision"] = state.get("routing_decision")
-        if state.get("persona_spec_version"):
-            res.additional_kwargs["persona_spec_version"] = state.get("persona_spec_version")
-        if state.get("persona_prompt_variant"):
-            res.additional_kwargs["persona_prompt_variant"] = state.get("persona_prompt_variant")
-        if route_meta:
-            res.additional_kwargs["inference_provider"] = route_meta.get("provider")
-            res.additional_kwargs["inference_model"] = route_meta.get("model")
-            res.additional_kwargs["inference_latency_ms"] = route_meta.get("latency_ms")
+        res = _build_realizer_message(
+            content=realized_text or deterministic_text,
+            plan=plan if isinstance(plan, dict) else {},
+            state=state,
+            mode=mode,
+            render_strategy=render_strategy or "conversational_realizer",
+            confidence_score=confidence_score,
+            route_meta=route_meta,
+        )
         
         return {
             "messages": [res],
             "citations": citations,
             "confidence_score": confidence_score,
-            "reasoning_history": (state.get("reasoning_history") or []) + ["Realizer: Response reified with Metadata."]
+            "reasoning_history": (state.get("reasoning_history") or []) + [
+                "Realizer: conversational rewrite completed."
+            ]
         }
     except Exception as e:
         print(f"Realizer error: {e}")
@@ -2806,42 +2952,21 @@ async def realizer_node(state: TwinState):
             )
         except Exception:
             pass
-        answer_points = plan.get("answer_points", []) if isinstance(plan, dict) else []
-        follow_up = (plan.get("follow_up_question") if isinstance(plan, dict) else None) or ""
-        fallback_base = " ".join(
-            [p for p in answer_points if isinstance(p, str) and p.strip()][:2]
-        ).strip()
-        if not fallback_base:
-            fallback_base = UNCERTAINTY_RESPONSE
-        fallback_text = f"{fallback_base} {follow_up}".strip()
-
-        fallback_msg = AIMessage(content=fallback_text)
-        fallback_msg.additional_kwargs["teaching_questions"] = (
-            plan.get("teaching_questions", []) if isinstance(plan, dict) else []
+        fallback_msg = _build_realizer_message(
+            content=deterministic_text,
+            plan=plan if isinstance(plan, dict) else {},
+            state=state,
+            mode=mode,
+            render_strategy="source_faithful",
+            confidence_score=confidence_score,
         )
-        fallback_msg.additional_kwargs["planning_output"] = plan if isinstance(plan, dict) else {}
-        fallback_msg.additional_kwargs["dialogue_mode"] = mode
-        fallback_msg.additional_kwargs["intent_label"] = state.get("intent_label")
-        fallback_msg.additional_kwargs["module_ids"] = state.get("persona_module_ids") or []
-        fallback_msg.additional_kwargs["requires_evidence"] = bool(state.get("requires_evidence", False))
-        fallback_msg.additional_kwargs["target_owner_scope"] = bool(state.get("target_owner_scope", False))
-        fallback_msg.additional_kwargs["router_reason"] = state.get("router_reason")
-        fallback_msg.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
-        fallback_msg.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
-        fallback_msg.additional_kwargs["confidence_score"] = float(
-            plan.get("confidence", state.get("confidence_score", 0.0)) if isinstance(plan, dict) else 0.0
-        )
-        if isinstance(state.get("routing_decision"), dict):
-            fallback_msg.additional_kwargs["routing_decision"] = state.get("routing_decision")
 
         return {
             "messages": [fallback_msg],
-            "citations": plan.get("citations", []) if isinstance(plan, dict) else [],
-            "confidence_score": float(
-                plan.get("confidence", state.get("confidence_score", 0.0)) if isinstance(plan, dict) else 0.0
-            ),
+            "citations": citations,
+            "confidence_score": confidence_score,
             "reasoning_history": (state.get("reasoning_history") or []) + [
-                "Realizer: deterministic fallback used after exception."
+                "Realizer: deterministic source-faithful fallback used after exception."
             ],
         }
 
@@ -2959,6 +3084,7 @@ async def run_agent_stream(
     enforce_group_filtering: bool = True,
     actor_user_id: Optional[str] = None,
     tenant_id: Optional[str] = None,
+    identity_gate_clarification_hint: Optional[Dict[str, Any]] = None,
 ):
     """
     Runs the agent and yields events from the graph.
@@ -3127,6 +3253,7 @@ async def run_agent_stream(
         "mem0_preferences_source": mem0_preferences_source,
         "system_prompt_override": system_prompt,
         "interaction_context": interaction_context,
+        "identity_gate_clarification_hint": identity_gate_clarification_hint,
     }
     
     # Phase 10: Metrics instrumentation

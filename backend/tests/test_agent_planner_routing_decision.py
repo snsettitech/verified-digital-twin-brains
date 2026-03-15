@@ -787,3 +787,126 @@ async def test_planner_resolves_clarification_echo_to_previous_user_query(monkey
     assert seen_queries[0].lower() == "what do you see in the founders"
     assert out["routing_decision"]["action"] == "answer"
     assert out["planning_output"]["teaching_questions"] == []
+
+
+@pytest.mark.asyncio
+async def test_planner_enables_conversational_realizer_for_grounded_owner_chat(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    monkeypatch.setattr("modules.agent.CONVERSATIONAL_REALIZER_ENABLED", True)
+    monkeypatch.setattr(
+        "modules.agent.evaluate_answerability",
+        AsyncMock(
+            return_value={
+                "answerability": "direct",
+                "confidence": 0.92,
+                "reasoning": "Evidence directly supports the answer.",
+                "missing_information": [],
+                "ambiguity_level": "low",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.invoke_json",
+        AsyncMock(
+            return_value=(
+                {
+                    "answer_points": ["Use managed containers first."],
+                    "citations": ["src-1"],
+                    "confidence": 0.91,
+                    "reasoning_trace": "Grounded recommendation extracted.",
+                },
+                {"provider": "test"},
+            )
+        ),
+    )
+
+    state = {
+        "messages": [HumanMessage(content="What should we use for MVP infra?")],
+        "dialogue_mode": "QA_FACT",
+        "interaction_context": "owner_chat",
+        "retrieved_context": {
+            "results": [{"text": "Use managed containers first.", "source_id": "src-1", "score": 0.93}]
+        },
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+        "query_class": "factual",
+        "quote_intent": False,
+    }
+
+    out = await planner_node(state)
+
+    assert out["routing_decision"]["action"] == "answer"
+    assert out["planning_output"]["render_strategy"] == "conversational_realizer"
+
+
+@pytest.mark.asyncio
+async def test_planner_keeps_source_faithful_for_strict_grounding(monkeypatch):
+    monkeypatch.setattr(
+        "modules.agent.build_system_prompt_with_trace",
+        lambda _state: (
+            "system",
+            {
+                "intent_label": "factual_with_evidence",
+                "module_ids": [],
+                "persona_spec_version": "1.0.0",
+                "persona_prompt_variant": "baseline_v1",
+            },
+        ),
+    )
+    monkeypatch.setattr("modules.agent.CONVERSATIONAL_REALIZER_ENABLED", True)
+    monkeypatch.setattr(
+        "modules.agent.get_grounding_policy",
+        lambda _query, interaction_context=None: {"strict_grounding": True},
+    )
+    monkeypatch.setattr(
+        "modules.agent.evaluate_answerability",
+        AsyncMock(
+            return_value={
+                "answerability": "direct",
+                "confidence": 0.9,
+                "reasoning": "Evidence directly supports the answer.",
+                "missing_information": [],
+                "ambiguity_level": "low",
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "modules.agent.invoke_json",
+        AsyncMock(
+            return_value=(
+                {
+                    "answer_points": ["Exact answer from source."],
+                    "citations": ["src-1"],
+                    "confidence": 0.9,
+                    "reasoning_trace": "Grounded answer extracted.",
+                },
+                {"provider": "test"},
+            )
+        ),
+    )
+
+    state = {
+        "messages": [HumanMessage(content="What exact words did I use?")],
+        "dialogue_mode": "QA_FACT",
+        "interaction_context": "owner_chat",
+        "retrieved_context": {"results": [{"text": "Exact answer from source.", "source_id": "src-1"}]},
+        "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
+        "reasoning_history": [],
+        "query_class": "identity",
+        "quote_intent": True,
+    }
+
+    out = await planner_node(state)
+
+    assert out["planning_output"]["render_strategy"] == "source_faithful"
