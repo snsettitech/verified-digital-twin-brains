@@ -1,6 +1,6 @@
 # Digital Brain Architecture
 
-> A Delphi-level Digital Brain MVP that learns day by day with multi-tenant isolation.
+> A advisor-level Digital Brain MVP that learns day by day with multi-tenant isolation.
 
 ## System Overview
 

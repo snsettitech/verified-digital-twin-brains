@@ -13,7 +13,7 @@ from modules.verified_qna import match_verified_qna
 from modules.owner_memory_store import find_owner_memory_candidates
 from modules.observability import supabase
 from modules.access_groups import get_default_group
-from modules.delphi_namespace import (
+from modules.twin_namespace import (
     build_creator_namespace,
     get_namespace_candidates_for_twin,
     get_primary_namespace_for_twin,
@@ -838,7 +838,7 @@ def measure_phase(phase_name: str, twin_id: str):
         })
 
 # =============================================================================
-# NAMESPACE FORMAT (Delphi.ai Architecture)
+# NAMESPACE FORMAT (creator-advisor platform Architecture)
 # =============================================================================
 # New format: creator_{creator_id}_twin_{twin_id}
 # Legacy format: {twin_id} (UUID or custom string)
@@ -848,7 +848,7 @@ def measure_phase(phase_name: str, twin_id: str):
 
 def get_namespace(creator_id: Optional[str], twin_id: str) -> str:
     """
-    Generate Pinecone namespace following Delphi architecture.
+    Generate Pinecone namespace following advisor architecture.
     
     Args:
         creator_id: Creator ID (e.g., 'sainath.no.1') or None for legacy
@@ -1622,7 +1622,7 @@ async def _execute_pinecone_queries(
     Args:
         embeddings: List of embedding vectors
         twin_id: Twin ID
-        creator_id: Creator ID (for Delphi namespace format) - None for legacy
+        creator_id: Creator ID (for creator namespace format) - None for legacy
         timeout: Timeout in seconds
         
     Returns:
@@ -1633,7 +1633,7 @@ async def _execute_pinecone_queries(
 
     target_twin_id = str(twin_id or "").strip()
     resolved_creator = creator_id or resolve_creator_id_for_twin(twin_id)
-    dual_read_enabled = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
+    dual_read_enabled = os.getenv("CREATOR_NAMESPACE_DUAL_READ", "true").lower() == "true"
     namespace_candidates = get_namespace_candidates_for_twin(
         twin_id=twin_id,
         creator_id=resolved_creator,
@@ -2187,7 +2187,7 @@ async def retrieve_context_with_verified_first(
     Args:
         query: Search query
         twin_id: Twin ID
-        creator_id: Creator ID (for Delphi namespace format) - None for legacy
+        creator_id: Creator ID (for creator namespace format) - None for legacy
         group_id: Access group for filtering (optional)
         top_k: Number of results to return
     """
@@ -2226,15 +2226,9 @@ async def retrieve_context_with_verified_first(
         log_retrieval_event("error", {"phase": "owner_memory_lookup", "twin_id": twin_id, "error": str(e)})
         print(f"[Retrieval] Owner memory lookup failed: {e}, continuing.")
 
+    owner_memory_results: List[Dict[str, Any]] = []
     if owner_memory_match:
-        total_time = time.time() - retrieval_start
-        log_retrieval_event("retrieval_complete", {
-            "twin_id": twin_id,
-            "source": "owner_memory",
-            "contexts_found": 1,
-            "total_duration_ms": round(total_time * 1000, 2)
-        })
-        return [_format_owner_memory_match_context(owner_memory_match)]
+        owner_memory_results = [_format_owner_memory_match_context(owner_memory_match)]
 
     # STEP 2: Check Verified QnA (next priority) - P1-C: 2s timeout
     verified_match = None
@@ -2270,31 +2264,63 @@ async def retrieve_context_with_verified_first(
             )
             verified_match = None
 
+    verified_results: List[Dict[str, Any]] = []
     if verified_match:
-        total_time = time.time() - retrieval_start
-        log_retrieval_event("retrieval_complete", {
-            "twin_id": twin_id,
-            "source": "verified_qna",
-            "contexts_found": 1,
-            "total_duration_ms": round(total_time * 1000, 2),
-            "similarity_score": verified_match.get("similarity_score"),
-            "match_type": verified_match.get("match_type", "unknown"),
-        })
-        return [_format_verified_match_context(verified_match)]
-    
-    # STEP 3: No high-priority match - proceed with vector retrieval
-    with measure_phase("vector_retrieval", twin_id):
-        vector_results = await retrieve_context_vectors(query, twin_id, creator_id=creator_id, group_id=group_id, top_k=top_k)
-    
+        verified_results = [_format_verified_match_context(verified_match)]
+
+    # STEP 3: Fill the remaining slots with vector retrieval.
+    remaining_slots = max(top_k - len(verified_results) - len(owner_memory_results), 0)
+    vector_results: List[Dict[str, Any]] = []
+    if remaining_slots > 0:
+        with measure_phase("vector_retrieval", twin_id):
+            vector_results = await retrieve_context_vectors(
+                query,
+                twin_id,
+                creator_id=creator_id,
+                group_id=group_id,
+                top_k=max(top_k, remaining_slots),
+            )
+
+    strategy_priority = {
+        "verified_qa": 0,
+        "owner_memory": 1,
+        "vector": 2,
+        "hyde": 2,
+        "lexical": 2,
+    }
+    combined_results = verified_results + owner_memory_results + vector_results
+    combined_results.sort(
+        key=lambda row: (
+            strategy_priority.get(str(row.get("strategy_name") or "").strip(), 3),
+            -float(row.get("score", 0.0) or 0.0),
+        )
+    )
+    deduped_results: List[Dict[str, Any]] = []
+    seen_keys = set()
+    for row in combined_results:
+        dedupe_key = (
+            str(row.get("strategy_name") or ""),
+            str(row.get("source_id") or ""),
+            str(row.get("text") or ""),
+        )
+        if dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        deduped_results.append(row)
+        if len(deduped_results) >= top_k:
+            break
+
     total_time = time.time() - retrieval_start
     log_retrieval_event("retrieval_complete", {
         "twin_id": twin_id,
-        "source": "vector_search",
-        "contexts_found": len(vector_results),
-        "total_duration_ms": round(total_time * 1000, 2)
+        "source": "priority_merge",
+        "contexts_found": len(deduped_results),
+        "total_duration_ms": round(total_time * 1000, 2),
+        "has_verified_qna": bool(verified_results),
+        "has_owner_memory": bool(owner_memory_results),
     })
-    
-    return vector_results
+
+    return deduped_results
 
 
 @observe(name="rag_vector_retrieval")
@@ -2314,7 +2340,7 @@ async def retrieve_context_vectors(
     Args:
         query: Search query
         twin_id: Twin ID
-        creator_id: Creator ID (for Delphi namespace format) - None for legacy
+        creator_id: Creator ID (for creator namespace format) - None for legacy
         group_id: Access group for filtering (optional)
         top_k: Number of results to return
     """
@@ -2693,7 +2719,7 @@ async def retrieve_context(
     Args:
         query: Search query
         twin_id: Twin ID
-        creator_id: Creator ID (for Delphi namespace format) - None for legacy
+        creator_id: Creator ID (for creator namespace format) - None for legacy
         group_id: Access group for filtering (optional)
         top_k: Number of results to return
     """
@@ -2984,9 +3010,9 @@ async def get_retrieval_health_status(twin_id: Optional[str] = None) -> Dict[str
             status["warnings"].append(f"Namespace resolution check failed: {e}")
     
     # Check 4: Configuration
-    dual_read = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
+    dual_read = os.getenv("CREATOR_NAMESPACE_DUAL_READ", "true").lower() == "true"
     status["configuration"] = {
-        "delphi_dual_read": dual_read,
+        "creator_namespace_dual_read": dual_read,
         "flashrank_enabled": _flashrank_enabled,
         "flashrank_available": _flashrank_available,
         "cohere_rerank_enabled": _cohere_rerank_enabled,
@@ -3001,7 +3027,7 @@ async def get_retrieval_health_status(twin_id: Optional[str] = None) -> Dict[str
     }
     
     if not dual_read:
-        status["warnings"].append("DELPHI_DUAL_READ is disabled - legacy namespaces may not be queried")
+        status["warnings"].append("CREATOR_NAMESPACE_DUAL_READ is disabled - legacy namespaces may not be queried")
     
     return status
 

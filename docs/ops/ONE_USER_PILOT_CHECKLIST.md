@@ -5,7 +5,7 @@ Use this checklist to validate owner-training and public-chat separation before 
 ## 1) Environment
 
 - `ENABLE_REALTIME_INGESTION=true`
-- `ENABLE_DELPHI_RETRIEVAL=true`
+- `ENABLE_ADVISOR_RETRIEVAL=true`
 - `ENABLE_ENHANCED_INGESTION=false` (unless already validated in your environment)
 - `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` set
 

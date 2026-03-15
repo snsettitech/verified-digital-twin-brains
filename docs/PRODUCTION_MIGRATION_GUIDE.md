@@ -23,7 +23,7 @@ COHERE_RERANK_MODEL=rerank-v3.5
 
 ## Executive Summary
 
-This guide documents the migration from UUID-based namespaces to creator-based namespaces (`creator_{creator_id}_twin_{twin_id}`) following Delphi.ai's architecture pattern.
+This guide documents the migration from UUID-based namespaces to creator-based namespaces (`creator_{creator_id}_twin_{twin_id}`) following creator-advisor platform's architecture pattern.
 
 ### What Changed
 
@@ -141,15 +141,15 @@ def get_namespace(creator_id: str, twin_id: str) -> str:
 
 ## Backend Integration
 
-### 1. New Client: `DelphiPineconeClient`
+### 1. New Client: `advisorPineconeClient`
 
-Location: `backend/modules/embeddings_delphi.py`
+Location: `backend/modules/embeddings_advisor.py`
 
 ```python
-from backend.modules.embeddings_delphi import DelphiPineconeClient
+from backend.modules.embeddings_advisor import advisorPineconeClient
 
 # Initialize
-client = DelphiPineconeClient()
+client = advisorPineconeClient()
 
 # Upsert with creator isolation
 await client.upsert_vectors(
@@ -194,14 +194,14 @@ TenantGuard.validate_namespace_access(
 
 ### 3. API Router
 
-Location: `backend/routers/retrieval_delphi.py`
+Location: `backend/routers/retrieval_advisor.py`
 
 ```python
 # New endpoints
-POST /delphi/search                    # Semantic search
-POST /delphi/search-cross-twin         # Search across all creator twins
-DELETE /delphi/twin/{twin_id}          # Delete specific twin
-DELETE /delphi/creator                 # GDPR delete all creator data
+POST /advisor/search                    # Semantic search
+POST /advisor/search-cross-twin         # Search across all creator twins
+DELETE /advisor/twin/{twin_id}          # Delete specific twin
+DELETE /advisor/creator                 # GDPR delete all creator data
 ```
 
 ---
@@ -234,7 +234,7 @@ else:
 ### Option C: Parallel Indexes
 
 1. **Keep old index**: `digital-twin-brain`
-2. **Create new index**: `digital-twin-delphi`
+2. **Create new index**: `digital-twin-advisor`
 3. **Dual write**: Write to both indexes
 4. **Migrate read traffic** gradually
 5. **Decommission old index** after validation
@@ -339,7 +339,7 @@ What's New:
 
 Action Required:
 - Update any hardcoded namespace references
-- Use DelphiPineconeClient for new code
+- Use advisorPineconeClient for new code
 
 Questions? See docs/PRODUCTION_MIGRATION_GUIDE.md
 ```
@@ -394,8 +394,8 @@ migration:
 
 ## Support
 
-- **Migration Questions**: See `DELPHI_ARCHITECTURE_UPGRADE_PLAN.md`
-- **Code Issues**: Check `backend/modules/embeddings_delphi.py`
+- **Migration Questions**: See `ADVISOR_ARCHITECTURE_UPGRADE_PLAN.md`
+- **Code Issues**: Check `backend/modules/embeddings_advisor.py`
 - **Security Questions**: Review `backend/modules/tenant_guard.py`
 
 ---

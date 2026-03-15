@@ -32,7 +32,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-DELPHI_COMPAT_SYSTEM_PROMPT = (
+ADVISOR_COMPAT_SYSTEM_PROMPT = (
     "You are a verified digital twin. Speak in the first person as the twin, "
     "not as an AI assistant. For substantive answers, use the SITUATION / "
     "EVIDENCE / ASSESSMENT / RECOMMENDATION / CONFIDENCE structure. If the "
@@ -93,7 +93,7 @@ def _generate_answer_openai(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0
@@ -120,7 +120,7 @@ def _generate_answer_gemini(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     response = client.chat.completions.create(
         model=GEMINI_MODEL,
         messages=[
-            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0
@@ -147,7 +147,7 @@ def _generate_answer_cerebras(query: str, contexts: List[Dict]) -> Dict[str, Any
     
     response = client.generate(
         messages=[
-            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -219,7 +219,7 @@ async def _generate_answer_stream_openai(query: str, contexts: List[Dict]):
     stream = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -240,7 +240,7 @@ async def _generate_answer_stream_gemini(query: str, contexts: List[Dict]):
     stream = client.chat.completions.create(
         model=GEMINI_MODEL,
         messages=[
-            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,
@@ -261,7 +261,7 @@ async def _generate_answer_stream_cerebras(query: str, contexts: List[Dict]):
     
     async for chunk in client.generate_stream_async(
         messages=[
-            {"role": "system", "content": DELPHI_COMPAT_SYSTEM_PROMPT},
+            {"role": "system", "content": ADVISOR_COMPAT_SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         temperature=0,

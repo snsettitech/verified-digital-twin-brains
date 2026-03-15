@@ -267,7 +267,7 @@ async def get_knowledge_profile(twin_id: str):
         index = get_pinecone_index()
         if index:
             try:
-                from modules.delphi_namespace import get_namespace_candidates_for_twin
+                from modules.twin_namespace import get_namespace_candidates_for_twin
 
                 matches = []
                 namespaces = get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True)

@@ -30,7 +30,7 @@ Verified Digital Twin Brains is an AI-powered platform that creates "digital twi
 | **1** | Real-time ingestion disabled | Real-time features don't work | Feature flag defaults to false | `backend/main.py:L73-L78` |
 | **2** | Enhanced ingestion disabled | Advanced ingestion features unavailable | Feature flag defaults to false | `backend/main.py:L96-L101` |
 | **3** | VC routes disabled | VC specialization features don't load | Feature flag defaults to false | `backend/main.py:L125-L133` |
-| **4** | Delphi retrieval disabled | Delphi namespace retrieval unavailable | Feature flag defaults to false | `backend/main.py:L110-L115` |
+| **4** | advisor retrieval disabled | creator namespace retrieval unavailable | Feature flag defaults to false | `backend/main.py:L110-L115` |
 | **5** | Graph context extraction placeholder | Graph extraction may not complete | No evidence of working Neo4j integration | `backend/modules/graph_context.py` (not verified runtime) |
 | **6** | Training status confusion | "Training" vs "Ingestion" terminology mixed | "Training" is just ingestion + indexing, not model training | Throughout codebase |
 | **7** | Missing billing/subscription | No payment flow visible | No Stripe or payment integration found | Not found in codebase |
@@ -379,7 +379,7 @@ async def process_queue_endpoint(...):
 
 #### ❌ Issue 2: Feature Flags Block Core Features
 
-**Symptom:** Real-time ingestion, enhanced ingestion, VC routes, and Delphi retrieval are all disabled by default.
+**Symptom:** Real-time ingestion, enhanced ingestion, VC routes, and advisor retrieval are all disabled by default.
 
 **Code Evidence:**
 ```python
@@ -393,15 +393,15 @@ else:
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
 # ...
 
-DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "false").lower() == "true"
-if DELPHI_RETRIEVAL_ENABLED:
-    app.include_router(retrieval_delphi.router)
+ADVISOR_RETRIEVAL_ENABLED = os.getenv("ENABLE_ADVISOR_RETRIEVAL", "false").lower() == "true"
+if ADVISOR_RETRIEVAL_ENABLED:
+    app.include_router(retrieval_advisor.router)
 ```
 
 **Impact:**
 - Users can't see real-time ingestion progress
 - Enhanced ingestion features unavailable
-- Delphi namespace strategy not active
+- creator namespace strategy not active
 
 **Fix Recommendation:**
 1. Audit which features are actually stable
@@ -657,7 +657,7 @@ flowchart LR
 
 ---
 
-## 5) Delphi.ai-Inspired Dashboard Redesign
+## 5) creator-advisor platform-Inspired Dashboard Redesign
 
 ### 5.1 Design Principles
 
@@ -844,7 +844,7 @@ When user clicks source:
 │  Routers: 33 files    │  High coupling: Chat router imports from   │
 │  Modules: 70+ files   │  15+ different modules                     │
 │  Feature flags: 4+    │  Conditional routing based on env vars     │
-│  Namespaces: 2        │  Legacy + Delphi namespace formats         │
+│  Namespaces: 2        │  Legacy + creator namespace formats         │
 │  Training concepts: 3 │  Jobs, Sessions, Ingestion (confusing)     │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -895,7 +895,7 @@ When user clicks source:
 **Phase 2: Simplify (Week 4)**
 - Remove feature flags for stable features
 - Delete stubbed pages
-- Simplify namespace strategy (Delphi only)
+- Simplify namespace strategy (advisor only)
 
 **Phase 3: Reorganize (Week 5-6)**
 - Restructure folders: `services/`, `repositories/`, `clients/`
@@ -968,7 +968,7 @@ backend/
 
 **Issue #3: [P1] Enable stable features by default**
 - **AC:** Remove ENABLE_REALTIME_INGESTION flag (enable by default)
-- **AC:** Remove ENABLE_DELPHI_RETRIEVAL flag (enable by default)
+- **AC:** Remove ENABLE_ADVISOR_RETRIEVAL flag (enable by default)
 - **AC:** Document any remaining feature flags
 
 **Issue #4: [P1] Remove or implement stubbed pages**

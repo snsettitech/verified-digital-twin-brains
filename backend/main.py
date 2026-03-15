@@ -40,7 +40,7 @@ from routers import (
     debug_retrieval, # New debug router
     verify,
     owner_memory,
-    retrieval_delphi,
+    retrieval_advisor,
     
     # P2: Langfuse observability enhancements
     regression_testing,
@@ -82,8 +82,8 @@ except ImportError:
 REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "true").lower() == "true"
 # Enhanced ingestion remains opt-in until further validation
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
-# Delphi retrieval is now enabled by default. Set ENABLE_DELPHI_RETRIEVAL=false to disable.
-DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
+# advisor retrieval is now enabled by default. Set ENABLE_ADVISOR_RETRIEVAL=false to disable.
+ADVISOR_RETRIEVAL_ENABLED = os.getenv("ENABLE_ADVISOR_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 # Deep Research routes remain env-gated for safer staged rollouts.
@@ -97,7 +97,7 @@ def print_feature_flag_summary():
     print("Feature Flag Status:")
     print(f"  Realtime Ingestion: {'ENABLED' if REALTIME_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
-    print(f"  Delphi Retrieval:   {'ENABLED' if DELPHI_RETRIEVAL_ENABLED else 'DISABLED'}")
+    print(f"  advisor retrieval:   {'ENABLED' if ADVISOR_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
     print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI):
 
     # PHASE 1 FIX: Clear namespace cache on startup to prevent stale creator_id resolution
     try:
-        from modules.delphi_namespace import clear_creator_namespace_cache
+        from modules.twin_namespace import clear_creator_namespace_cache
         clear_creator_namespace_cache()
         print("[Startup] Namespace cache cleared")
     except Exception as e:
@@ -210,11 +210,11 @@ app.include_router(debug_retrieval.router)
 app.include_router(verify.router)
 app.include_router(owner_memory.router)
 
-if DELPHI_RETRIEVAL_ENABLED:
-    app.include_router(retrieval_delphi.router)
-    print("[INFO] Delphi retrieval routes enabled (ENABLE_DELPHI_RETRIEVAL=true)")
+if ADVISOR_RETRIEVAL_ENABLED:
+    app.include_router(retrieval_advisor.router)
+    print("[INFO] advisor retrieval routes enabled (ENABLE_ADVISOR_RETRIEVAL=true)")
 else:
-    print("[INFO] Delphi retrieval routes disabled (ENABLE_DELPHI_RETRIEVAL=false)")
+    print("[INFO] advisor retrieval routes disabled (ENABLE_ADVISOR_RETRIEVAL=false)")
 
 # P2: Langfuse observability routers
 app.include_router(regression_testing.router)

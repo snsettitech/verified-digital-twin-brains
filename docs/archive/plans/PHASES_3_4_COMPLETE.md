@@ -152,9 +152,9 @@ Comprehensive runbook with:
 |------|---------|
 | `modules/retrieval.py` | Structured logging, phase timing |
 | `routers/debug_retrieval.py` | 5 new debug endpoints |
-| `.env` | Added DELPHI_DUAL_READ |
+| `.env` | Added CREATOR_NAMESPACE_DUAL_READ |
 | `main.py` | Startup diagnostics |
-| `modules/delphi_namespace.py` | TTL-based caching |
+| `modules/twin_namespace.py` | TTL-based caching |
 
 ---
 

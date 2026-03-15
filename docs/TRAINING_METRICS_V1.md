@@ -2,7 +2,7 @@
 
 ## Overview
 
-Delphi-style profile training metrics for the Digital Brains platform. These metrics provide users with understandable, market-friendly indicators of their twin's training completeness and knowledge coverage.
+creator-scoped profile training metrics for the Digital Brains platform. These metrics provide users with understandable, market-friendly indicators of their twin's training completeness and knowledge coverage.
 
 **Version:** v1_heuristic  
 **Status:** Production Ready  

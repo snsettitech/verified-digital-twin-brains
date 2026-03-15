@@ -3,7 +3,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 class ChatRequest(BaseModel):
-    query: str
+    query: Optional[str] = None
+    twin_id: Optional[str] = None
     conversation_id: Optional[str] = None
     group_id: Optional[str] = None  # NEW: Allow group override
     metadata: Optional[Dict[str, Any]] = None
@@ -551,12 +552,12 @@ class DeepScrubRequest(BaseModel):
 
 
 # =============================================================================
-# Training Metrics Schemas (Delphi-style Profile Metrics)
+# Training Metrics Schemas (creator-scoped Profile Metrics)
 # =============================================================================
 
 class TrainingMetricsSchema(BaseModel):
     """
-    Delphi-style training metrics for twin/profile display.
+    creator-scoped training metrics for twin/profile display.
     
     V1 Heuristic Implementation:
     - words_processed: Total words from successfully ingested sources

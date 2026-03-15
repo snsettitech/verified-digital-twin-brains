@@ -11,7 +11,7 @@
 |------|------------------|-----------------|------------------------|------------|
 | **ENABLE_REALTIME_INGESTION** | Real-time audio/streaming ingestion | `true` (was `false`) | ✅ **ENABLED** | Low |
 | **ENABLE_ENHANCED_INGESTION** | Web crawling, RSS, social media | `false` | ❌ **DISABLED** | Medium |
-| **ENABLE_DELPHI_RETRIEVAL** | Creator-scoped namespace retrieval | `true` (was `false`) | ✅ **ENABLED** | Low |
+| **ENABLE_ADVISOR_RETRIEVAL** | Creator-scoped namespace retrieval | `true` (was `false`) | ✅ **ENABLED** | Low |
 | **ENABLE_VC_ROUTES** | VC (Venture Capital) specialization | `false` | ❌ **DISABLED** | High |
 
 ---
@@ -88,16 +88,16 @@ POST /enhanced-ingestion/linkedin
 
 ---
 
-### 3. ENABLE_DELPHI_RETRIEVAL
+### 3. ENABLE_ADVISOR_RETRIEVAL
 
 **What it does:**
 - Enables **creator-scoped namespace retrieval** system
-- Uses "Delphi" namespace strategy for tenant isolation
+- Uses "advisor" namespace strategy for tenant isolation
 - Provides retrieval endpoints with strict tenant boundaries
 
-**Router:** `retrieval_delphi`
+**Router:** `retrieval_advisor`
 
-**Key concept:** "Delphi" refers to a namespace strategy where vectors are stored in Pinecone namespaces based on `creator_id` rather than `twin_id`, enabling cross-twin retrieval while maintaining isolation.
+**Key concept:** "advisor" refers to a namespace strategy where vectors are stored in Pinecone namespaces based on `creator_id` rather than `twin_id`, enabling cross-twin retrieval while maintaining isolation.
 
 **Endpoints include:**
 ```
@@ -197,7 +197,7 @@ else:
 ```
 Realtime Ingestion:  DISABLED (default: false)
 Enhanced Ingestion:  DISABLED (default: false)
-Delphi Retrieval:    DISABLED (default: false)  ← Problem!
+advisor retrieval:    DISABLED (default: false)  ← Problem!
 VC Routes:           DISABLED (default: false)
 ```
 
@@ -205,7 +205,7 @@ VC Routes:           DISABLED (default: false)
 ```
 Realtime Ingestion:  ENABLED  (default: true)   ← Fixed
 Enhanced Ingestion:  DISABLED (default: false)
-Delphi Retrieval:    ENABLED  (default: true)   ← Fixed
+advisor retrieval:    ENABLED  (default: true)   ← Fixed
 VC Routes:           DISABLED (default: false)
 ```
 
@@ -214,7 +214,7 @@ VC Routes:           DISABLED (default: false)
 | Feature | Impact of Being Disabled |
 |---------|------------------------|
 | Realtime Ingestion | Users can't do live interviews |
-| Delphi Retrieval | Retrieval fails or uses legacy (worse) strategy |
+| advisor retrieval | Retrieval fails or uses legacy (worse) strategy |
 | Enhanced Ingestion | No web crawling/social media (acceptable) |
 | VC Routes | No VC specialization (acceptable for non-VC) |
 
@@ -226,7 +226,7 @@ VC Routes:           DISABLED (default: false)
 ```bash
 # .env file for development
 ENABLE_REALTIME_INGESTION=true      # Always enable for dev
-ENABLE_DELPHI_RETRIEVAL=true        # Always enable for dev
+ENABLE_ADVISOR_RETRIEVAL=true        # Always enable for dev
 ENABLE_ENHANCED_INGESTION=false     # Only enable if testing
 ENABLE_VC_ROUTES=false              # Only enable for VC testing
 ```
@@ -235,7 +235,7 @@ ENABLE_VC_ROUTES=false              # Only enable for VC testing
 ```bash
 # Stable production settings
 ENABLE_REALTIME_INGESTION=true      # Core feature
-ENABLE_DELPHI_RETRIEVAL=true        # Preferred retrieval
+ENABLE_ADVISOR_RETRIEVAL=true        # Preferred retrieval
 ENABLE_ENHANCED_INGESTION=false     # Until fully validated
 ENABLE_VC_ROUTES=false              # Only for VC deployments
 ```
@@ -247,7 +247,7 @@ Check the startup logs:
 Feature Flag Status:
   Realtime Ingestion: ENABLED
   Enhanced Ingestion: DISABLED
-  Delphi Retrieval:   ENABLED
+  advisor retrieval:   ENABLED
   VC Routes:          DISABLED
 ------------------------------------------------------------
 ```
@@ -260,7 +260,7 @@ Feature Flag Status:
 **Check:** `ENABLE_REALTIME_INGESTION=true`
 
 ### Issue: "Retrieval returning empty results"
-**Check:** `ENABLE_DELPHI_RETRIEVAL=true`
+**Check:** `ENABLE_ADVISOR_RETRIEVAL=true`
 
 ### Issue: "Can't crawl websites or connect social media"
 **Check:** `ENABLE_ENHANCED_INGESTION=true` (and verify API keys)
@@ -276,5 +276,5 @@ Feature Flag Status:
 |------|---------------------|---------------------|
 | REALTIME | You need live interviews | Never (core feature) |
 | ENHANCED | You need web crawling/social | You want stability |
-| DELPHI | You want proper retrieval | Never (preferred strategy) |
+| ADVISOR | You want proper retrieval | Never (preferred strategy) |
 | VC | You're a VC customer | You're not VC |

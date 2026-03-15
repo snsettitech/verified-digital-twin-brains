@@ -21,15 +21,15 @@ Implemented a 4-phase fix for chat retrieval issues:
 
 ## Phase 1: Environment & Quick Wins ✅
 
-### 1.1 Added DELPHI_DUAL_READ Environment Variable
+### 1.1 Added CREATOR_NAMESPACE_DUAL_READ Environment Variable
 **File**: `backend/.env`
 
 ```bash
 # Added to .env
-DELPHI_DUAL_READ=true
+CREATOR_NAMESPACE_DUAL_READ=true
 ```
 
-**Purpose**: Ensures both legacy (`twin_id`) and Delphi (`creator_*_twin_*`) namespaces are queried.
+**Purpose**: Ensures both legacy (`twin_id`) and advisor (`creator_*_twin_*`) namespaces are queried.
 
 **Impact**: Fixes the most common cause of "no retrieval results" - namespace mismatch.
 
@@ -40,7 +40,7 @@ DELPHI_DUAL_READ=true
 @app.on_event("startup")
 async def startup_event():
     # Clear namespace cache to prevent stale creator_id resolution
-    from modules.delphi_namespace import clear_creator_namespace_cache
+    from modules.twin_namespace import clear_creator_namespace_cache
     clear_creator_namespace_cache()
 ```
 
@@ -63,7 +63,7 @@ async def _run_retrieval_diagnostics():
 [Startup] Running retrieval system diagnostics...
 [Startup] ✓ Pinecone connected: 15000 total vectors
 [Startup] ✓ Embeddings working: 3072 dimensions
-[Startup] DELPHI_DUAL_READ: true
+[Startup] CREATOR_NAMESPACE_DUAL_READ: true
 [Startup] Retrieval diagnostics complete
 ```
 
@@ -72,7 +72,7 @@ async def _run_retrieval_diagnostics():
 ## Phase 2: Code Fixes & Hardening ✅
 
 ### 2.1 Fixed Namespace Cache Issue
-**File**: `backend/modules/delphi_namespace.py`
+**File**: `backend/modules/twin_namespace.py`
 
 **Problem**: `@lru_cache` could cache `None` indefinitely if first lookup failed.
 
@@ -212,7 +212,7 @@ GET /debug/retrieval/health?twin_id=your-twin-id
       }
     },
     "configuration": {
-      "delphi_dual_read": true,
+      "creator_namespace_dual_read": true,
       "flashrank_available": true
     },
     "warnings": [],
@@ -226,9 +226,9 @@ GET /debug/retrieval/health?twin_id=your-twin-id
 ## Files Modified
 
 ### Backend
-1. `backend/.env` - Added DELPHI_DUAL_READ
+1. `backend/.env` - Added CREATOR_NAMESPACE_DUAL_READ
 2. `backend/main.py` - Startup diagnostics & cache clearing
-3. `backend/modules/delphi_namespace.py` - TTL-based caching
+3. `backend/modules/twin_namespace.py` - TTL-based caching
 4. `backend/modules/retrieval.py` - Better logging & health checks
 5. `backend/routers/debug_retrieval.py` - Health endpoint
 
@@ -254,7 +254,7 @@ All existing tests pass. Module loading verified:
 ```bash
 $ python -c "from modules import retrieval; print('OK')"
 OK
-$ python -c "from modules import delphi_namespace; print('OK')"
+$ python -c "from modules import twin_namespace; print('OK')"
 OK
 ```
 
@@ -316,7 +316,7 @@ OK
 - [ ] Environment variable added to production
 
 ### Deployment
-1. Set `DELPHI_DUAL_READ=true` in production environment
+1. Set `CREATOR_NAMESPACE_DUAL_READ=true` in production environment
 2. Deploy code changes
 3. Verify startup logs show diagnostics
 4. Test retrieval with debug endpoint
@@ -336,9 +336,9 @@ If issues occur:
 1. **Phase 1 Rollback**:
    ```bash
    # Remove env var
-   unset DELPHI_DUAL_READ
+   unset CREATOR_NAMESPACE_DUAL_READ
    # Or set to false
-   DELPHI_DUAL_READ=false
+   CREATOR_NAMESPACE_DUAL_READ=false
    ```
 
 2. **Phase 2 Rollback**:
@@ -355,7 +355,7 @@ The phased implementation addresses the root causes of chat retrieval failures:
 
 | Issue | Phase | Fix |
 |-------|-------|-----|
-| Namespace mismatch | 1 | `DELPHI_DUAL_READ=true` env var |
+| Namespace mismatch | 1 | `CREATOR_NAMESPACE_DUAL_READ=true` env var |
 | Stale cache | 1, 2 | Cache clear on startup + TTL |
 | Poor error visibility | 2 | Enhanced logging throughout |
 | No health checks | 2 | New health endpoint |

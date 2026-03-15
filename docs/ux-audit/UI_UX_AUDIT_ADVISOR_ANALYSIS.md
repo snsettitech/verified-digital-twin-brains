@@ -1,14 +1,14 @@
-# Comprehensive UI/UX Audit & Delphi.ai Competitive Analysis
+# Comprehensive UI/UX Audit & creator-advisor platform Competitive Analysis
 
 **Project:** Verified Digital Twin Brains  
 **Date:** February 2026  
 **Auditor:** Senior Staff Product Designer  
-**Scope:** Full frontend audit + Delphi.ai teardown + production-ready UX specifications
+**Scope:** Full frontend audit + creator-advisor platform teardown + production-ready UX specifications
 
 ---
 
 ## Table of Contents
-1. [Delphi.ai Teardown: 10 Patterns, Anti-Patterns & Microinteractions](#section-1-delphiai-teardown)
+1. [creator-advisor platform Teardown: 10 Patterns, Anti-Patterns & Microinteractions](#section-1-advisorai-teardown)
 2. [Full Frontend Audit: Broken UX Inventory](#section-2-frontend-audit)
 3. [Production-Ready UX Specifications](#section-3-ux-specifications)
 4. [Button-by-Button Behavior Contracts](#section-4-behavior-contracts)
@@ -16,7 +16,7 @@
 
 ---
 
-## Section 1: Delphi.ai Teardown
+## Section 1: creator-advisor platform Teardown
 
 ### 1.1 Pattern Analysis
 
@@ -24,16 +24,16 @@
 |---|---------|---------------|------------------|---------|
 | 1 | **Verification Badge** | Green checkmark with "This clone is associated with the person it represents" tooltip | Trust establishment, credibility signaling | ✅ Implemented - VerificationBadge.tsx exists |
 | 2 | **Suggested Question Chips** | 5 horizontally-scrollable chips below input (e.g., "What are your top 3 productivity tips?") | Reduces cognitive load, accelerates first interaction | ⚠️ Missing - ChatTab has static suggestions but no personalization |
-| 3 | **Inline Citation Superscripts** | Clickable [¹], [²] superscripts inline with response text | Transparency, verifiability | ⚠️ Partial - Source chips exist below messages, but not inline superscripts like Delphi |
+| 3 | **Inline Citation Superscripts** | Clickable [¹], [²] superscripts inline with response text | Transparency, verifiability | ⚠️ Partial - Source chips exist below messages, but not inline superscripts like advisor |
 | 4 | **Citations Drawer** | Slide-out panel from right showing source list with timestamps | Deep context without cluttering chat | ⚠️ Missing - No citations drawer component |
 | 5 | **"Read Aloud" Button** | Voice icon button in header playing TTS | Accessibility, multi-modal consumption | ❌ Not implemented |
 | 6 | **Training Scale Stat** | "57.6K Mind" badge showing data volume | Social proof, depth signaling | ✅ Partial - We show "2,847 conversations" in preview |
 | 7 | **Clean Profile Header** | Avatar + Name + Social Links (Twitter, LinkedIn, Website) | Professional credibility | ✅ Implemented in twin settings |
-| 8 | **3-Step Onboarding Flow** | "Connect content → Train → Share" with progress bar | Clear mental model, reduced anxiety | ❌ Gap - We have 9 steps vs Delphi's 3 |
+| 8 | **3-Step Onboarding Flow** | "Connect content → Train → Share" with progress bar | Clear mental model, reduced anxiety | ❌ Gap - We have 9 steps vs advisor's 3 |
 | 9 | **Escalation Handoff** | "Request 1:1" button that opens Calendly | Business value capture | ❌ Not implemented |
 | 10 | **Confidence Meter** | Circular progress showing "98% accurate" | Reliability signaling | ✅ Implemented in ChatWidget |
 
-### 1.2 Anti-Patterns Observed in Delphi.ai
+### 1.2 Anti-Patterns Observed in creator-advisor platform
 
 | Anti-Pattern | Issue | Our Opportunity |
 |--------------|-------|-----------------|
@@ -46,7 +46,7 @@
 ### 1.3 Microinteractions Breakdown
 
 ```
-Delphi.ai Microinteraction Map:
+creator-advisor platform Microinteraction Map:
 ├── Hover States
 │   ├── Question chips: scale(1.02) + shadow-lg (150ms ease-out)
 │   ├── Citation links: color transition to brand purple
@@ -69,12 +69,12 @@ Delphi.ai Microinteraction Map:
 |----|----------|-------|----------|----------|--------------|
 | UX-001 | PublishTab.tsx:207-230 | Integration cards show "Coming soon" for Slack/Discord/WhatsApp but no visual distinction from available API Access | Medium | No opacity/grayscale difference, inconsistent hover states | 2 hrs |
 | UX-002 | ChatTab.tsx:282-291 | Suggested questions are static array, not personalized to twin's knowledge | Medium | Hardcoded ['What can you help me with?', 'Tell me about yourself', 'What do you know?'] | 4 hrs |
-| UX-003 | Public share page | Citations exist as "Source 1, 2" chips but NOT inline superscripts like Delphi | Medium | Source chips at bottom (line 349-356), not inline [¹] style | 4 hrs |
+| UX-003 | Public share page | Citations exist as "Source 1, 2" chips but NOT inline superscripts like advisor | Medium | Source chips at bottom (line 349-356), not inline [¹] style | 4 hrs |
 | UX-004 | ChatTab.tsx | No "Read Aloud" TTS feature | Low | No audio playback capability | 6 hrs |
 | UX-005 | KnowledgeTab.tsx | Graph view is placeholder (empty div with text) | High | "Graph visualization coming soon" shown | 16 hrs |
 | UX-006 | OverviewTab.tsx:119-128 | "Loading recent conversations..." is static text, not actual loading | Medium | No actual conversation fetching in OverviewTab | 4 hrs |
 | UX-007 | Settings Billing Tab | Static mock data ("67 / 100" messages used) | Medium | Hardcoded progress bar at 67% | 2 hrs |
-| UX-008 | Onboarding:9-steps | Flow is 9 steps vs Delphi's 3 - cognitive overload | High | Wizard.tsx shows 9 steps | Design decision |
+| UX-008 | Onboarding:9-steps | Flow is 9 steps vs advisor's 3 - cognitive overload | High | Wizard.tsx shows 9 steps | Design decision |
 | UX-009 | ✅ Verified | Public twin page FULLY IMPLEMENTED with citations, confidence, retry logic | - | /share/[twin_id]/[token]/page.tsx:429 lines, persistence, error handling | - |
 | UX-010 | TrainingTab.tsx | No progress indicator for training job status | Medium | Shows cards but no step-by-step progress | 4 hrs |
 | UX-011 | EscalationsTab.tsx | Empty state shows static icon, no CTA to create first escalation | Low | No "Create FAQ" or "Test Twin" link | 1 hr |
@@ -84,9 +84,9 @@ Delphi.ai Microinteraction Map:
 | UX-015 | DeleteTwinModal.tsx | No visual confirmation of twin data volume being deleted | Low | Could show "This will delete 47 knowledge sources" | 2 hrs |
 | UX-016 | ActionsTab.tsx:154 | Create Action modal is non-functional placeholder | Medium | "More configuration options coming soon..." text shown | 8 hrs |
 | UX-017 | dashboard/share | QR code is placeholder (shows icon, not real QR) | Low | SVG icon instead of generated QR code | 2 hrs |
-| UX-018 | Public share | No suggested question chips (Delphi has 5 quick-start questions) | Medium | Empty state just says "Ask me anything" | 4 hrs |
+| UX-018 | Public share | No suggested question chips (advisor has 5 quick-start questions) | Medium | Empty state just says "Ask me anything" | 4 hrs |
 | UX-019 | Public share | No "Read Aloud" TTS feature | Low | No audio playback capability | 6 hrs |
-| UX-020 | Public share | No verification badge (Delphi has green checkmark with tooltip) | Medium | Missing trust indicator that this is verified twin | 2 hrs |
+| UX-020 | Public share | No verification badge (advisor has green checkmark with tooltip) | Medium | Missing trust indicator that this is verified twin | 2 hrs |
 
 ### 2.2 Component Inventory
 

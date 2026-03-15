@@ -212,7 +212,7 @@ def _best_effort_delete_by_twin_id(table: str, twin_id: str) -> None:
 def _best_effort_purge_vectors(twin_id: str) -> None:
     try:
         from modules.clients import get_pinecone_index
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
 
         index = get_pinecone_index()
         for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):

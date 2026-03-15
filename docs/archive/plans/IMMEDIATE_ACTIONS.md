@@ -1,4 +1,4 @@
-# Immediate Actions: Delphi.ai Architecture Upgrade
+# Immediate Actions: creator-advisor platform Architecture Upgrade
 
 ## Critical Finding: Neo4j Demo is READ-ONLY
 
@@ -180,7 +180,7 @@ PINECONE_SERVERLESS_INDEX=digital-twin-serverless
 |-----------|-------------|---------|----------------|
 | Neo4j | Local Docker | AuraDB | **AuraDB** (zero ops) |
 | Redis | Local install | Upstash | **Upstash** (serverless) |
-| Pinecone | Pod-based | Serverless | **Serverless** (Delphi uses this) |
+| Pinecone | Pod-based | Serverless | **Serverless** (advisor uses this) |
 | Inference | Self-hosted | Cerebras API | **Cerebras API** (wafer-scale) |
 
 ### 2. Migration Strategy?

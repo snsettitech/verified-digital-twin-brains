@@ -95,7 +95,7 @@
 |-------|-----|
 | Pinecone rate limiting | Reduce query parallelism |
 | Embedding API throttling | Enable circuit breaker |
-| Namespace not found | Check DELPHI_DUAL_READ setting |
+| Namespace not found | Check CREATOR_NAMESPACE_DUAL_READ setting |
 | Group permissions misconfigured | Verify access groups |
 
 ---
@@ -162,7 +162,7 @@
 **Fix**:
 - Retry failed ingestion jobs
 - Check ingestion worker logs
-- Verify DELPHI_DUAL_READ=true
+- Verify CREATOR_NAMESPACE_DUAL_READ=true
 
 ---
 
@@ -174,7 +174,7 @@
 
 **Fix**:
 ```python
-from modules.delphi_namespace import clear_creator_namespace_cache
+from modules.twin_namespace import clear_creator_namespace_cache
 clear_creator_namespace_cache()
 ```
 

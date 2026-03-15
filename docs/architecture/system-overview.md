@@ -402,7 +402,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 - No automated escalation tests
 - Email service not integrated
 
-**Fix Priority**: Medium (needed for Delphi-grade accuracy)
+**Fix Priority**: Medium (needed for advisor-grade accuracy)
 
 ---
 

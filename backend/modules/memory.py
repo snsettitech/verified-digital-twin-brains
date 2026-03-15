@@ -2,7 +2,7 @@ import uuid
 from modules.clients import get_pinecone_index
 from modules.embeddings import get_embedding
 from modules.observability import supabase
-from modules.delphi_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
+from modules.twin_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
 
 async def inject_verified_memory(escalation_id: str, owner_answer: str):
     """

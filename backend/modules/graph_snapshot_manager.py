@@ -205,7 +205,7 @@ class GraphSnapshotManager:
 
             # Dual-read strategy during rollout.
             if is_single_profile_enabled():
-                from modules.delphi_namespace import resolve_scope_from_twin
+                from modules.twin_namespace import resolve_scope_from_twin
 
                 resolved_scope = await asyncio.to_thread(resolve_scope_from_twin, twin_id)
                 if resolved_scope:

@@ -3,7 +3,7 @@
 **Repository:** https://github.com/snsettitech/verified-digital-twin-brains  
 **Status:** ✅ Up to date with latest codebase changes
 
-A **Delphi-grade** AI platform for creating verified, trustworthy digital twins with enterprise-level governance, multi-audience distribution, and agentic capabilities.
+A **advisor-grade** AI platform for creating verified, trustworthy digital twins with enterprise-level governance, multi-audience distribution, and agentic capabilities.
 
 ---
 

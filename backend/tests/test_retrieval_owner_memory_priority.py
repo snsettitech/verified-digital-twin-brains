@@ -4,7 +4,7 @@ from modules import retrieval
 
 
 @pytest.mark.asyncio
-async def test_owner_memory_precedence_short_circuits_verified_and_vectors(monkeypatch):
+async def test_owner_memory_is_preserved_when_verified_qna_does_not_match(monkeypatch):
     async def fake_default_group(_twin_id: str):
         return {"id": "group-1"}
 
@@ -38,7 +38,7 @@ async def test_owner_memory_precedence_short_circuits_verified_and_vectors(monke
     assert len(result) == 1
     assert result[0]["is_owner_memory"] is True
     assert result[0]["owner_memory_match"] is True
-    assert called["verified"] is False
+    assert called["verified"] is True
 
 
 @pytest.mark.asyncio

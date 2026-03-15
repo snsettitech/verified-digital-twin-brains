@@ -1,5 +1,5 @@
 """
-Namespace resolution helpers for Delphi-style creator namespaces.
+Namespace resolution helpers for creator-scoped creator namespaces.
 
 Single-Profile Scope Migration:
 - scope_id: "{tenant_id}__{creator_id}"
@@ -116,7 +116,7 @@ def make_scope_id(tenant_id: str, creator_id: str) -> str:
 # =============================================================================
 
 def build_creator_namespace(creator_id: str, twin_id: str) -> str:
-    """Build Delphi-style namespace for a creator/twin pair."""
+    """Build creator-scoped namespace for a creator/twin pair."""
     return f"creator_{creator_id}_twin_{twin_id}"
 
 
@@ -238,7 +238,7 @@ def get_namespace_candidates_for_twin(
     Return namespace candidates for dual-read migration compatibility.
     """
     if include_legacy is None:
-        include_legacy = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
+        include_legacy = os.getenv("CREATOR_NAMESPACE_DUAL_READ", "true").lower() == "true"
 
     primary = get_primary_namespace_for_twin(twin_id=twin_id, creator_id=creator_id)
     namespaces = [primary]
@@ -293,7 +293,7 @@ def get_namespace_candidates_for_scope(
         List of namespace candidates
     """
     if include_legacy is None:
-        include_legacy = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
+        include_legacy = os.getenv("CREATOR_NAMESPACE_DUAL_READ", "true").lower() == "true"
     
     primary = build_scope_namespace(scope_id)
     namespaces = [primary]

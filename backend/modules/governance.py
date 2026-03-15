@@ -174,7 +174,7 @@ async def deep_scrub_source(source_id: str, tenant_id: str, actor_id: Optional[s
     
     # 2. Delete from Pinecone
     from modules.clients import get_pinecone_index
-    from modules.delphi_namespace import get_namespace_candidates_for_twin
+    from modules.twin_namespace import get_namespace_candidates_for_twin
     index = get_pinecone_index()
     try:
         for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):

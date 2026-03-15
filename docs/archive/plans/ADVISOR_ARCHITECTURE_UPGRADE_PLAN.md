@@ -1,19 +1,19 @@
-# Delphi.ai Architecture Upgrade Plan
-## Verified Digital Twin Brains → Delphi.ai-Style Architecture
+# creator-advisor platform Architecture Upgrade Plan
+## Verified Digital Twin Brains → creator-advisor platform-Style Architecture
 
 **Date:** February 11, 2026  
 **Status:** Research & Planning Phase  
-**Objective:** Upgrade architecture to match Delphi.ai capabilities (except monetization)
+**Objective:** Upgrade architecture to match creator-advisor platform capabilities (except monetization)
 
 ---
 
 ## Executive Summary
 
-Based on research into Delphi.ai's architecture (Pinecone case study, Cerebras partnership, and technical blogs), this plan outlines a phased migration from the current modular microservices architecture to an integrated, high-performance platform similar to Delphi.ai.
+Based on research into creator-advisor platform's architecture (Pinecone case study, Cerebras partnership, and technical blogs), this plan outlines a phased migration from the current modular microservices architecture to an integrated, high-performance platform similar to creator-advisor platform.
 
-### Key Delphi.ai Architectural Insights
+### Key creator-advisor platform Architectural Insights
 
-| Component | Delphi.ai Implementation | Current System | Gap |
+| Component | creator-advisor platform Implementation | Current System | Gap |
 |-----------|------------------------|----------------|-----|
 | **Inference** | Cerebras wafer-scale (Llama 3.3 70B) | OpenAI API only | HIGH |
 | **Vector DB** | Pinecone Serverless (100M+ vectors, 12K namespaces) | Pinecone self-managed | MEDIUM |
@@ -76,8 +76,8 @@ docker run -d \
 - Separation of storage/compute (cost optimization)
 - Dynamic index construction
 - Built-in freshness layer
-- Zero scaling incidents (Delphi handles 20 QPS globally)
-- Supports 5M+ namespaces (Delphi's target)
+- Zero scaling incidents (advisor handles 20 QPS globally)
+- Supports 5M+ namespaces (advisor's target)
 
 **Implementation:**
 
@@ -105,7 +105,7 @@ class PineconeServerlessManager:
     
     def namespace_strategy(self, creator_id: str, twin_id: str = None):
         """
-        Delphi-style: namespace-per-creator with optional twin sub-namespace
+        creator-scoped: namespace-per-creator with optional twin sub-namespace
         Format: creator_{creator_id}[_twin_{twin_id}]
         """
         if twin_id:
@@ -132,9 +132,9 @@ class PineconeServerlessManager:
 
 ```python
 # modules/retrieval_v2.py
-class DelphiStyleRetrieval:
+class advisorStyleRetrieval:
     """
-    Delphi-style retrieval with context engineering
+    creator-scoped retrieval with context engineering
     """
     
     async def retrieve(self, query: str, context: dict) -> RetrievalResult:
@@ -153,7 +153,7 @@ class DelphiStyleRetrieval:
         # Stage 4: Result fusion & reranking
         fused = self.fuse_results(results)
         
-        # Stage 5: Context assembly (Delphi-style)
+        # Stage 5: Context assembly (creator-scoped)
         context_window = self.assemble_context(fused, max_tokens=8000)
         
         return context_window
@@ -193,7 +193,7 @@ class DelphiStyleRetrieval:
 **Target:** Hybrid (Cerebras Llama 3.3 70B + OpenAI/Anthropic)
 
 **Why Cerebras:**
-- Fastest inference speeds on earth (per Delphi blog)
+- Fastest inference speeds on earth (per advisor blog)
 - Sub-second end-to-end latency
 - Cost-effective at scale
 - No rate limiting issues
@@ -258,7 +258,7 @@ class HybridInferenceRouter:
     
     def select_provider(self, req: InferenceRequirements) -> ModelProvider:
         """
-        Delphi-style model selection:
+        creator-scoped model selection:
         - Real-time convos → Cerebras (speed)
         - Complex reasoning → Anthropic (quality)
         - Default → OpenAI (balance)
@@ -494,7 +494,7 @@ class StreamingDocumentProcessor:
 # modules/voice_v2.py
 class AdvancedVoiceEngine:
     """
-    Delphi-style real-time voice generation
+    creator-scoped real-time voice generation
     """
     
     def __init__(self):
@@ -558,7 +558,7 @@ class AdvancedVoiceEngine:
 ```
 
 ### 4.2 Video Avatar (Future Phase)
-**Delphi Feature:** Video chat with digital avatar  
+**advisor Feature:** Video chat with digital avatar  
 **Implementation:** Hedra, LivePortrait, or similar
 
 **Options:**
@@ -732,7 +732,7 @@ class MultimodalRAG:
 ```
 
 ### 6.2 Interview Mode
-**Delphi Feature:** Digital Mind interviews creator to fill gaps
+**advisor Feature:** Digital Mind interviews creator to fill gaps
 
 ```python
 # modules/interview_mode.py
@@ -893,4 +893,4 @@ class InterviewModeEngine:
 
 ---
 
-*This plan is based on research into Delphi.ai's published architecture (Pinecone case study, Cerebras blog post) and current system analysis via CodeGraphContext.*
+*This plan is based on research into creator-advisor platform's published architecture (Pinecone case study, Cerebras blog post) and current system analysis via CodeGraphContext.*

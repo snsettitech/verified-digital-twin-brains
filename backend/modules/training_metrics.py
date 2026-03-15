@@ -1,7 +1,7 @@
 """
 Training Metrics Module
 
-Computes Delphi-style profile training metrics for twins/profiles.
+Computes creator-scoped profile training metrics for twins/profiles.
 
 V1 Heuristic Implementation:
 - Words Processed: Total words from successfully ingested sources

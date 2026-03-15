@@ -194,7 +194,7 @@ digital-twin-brain (index)
 1. **Creator Isolation**: Each creator's data is isolated
 2. **Twin Granularity**: Can delete/query individual twins
 3. **Shared Knowledge**: Can have creator-wide namespace for common data
-4. **Scalable**: Supports 25,000 namespaces (Delphi has 12,000+)
+4. **Scalable**: Supports 25,000 namespaces (advisor has 12,000+)
 
 ---
 

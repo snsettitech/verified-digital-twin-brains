@@ -335,7 +335,7 @@ class CrawlIngestionBridge:
         
         # Get namespace
         from modules.retrieval import get_namespace
-        from modules.delphi_namespace import resolve_creator_id_for_twin
+        from modules.twin_namespace import resolve_creator_id_for_twin
         
         creator_id = resolve_creator_id_for_twin(twin_id)
         namespace = get_namespace(creator_id, twin_id)

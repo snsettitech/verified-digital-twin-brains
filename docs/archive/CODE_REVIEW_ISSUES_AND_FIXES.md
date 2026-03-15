@@ -166,7 +166,7 @@ if verification_age > timedelta(hours=24):
 ```bash
 # Feature Flags (all enabled by default as of 2026-02-12)
 ENABLE_REALTIME_INGESTION=true   # Set to false to disable
-ENABLE_DELPHI_RETRIEVAL=true     # Set to false to disable
+ENABLE_ADVISOR_RETRIEVAL=true     # Set to false to disable
 ENABLE_ENHANCED_INGESTION=false  # Remains opt-in
 ENABLE_VC_ROUTES=false           # Remains opt-in
 ```

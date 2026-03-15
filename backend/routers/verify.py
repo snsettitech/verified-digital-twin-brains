@@ -253,7 +253,7 @@ async def run_quality_verification_suite(
         status = "PASS" if tests_passed == tests_run else "FAIL"
         
         # Additional check: must have vectors
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
         from modules.clients import get_pinecone_index
         
         try:

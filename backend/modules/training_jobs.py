@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from modules.observability import supabase
 from modules.job_queue import enqueue_job
-from modules.delphi_namespace import get_namespace_candidates_for_twin
+from modules.twin_namespace import get_namespace_candidates_for_twin
 # Note: process_and_index_text is imported inside process_training_job to avoid circular import
 
 

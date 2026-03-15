@@ -1,5 +1,5 @@
 # Tenant Isolation Analysis
-## Delphi Namespace Strategy & Multi-Tenancy
+## advisor Namespace Strategy & Multi-Tenancy
 
 ---
 
@@ -28,7 +28,7 @@ Current Isolation Layers:
 
 ---
 
-## Proposed Tenant Isolation (Delphi Pattern)
+## Proposed Tenant Isolation (creator-namespace pattern)
 
 ### New Architecture (After Migration)
 
@@ -146,7 +146,7 @@ async def query_vectors(
     guard.validate_namespace_access(request.creator_id)
     
     # Now safe to query
-    client = get_delphi_client()
+    client = get_advisor_client()
     results = client.query(
         vector=request.vector,
         creator_id=request.creator_id,  # Validated!
@@ -213,10 +213,10 @@ Result: Returns vectors + admin_access_logged
 |----------|-----------------|------|------|
 | **Single Namespace + Metadata Filter** | Weak | Simple, fewer namespaces | Risk of cross-tenant leakage |
 | **Namespace per Creator** | Strong | Clear boundaries, easy deletion | More namespaces to manage |
-| **Namespace per Twin (Delphi)** | Very Strong | Physical isolation, granular | Maximum namespaces |
+| **Namespace per Twin (advisor)** | Very Strong | Physical isolation, granular | Maximum namespaces |
 | **Separate Indexes per Creator** | Extreme | Complete isolation | Expensive, complex |
 
-**Your Choice: Namespace per Twin (Delphi)**
+**Your Choice: Namespace per Twin (advisor)**
 - ✅ Strongest practical isolation
 - ✅ GDPR compliant (easy deletion)
 - ✅ Prevents accidental cross-tenant queries
@@ -294,7 +294,7 @@ def require_creator_access(creator_id_param: str = "creator_id"):
 # backend/routers/retrieval.py (Updated)
 
 from backend.modules.tenant_guard import require_creator_access
-from backend.modules.embeddings_delphi import get_delphi_client
+from backend.modules.embeddings_advisor import get_advisor_client
 
 @router.post("/query")
 @require_creator_access(creator_id_param="creator_id")
@@ -310,7 +310,7 @@ async def query_vectors(
     - Cross-tenant access is blocked
     - All access is logged for audit
     """
-    client = get_delphi_client()
+    client = get_advisor_client()
     
     results = client.query(
         vector=request.vector,
@@ -475,7 +475,7 @@ class TestTenantIsolation:
 
 ---
 
-## Summary: Tenant Isolation with Delphi Pattern
+## Summary: Tenant Isolation with creator-namespace pattern
 
 ### ✅ What You Get
 
@@ -541,7 +541,7 @@ class TestTenantIsolation:
 
 ## Recommendation
 
-**The Delphi namespace strategy provides EXCELLENT tenant isolation.**
+**The creator namespace strategy provides EXCELLENT tenant isolation.**
 
 It's actually **stronger** than your current UUID-based approach because:
 - Current: UUIDs don't indicate ownership (hard to audit)

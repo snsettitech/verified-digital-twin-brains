@@ -86,7 +86,7 @@ Non-current documentation and reports.
 | `CODE_REVIEW_*.md` | Process |
 | `CRITICAL_PATH_*.md` | Planning |
 | `DEEP_RESEARCH_*.md` | Planning |
-| `DELPHI_*.md` | Planning |
+| `ADVISOR_*.md` | Planning |
 | `DEPLOYMENT_STATUS.md` | Status |
 | `DUPLICATION_COMPLEXITY_REPORT.md` | Analysis |
 | `FEATURE_FLAGS_EXPLAINED.md` | Documentation |

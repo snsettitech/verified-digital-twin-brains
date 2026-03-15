@@ -47,7 +47,7 @@ Three proven market directions are converging:
 - Leaders emphasize safe use of AI with policy enforcement, permission checks, and agent governance. (Glean is a clear example of this product direction.)
 
 2) **“Digital minds / clones” have demonstrated demand**
-- Platforms like Delphi show that people will pay to scale expertise and availability through a digital “mind.”
+- Platforms like advisor show that people will pay to scale expertise and availability through a digital “mind.”
 
 3) **Actions are the next frontier, but reliability is the bottleneck**
 - Tool-use/automation approaches (e.g., Adept-style “do actions in software”) are powerful, but broad autonomy increases risk.
@@ -88,6 +88,6 @@ Phase 4 — **Autonomous Workflows**
 
 ## Competitive frame (how we position)
 - Versus enterprise search (Glean-style): we start narrower, but build deeper verified delegation.
-- Versus digital clone platforms (Delphi-style): we compete on verification + audit + accountable actions.
+- Versus digital clone platforms (creator-scoped): we compete on verification + audit + accountable actions.
 - Versus action automation (Adept-style): we delay broad autonomy and win on trust + governance first.
 

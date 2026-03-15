@@ -1635,6 +1635,215 @@ def _persist_runtime_audit(
         "response_action": action,
     }
 
+async def _extract_body_session_id(req_raw: Optional[Request]) -> Optional[str]:
+    if req_raw is None:
+        return None
+    try:
+        payload = await req_raw.json()
+    except Exception:
+        return None
+    if isinstance(payload, dict):
+        raw_session_id = payload.get("session_id")
+        if isinstance(raw_session_id, str) and raw_session_id.strip():
+            return raw_session_id.strip()
+    return None
+
+
+def _resolve_conversation_id_for_session(twin_id: str, session_id: Optional[str]) -> Optional[str]:
+    if not twin_id or not session_id:
+        return None
+    try:
+        response = (
+            supabase.table("conversations")
+            .select("id")
+            .eq("twin_id", twin_id)
+            .eq("session_id", session_id)
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if response.data:
+            return response.data[0].get("id")
+    except Exception as exc:
+        logger.debug("Failed to resolve conversation_id from session_id=%s: %s", session_id, exc)
+    return None
+
+
+def _bind_session_id_to_conversation(conversation_id: Optional[str], session_id: Optional[str]) -> None:
+    if not conversation_id or not session_id:
+        return
+    try:
+        supabase.table("conversations").update({"session_id": session_id}).eq("id", conversation_id).execute()
+    except Exception as exc:
+        logger.debug("Failed to bind session_id=%s to conversation_id=%s: %s", session_id, conversation_id, exc)
+
+
+async def _prepare_body_routed_chat_request(
+    *,
+    twin_id: str,
+    request: ChatRequest,
+    req_raw: Optional[Request],
+) -> Optional[str]:
+    request.twin_id = twin_id
+    session_id = await _extract_body_session_id(req_raw)
+    if not request.conversation_id and session_id:
+        request.conversation_id = _resolve_conversation_id_for_session(twin_id, session_id)
+    return session_id
+
+
+async def _iter_stream_chunks(response: StreamingResponse):
+    async for chunk in response.body_iterator:
+        if isinstance(chunk, bytes):
+            yield chunk.decode("utf-8")
+        else:
+            yield str(chunk)
+
+
+def _iter_stream_events(chunk_text: str):
+    for raw_line in str(chunk_text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            yield payload
+
+
+async def _consume_streaming_chat_response(
+    response: StreamingResponse,
+    *,
+    session_id: Optional[str],
+) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+    content_parts: List[str] = []
+    errors: List[str] = []
+    session_bound = False
+
+    async for chunk_text in _iter_stream_chunks(response):
+        for payload in _iter_stream_events(chunk_text):
+            event_type = str(payload.get("type") or "").strip().lower()
+            if event_type == "metadata":
+                metadata = payload
+                if not session_bound:
+                    _bind_session_id_to_conversation(payload.get("conversation_id"), session_id)
+                    session_bound = True
+            elif event_type == "content":
+                content_parts.append(str(payload.get("content") or payload.get("token") or ""))
+            elif event_type == "error":
+                errors.append(str(payload.get("error") or "Unknown chat error"))
+
+    if errors:
+        raise HTTPException(status_code=500, detail=" ".join(errors))
+
+    response_type = metadata.get("response_type")
+    if not isinstance(response_type, str) or not response_type.strip():
+        response_type = "clarification" if metadata.get("requires_user_input") else "answer"
+
+    return _normalize_json(
+        {
+            "message": "".join(content_parts).strip(),
+            "response_type": response_type,
+            "requires_user_input": bool(metadata.get("requires_user_input")),
+            "dialogue_mode": metadata.get("dialogue_mode"),
+            "sources": metadata.get("citation_details") or metadata.get("citations") or [],
+            "citations": metadata.get("citations") or [],
+            "confidence_score": metadata.get("confidence_score"),
+            "conversation_id": metadata.get("conversation_id"),
+            "clarification_hint": metadata.get("clarification_hint"),
+            "clarification_options": metadata.get("clarification_options") or [],
+            "model_used": metadata.get("model_used") or metadata.get("inference_model"),
+            "provider_used": metadata.get("provider_used") or metadata.get("inference_provider"),
+        }
+    )
+
+
+def _wrap_streaming_chat_response(
+    response: StreamingResponse,
+    *,
+    session_id: Optional[str],
+) -> StreamingResponse:
+    async def wrapped_stream():
+        session_bound = False
+        async for chunk_text in _iter_stream_chunks(response):
+            if not session_bound:
+                for payload in _iter_stream_events(chunk_text):
+                    if str(payload.get("type") or "").strip().lower() == "metadata":
+                        _bind_session_id_to_conversation(payload.get("conversation_id"), session_id)
+                        session_bound = True
+                        break
+            yield chunk_text
+
+    return StreamingResponse(
+        wrapped_stream(),
+        media_type=response.media_type,
+        status_code=response.status_code,
+        headers=dict(response.headers),
+    )
+
+
+@router.post(
+    "/chat",
+    include_in_schema=True,
+    summary="Send a message to a twin (body-based routing)",
+)
+async def chat_flat(
+    request: ChatRequest,
+    req_raw: Request,
+    user=Depends(get_current_user),
+    x_langfuse_trace_id: Optional[str] = Header(None, alias="X-Langfuse-Trace-Id"),
+):
+    if not request.twin_id:
+        raise HTTPException(
+            status_code=422,
+            detail="twin_id is required in the request body for POST /chat",
+        )
+    session_id = await _prepare_body_routed_chat_request(
+        twin_id=request.twin_id,
+        request=request,
+        req_raw=req_raw,
+    )
+    response = await chat(
+        twin_id=request.twin_id,
+        request=request,
+        user=user,
+        x_langfuse_trace_id=x_langfuse_trace_id,
+    )
+    return await _consume_streaming_chat_response(response, session_id=session_id)
+
+
+@router.post(
+    "/chat/stream",
+    include_in_schema=True,
+    summary="Stream a response from a twin (body-based routing)",
+)
+async def chat_stream_flat(
+    request: ChatRequest,
+    req_raw: Request,
+    user=Depends(get_current_user),
+    x_langfuse_trace_id: Optional[str] = Header(None, alias="X-Langfuse-Trace-Id"),
+):
+    if not request.twin_id:
+        raise HTTPException(
+            status_code=422,
+            detail="twin_id is required in the request body for POST /chat/stream",
+        )
+    session_id = await _prepare_body_routed_chat_request(
+        twin_id=request.twin_id,
+        request=request,
+        req_raw=req_raw,
+    )
+    response = await chat(
+        twin_id=request.twin_id,
+        request=request,
+        user=user,
+        x_langfuse_trace_id=x_langfuse_trace_id,
+    )
+    return _wrap_streaming_chat_response(response, session_id=session_id)
+
+
 @router.post("/chat/{twin_id}")
 @observe(name="chat_request")
 async def chat(
@@ -1781,6 +1990,9 @@ async def chat(
             router_reason = None
             router_knowledge_available = None
             routing_decision: Optional[Dict[str, Any]] = None
+            inference_provider = None
+            inference_model = None
+            inference_latency_ms = None
             
             # Fetch graph stats for this twin
             from modules.graph_context import get_graph_stats
@@ -2126,6 +2338,12 @@ async def chat(
                                     raw_decision = msg.additional_kwargs["routing_decision"]
                                     if isinstance(raw_decision, dict):
                                         routing_decision = _normalize_json(raw_decision)
+                                if "inference_provider" in msg.additional_kwargs:
+                                    inference_provider = msg.additional_kwargs["inference_provider"]
+                                if "inference_model" in msg.additional_kwargs:
+                                    inference_model = msg.additional_kwargs["inference_model"]
+                                if "inference_latency_ms" in msg.additional_kwargs:
+                                    inference_latency_ms = msg.additional_kwargs["inference_latency_ms"]
                                 if "persona_spec_version" in msg.additional_kwargs:
                                     context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                                 if "persona_prompt_variant" in msg.additional_kwargs:
@@ -2374,6 +2592,11 @@ async def chat(
                     "reason": router_reason,
                 },
                 "module_ids": module_ids,
+                "inference_provider": inference_provider,
+                "inference_model": inference_model,
+                "inference_latency_ms": inference_latency_ms,
+                "provider_used": inference_provider,
+                "model_used": inference_model,
                 "graph_context": {
                     "has_graph": graph_prefetch_has_data or graph_stats["has_graph"],
                     "node_count": (

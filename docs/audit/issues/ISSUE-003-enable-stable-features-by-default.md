@@ -29,7 +29,7 @@ Current defaults in `main.py`:
 
 - `ENABLE_REALTIME_INGESTION` defaults to `false`
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
-- `ENABLE_DELPHI_RETRIEVAL` defaults to `false`
+- `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
 - `ENABLE_VC_ROUTES` defaults to `false`
 
 ## Scope
@@ -48,7 +48,7 @@ Out of scope:
 ## Implementation Checklist
 
 - [x] Define "stable feature" list with engineering sign-off.
-- [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_DELPHI_RETRIEVAL` if stable.
+- [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` if stable.
 - [x] Keep explicit opt-out flags for emergency kill switch.
 - [x] Add startup log summary that prints enabled/disabled feature map.
 - [x] Add smoke tests that assert route availability under default config.
@@ -57,7 +57,7 @@ Out of scope:
 ## Acceptance Criteria (from audit report)
 
 - [x] Remove `ENABLE_REALTIME_INGESTION` flag (enable by default).
-- [x] Remove `ENABLE_DELPHI_RETRIEVAL` flag (enable by default).
+- [x] Remove `ENABLE_ADVISOR_RETRIEVAL` flag (enable by default).
 - [x] Document any remaining feature flags.
 
 ## Verification Plan

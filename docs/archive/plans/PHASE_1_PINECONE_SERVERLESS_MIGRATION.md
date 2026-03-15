@@ -30,7 +30,7 @@
 | **Max Namespaces** | 1,000 per index | 25,000+ per index | **25x more** |
 | **Multi-tenancy** | Complex | Native | Simplified |
 
-### Delphi.ai Reference Architecture
+### creator-advisor platform Reference Architecture
 From Pinecone case study:
 - **100M+ vectors** across **12,000+ namespaces**
 - **<100ms P95 latency** for retrieval
@@ -293,13 +293,13 @@ python migrate_vectors.py --namespace "twin_def456" --batch-size 100
 #### Day 4-5: Namespace Strategy Refactoring
 
 **Current:** Namespace per twin (e.g., `twin_abc123`)  
-**Target:** Namespace per creator (Delphi-style, e.g., `creator_user123_twin_abc123`)
+**Target:** Namespace per creator (creator-scoped, e.g., `creator_user123_twin_abc123`)
 
 ```python
 # modules/embeddings_v2.py
 class PineconeServerlessManager:
     """
-    Delphi-style namespace management for Pinecone Serverless.
+    creator-scoped namespace management for Pinecone Serverless.
     """
     
     def __init__(self):
@@ -308,7 +308,7 @@ class PineconeServerlessManager:
         
     def get_namespace(self, creator_id: str, twin_id: str = None) -> str:
         """
-        Generate namespace name following Delphi pattern:
+        Generate namespace name following creator-namespace pattern:
         - Primary: creator_{creator_id}_twin_{twin_id}
         - Creator-wide: creator_{creator_id}
         """
@@ -632,7 +632,7 @@ class PineconeMonitor:
 - [Pinecone Migration Guide](https://docs.pinecone.io/guides/indexes/pods/migrate-a-pod-based-index-to-serverless)
 - [Pinecone Serverless Best Practices](https://docs.pinecone.io/guides/production/production-checklist)
 - [Pinecone Error Handling](https://docs.pinecone.io/guides/production/error-handling)
-- [Delphi.ai Case Study](https://www.pinecone.io/customers/delphi/)
+- [creator-advisor platform Case Study](https://www.pinecone.io/customers/advisor/)
 
 ---
 

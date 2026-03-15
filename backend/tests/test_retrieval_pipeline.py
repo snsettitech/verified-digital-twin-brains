@@ -20,9 +20,9 @@ class TestNamespaceResolution:
     
     async def test_resolve_creator_id_returns_none_for_nonexistent_twin(self):
         """Should return None when twin doesn't exist."""
-        from modules.delphi_namespace import resolve_creator_id_for_twin
+        from modules.twin_namespace import resolve_creator_id_for_twin
         
-        with patch('modules.delphi_namespace.supabase') as mock_supabase:
+        with patch('modules.twin_namespace.supabase') as mock_supabase:
             mock_supabase.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
             
             result = resolve_creator_id_for_twin("nonexistent-twin", _bypass_cache=True)
@@ -30,11 +30,11 @@ class TestNamespaceResolution:
     
     async def test_resolve_creator_id_returns_creator_id(self):
         """Should return creator_id when present in twin record."""
-        from modules.delphi_namespace import resolve_creator_id_for_twin, clear_creator_namespace_cache
+        from modules.twin_namespace import resolve_creator_id_for_twin, clear_creator_namespace_cache
         
         clear_creator_namespace_cache()
         
-        with patch('modules.delphi_namespace.supabase') as mock_supabase:
+        with patch('modules.twin_namespace.supabase') as mock_supabase:
             mock_supabase.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
                 {"creator_id": "user.123", "tenant_id": "tenant_456"}
             ]
@@ -44,11 +44,11 @@ class TestNamespaceResolution:
     
     async def test_resolve_creator_id_fallback_to_tenant(self):
         """Should fallback to tenant-derived ID when creator_id is null."""
-        from modules.delphi_namespace import resolve_creator_id_for_twin, clear_creator_namespace_cache
+        from modules.twin_namespace import resolve_creator_id_for_twin, clear_creator_namespace_cache
         
         clear_creator_namespace_cache()
         
-        with patch('modules.delphi_namespace.supabase') as mock_supabase:
+        with patch('modules.twin_namespace.supabase') as mock_supabase:
             mock_supabase.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
                 {"creator_id": None, "tenant_id": "tenant_789"}
             ]
@@ -58,10 +58,10 @@ class TestNamespaceResolution:
     
     async def test_get_namespace_candidates_with_dual_read(self):
         """Should return both namespaces when dual-read is enabled."""
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
         
-        with patch.dict('os.environ', {'DELPHI_DUAL_READ': 'true'}):
-            with patch('modules.delphi_namespace.resolve_creator_id_for_twin', return_value="user.123"):
+        with patch.dict('os.environ', {'CREATOR_NAMESPACE_DUAL_READ': 'true'}):
+            with patch('modules.twin_namespace.resolve_creator_id_for_twin', return_value="user.123"):
                 result = get_namespace_candidates_for_twin("my-twin", include_legacy=True)
                 
                 assert len(result) == 2
@@ -70,10 +70,10 @@ class TestNamespaceResolution:
     
     async def test_get_namespace_candidates_without_dual_read(self):
         """Should return only primary namespace when dual-read is disabled."""
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
         
-        with patch.dict('os.environ', {'DELPHI_DUAL_READ': 'false'}):
-            with patch('modules.delphi_namespace.resolve_creator_id_for_twin', return_value="user.123"):
+        with patch.dict('os.environ', {'CREATOR_NAMESPACE_DUAL_READ': 'false'}):
+            with patch('modules.twin_namespace.resolve_creator_id_for_twin', return_value="user.123"):
                 result = get_namespace_candidates_for_twin("my-twin", include_legacy=False)
                 
                 assert len(result) == 1
@@ -737,7 +737,7 @@ class TestHealthCheck:
             mock_pc.return_value.describe_index_stats.return_value = mock_stats
             
             with patch('modules.retrieval.get_embedding', return_value=[0.1] * 3072):
-                with patch.dict('os.environ', {'DELPHI_DUAL_READ': 'true'}):
+                with patch.dict('os.environ', {'CREATOR_NAMESPACE_DUAL_READ': 'true'}):
                     result = await get_retrieval_health_status()
                     
                     assert result["healthy"] is True

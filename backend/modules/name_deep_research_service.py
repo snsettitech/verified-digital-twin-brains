@@ -516,7 +516,7 @@ class NameDeepResearchService:
         # Best-effort vector namespace purge to avoid cross-person retrieval bleed.
         try:
             from modules.clients import get_pinecone_index
-            from modules.delphi_namespace import get_primary_namespace_for_twin
+            from modules.twin_namespace import get_primary_namespace_for_twin
 
             namespace = get_primary_namespace_for_twin(twin_id=twin_id)
             index = get_pinecone_index()

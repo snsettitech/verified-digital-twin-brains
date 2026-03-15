@@ -416,7 +416,7 @@ async def create_twin(request: TwinCreateRequest, user=Depends(get_current_user)
         data = {
             "name": requested_name,
             "tenant_id": tenant_id,  # Always from resolve_tenant_id
-            # Creator ID is the isolation root for Delphi namespace strategy.
+            # Creator ID is the isolation root for creator namespace strategy.
             # Use authenticated creator claim first; fallback is deterministic tenant mapping.
             "creator_id": (derive_creator_ids(user) or [f"tenant_{tenant_id}"])[0],
             "description": request.description or f"{requested_name}'s digital twin",
@@ -1382,7 +1382,7 @@ async def delete_twin(
             # 11. Delete Pinecone vectors for this twin (external to Postgres)
             try:
                 from modules.clients import get_pinecone_index
-                from modules.delphi_namespace import get_namespace_candidates_for_twin
+                from modules.twin_namespace import get_namespace_candidates_for_twin
                 index = get_pinecone_index()
                 for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
                     try:

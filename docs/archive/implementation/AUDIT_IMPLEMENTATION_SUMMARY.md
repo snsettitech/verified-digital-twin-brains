@@ -80,7 +80,7 @@ tests/test_chat_interaction_context.py - 7 PASSED
 
 1. **Feature Flag Defaults** (`backend/main.py`)
    - Line 94: `ENABLE_REALTIME_INGESTION` default changed from `"false"` to `"true"`
-   - Line 134: `ENABLE_DELPHI_RETRIEVAL` default changed from `"false"` to `"true"`
+   - Line 134: `ENABLE_ADVISOR_RETRIEVAL` default changed from `"false"` to `"true"`
 
 2. **Observability** (`backend/main.py`, lines 329-338)
    - Added `print_feature_flag_summary()` function
@@ -91,7 +91,7 @@ tests/test_chat_interaction_context.py - 7 PASSED
      Feature Flag Status:
        Realtime Ingestion: ENABLED
        Enhanced Ingestion: DISABLED
-       Delphi Retrieval:   ENABLED
+       advisor retrieval:   ENABLED
        VC Routes:          DISABLED
      ------------------------------------------------------------
      ```

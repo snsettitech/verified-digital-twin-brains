@@ -103,9 +103,9 @@ Feature/perf:
   - Emergency rollback: set `ENABLE_REALTIME_INGESTION=false`
   - Optional (recommended for canary): `REDIS_URL` to enable Redis Streams lane
   - Knobs (optional): `REALTIME_MIN_CHARS_DELTA`, `REALTIME_MIN_SECONDS_BETWEEN_INDEX`, `REALTIME_USE_REDIS_STREAMS`
-- Delphi retrieval:
-  - Default: `ENABLE_DELPHI_RETRIEVAL=true`
-  - Emergency rollback: set `ENABLE_DELPHI_RETRIEVAL=false`
+- advisor retrieval:
+  - Default: `ENABLE_ADVISOR_RETRIEVAL=true`
+  - Emergency rollback: set `ENABLE_ADVISOR_RETRIEVAL=false`
 
 Feedback learning:
 - `FEEDBACK_LEARNING_MIN_EVENTS=5` (or your chosen threshold)

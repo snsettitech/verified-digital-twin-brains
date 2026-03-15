@@ -83,9 +83,9 @@ GET /debug/retrieval/health?twin_id=c3cd4ad0-d4cc-4e82-a020-82b48de72d42
 ```
 Observed:
 - Pinecone connected
-- namespaces discovered (Delphi + legacy candidate)
-- vectors present in Delphi namespace
-- `delphi_dual_read: true`
+- namespaces discovered (advisor + legacy candidate)
+- vectors present in creator namespace
+- `creator_namespace_dual_read: true`
 - `flashrank_enabled: false`
 
 ## 6) Provider Usage: What is Actually Active

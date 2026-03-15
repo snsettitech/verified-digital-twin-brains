@@ -1,5 +1,5 @@
 -- ============================================================================
--- Phase 1/2: Delphi Creator Namespace Foundation
+-- Phase 1/2: advisor Creator Namespace Foundation
 -- Adds creator_id for namespace-per-creator strategy.
 -- ============================================================================
 

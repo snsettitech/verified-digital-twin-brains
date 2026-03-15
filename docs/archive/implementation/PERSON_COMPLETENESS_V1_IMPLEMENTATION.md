@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This document describes the implementation of the Person Completeness Layer v1 - a Delphi-like structured person modeling system built on top of the existing Deep Research pipeline. The system provides evidence-grounded, structured, and verifiable person modeling with features for trust, auditability, and runtime confidence gating.
+This document describes the implementation of the Person Completeness Layer v1 - a advisor-like structured person modeling system built on top of the existing Deep Research pipeline. The system provides evidence-grounded, structured, and verifiable person modeling with features for trust, auditability, and runtime confidence gating.
 
 ## Architecture Overview
 

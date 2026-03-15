@@ -1,5 +1,5 @@
 # Phase 1: Namespace Strategy Refactoring Plan
-## Twin-Based → Creator-Based (Delphi Pattern)
+## Twin-Based → Creator-Based (creator-namespace pattern)
 
 **Status:** Planning Complete → Ready for Implementation  
 **Creator ID for Testing:** `sainath.no.1`  
@@ -42,14 +42,14 @@ ad1eeace-26d1-4eff-9560-39643832d0f2     :  47 vectors   (6%)
 - No isolation between creators in default namespace
 - Risk of data leakage between tenants
 
-**Issue 3: Not Delphi-Compatible**
-- Delphi uses `creator_{id}` or `creator_{id}_twin_{twin_id}` pattern
+**Issue 3: Not advisor-Compatible**
+- advisor uses `creator_{id}` or `creator_{id}_twin_{twin_id}` pattern
 - Current pattern doesn't support multi-twin search
 - Limits scalability to 12,000+ namespaces
 
 ---
 
-## 🎯 Target State (Delphi Pattern)
+## 🎯 Target State (creator-namespace pattern)
 
 ### Namespace Naming Convention
 
@@ -65,11 +65,11 @@ ad1eeace-26d1-4eff-9560-39643832d0f2     :  47 vectors   (6%)
 |---------|-------------|
 | **GDPR Compliance** | Delete all creator data with single `delete_all` call |
 | **Multi-Twin Search** | Query `creator_sainath.no.1_*` pattern across twins |
-| **Scalability** | 25,000 namespaces per index (Delphi has 12,000+) |
+| **Scalability** | 25,000 namespaces per index (advisor has 12,000+) |
 | **Cost Optimization** | Inactive namespaces don't consume compute |
 | **Data Isolation** | Clear tenant boundaries |
 
-### Delphi.ai Reference
+### creator-advisor platform Reference
 - **100M+ vectors** across **12,000+ namespaces**
 - **<100ms P95 latency**
 - **20 QPS globally**
@@ -436,18 +436,18 @@ class DefaultNamespaceHandler:
 
 **Task 3.1: New Embedding Module**
 ```python
-# modules/embeddings_delphi.py
+# modules/embeddings_advisor.py
 """
-Delphi-style Pinecone client with creator-based namespaces.
+creator-scoped Pinecone client with creator-based namespaces.
 Drop-in replacement for current embeddings module.
 """
 from pinecone import Pinecone
 from typing import Optional, List, Dict
 import os
 
-class PineconeDelphiClient:
+class PineconeAdvisorClient:
     """
-    Pinecone client using Delphi namespace strategy.
+    Pinecone client using creator namespace strategy.
     
     Naming convention:
     - Twin-specific: creator_{creator_id}_twin_{twin_id}
@@ -584,14 +584,14 @@ class PineconeDelphiClient:
         return twins
 
 # Singleton instance
-_delphi_client = None
+_advisor_client = None
 
-def get_delphi_client() -> PineconeDelphiClient:
-    """Get singleton Delphi client."""
-    global _delphi_client
-    if _delphi_client is None:
-        _delphi_client = PineconeDelphiClient()
-    return _delphi_client
+def get_advisor_client() -> PineconeAdvisorClient:
+    """Get singleton advisor client."""
+    global _advisor_client
+    if _advisor_client is None:
+        _advisor_client = PineconeAdvisorClient()
+    return _advisor_client
 ```
 
 **Task 3.2: Feature Flag Integration**
@@ -599,20 +599,20 @@ def get_delphi_client() -> PineconeDelphiClient:
 # modules/feature_flags.py
 import os
 
-def use_delphi_namespaces() -> bool:
+def use_twin_namespaces() -> bool:
     """
-    Feature flag for Delphi namespace strategy.
-    Set USE_DELPHI_NAMESPACES=true to enable.
+    Feature flag for creator namespace strategy.
+    Set USE_ADVISOR_NAMESPACES=true to enable.
     """
     return os.environ.get(
-        "USE_DELPHI_NAMESPACES",
+        "USE_ADVISOR_NAMESPACES",
         "false"
     ).lower() == "true"
 
 # Usage in code:
-# if use_delphi_namespaces():
-#     from modules.embeddings_delphi import get_delphi_client
-#     client = get_delphi_client()
+# if use_twin_namespaces():
+#     from modules.embeddings_advisor import get_advisor_client
+#     client = get_advisor_client()
 # else:
 #     from modules.embeddings import get_pinecone_client
 #     client = get_pinecone_client()
@@ -631,14 +631,14 @@ def use_delphi_namespaces() -> bool:
 ```python
 # tests/test_namespace_migration.py
 import pytest
-from modules.embeddings_delphi import PineconeDelphiClient
+from modules.embeddings_advisor import PineconeAdvisorClient
 
-class TestDelphiNamespaceStrategy:
-    """Test suite for Delphi namespace refactoring."""
+class TestadvisorNamespaceStrategy:
+    """Test suite for creator namespace refactoring."""
     
     @pytest.fixture
     def client(self):
-        return PineconeDelphiClient()
+        return PineconeAdvisorClient()
     
     def test_namespace_generation(self, client):
         """Test correct namespace naming."""
@@ -769,7 +769,7 @@ class TestDelphiNamespaceStrategy:
 | File | Purpose |
 |------|---------|
 | `migrate_namespaces.py` | Main migration script |
-| `modules/embeddings_delphi.py` | New Delphi client |
+| `modules/embeddings_advisor.py` | New advisor client |
 | `modules/feature_flags.py` | Feature toggle |
 | `tests/test_namespace_migration.py` | Test suite |
 | `rollback_namespaces.py` | Rollback script |
@@ -805,6 +805,6 @@ Before starting implementation, confirm:
 
 ## 📚 References
 
-- [Delphi.ai Pinecone Case Study](https://www.pinecone.io/customers/delphi/)
+- [creator-advisor platform Pinecone Case Study](https://www.pinecone.io/customers/advisor/)
 - [Pinecone Serverless Best Practices](https://docs.pinecone.io/guides/production/production-checklist)
 - [GDPR Right to Erasure](https://gdpr.eu/article-17-right-to-be-forgotten/)

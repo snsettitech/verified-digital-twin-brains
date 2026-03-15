@@ -18,13 +18,13 @@
 
 ## Phase 1: Environment & Quick Wins (IMMEDIATE)
 
-### 1.1 Set DELPHI_DUAL_READ Environment Variable
+### 1.1 Set CREATOR_NAMESPACE_DUAL_READ Environment Variable
 **File**: `.env`  
 **Purpose**: Enable backward-compatible namespace querying
 
 ```bash
 # Add to .env
-DELPHI_DUAL_READ=true
+CREATOR_NAMESPACE_DUAL_READ=true
 ```
 
 ### 1.2 Clear Namespace Cache on Startup
@@ -40,7 +40,7 @@ DELPHI_DUAL_READ=true
 ## Phase 2: Code Fixes & Hardening
 
 ### 2.1 Fix Namespace Cache Issue
-**File**: `modules/delphi_namespace.py`  
+**File**: `modules/twin_namespace.py`  
 **Problem**: LRU cache might cache None indefinitely
 
 ### 2.2 Add Better Error Handling

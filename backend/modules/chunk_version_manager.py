@@ -21,7 +21,7 @@ from datetime import datetime
 
 from modules.clients import get_pinecone_index
 from modules.pinecone_adapter import PineconeIndexAdapter
-from modules.delphi_namespace import resolve_creator_id_for_twin
+from modules.twin_namespace import resolve_creator_id_for_twin
 from modules.retrieval import get_namespace
 
 logger = logging.getLogger(__name__)

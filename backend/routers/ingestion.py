@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import os
 import uuid
+from uuid import uuid4
 from modules.health_checks import calculate_content_hash, run_all_health_checks
 from modules.ingestion_diagnostics import start_step, finish_step, build_error
 
@@ -139,6 +140,14 @@ class URLIngestWithTwinRequest(BaseModel):
     source_label: Optional[str] = None
     identity_confirmed: Optional[bool] = False
 
+
+class IngestTextRequest(BaseModel):
+    twin_id: str
+    content: str
+    source_type: str = "manual"
+    source_id: Optional[str] = None
+    metadata: Optional[dict] = {}
+
 def _get_correlation_id(request: Request) -> Optional[str]:
     return request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
 
@@ -237,6 +246,20 @@ def _insert_source_row(
         source_label=source_label,
         identity_confirmed=identity_confirmed,
     )
+
+
+def _persist_source_metadata(source_id: str, metadata: Optional[dict]) -> None:
+    if not isinstance(metadata, dict) or not metadata:
+        return
+    try:
+        existing = supabase.table("sources").select("metadata").eq("id", source_id).single().execute()
+        merged = {}
+        if existing.data and isinstance(existing.data.get("metadata"), dict):
+            merged = dict(existing.data["metadata"])
+        merged.update(metadata)
+        supabase.table("sources").update({"metadata": merged}).eq("id", source_id).execute()
+    except Exception:
+        pass
 
 def _queue_ingestion_job(*, source_id: str, twin_id: str, provider: str, url: Optional[str], correlation_id: Optional[str]) -> str:
     return create_training_job(
@@ -522,6 +545,73 @@ async def ingest_url_endpoint(twin_id: str, request: URLIngestRequest, http_req:
 # ---------------------------------------------------------------------------
 # Compatibility shims (Phase 2)
 # ---------------------------------------------------------------------------
+
+@router.post(
+    "/ingest",
+    include_in_schema=True,
+    summary="Ingest raw text content into a twin's knowledge base",
+)
+async def ingest_text(
+    request: IngestTextRequest,
+    user=Depends(verify_owner),
+):
+    verify_twin_ownership(request.twin_id, user)
+    content = (request.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="content is required")
+
+    content_hash = calculate_content_hash(content)
+    existing_source = (
+        supabase.table("sources")
+        .select("id, status, content_hash")
+        .eq("twin_id", request.twin_id)
+        .eq("content_hash", content_hash)
+        .execute()
+    )
+    if existing_source.data:
+        existing = existing_source.data[0]
+        return {
+            "source_id": existing["id"],
+            "job_id": None,
+            "status": existing.get("status", "live"),
+            "duplicate": True,
+            "message": "This content has already been uploaded. Returning existing source.",
+        }
+
+    source_id = request.source_id or f"manual-{uuid4()}"
+    _insert_source_with_schema_fallback({
+        "id": source_id,
+        "twin_id": request.twin_id,
+        "filename": f"{request.source_type or 'manual'}.txt",
+        "file_size": len(content.encode("utf-8")),
+        "content_text": content,
+        "content_hash": content_hash,
+        "status": "processing",
+        "staging_status": "staged",
+        "health_status": "healthy",
+        "extracted_text_length": len(content),
+    })
+    _persist_source_metadata(
+        source_id,
+        {
+            **(request.metadata or {}),
+            "source_type": request.source_type or "manual",
+            "ingest_kind": "text",
+        },
+    )
+    job_id = _queue_ingestion_job(
+        source_id=source_id,
+        twin_id=request.twin_id,
+        provider=request.source_type or "manual",
+        url=None,
+        correlation_id=None,
+    )
+    return {
+        "source_id": source_id,
+        "job_id": job_id,
+        "status": "processing",
+        "duplicate": False,
+    }
 
 @router.post("/ingest/document")
 async def ingest_document_compat(

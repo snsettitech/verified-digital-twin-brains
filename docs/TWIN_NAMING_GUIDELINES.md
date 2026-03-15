@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document defines naming conventions for Digital Twins following the Delphi.ai architecture pattern.
+This document defines naming conventions for Digital Twins following the creator-advisor platform architecture pattern.
 
 **Namespace Format**: `creator_{creator_id}_twin_{twin_name}`
 
@@ -308,7 +308,7 @@ creator_sainath.no.1_twin_executive_coach
 ### Querying
 
 ```python
-POST /delphi/search
+POST /advisor/search
 {
   "query": "How to handle team conflict?",
   "creator_id": "sainath.no.1",

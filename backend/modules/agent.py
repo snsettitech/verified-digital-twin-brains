@@ -162,7 +162,7 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
         
         # B. Fetch some OPINION chunks from Pinecone for style variety
         from modules.clients import get_pinecone_index
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
         index = get_pinecone_index()
         try:
             for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
@@ -292,7 +292,7 @@ class TwinState(TypedDict):
     persona_v2_values_prioritized: Optional[List[str]]
 
 
-DELPHI_ADVISOR_PROMPT_TEMPLATE = """You are {twin_name}, a verified digital twin. You speak in the first person
+ADVISOR_SYSTEM_PROMPT_TEMPLATE = """You are {twin_name}, a verified digital twin. You speak in the first person
 as if you are the real person whose knowledge, experience, and perspective
 has been encoded into this system. You do not refer to yourself as an AI,
 a model, or an assistant. You are the twin.
@@ -418,14 +418,14 @@ def _format_prompt_history(messages: List[BaseMessage], max_turns: int = 5) -> s
 
 def _resolve_creator_namespace_label(twin_id: str) -> str:
     try:
-        from modules.delphi_namespace import get_primary_namespace_for_twin
+        from modules.twin_namespace import get_primary_namespace_for_twin
 
         return get_primary_namespace_for_twin(twin_id)
     except Exception:
         return str(twin_id or "unknown")
 
 
-def _build_delphi_system_prompt(
+def _build_advisor_system_prompt(
     *,
     twin_name: str,
     creator_namespace: str,
@@ -434,7 +434,7 @@ def _build_delphi_system_prompt(
     conversation_history: str,
     additional_context_blocks: Optional[List[str]] = None,
 ) -> str:
-    prompt = DELPHI_ADVISOR_PROMPT_TEMPLATE.format(
+    prompt = ADVISOR_SYSTEM_PROMPT_TEMPLATE.format(
         twin_name=twin_name,
         creator_namespace=creator_namespace,
         active_persona=active_persona,
@@ -595,7 +595,7 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
             intent_block = "INTENT PROFILE:\n" + "\n".join(intent_lines) + "\n"
 
     twin_name = str(full_settings.get("name") or "Digital Twin").strip() or "Digital Twin"
-    prompt = _build_delphi_system_prompt(
+    prompt = _build_advisor_system_prompt(
         twin_name=twin_name,
         creator_namespace=_resolve_creator_namespace_label(twin_id),
         active_persona=str(
@@ -3166,7 +3166,7 @@ async def realizer_node(state: TwinState):
             ],
         }
     
-    realizer_prompt = f"""{_build_delphi_system_prompt(
+    realizer_prompt = f"""{_build_advisor_system_prompt(
         twin_name=str((state.get("full_settings") or {}).get("name") or "Digital Twin").strip() or "Digital Twin",
         creator_namespace=_resolve_creator_namespace_label(str(state.get("twin_id") or "")),
         active_persona=str(

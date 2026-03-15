@@ -47,22 +47,22 @@
 
 ### 1. **Namespace Mismatch (Highest Probability)**
 
-**The Issue**: The system uses "Delphi" namespaces (`creator_{id}_twin_{twin_id}`) but:
+**The Issue**: The system uses "advisor" namespaces (`creator_{id}_twin_{twin_id}`) but:
 - Old data might be in legacy format (`{twin_id}` only)
 - The `creator_id` resolution might fail
 - Dual-read mode might not be enabled
 
 **Evidence from Code**:
 ```python
-# From delphi_namespace.py
-DELPHI_DUAL_READ = os.getenv("DELPHI_DUAL_READ", "true").lower() == "true"
+# From twin_namespace.py
+CREATOR_NAMESPACE_DUAL_READ = os.getenv("CREATOR_NAMESPACE_DUAL_READ", "true").lower() == "true"
 ```
 
-If `DELPHI_DUAL_READ` is not set to `true`, the system only queries the new format namespaces, missing legacy data.
+If `CREATOR_NAMESPACE_DUAL_READ` is not set to `true`, the system only queries the new format namespaces, missing legacy data.
 
 **Fix**:
 ```bash
-export DELPHI_DUAL_READ=true
+export CREATOR_NAMESPACE_DUAL_READ=true
 ```
 
 ---
@@ -169,16 +169,16 @@ POST /debug/retrieval
 
 ### Fix 1: Enable Dual-Read Mode
 ```bash
-export DELPHI_DUAL_READ=true
+export CREATOR_NAMESPACE_DUAL_READ=true
 # Or in .env file
-DELPHI_DUAL_READ=true
+CREATOR_NAMESPACE_DUAL_READ=true
 ```
 
 This ensures both legacy and new namespaces are queried.
 
 ### Fix 2: Clear Namespace Cache
 ```python
-from modules.delphi_namespace import clear_creator_namespace_cache
+from modules.twin_namespace import clear_creator_namespace_cache
 clear_creator_namespace_cache()
 ```
 
@@ -208,7 +208,7 @@ Ensure a default group exists.
 ## Code Issues Found During Investigation
 
 ### Issue 1: LRU Cache Might Cache None
-**File**: `delphi_namespace.py:39`
+**File**: `twin_namespace.py:39`
 
 ```python
 @lru_cache(maxsize=4096)
@@ -275,15 +275,15 @@ python ..\diagnose_retrieval.py <your-twin-id>
 
 | Component | Likely Issue | Quick Fix |
 |-----------|--------------|-----------|
-| Namespaces | Legacy vs Delphi format mismatch | Set `DELPHI_DUAL_READ=true` |
+| Namespaces | Legacy vs advisor format mismatch | Set `CREATOR_NAMESPACE_DUAL_READ=true` |
 | Embeddings | Dimension mismatch | Verify `EMBEDDING_PROVIDER` |
 | Pinecone | Connection/auth issues | Check env vars |
 | Groups | Missing default group | Create default access group |
 | Reranking | FlashRank not loading | Check model cache |
 
-**Most likely cause**: Namespace mismatch between legacy (`twin_id`) and Delphi (`creator_*_twin_*`) formats.
+**Most likely cause**: Namespace mismatch between legacy (`twin_id`) and advisor (`creator_*_twin_*`) formats.
 
 **Recommended immediate action**: 
-1. Set `DELPHI_DUAL_READ=true`
+1. Set `CREATOR_NAMESPACE_DUAL_READ=true`
 2. Run diagnostic script
 3. Share output for specific diagnosis

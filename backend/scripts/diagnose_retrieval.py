@@ -62,7 +62,7 @@ async def check_environment() -> Dict[str, Any]:
     
     optional_vars = [
         'PINECONE_INDEX_NAME',
-        'DELPHI_DUAL_READ',
+        'CREATOR_NAMESPACE_DUAL_READ',
         'EMBEDDING_PROVIDER'
     ]
     
@@ -175,14 +175,14 @@ async def check_namespace_resolution(twin_id: str) -> Dict[str, Any]:
     print_section(f"4. Namespace Resolution (Twin: {twin_id})")
     
     try:
-        from modules.delphi_namespace import (
+        from modules.twin_namespace import (
             resolve_creator_id_for_twin,
             get_namespace_candidates_for_twin,
             get_primary_namespace_for_twin
         )
         
         # Clear cache for fresh lookup
-        from modules.delphi_namespace import clear_creator_namespace_cache
+        from modules.twin_namespace import clear_creator_namespace_cache
         clear_creator_namespace_cache()
         
         creator_id = resolve_creator_id_for_twin(twin_id, _bypass_cache=True)
@@ -216,7 +216,7 @@ async def check_vector_counts(twin_id: str, pinecone_stats: Dict) -> Dict[str, A
     print_section("5. Vector Counts for Twin")
     
     try:
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
         
         candidates = get_namespace_candidates_for_twin(twin_id, include_legacy=True)
         namespaces = pinecone_stats.get("namespaces", {})
@@ -239,7 +239,7 @@ async def check_vector_counts(twin_id: str, pinecone_stats: Dict) -> Dict[str, A
             print("  Possible causes:")
             print("  - Twin has no documents uploaded")
             print("  - Documents not yet processed/indexed")
-            print("  - Wrong namespace format (check DELPHI_DUAL_READ)")
+            print("  - Wrong namespace format (check CREATOR_NAMESPACE_DUAL_READ)")
             print("  - Vectors in different namespace")
         
         return {

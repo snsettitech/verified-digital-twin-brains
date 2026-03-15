@@ -23,7 +23,7 @@ from modules.ingestion_diagnostics import start_step, finish_step, build_error
 from modules.health_checks import run_all_health_checks, calculate_content_hash
 from modules.access_groups import get_default_group, add_content_permission
 from modules.governance import AuditLogger
-from modules.delphi_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
+from modules.twin_namespace import get_primary_namespace_for_twin, resolve_creator_id_for_twin
 from modules.doc_sectioning import extract_section_blocks
 from modules.pinecone_adapter import PineconeIndexAdapter
 from modules.persona_extraction_service import run_persona_extraction_for_source
@@ -2935,7 +2935,7 @@ async def process_and_index_text(
             supabase.table("chunks").insert(db_chunks).execute()
             print(f"[Supabase] Persisted {len(db_chunks)} chunks for source_id={source_id}")
 
-        # Upsert vectors to Pinecone (Delphi creator namespace with legacy fallback)
+        # Upsert vectors to Pinecone (advisor creator namespace with legacy fallback)
         if vectors:
             creator_id = resolve_creator_id_for_twin(twin_id)
             namespace = get_primary_namespace_for_twin(twin_id=twin_id, creator_id=creator_id)

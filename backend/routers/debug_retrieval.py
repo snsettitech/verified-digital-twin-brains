@@ -131,7 +131,7 @@ async def debug_namespaces(
     """
     Inspect namespace configuration and vector counts for a twin.
     """
-    from modules.delphi_namespace import (
+    from modules.twin_namespace import (
         resolve_creator_id_for_twin,
         get_namespace_candidates_for_twin,
         get_primary_namespace_for_twin,
@@ -170,7 +170,7 @@ async def debug_namespaces(
             "twin_id": twin_id,
             "creator_id": creator_id,
             "primary_namespace": primary,
-            "dual_read_enabled": os.getenv("DELPHI_DUAL_READ", "true").lower() == "true",
+            "dual_read_enabled": os.getenv("CREATOR_NAMESPACE_DUAL_READ", "true").lower() == "true",
             "namespaces": namespace_details,
             "pinecone_total_vectors": stats.total_vector_count,
             "pinecone_dimension": stats.dimension
@@ -201,7 +201,7 @@ async def debug_vector_search(
     """
     from modules.embeddings import get_embedding
     from modules.clients import get_pinecone_index
-    from modules.delphi_namespace import get_namespace_candidates_for_twin
+    from modules.twin_namespace import get_namespace_candidates_for_twin
     
     try:
         verify_twin_ownership(request.twin_id, current_user)

@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Person Completeness Layer v1 - Core Schema
 -- ============================================================================
--- Implements Delphi-like structured person modeling on top of existing
+-- Implements advisor-like structured person modeling on top of existing
 -- research claims pipeline (Phases 8-12).
 --
 -- All tables use twin_id for tenant isolation and support soft deletes.

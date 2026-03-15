@@ -267,7 +267,7 @@ async def _select_seeds_semantic(
         import asyncio
         from modules.embeddings import get_embedding
         from modules.clients import get_pinecone_index
-        from modules.delphi_namespace import get_namespace_candidates_for_twin
+        from modules.twin_namespace import get_namespace_candidates_for_twin
         
         loop = asyncio.get_event_loop()
         

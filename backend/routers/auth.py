@@ -800,7 +800,7 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
             # Best-effort Pinecone namespace purge
             try:
                 from modules.clients import get_pinecone_index
-                from modules.delphi_namespace import get_namespace_candidates_for_twin
+                from modules.twin_namespace import get_namespace_candidates_for_twin
                 index = get_pinecone_index()
                 for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
                     index.delete(delete_all=True, namespace=namespace)

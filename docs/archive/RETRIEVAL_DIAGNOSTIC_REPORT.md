@@ -37,7 +37,7 @@ retrieve_context (retrieval.py)
 │     - Query Expansion (GPT-4o-mini)                    │
 │     - HyDE Answer Generation                           │
 │     - Embedding Generation                             │
-│     - Namespace Resolution (Delphi)                    │
+│     - Namespace Resolution (advisor)                    │
 │     - Pinecone Query                                   │
 │     - RRF Merging                                      │
 │     - Reranking (FlashRank)                            │
@@ -71,21 +71,21 @@ PINECONE_HOST=https://...pinecone.io
 PINECONE_INDEX_NAME=digital-twin-brain
 ```
 
-### 2. 🚨 Namespace Resolution Issues (Delphi)
+### 2. 🚨 Namespace Resolution Issues (advisor)
 
 **Symptoms**:
 - Retrieval works for some twins but not others
 - "No knowledge vectors found" errors
 - Empty results despite uploaded documents
 
-**Root Cause**: The Delphi namespace system uses `creator_{creator_id}_twin_{twin_id}` format, but:
+**Root Cause**: The creator namespace system uses `creator_{creator_id}_twin_{twin_id}` format, but:
 - Old data might be in legacy format (just `twin_id`)
 - `creator_id` might not be resolved correctly
 - Namespace candidates might not include both formats
 
 **Debug**:
 ```python
-from modules.delphi_namespace import get_namespace_candidates_for_twin
+from modules.twin_namespace import get_namespace_candidates_for_twin
 
 # Check namespace candidates
 namespaces = get_namespace_candidates_for_twin(twin_id="your-twin-id", include_legacy=True)
@@ -180,7 +180,7 @@ print(f'First 5 values: {emb[:5]}')
 ```bash
 cd backend
 python -c "
-from modules.delphi_namespace import get_namespace_candidates_for_twin
+from modules.twin_namespace import get_namespace_candidates_for_twin
 # Replace with your twin ID
 ns = get_namespace_candidates_for_twin('your-twin-id', include_legacy=True)
 print(f'Namespaces: {ns}')
@@ -205,7 +205,7 @@ curl -X POST http://localhost:8000/debug/retrieval \
 ## Code Issues Found
 
 ### Issue 1: Namespace Resolution Caching
-**File**: `modules/delphi_namespace.py:39`
+**File**: `modules/twin_namespace.py:39`
 
 The `@lru_cache` on `resolve_creator_id_for_twin` might cache `None` if the first lookup fails:
 
@@ -250,8 +250,8 @@ Based on the code analysis, the most likely causes of "chat retrieval not workin
 
 ### 1. **Empty Namespaces (80% probability)**
 The vectors exist but not in the expected namespace format. Check:
-- Are vectors in legacy format (`twin_id`) but code expects Delphi format (`creator_*_twin_*`)?
-- Is `DELPHI_DUAL_READ` environment variable set to `true`?
+- Are vectors in legacy format (`twin_id`) but code expects advisor format (`creator_*_twin_*`)?
+- Is `CREATOR_NAMESPACE_DUAL_READ` environment variable set to `true`?
 
 ### 2. **Creator ID Resolution Failure (60% probability)**
 The `resolve_creator_id_for_twin` function might be returning `None` due to:
@@ -277,12 +277,12 @@ The index stats might show vectors but in different namespaces than expected.
    OPENAI_API_KEY
    
    # Recommended
-   DELPHI_DUAL_READ=true  # Enable dual-read for backward compatibility
+   CREATOR_NAMESPACE_DUAL_READ=true  # Enable dual-read for backward compatibility
    ```
 
 3. **Clear namespace cache** if creator_id was recently added:
    ```python
-   from modules.delphi_namespace import clear_creator_namespace_cache
+   from modules.twin_namespace import clear_creator_namespace_cache
    clear_creator_namespace_cache()
    ```
 
@@ -302,7 +302,7 @@ The index stats might show vectors but in different namespaces than expected.
 | File | Purpose |
 |------|---------|
 | `modules/retrieval.py` | Main retrieval logic |
-| `modules/delphi_namespace.py` | Namespace resolution |
+| `modules/twin_namespace.py` | Namespace resolution |
 | `modules/clients.py` | Pinecone client initialization |
 | `modules/embeddings.py` | Embedding generation |
 | `routers/debug_retrieval.py` | Debug endpoint |
@@ -349,7 +349,7 @@ async def diagnose(twin_id: str):
     
     # 2. Check namespace resolution
     print("\n2. Namespace Resolution:")
-    from modules.delphi_namespace import (
+    from modules.twin_namespace import (
         resolve_creator_id_for_twin,
         get_namespace_candidates_for_twin
     )

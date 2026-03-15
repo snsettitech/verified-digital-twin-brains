@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Delphi-style Pinecone Client with Creator-Based Namespaces
+creator-scoped Pinecone Client with Creator-Based Namespaces
 
-This module provides a new embedding client that uses the Delphi namespace strategy:
+This module provides a new embedding client that uses the creator namespace strategy:
 - Twin-specific: creator_{creator_id}_twin_{twin_id}
 - Creator-wide: creator_{creator_id}
 
@@ -20,9 +20,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class PineconeDelphiClient:
+class PineconeAdvisorClient:
     """
-    Pinecone client using Delphi namespace strategy.
+    Pinecone client using creator namespace strategy.
     
     Namespace naming convention:
     - Twin-specific: creator_{creator_id}_twin_{twin_id}
@@ -35,7 +35,7 @@ class PineconeDelphiClient:
         api_key: Optional[str] = None,
     ):
         """
-        Initialize the Delphi client.
+        Initialize the advisor client.
         
         Args:
             index_name: Pinecone index name (default: digital-twin-brain)
@@ -51,7 +51,7 @@ class PineconeDelphiClient:
         self.index = self.pc.Index(resolved_index_name)
         self.index_name = resolved_index_name
         
-        logger.info(f"Delphi client initialized for index: {resolved_index_name}")
+        logger.info(f"advisor client initialized for index: {resolved_index_name}")
     
     def _get_namespace(
         self,
@@ -390,25 +390,25 @@ class PineconeDelphiClient:
 
 
 # Singleton instance for application use
-_delphi_client = None
+_advisor_client = None
 
-def get_delphi_client(index_name: str = "digital-twin-brain") -> PineconeDelphiClient:
+def get_advisor_client(index_name: str = "digital-twin-brain") -> PineconeAdvisorClient:
     """
-    Get or create singleton Delphi client.
+    Get or create singleton advisor client.
     
     Args:
         index_name: Pinecone index name
     
     Returns:
-        PineconeDelphiClient instance
+        PineconeAdvisorClient instance
     """
-    global _delphi_client
-    if _delphi_client is None:
-        _delphi_client = PineconeDelphiClient(index_name)
-    return _delphi_client
+    global _advisor_client
+    if _advisor_client is None:
+        _advisor_client = PineconeAdvisorClient(index_name)
+    return _advisor_client
 
 
-def reset_delphi_client():
+def reset_advisor_client():
     """Reset singleton (useful for testing)."""
-    global _delphi_client
-    _delphi_client = None
+    global _advisor_client
+    _advisor_client = None

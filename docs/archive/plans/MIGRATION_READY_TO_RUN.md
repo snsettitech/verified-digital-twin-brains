@@ -9,7 +9,7 @@
 |--------|---------|----------|
 | `day1_map_to_test_creator.py` | Map all namespaces to test creator | Root directory |
 | `day2_test_deletion.py` | Test twin/creator deletion | Root directory |
-| `backend/modules/embeddings_delphi.py` | New Delphi client module | Backend modules |
+| `backend/modules/embeddings_advisor.py` | New advisor client module | Backend modules |
 
 ---
 
@@ -115,7 +115,7 @@ Delete ALL remaining data for sainath.no.1? (yes/no):
 
 ## 🎯 What You Get After Migration
 
-### 1. Delphi Namespace Structure
+### 1. advisor Namespace Structure
 ```
 digital-twin-brain (index)
 ├── creator_sainath.no.1_twin_default      (376 vectors)
@@ -127,9 +127,9 @@ digital-twin-brain (index)
 ### 2. New Client Module
 
 ```python
-from backend.modules.embeddings_delphi import get_delphi_client
+from backend.modules.embeddings_advisor import get_advisor_client
 
-client = get_delphi_client()
+client = get_advisor_client()
 
 # Upsert to specific twin
 client.upsert_vectors(
@@ -156,13 +156,13 @@ client.delete_creator_data("sainath.no.1")
 
 Add to your `.env`:
 ```bash
-USE_DELPHI_NAMESPACES=true
+USE_ADVISOR_NAMESPACES=true
 ```
 
 Then in your code:
 ```python
-if os.environ.get("USE_DELPHI_NAMESPACES") == "true":
-    from backend.modules.embeddings_delphi import get_delphi_client
+if os.environ.get("USE_ADVISOR_NAMESPACES") == "true":
+    from backend.modules.embeddings_advisor import get_advisor_client
 else:
     from backend.modules.embeddings import get_pinecone_client
 ```
@@ -260,7 +260,7 @@ If you encounter issues:
 
 Once Day 1 and Day 2 are complete:
 
-1. Update your application to use `embeddings_delphi.py`
+1. Update your application to use `embeddings_advisor.py`
 2. Add feature flag for gradual rollout
 3. Start creating new twins with semantic names
 4. Monitor performance and costs
