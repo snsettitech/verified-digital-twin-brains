@@ -43,6 +43,7 @@ async def knowledge_profile(twin_id: str, user=Depends(get_current_user)):
             "top_tone": "Neutral"
         }
 
+@router.get("/twins/{twin_id}/verified-qa")
 @router.get("/twins/{twin_id}/verified-qna")
 async def list_twin_verified_qna(twin_id: str, visibility: Optional[str] = None, user=Depends(get_current_user)):
     # Verify user has access to this twin
@@ -71,6 +72,7 @@ async def list_twin_verified_qna(twin_id: str, visibility: Optional[str] = None,
         print(f"Error listing verified QnA: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/twins/{twin_id}/verified-qa", response_model=VerifiedQnASchema)
 @router.post("/twins/{twin_id}/verified-qna", response_model=VerifiedQnASchema)
 async def create_twin_verified_qna(
     twin_id: str,
@@ -113,6 +115,7 @@ async def create_twin_verified_qna(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/verified-qa/{qna_id}", response_model=VerifiedQnASchema)
 @router.get("/verified-qna/{qna_id}", response_model=VerifiedQnASchema)
 async def get_verified_qna_endpoint(qna_id: str, user=Depends(get_current_user)):
     """Get specific verified QnA with citations and patch history."""
@@ -126,6 +129,7 @@ async def get_verified_qna_endpoint(qna_id: str, user=Depends(get_current_user))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.patch("/verified-qa/{qna_id}")
 @router.patch("/verified-qna/{qna_id}")
 async def update_verified_qna(qna_id: str, request: VerifiedQnAUpdateRequest, user=Depends(verify_owner)):
     """
@@ -145,6 +149,7 @@ async def update_verified_qna(qna_id: str, request: VerifiedQnAUpdateRequest, us
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.delete("/verified-qa/{qna_id}")
 @router.delete("/verified-qna/{qna_id}")
 async def delete_verified_qna(qna_id: str, user=Depends(verify_owner)):
     """
