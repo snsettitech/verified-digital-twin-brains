@@ -2403,6 +2403,58 @@ async def chat(
                                 print("[Chat] Fallback override: extracted exact line from context")
                     except Exception as e:
                         print(f"[Chat] Fallback override failed: {e}")
+            if full_response.strip() == fallback_message and not citations:
+                try:
+                    if not retrieved_context_snippets:
+                        from modules.retrieval import retrieve_context_with_verified_first
+
+                        recovered_contexts = await retrieve_context_with_verified_first(
+                            query=query,
+                            twin_id=twin_id,
+                            group_id=group_id if (resolved_context.is_public or bool(requested_group_id)) else None,
+                            top_k=5,
+                            resolve_default_group=(resolved_context.is_public or bool(requested_group_id)),
+                        )
+                        if isinstance(recovered_contexts, list):
+                            retrieved_context_snippets = _merge_context_snippets(
+                                retrieved_context_snippets,
+                                recovered_contexts,
+                            )
+
+                    if retrieved_context_snippets:
+                        from modules.agent import _build_source_faithful_response_text
+
+                        recovered_citations = [
+                            str(row.get("source_id") or "").strip()
+                            for row in retrieved_context_snippets[:5]
+                            if str(row.get("source_id") or "").strip()
+                        ]
+                        citations = _merge_citations(citations, recovered_citations)
+                        fallback_plan = {
+                            "answer_points": [
+                                str(row.get("text") or "").strip()
+                                for row in retrieved_context_snippets[:2]
+                                if str(row.get("text") or "").strip()
+                            ],
+                            "citations": citations[:5],
+                            "follow_up_question": "",
+                        }
+                        fallback_state = {
+                            "messages": [HumanMessage(content=query)],
+                            "retrieved_context": {"results": retrieved_context_snippets},
+                            "requires_evidence": True,
+                        }
+                        full_response = _build_source_faithful_response_text(
+                            fallback_plan,
+                            state=fallback_state,
+                            fallback_text=fallback_message,
+                        )
+                        render_strategy = "source_faithful"
+                        if not dialogue_mode:
+                            dialogue_mode = "QA_FACT"
+                        print("[Chat] Fallback override: synthesized source-faithful answer from retrieved context")
+                except Exception as e:
+                    print(f"[Chat] Source-faithful fallback synthesis failed: {e}")
 
             # Safety override: if we ended with no evidence and no owner-memory refs,
             # force uncertainty response instead of a generic/hallucinated answer.
