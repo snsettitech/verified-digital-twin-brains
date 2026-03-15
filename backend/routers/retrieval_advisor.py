@@ -179,6 +179,7 @@ async def query_vectors(
                 twin_id=request.twin_id,
                 creator_id=request.creator_id,
                 top_k=request.top_k,
+                resolve_default_group=False,
             )
             normalized_results = [
                 _normalize_result_row(result, default_strategy="vector")
