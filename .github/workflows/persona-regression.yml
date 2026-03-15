@@ -27,7 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install pytest
+          pip install pytest pytest-asyncio httpx
 
       - name: Run persona regression test lane
         run: |
@@ -47,15 +47,34 @@ jobs:
             backend/tests/test_publish_quality_gate.py \
             backend/tests/test_escalations_verified_qna_contract.py \
             backend/tests/test_public_chat_citation_details.py
+        env:
+          SUPABASE_URL: "https://mock.supabase.co"
+          SUPABASE_KEY: "mock-key"
+          SUPABASE_SERVICE_KEY: "mock-service-key"
+          OPENAI_API_KEY: "mock-key"
+          PINECONE_API_KEY: "mock-key"
+          PINECONE_INDEX_NAME: "mock-index"
+          JWT_SECRET: "test-secret"
+          DEV_MODE: "true"
 
       - name: Run blocking persona regression gate
         run: |
+          mkdir -p artifacts
           python backend/eval/persona_regression_runner.py \
             --dataset backend/eval/persona_regression_dataset.json \
             --output artifacts/persona_regression_ci_result.json \
             --min-pass-rate 0.95 \
             --min-adversarial-pass-rate 0.95 \
             --min-channel-isolation-pass-rate 1.0
+        env:
+          SUPABASE_URL: "https://mock.supabase.co"
+          SUPABASE_KEY: "mock-key"
+          SUPABASE_SERVICE_KEY: "mock-service-key"
+          OPENAI_API_KEY: "mock-key"
+          PINECONE_API_KEY: "mock-key"
+          PINECONE_INDEX_NAME: "mock-index"
+          JWT_SECRET: "test-secret"
+          DEV_MODE: "true"
 
       - name: Upload persona regression artifact
         uses: actions/upload-artifact@v4
