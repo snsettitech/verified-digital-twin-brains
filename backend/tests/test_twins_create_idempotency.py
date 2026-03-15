@@ -85,7 +85,7 @@ async def test_create_twin_reuses_existing_active_twin(monkeypatch):
         "id": "twin-existing",
         "name": "Sai Twin",
         "tenant_id": "tenant-1",
-        "settings": {},
+        "settings": {"owner_user_id": "user-1"},
     }
     twins_table = _TwinsTable(select_responses=[[existing]])
 
@@ -111,7 +111,7 @@ async def test_create_twin_returns_existing_when_insert_hits_duplicate_race(monk
         "id": "twin-existing-after-race",
         "name": "Sai Twin",
         "tenant_id": "tenant-1",
-        "settings": {},
+        "settings": {"owner_user_id": "user-1"},
     }
     twins_table = _TwinsTable(
         select_responses=[[], [existing]],

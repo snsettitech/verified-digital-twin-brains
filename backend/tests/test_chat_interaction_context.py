@@ -294,7 +294,7 @@ def test_public_share_clarify_is_exposed_in_response_metadata():
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "clarify"
+        assert body["status"] == "clarification"
         assert body["interaction_context"] == "public_share"
         assert body["share_link_id"] == "token-ab"
         assert body["clarification_hint"]["question"] == "Can you clarify?"

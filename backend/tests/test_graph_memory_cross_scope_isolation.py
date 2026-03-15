@@ -30,21 +30,27 @@ from modules.graph_memory_core import GraphMemoryCore
 class TestOutboxCrossScopeIsolation:
     """
     CRITICAL BUG FIX TEST: Outbox Deduplication Must Be Scope-Isolated
-    
+
     Before the fix:
     - Scope A submits job with idempotency_key "X" → job created
     - Scope B submits job with idempotency_key "X" → DEDUPED (WRONG!)
-    
+
     After the fix:
     - Scope A submits job with idempotency_key "X" → job created
     - Scope B submits job with idempotency_key "X" → NEW job created (CORRECT!)
     """
-    
+
     @pytest.fixture(autouse=True)
-    def setup(self):
-        """Reset state before each test."""
+    def setup(self, monkeypatch):
+        """Reset state and mock outbox before each test."""
+        import modules.graph_outbox as outbox_module
+        from conftest import MockGraphOutbox
+
         reset_outbox()
         reset_config()
+        mock = MockGraphOutbox()
+        monkeypatch.setattr(outbox_module, "_outbox_instance", mock)
+        monkeypatch.setattr(outbox_module, "get_graph_outbox", lambda: mock)
         yield
         reset_outbox()
         reset_config()
@@ -354,23 +360,28 @@ class TestScopeIdFormat:
         )
         assert "__" in scope_id, "Scope ID should contain separator"
     
-    def test_scope_id_resolution(self):
+    def test_scope_id_resolution(self, monkeypatch):
         """
         Test scope_id resolution logic.
         """
+        import modules.graph_memory_config as config_module
+        monkeypatch.setattr(config_module, "SINGLE_PROFILE_SCOPE_ENABLED", True)
+        config_module._config_instance = None
+
         from modules.graph_memory_config import get_graph_memory_config
-        
+
         config = get_graph_memory_config()
-        
+
         # With creator_id
         scope = config.resolve_scope_id(
             tenant_id="tenant_123",
             twin_id="twin_456",
             creator_id="creator_789"
         )
-        
+
         # Should use creator_id
         assert "creator_789" in scope, f"Scope should include creator_id: {scope}"
+        config_module._config_instance = None
 
 
 # =============================================================================
@@ -392,28 +403,61 @@ class TestCrossScopeIntegration:
         - Database connection
         - Graph memory tables migrated with scope_id columns
         """
-        # Skip if not in integration test environment
+        # Skip if not in integration test environment or migration not fully applied
         try:
             from modules.observability import supabase
-            # Quick connectivity check
-            result = supabase.table("graph_outbox").select("count", count="exact").limit(1).execute()
+            # Check connectivity and that scope_id column exists
+            supabase.table("graph_outbox").select("scope_id").limit(1).execute()
         except Exception as e:
-            pytest.skip(f"Database not available: {e}")
+            pytest.skip(f"Database not available or scope_id migration not applied: {e}")
+
+        # Check if unique constraint has been migrated to include scope_id
+        # (legacy constraint: tenant_id+twin_id+idempotency_key, new: scope_id+idempotency_key)
+        try:
+            import uuid as _check_uuid
+            _probe_tenant = str(_check_uuid.uuid4())
+            _probe_twin = str(_check_uuid.uuid4())
+            _probe_scope_a = f"{_probe_tenant}__probe_a"
+            _probe_scope_b = f"{_probe_tenant}__probe_b"
+            from modules.graph_outbox import GraphOperationType as _GOT
+            import datetime as _dt
+            _now = _dt.datetime.utcnow().isoformat()
+            _probe_key = f"probe_{_check_uuid.uuid4().hex}"
+            _r1 = supabase.table("graph_outbox").insert({
+                "id": str(_check_uuid.uuid4()), "tenant_id": _probe_tenant,
+                "twin_id": _probe_twin, "scope_id": _probe_scope_a,
+                "operation": "create_episode", "idempotency_key": _probe_key,
+                "payload": {}, "status": "pending", "priority": 0,
+                "attempt_count": 0, "max_attempts": 3,
+                "created_at": _now, "updated_at": _now,
+            }).execute()
+            _r2 = supabase.table("graph_outbox").insert({
+                "id": str(_check_uuid.uuid4()), "tenant_id": _probe_tenant,
+                "twin_id": _probe_twin, "scope_id": _probe_scope_b,
+                "operation": "create_episode", "idempotency_key": _probe_key,
+                "payload": {}, "status": "pending", "priority": 0,
+                "attempt_count": 0, "max_attempts": 3,
+                "created_at": _now, "updated_at": _now,
+            }).execute()
+        except Exception:
+            pytest.skip("Unique constraint migration not yet applied — run migration_graph_memory_single_profile.sql first")
         
         outbox = get_graph_outbox()
         
-        # Create unique test scopes
+        # Create unique test scopes using UUIDs (DB schema requires UUID tenant_id/twin_id)
+        import uuid as _uuid
+        tenant_id = str(_uuid.uuid4())
+        twin_id = str(_uuid.uuid4())
+        scope_a = f"{tenant_id}__creator_a"
+        scope_b = f"{tenant_id}__creator_b"
         timestamp = int(time.time())
-        scope_a = f"test_tenant_{timestamp}__creator_a"
-        scope_b = f"test_tenant_{timestamp}__creator_b"
-        tenant_id = f"test_tenant_{timestamp}"
-        
+
         shared_key = f"test_shared_key_{timestamp}"
-        
+
         # Submit jobs from both scopes
         job_a = outbox.submit(
             tenant_id=tenant_id,
-            twin_id="twin_default",
+            twin_id=twin_id,
             scope_id=scope_a,
             operation=GraphOperationType.CREATE_EPISODE,
             idempotency_key=shared_key,
@@ -422,7 +466,7 @@ class TestCrossScopeIntegration:
         
         job_b = outbox.submit(
             tenant_id=tenant_id,
-            twin_id="twin_default",
+            twin_id=twin_id,
             scope_id=scope_b,
             operation=GraphOperationType.CREATE_EPISODE,
             idempotency_key=shared_key,

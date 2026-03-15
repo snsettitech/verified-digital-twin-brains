@@ -30,10 +30,16 @@ def reset_state():
 
 @pytest.fixture
 def require_neo4j():
-    """Skip tests if Neo4j not configured."""
+    """Skip tests if Neo4j not configured or not reachable."""
+    import socket
     config = get_graph_memory_config()
     if not config.neo4j_uri or not config.neo4j_password:
         pytest.skip("Neo4j not configured")
+    try:
+        host = config.neo4j_uri.split("://")[-1].split(":")[0]
+        socket.getaddrinfo(host, None)
+    except (socket.gaierror, OSError):
+        pytest.skip("Neo4j host not reachable")
 
 
 @pytest.mark.asyncio

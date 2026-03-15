@@ -15,6 +15,9 @@ class _Query:
         self._filters[field] = value
         return self
 
+    def order(self, *_args, **_kwargs):  # noqa: ANN001
+        return self
+
     def limit(self, *_args, **_kwargs):  # noqa: ANN001
         return self
 

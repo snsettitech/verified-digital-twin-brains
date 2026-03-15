@@ -19,6 +19,7 @@ if backend_dir not in sys.path:
 # Ensure feature flags and dev mode are consistent for tests
 os.environ.setdefault("ENABLE_ENHANCED_INGESTION", "true")
 os.environ.setdefault("DEV_MODE", "false")
+os.environ.setdefault("DEEP_RESEARCH_ENABLED", "true")
 
 # Ensure langfuse decorator doesn't break FastAPI signatures in tests
 def _noop_observe(*args, **kwargs):
@@ -48,6 +49,9 @@ def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line(
         "markers", "network: mark test as requiring network access (skipped in CI)"
+    )
+    config.addinivalue_line(
+        "markers", "integration: mark test as an integration test requiring external services"
     )
 
 

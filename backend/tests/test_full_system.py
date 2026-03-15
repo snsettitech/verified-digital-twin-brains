@@ -9,7 +9,6 @@ Verifies the "Life of a Thought":
 
 import sys
 import os
-import unittest
 import json
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
@@ -28,7 +27,8 @@ client = TestClient(app)
 def _override_auth_and_supabase():
     app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user", "tenant_id": "test-tenant"}
     with patch("modules.observability.supabase", MagicMock()) as mock_sb, \
-         patch("modules.ingestion.process_and_index_text", new_callable=AsyncMock, return_value=1):
+         patch("modules.ingestion.process_and_index_text", new_callable=AsyncMock, return_value=1), \
+         patch("routers.chat.verify_twin_ownership"):
         mock_sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
             "settings": {},
             "tenant_id": "test-tenant"
@@ -36,8 +36,8 @@ def _override_auth_and_supabase():
         yield
     app.dependency_overrides = {}
 
-class TestFullSystemFlow(unittest.TestCase):
-    
+class TestFullSystemFlow:
+
     @patch('routers.chat.run_identity_gate', new_callable=AsyncMock)
     @patch('routers.chat.get_default_group', new_callable=AsyncMock)
     @patch('routers.chat.get_user_group', new_callable=AsyncMock)
@@ -83,8 +83,8 @@ class TestFullSystemFlow(unittest.TestCase):
             json={"query": query, "conversation_id": "conv-full-flow"}
         )
         
-        self.assertEqual(response.status_code, 200)
-        
+        assert response.status_code == 200
+
         # 5. Analyze Stream Response
         stream_content = response.text
         blocks = []
@@ -94,21 +94,18 @@ class TestFullSystemFlow(unittest.TestCase):
                     blocks.append(json.loads(line))
                 except json.JSONDecodeError:
                     pass
-                
+
         # 6. Verify Decision Trace is present in Metadata
         metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
-        self.assertIsNotNone(metadata, "Metadata block missing from response")
-        self.assertIn("decision_trace", metadata, "Decision trace missing from metadata")
-        
+        assert metadata is not None, "Metadata block missing from response"
+        assert "decision_trace" in metadata, "Decision trace missing from metadata"
+
         trace = metadata["decision_trace"]
-        self.assertEqual(trace["final_stance"], "positive")
-        self.assertEqual(trace["confidence_score"], 0.99)
-        self.assertEqual(len(trace["logic_chain"]), 2)
-        
+        assert trace["final_stance"] == "positive"
+        assert trace["confidence_score"] == 0.99
+        assert len(trace["logic_chain"]) == 2
+
         # 7. Verify Content Block matches trace readable output
         content_block = next((b for b in blocks if b.get("type") == "content"), None)
-        self.assertIsNotNone(content_block)
-        self.assertIn("POSITIVE", content_block["content"])
-
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+        assert content_block is not None
+        assert "POSITIVE" in content_block["content"]

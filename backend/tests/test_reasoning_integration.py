@@ -8,7 +8,6 @@ Tests:
 
 import sys
 import os
-import unittest
 import json
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
@@ -27,7 +26,9 @@ client = TestClient(app)
 def _override_auth_and_supabase():
     app.dependency_overrides[get_current_user] = lambda: {"user_id": "test-user", "tenant_id": "test-tenant"}
     with patch("modules.observability.supabase", MagicMock()) as mock_sb, \
-         patch("modules.ingestion.process_and_index_text", new_callable=AsyncMock, return_value=5):
+         patch("modules.ingestion.process_and_index_text", new_callable=AsyncMock, return_value=5), \
+         patch("routers.reasoning.verify_twin_ownership"), \
+         patch("routers.chat.verify_twin_ownership"):
         mock_sb.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {
             "settings": {},
             "tenant_id": "test-tenant"
@@ -35,12 +36,11 @@ def _override_auth_and_supabase():
         yield
     app.dependency_overrides = {}
 
-class TestReasoningIntegration(unittest.TestCase):
-    
+class TestReasoningIntegration:
+
     @patch('modules.reasoning_engine.ReasoningEngine.predict_stance')
     def test_direct_prediction_endpoint(self, mock_predict):
         """Test POST /reason/predict/{twin_id}"""
-        # Mock result
         mock_trace = DecisionTrace(
             topic="test",
             final_stance=StanceType.POSITIVE,
@@ -49,23 +49,23 @@ class TestReasoningIntegration(unittest.TestCase):
             key_factors=["Factor A"]
         )
         mock_predict.return_value = mock_trace
-        
+
         response = client.post(
             "/reason/predict/twin-123",
             json={"topic": "Should I invest in AI?"}
         )
-        
-        self.assertEqual(response.status_code, 200)
+
+        assert response.status_code == 200
         data = response.json()
-        self.assertEqual(data["final_stance"], "positive")
-        self.assertEqual(data["confidence_score"], 0.95)
-        
+        assert data["final_stance"] == "positive"
+        assert data["confidence_score"] == 0.95
+
     @patch('modules.reasoning_engine.ReasoningEngine.predict_stance')
-    @patch('modules.graph_context.get_graph_stats') # Patch the source since it's imported locally
+    @patch('modules.graph_context.get_graph_stats')
     def test_chat_routing_to_reasoning(self, mock_stats, mock_predict):
         """Test that chat routes specific queries to reasoning engine."""
         mock_stats.return_value = {"has_graph": True, "node_count": 10}
-        
+
         mock_trace = DecisionTrace(
             topic="test",
             final_stance=StanceType.NEGATIVE,
@@ -74,16 +74,14 @@ class TestReasoningIntegration(unittest.TestCase):
             key_factors=["Risk"]
         )
         mock_predict.return_value = mock_trace
-        
-        # Test query that should trigger reasoning
+
         response = client.post(
             "/chat/twin-123",
             json={"query": "What is my stance on risk?", "conversation_id": "conv-123"}
         )
-        
-        self.assertEqual(response.status_code, 200)
-        
-        # Parse SSE stream
+
+        assert response.status_code == 200
+
         blocks = []
         for line in response.text.strip().split('\n'):
             if line:
@@ -91,12 +89,8 @@ class TestReasoningIntegration(unittest.TestCase):
                     blocks.append(json.loads(line))
                 except json.JSONDecodeError:
                     pass
-        
-        # Verify metadata contains decision trace
-        metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
-        self.assertIsNotNone(metadata)
-        self.assertIn("decision_trace", metadata)
-        self.assertEqual(metadata["decision_trace"]["final_stance"], "negative")
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+        metadata = next((b for b in blocks if b.get("type") == "metadata"), None)
+        assert metadata is not None
+        assert "decision_trace" in metadata
+        assert metadata["decision_trace"]["final_stance"] == "negative"

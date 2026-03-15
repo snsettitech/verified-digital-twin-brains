@@ -836,7 +836,10 @@ async def test_planner_enables_conversational_realizer_for_grounded_owner_chat(m
         "dialogue_mode": "QA_FACT",
         "interaction_context": "owner_chat",
         "retrieved_context": {
-            "results": [{"text": "Use managed containers first.", "source_id": "src-1", "score": 0.93}]
+            "results": [
+                {"text": "Use managed containers first.", "source_id": "src-1", "score": 0.93, "namespace": "infra"},
+                {"text": "Avoid premature optimization.", "source_id": "src-2", "score": 0.85, "namespace": "infra"},
+            ]
         },
         "routing_decision": {"intent": "answer", "chosen_workflow": "answer", "output_schema": "workflow.answer.v1"},
         "reasoning_history": [],

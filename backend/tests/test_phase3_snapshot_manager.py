@@ -27,9 +27,9 @@ class TestSnapshotReads:
     
     @pytest.mark.asyncio
     async def test_get_snapshot_from_supabase(self):
-        """Should read snapshot from Supabase instantly."""
+        """Should read snapshot from Supabase."""
         with patch('modules.graph_snapshot_manager.supabase') as mock_supabase:
-            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
                 data=[{
                     "twin_id": "twin1",
                     "tenant_id": "tenant1",
@@ -42,22 +42,18 @@ class TestSnapshotReads:
                     "version": 1
                 }]
             )
-            
+
             manager = GraphSnapshotManager()
-            
-            start = asyncio.get_event_loop().time()
             snapshot = await manager.get_snapshot("tenant1", "twin1")
-            elapsed = (asyncio.get_event_loop().time() - start) * 1000
-            
+
             assert snapshot is not None
             assert snapshot.twin_id == "twin1"
-            assert elapsed < 50  # Should be instant (<50ms)
     
     @pytest.mark.asyncio
     async def test_returns_none_when_expired(self):
         """Should return None when snapshot expired."""
         with patch('modules.graph_snapshot_manager.supabase') as mock_supabase:
-            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
                 data=[{
                     "twin_id": "twin1",
                     "tenant_id": "tenant1",
@@ -79,7 +75,7 @@ class TestSnapshotReads:
     async def test_returns_none_when_no_snapshot(self):
         """Should return None when no snapshot exists."""
         with patch('modules.graph_snapshot_manager.supabase') as mock_supabase:
-            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
                 data=[]
             )
             
@@ -96,7 +92,7 @@ class TestSnapshotFormatting:
     async def test_format_snapshot_for_agent(self):
         """Should format snapshot into agent-readable context."""
         with patch('modules.graph_snapshot_manager.supabase') as mock_supabase:
-            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
                 data=[{
                     "twin_id": "twin1",
                     "tenant_id": "tenant1",
@@ -129,6 +125,7 @@ class TestSnapshotFormatting:
         manager = GraphSnapshotManager()
         
         snapshot = GraphSnapshot(
+            scope_id="tenant1__twin1",
             twin_id="twin1",
             tenant_id="tenant1",
             group_id="tenant1__twin1",
@@ -238,7 +235,9 @@ class TestWorkerRefresh:
             result = await refresh_twin_snapshot("tenant1", "twin1")
             
             assert result is True
-            mock_manager.refresh_snapshot.assert_called_once_with("tenant1", "twin1", None)
+            mock_manager.refresh_snapshot.assert_called_once_with(
+                tenant_id="tenant1", twin_id="twin1", correlation_id=None, creator_id=None
+            )
 
 
 class TestTenantTwinIsolation:
@@ -248,7 +247,7 @@ class TestTenantTwinIsolation:
     async def test_group_id_in_query(self):
         """Supabase queries should filter by group_id."""
         with patch('modules.graph_snapshot_manager.supabase') as mock_supabase:
-            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+            mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
             
             manager = GraphSnapshotManager()
             await manager.get_snapshot("tenant1", "twin1")

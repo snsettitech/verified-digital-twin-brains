@@ -16,19 +16,31 @@ import asyncio
 import uuid
 from datetime import datetime
 
-# Skip all tests if Neo4j not configured
+# Skip all tests if Neo4j not configured or not reachable
+import socket as _socket
+
 neo4j_uri = os.getenv("NEO4J_URI", "")
 neo4j_password = os.getenv("NEO4J_PASSWORD", "")
-has_real_neo4j = (
-    neo4j_uri and 
-    neo4j_password and 
-    "localhost" not in neo4j_uri and 
-    "bolt://" in neo4j_uri or "neo4j+s" in neo4j_uri
+
+def _neo4j_reachable(uri: str) -> bool:
+    try:
+        host = uri.split("://")[-1].split(":")[0]
+        _socket.getaddrinfo(host, None)
+        return True
+    except (_socket.gaierror, OSError):
+        return False
+
+has_real_neo4j = bool(
+    neo4j_uri and
+    neo4j_password and
+    "localhost" not in neo4j_uri and
+    ("bolt://" in neo4j_uri or "neo4j+s" in neo4j_uri) and
+    _neo4j_reachable(neo4j_uri)
 )
 
 pytestmark = pytest.mark.skipif(
     not has_real_neo4j,
-    reason="Real Neo4j instance required (set NEO4J_URI and NEO4J_PASSWORD)"
+    reason="Real Neo4j instance required and reachable (set NEO4J_URI and NEO4J_PASSWORD)"
 )
 
 
