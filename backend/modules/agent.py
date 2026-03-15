@@ -2,7 +2,7 @@ import os
 import asyncio
 import json
 import re
-import re as _re
+import re as _re  # alias used by _ensure_closing_question
 import time
 from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional, Tuple
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
@@ -852,7 +852,8 @@ def _resolve_twin_pronoun_query(query: str) -> str:
             "and core expertise)"
         )
 
-    padded = f" {re.sub(r'\\s+', ' ', lowered)} "
+    normalized = re.sub(r'\s+', ' ', lowered)
+    padded = f" {normalized} "
     pronoun_markers = (
         " you ",
         " your ",

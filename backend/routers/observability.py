@@ -7,7 +7,8 @@ from modules.auth_guard import get_current_user
 router = APIRouter(tags=["observability"])
 
 @router.get("/observability/health")
-async def health_check():
+async def health_check(user=Depends(get_current_user)):
+    """Service dependency health — requires authentication to avoid information disclosure."""
     health_status = {
         "status": "online",
         "services": {
@@ -15,7 +16,7 @@ async def health_check():
             "openai": "unknown"
         }
     }
-    
+
     try:
         get_pinecone_index()
         health_status["services"]["pinecone"] = "connected"

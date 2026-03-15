@@ -10,6 +10,7 @@ Based on research:
 - CHIQ: Contextual History enhancement for Intent Understanding (2024)
 """
 
+import logging
 import os
 import re
 import json
@@ -20,6 +21,8 @@ from typing import List, Dict, Any, Optional, Tuple
 from functools import lru_cache
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 from modules.clients import get_openai_client
 from modules.langfuse_sdk import observe, langfuse_context
@@ -341,15 +344,15 @@ class ConversationalQueryRewriter:
                                 metrics.increment_counter("query_rewrite.applied")
                             if cached:
                                 metrics.increment_counter("query_rewrite.cache_hit")
-                    except Exception:
-                        pass
-                    
+                    except Exception as _metrics_err:
+                        logger.debug("Query rewrite counter metrics failed: %s", _metrics_err)
+
                     try:
                         if hasattr(metrics, 'record_histogram'):
                             metrics.record_histogram("query_rewrite.confidence", result.rewrite_confidence)
                             metrics.record_histogram("query_rewrite.latency_ms", result.latency_ms)
-                    except Exception:
-                        pass
+                    except Exception as _metrics_err:
+                        logger.debug("Query rewrite histogram metrics failed: %s", _metrics_err)
         except Exception as e:
             # Don't fail on metrics logging
             print(f"[QueryRewrite] Metrics logging failed: {e}")

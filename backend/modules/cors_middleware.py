@@ -137,8 +137,8 @@ def create_cors_middleware(app: ASGIApp) -> ASGIApp:
         app=app,
         allow_origins=origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-Correlation-ID"],
         expose_headers=["x-correlation-id"],
         log_rejections=os.getenv("CORS_LOG_REJECTIONS", "true").lower() == "true",
     )

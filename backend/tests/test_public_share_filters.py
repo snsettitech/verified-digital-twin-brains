@@ -1,4 +1,4 @@
-﻿from routers.chat import (
+from routers.chat import (
     _filter_citations_to_allowed_sources,
     _filter_contexts_to_allowed_sources,
     _filter_public_owner_memory_candidates,

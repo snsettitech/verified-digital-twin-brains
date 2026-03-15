@@ -1,9 +1,13 @@
 
 from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 import os
 import sys
 import time
+import logging
 from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 # Import our dynamic CORS middleware
 from modules.cors_middleware import create_cors_middleware, get_allowed_origins
@@ -151,18 +155,45 @@ APP_STARTED_AT = time.time()
 # Supports *.vercel.app for preview deployments
 app = create_cors_middleware(app)
 
+
+# ---------------------------------------------------------------------------
+# Global exception handler — returns structured JSON, never a raw traceback
+# ---------------------------------------------------------------------------
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_server_error",
+            "message": "An unexpected error occurred.",
+        },
+    )
+
+
 # Request tracing middleware for deployment debugging
+import uuid as _uuid
+
 @app.middleware("http")
 async def log_requests(request, call_next):
     start_time = time.time()
-    correlation_id = request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
+    request_id = (
+        request.headers.get("x-request-id")
+        or request.headers.get("x-correlation-id")
+        or str(_uuid.uuid4())
+    )
+    request.state.request_id = request_id
     response = await call_next(request)
     duration = time.time() - start_time
-    if correlation_id:
-        response.headers["x-correlation-id"] = correlation_id
-    # Use standard print for immediate visibility in Render logs
-    print(f"DEBUG: {request.method} {request.url.path} - {response.status_code} ({duration:.3f}s) corr={correlation_id or 'none'} UA: {request.headers.get('user-agent')}")
-    sys.stdout.flush()
+    response.headers["x-request-id"] = request_id
+    logger.info(
+        "%s %s %s %.3fs request_id=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration,
+        request_id,
+    )
     return response
 
 # Include Routers
@@ -315,11 +346,13 @@ async def health_check():
                 dependencies[name] = f"error: {dep_error}"
     except Exception as e:
         dependencies["health_probe"] = f"error: {e}"
+    environment = "production" if os.getenv("DEV_MODE", "true").lower() == "false" else "development"
     return {
         "status": "healthy",
         "service": "verified-digital-twin-brain-api",
         "version": "1.0.0",
         "uptime_seconds": uptime_seconds,
+        "environment": environment,
         "dependencies": dependencies,
     }
 
@@ -397,7 +430,7 @@ async def health_langfuse():
 # P0 Deployment: Version Endpoint for Deployment Verification
 # ============================================================================
 
-import subprocess
+import subprocess  # noqa: E402 — needed here for version endpoint below
 
 @app.get("/version", tags=["health"])
 async def version():
@@ -432,40 +465,19 @@ async def version():
     }
 
 
-@app.get("/cors-test", tags=["health"])
+@app.get("/cors-test", tags=["health"], include_in_schema=False)
 async def cors_test(request: Request):
-    """
-    CORS test endpoint for debugging cross-origin issues.
-    
-    Returns information about the request origin and whether it's allowed.
-    """
+    """CORS diagnostic — only available in dev mode."""
+    if os.getenv("DEV_MODE", "true").lower() == "false":
+        return JSONResponse(status_code=404, content={"error": "not_found"})
     origin = request.headers.get("origin", "no-origin")
     allowed_origins = get_allowed_origins()
-    
-    # Check if origin matches any pattern
-    is_allowed = False
-    matched_pattern = None
-    
-    for pattern in allowed_origins:
-        if '*' in pattern or '?' in pattern:
-            import fnmatch
-            if fnmatch.fnmatch(origin, pattern):
-                is_allowed = True
-                matched_pattern = pattern
-                break
-        elif origin == pattern:
-            is_allowed = True
-            matched_pattern = pattern
-            break
-    
-    return {
-        "origin": origin,
-        "is_allowed": is_allowed,
-        "matched_pattern": matched_pattern,
-        "allowed_origins": allowed_origins,
-        "headers": dict(request.headers),
-        "timestamp": time.time()
-    }
+    import fnmatch
+    is_allowed = any(
+        fnmatch.fnmatch(origin, p) if ('*' in p or '?' in p) else origin == p
+        for p in allowed_origins
+    )
+    return {"origin": origin, "is_allowed": is_allowed}
 
 
 # ============================================================================

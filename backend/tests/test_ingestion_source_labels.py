@@ -1,4 +1,4 @@
-﻿import pytest
+import pytest
 from fastapi import HTTPException
 
 from routers.ingestion import _validate_source_label
