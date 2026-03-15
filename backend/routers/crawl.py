@@ -2249,8 +2249,8 @@ async def force_status_transition(
     verify_twin_ownership(twin_id, user)
     
     try:
-        from modules.research_orchestrator import ResearchOrchestrator
-        
+        from modules.research_orchestrator import ResearchOrchestrator, ResearchRunStatus
+
         # Validate status
         try:
             to_status = ResearchRunStatus(new_status)

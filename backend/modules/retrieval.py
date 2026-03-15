@@ -3078,7 +3078,6 @@ def get_reranker_status() -> Dict[str, Any]:
 
 def clear_rerank_cache():
     """Clear the reranking cache."""
-    global _rerank_cache
     if _rerank_cache:
         _rerank_cache.clear()
         print("[Reranking] Cache cleared")

@@ -17,6 +17,7 @@ from modules.profile_selection import (
     build_creator_candidates,
     select_profile_twin_from_rows,
 )
+from modules.tenant_guard import derive_creator_ids
 from modules.person_completeness_pipeline import run_person_completeness_pipeline
 
 logger = logging.getLogger(__name__)
@@ -676,7 +677,7 @@ async def get_build_status(user: dict = Depends(require_tenant)):
         current_stage = pc_run.get("current_stage", "")
         
         if pc_status == "running":
-            status = "building"
+            build_status = "building"
             # Map stage to progress
             stage_progress = {
                 "source_registry_built": 15,
@@ -690,26 +691,26 @@ async def get_build_status(user: dict = Depends(require_tenant)):
             progress = stage_progress.get(current_stage, 50)
             stage = current_stage
         elif pc_status == "completed":
-            status = "ready"
+            build_status = "ready"
             progress = 100
             stage = "completed"
         elif pc_status == "failed":
-            status = "failed"
+            build_status = "failed"
             progress = 0
             stage = "failed"
         else:
-            status = "pending"
+            build_status = "pending"
             progress = 5
             stage = "planning"
     else:
         # No PC run yet
-        status = "draft"
+        build_status = "draft"
         progress = 0
         stage = "planning"
-    
+
     # Determine quality tier
     quality_tier = None
-    if status == "ready":
+    if build_status == "ready":
         score = profile.get("answerability_score", 0)
         if score >= 75:
             quality_tier = "high_confidence"
@@ -717,10 +718,10 @@ async def get_build_status(user: dict = Depends(require_tenant)):
             quality_tier = "with_gaps"
         else:
             quality_tier = "low_confidence"
-    
+
     return {
         "profile_id": twin_id,
-        "status": status,
+        "status": build_status,
         "stage": stage,
         "progress_percent": progress,
         "stats": stats,

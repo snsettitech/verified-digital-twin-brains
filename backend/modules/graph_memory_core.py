@@ -42,7 +42,6 @@ _driver_pool: Dict[str, Any] = {}
 
 def _get_pooled_driver(uri: str, user: str, password: str) -> Optional[Any]:
     """Get or create persistent Neo4j driver."""
-    global _driver_pool
     key = f"{uri}@{user}"
     
     if key not in _driver_pool or _driver_pool[key] is None:
@@ -61,7 +60,6 @@ def _get_pooled_driver(uri: str, user: str, password: str) -> Optional[Any]:
 
 async def _close_all_drivers():
     """Close all pooled drivers (for shutdown)."""
-    global _driver_pool
     for key, driver in list(_driver_pool.items()):
         if driver:
             try:

@@ -5,6 +5,7 @@ Phase 3 Component: Build PersonaSpecV2 from claims with inference honesty.
 Links claims to persona layers and generates clarification interview.
 """
 
+import hashlib
 import uuid
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from modules.persona_spec_v2 import (
     ValueItem,
     ValueHierarchy,
 )
-from modules.persona_claim_extractor import ClaimStore
+from modules.persona_claim_extractor import ClaimStore, PersonaClaim
 
 
 # =============================================================================
