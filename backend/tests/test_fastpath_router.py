@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import HumanMessage
 
-from modules.agent import planner_node, router_node
+from modules.agent import (
+    _build_source_faithful_response_text,
+    planner_node,
+    router_node,
+)
 from modules.fastpath_intent_router import classify_fastpath_intent
 
 
@@ -122,3 +126,43 @@ async def test_canonical_identity_fastpath_uses_public_profile_when_profile_pack
         assert isinstance(routed["fastpath_response"], dict)
         assert "Elon Musk" in routed["fastpath_response"]["text"]
         assert "digital" not in routed["fastpath_response"]["text"].lower()
+
+
+def test_source_faithful_identity_prefers_canonical_profile_when_planner_is_insufficient():
+    text = _build_source_faithful_response_text(
+        {
+            "answer_points": ["I don't know based on available sources."],
+            "follow_up_question": "",
+            "answerability": {"answerability": "insufficient"},
+        },
+        state={
+            "messages": [HumanMessage(content="Who are you?")],
+            "requires_evidence": True,
+            "retrieved_context": {
+                "results": [
+                    {
+                        "source_id": "kb-1",
+                        "text": "A generic quote about ambition.",
+                        "score": 0.88,
+                    },
+                    {
+                        "source_id": "kb-2",
+                        "text": "A generic quote about building things.",
+                        "score": 0.84,
+                    },
+                ]
+            },
+            "full_settings": {
+                "name": "Elon Musk",
+                "description": "Tech entrepreneur, CEO of Tesla and SpaceX, founder of xAI.",
+                "public_profile": {
+                    "bio": "He believes humanity must become a multi-planetary species.",
+                },
+            },
+        },
+        fallback_text="I don't know based on available sources.",
+    )
+
+    assert text.startswith("I'm Elon Musk")
+    assert "I don't know based on available sources." not in text
+    assert text.endswith("?")

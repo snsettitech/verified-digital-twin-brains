@@ -36,6 +36,7 @@ from modules.persona_profile_store import (
     get_persona_profile,
     is_profile_eligible_for_fastpath,
 )
+from modules.public_profile_pack import normalize_social_links
 from modules.fastpath_intent_router import (
     classify_fastpath_intent,
     is_persona_fastpath_enabled,
@@ -177,6 +178,281 @@ def _strip_identity_prefix(text: str, display_name: str) -> str:
     return re.sub(pattern, "", normalized, flags=re.IGNORECASE).strip()
 
 
+def _clean_profile_strings(values: Any, *, limit: int = 6) -> List[str]:
+    if not isinstance(values, list):
+        return []
+
+    cleaned: List[str] = []
+    seen = set()
+    for value in values:
+        text = re.sub(r"\s+", " ", str(value or "").strip())
+        if not text:
+            continue
+        lowered = text.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        cleaned.append(text)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _build_profile_fact_block(full_settings: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(full_settings, dict):
+        return ""
+
+    public_profile = full_settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+
+    identity_pack = full_settings.get("persona_identity_pack")
+    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
+
+    display_name = (
+        str(full_settings.get("name") or "").strip()
+        or str(public_profile.get("display_name") or "").strip()
+        or str(identity_pack.get("preferred_name") or identity_pack.get("display_name") or "").strip()
+    )
+    if not display_name:
+        return ""
+
+    headline = (
+        str(public_profile.get("headline") or full_settings.get("tagline") or "").strip()
+        or str(identity_pack.get("headline") or identity_pack.get("summary") or "").strip()
+    )
+    role = (
+        str(public_profile.get("role") or "").strip()
+        or str(identity_pack.get("role") or identity_pack.get("current_role") or "").strip()
+    )
+    organization = (
+        str(public_profile.get("organization") or "").strip()
+        or str(identity_pack.get("organization") or identity_pack.get("current_company") or "").strip()
+    )
+    descriptor = ""
+    if role and organization:
+        descriptor = f"{role} at {organization}"
+    elif role:
+        descriptor = role
+    elif headline:
+        descriptor = headline
+
+    bio = (
+        str(public_profile.get("bio") or "").strip()
+        or str(full_settings.get("public_intro") or "").strip()
+        or str(full_settings.get("description") or "").strip()
+    )
+    short_bio = _first_sentence(bio) or bio
+
+    topic_names: List[str] = []
+    raw_topics = full_settings.get("public_topics")
+    if isinstance(raw_topics, list):
+        topic_names = [
+            str(item.get("name") or item.get("slug") or "").strip()
+            for item in raw_topics
+            if isinstance(item, dict) and str(item.get("name") or item.get("slug") or "").strip()
+        ]
+
+    expertise = _clean_profile_strings(
+        [
+            *topic_names,
+            *_clean_profile_strings(public_profile.get("areas_of_expertise"), limit=6),
+            *_clean_profile_strings(identity_pack.get("expertise_areas"), limit=6),
+        ],
+        limit=6,
+    )
+    personality = _clean_profile_strings(
+        [
+            *_clean_profile_strings(public_profile.get("personality_traits"), limit=6),
+            *_clean_profile_strings(identity_pack.get("tone_tags"), limit=6),
+        ],
+        limit=5,
+    )
+    achievements = _clean_profile_strings(public_profile.get("key_achievements"), limit=3)
+    speaking_style = (
+        str(public_profile.get("speaking_style") or "").strip()
+        or ", ".join(_clean_profile_strings(identity_pack.get("tone_tags"), limit=3))
+    )
+    social_links = normalize_social_links(
+        public_profile.get("social_links") or identity_pack.get("social_links")
+    )
+
+    lines: List[str] = [f"- Name: {display_name}"]
+    if descriptor:
+        lines.append(f"- Occupation: {descriptor}")
+    if short_bio:
+        lines.append(f"- Bio: {short_bio}")
+    if expertise:
+        lines.append(f"- Expertise: {', '.join(expertise[:5])}")
+    if personality:
+        lines.append(f"- Personality: {', '.join(personality[:4])}")
+    if speaking_style:
+        lines.append(f"- Speaking style: {speaking_style}")
+    if achievements:
+        lines.append(f"- Key achievements: {'; '.join(achievements[:3])}")
+    if social_links:
+        lines.append(
+            "- Public links: "
+            + ", ".join(f"{label}: {url}" for label, url in list(social_links.items())[:4])
+        )
+
+    return "PROFILE FACTS:\n" + "\n".join(lines) + "\n"
+
+
+def _build_canonical_profile_block(full_settings: Optional[Dict[str, Any]]) -> str:
+    profile = _build_clean_canonical_fastpath_profile(full_settings)
+    if not profile:
+        return ""
+
+    public_profile = (full_settings or {}).get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+
+    lines: List[str] = [f"- Name: {profile.get('display_name')}"]
+    one_line_intro = str(profile.get("one_line_intro") or "").strip()
+    if one_line_intro:
+        lines.append(f"- Identity anchor: {one_line_intro}")
+
+    headline = str(public_profile.get("headline") or "").strip()
+    role = str(public_profile.get("role") or "").strip()
+    organization = str(public_profile.get("organization") or "").strip()
+    descriptor = ""
+    if role and organization:
+        descriptor = f"{role} at {organization}"
+    elif headline:
+        descriptor = headline
+    elif role:
+        descriptor = role
+    if descriptor:
+        lines.append(f"- Occupation: {descriptor}")
+
+    expertise = _clean_profile_strings(profile.get("expertise_areas"), limit=4)
+    if expertise:
+        lines.append(f"- Expertise focus: {', '.join(expertise)}")
+
+    disclosure_line = str(profile.get("disclosure_line") or "").strip()
+    if disclosure_line:
+        lines.append(f"- Disclosure: {disclosure_line}")
+
+    return "CANONICAL PERSONA PROFILE:\n" + "\n".join(lines) + "\n"
+
+
+def _build_featured_sources_block(
+    full_settings: Optional[Dict[str, Any]],
+    context_rows: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    settings = full_settings if isinstance(full_settings, dict) else {}
+    public_profile = settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+
+    lines: List[str] = []
+    seen = set()
+
+    featured_content = public_profile.get("featured_content")
+    if isinstance(featured_content, list):
+        for raw_item in featured_content:
+            item = raw_item if isinstance(raw_item, dict) else {}
+            title = str(item.get("title") or item.get("name") or item.get("label") or "").strip()
+            url = str(item.get("url") or "").strip()
+            summary = str(item.get("summary") or item.get("description") or "").strip()
+            key = (title or url).lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            line = f"- {title}" if title else "- Featured resource"
+            if url:
+                line += f": {url}"
+            if summary:
+                line += f" | {summary}"
+            lines.append(line)
+            if len(lines) >= 4:
+                break
+
+    for row in context_rows or []:
+        if len(lines) >= 4:
+            break
+        if not isinstance(row, dict):
+            continue
+        title = str(
+            row.get("title")
+            or row.get("source_name")
+            or row.get("filename")
+            or row.get("url")
+            or ""
+        ).strip()
+        url = str(row.get("url") or "").strip()
+        key = (title or url).lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        line = f"- {title}" if title else "- Top source"
+        if url and url != title:
+            line += f": {url}"
+        lines.append(line)
+
+    if not lines:
+        return ""
+    return "FEATURED RESOURCES OR TOP SOURCES:\n" + "\n".join(lines) + "\n"
+
+
+def _build_memory_context_block(
+    *,
+    graph_context: str,
+    owner_memory_context: str,
+    node_context: str,
+) -> str:
+    sections: List[str] = []
+    graph_context = str(graph_context or "").strip()
+    owner_memory_context = str(owner_memory_context or "").strip()
+    node_context = str(node_context or "").strip()
+
+    if graph_context:
+        sections.append("GRAPH CONTEXT:\n" + graph_context)
+    if node_context:
+        sections.append("IDENTITY NODES:\n" + node_context)
+    if owner_memory_context:
+        sections.append("OWNER MEMORY:\n" + owner_memory_context)
+
+    if not sections:
+        return ""
+    return "GRAPH OR MEMORY CONTEXT:\n" + "\n\n".join(sections) + "\n"
+
+
+def _build_persona_grounding_block(
+    *,
+    full_settings: Optional[Dict[str, Any]],
+    context_rows: Optional[List[Dict[str, Any]]],
+    graph_context: str,
+    owner_memory_context: str,
+    node_context: str,
+) -> str:
+    vector_rows = [row for row in (context_rows or []) if isinstance(row, dict)]
+    blocks: List[str] = []
+
+    canonical_profile_block = _build_canonical_profile_block(full_settings)
+    if canonical_profile_block:
+        blocks.append(canonical_profile_block.strip())
+
+    profile_fact_block = _build_profile_fact_block(full_settings)
+    if profile_fact_block:
+        blocks.append(profile_fact_block.strip())
+
+    featured_sources_block = _build_featured_sources_block(full_settings, vector_rows)
+    if featured_sources_block:
+        blocks.append(featured_sources_block.strip())
+
+    vector_block_body = build_retrieved_context_block(vector_rows[:5]) if vector_rows else "- None available."
+    blocks.append("VECTOR RETRIEVAL EVIDENCE:\n" + vector_block_body)
+
+    memory_block = _build_memory_context_block(
+        graph_context=graph_context,
+        owner_memory_context=owner_memory_context,
+        node_context=node_context,
+    )
+    if memory_block:
+        blocks.append(memory_block.strip())
+
+    return "\n\n".join(block for block in blocks if block.strip()) or "- None available."
+
+
 def _build_canonical_fastpath_profile(full_settings: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     if not isinstance(full_settings, dict):
         return None
@@ -252,8 +528,108 @@ def _build_canonical_fastpath_profile(full_settings: Optional[Dict[str, Any]]) -
     }
 
 
+def _build_clean_canonical_fastpath_profile(full_settings: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(full_settings, dict):
+        return None
+
+    public_profile = full_settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+
+    identity_pack = full_settings.get("persona_identity_pack")
+    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
+
+    display_name = (
+        str(full_settings.get("name") or "").strip()
+        or str(public_profile.get("display_name") or "").strip()
+        or str(identity_pack.get("preferred_name") or identity_pack.get("display_name") or "").strip()
+    )
+    if not display_name:
+        return None
+
+    headline = (
+        str(public_profile.get("headline") or full_settings.get("tagline") or "").strip()
+        or str(identity_pack.get("headline") or identity_pack.get("summary") or "").strip()
+    )
+    role = (
+        str(public_profile.get("role") or "").strip()
+        or str(identity_pack.get("role") or identity_pack.get("current_role") or "").strip()
+    )
+    organization = (
+        str(public_profile.get("organization") or "").strip()
+        or str(identity_pack.get("organization") or identity_pack.get("current_company") or "").strip()
+    )
+    description = _strip_identity_prefix(
+        str(full_settings.get("description") or "").strip(),
+        display_name,
+    )
+    public_intro = str(full_settings.get("public_intro") or "").strip()
+    bio = (
+        str(public_profile.get("bio") or "").strip()
+        or str(identity_pack.get("summary") or identity_pack.get("biography") or "").strip()
+    )
+
+    descriptor = ""
+    if headline:
+        descriptor = headline.rstrip(". ")
+    elif role and organization:
+        descriptor = f"{role} at {organization}"
+    elif role:
+        descriptor = role
+    elif description:
+        descriptor = description.rstrip(". ")
+
+    if descriptor:
+        one_line_intro = f"I'm {display_name}, {descriptor}."
+    elif public_intro.lower().startswith(("i'm ", "i am ")):
+        one_line_intro = public_intro.rstrip(". ") + "."
+    else:
+        one_line_intro = f"I'm {display_name}."
+
+    short_parts: List[str] = [one_line_intro]
+    lead_sentence = _first_sentence(public_intro or bio)
+    if lead_sentence:
+        lowered = lead_sentence.lower()
+        if not lowered.startswith(("he ", "she ", "they ", display_name.lower() + " ")):
+            if lead_sentence.rstrip(". ") != one_line_intro.rstrip(". "):
+                short_parts.append(lead_sentence.rstrip(". ") + ".")
+
+    expertise_areas: List[str] = []
+    raw_topics = full_settings.get("public_topics")
+    if isinstance(raw_topics, list):
+        expertise_areas = [
+            str(item.get("name") or item.get("slug") or "").strip()
+            for item in raw_topics
+            if isinstance(item, dict) and str(item.get("name") or item.get("slug") or "").strip()
+        ][:4]
+    if not expertise_areas:
+        expertise_areas = _clean_profile_strings(
+            public_profile.get("areas_of_expertise") or identity_pack.get("expertise_areas"),
+            limit=4,
+        )
+
+    social_links = normalize_social_links(
+        public_profile.get("social_links") or identity_pack.get("social_links")
+    )
+
+    return {
+        "profile_status": "approved",
+        "display_name": display_name,
+        "one_line_intro": one_line_intro,
+        "short_intro": " ".join(part.strip() for part in short_parts if part.strip()).strip(),
+        "disclosure_line": f"I'm a digital version of {display_name}, not the person directly.",
+        "contact_handoff_line": "For direct contact, please use the public channels listed in this profile.",
+        "preferred_contact_channel": (
+            str(public_profile.get("preferred_contact_channel") or "").strip()
+            or str(identity_pack.get("preferred_contact_channel") or "").strip()
+        ),
+        "social_links": social_links,
+        "expertise_areas": expertise_areas,
+        "follow_up_question": _canonical_identity_follow_up_question(),
+    }
+
+
 def _build_canonical_identity_response(state: Dict[str, Any]) -> Optional[str]:
-    profile = _build_canonical_fastpath_profile(state.get("full_settings"))
+    profile = _build_clean_canonical_fastpath_profile(state.get("full_settings"))
     if not profile:
         return None
     return str(profile.get("short_intro") or profile.get("one_line_intro") or "").strip()
@@ -550,6 +926,8 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
     custom_instructions = system_prompt_override or default_system_prompt
     public_intro = (full_settings.get("public_intro") or "").strip()
     intent_profile = full_settings.get("intent_profile") or {}
+    raw_context = state.get("retrieved_context", {}).get("results", [])
+    context_rows = [row for row in raw_context if isinstance(row, dict)] if isinstance(raw_context, list) else []
 
     # Load identity context (High-level concepts)
     node_context = ""
@@ -557,15 +935,9 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
         nodes_res = supabase.rpc("get_nodes_system", {"t_id": twin_id, "limit_val": 10}).execute()
         if nodes_res.data:
             profile_items = [f"- {n.get('name')}: {n.get('description')}" for n in nodes_res.data]
-            node_context = "\n            **GENERAL IDENTITY NODES:**\n            " + "\n            ".join(profile_items)
+            node_context = "\n".join(profile_items)
     except Exception:
         pass
-
-    final_graph_context = ""
-    if graph_context:
-        final_graph_context += f"SPECIFIC KNOWLEDGE:\n{graph_context}\n\n"
-    if node_context:
-        final_graph_context += node_context
 
     persona_section = ""
     persona_trace = {
@@ -643,9 +1015,15 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
             opinions_text = "\n".join([f"- {t}: {d['stance']}" for t, d in opinion_map.items()])
             persona_section += f"\n- CORE WORLDVIEW:\n{opinions_text}"
 
-    owner_memory_block = f"OWNER MEMORY:\n{owner_memory_context if owner_memory_context else '- None available.'}"
     custom_instructions_block = f"CUSTOM INSTRUCTIONS:\n{custom_instructions}\n" if custom_instructions else ""
     public_intro_block = f"PUBLIC INTRO (use when asked to introduce yourself):\n{public_intro}\n" if public_intro else ""
+    grounding_block = _build_persona_grounding_block(
+        full_settings=full_settings,
+        context_rows=context_rows,
+        graph_context=graph_context,
+        owner_memory_context=owner_memory_context,
+        node_context=node_context,
+    )
     intent_block = ""
     if isinstance(intent_profile, dict) and intent_profile:
         use_case = (intent_profile.get("use_case") or "").strip()
@@ -670,14 +1048,7 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
             or persona_trace.get("persona_spec_version")
             or DEFAULT_PERSONA_PROMPT_VARIANT
         ).strip(),
-        retrieved_context_block="\n\n".join(
-            [
-                block.strip()
-                for block in [final_graph_context, owner_memory_block]
-                if isinstance(block, str) and block.strip()
-            ]
-        )
-        or "- None available.",
+        retrieved_context_block=grounding_block or "- None available.",
         conversation_history=_format_prompt_history(messages, max_turns=5),
         additional_context_blocks=[
             custom_instructions_block,
@@ -1310,7 +1681,7 @@ async def router_node(state: TwinState):
                 )
 
         if not fastpath_payload:
-            canonical_profile = _build_canonical_fastpath_profile(state.get("full_settings"))
+            canonical_profile = _build_clean_canonical_fastpath_profile(state.get("full_settings"))
             if canonical_profile:
                 fastpath_payload = build_fastpath_response(
                     intent=str(fastpath_match.get("intent")),
@@ -2313,6 +2684,15 @@ def _build_source_faithful_response_text(
         for source_id in (plan.get("citations", []) if isinstance(plan, dict) else [])
         if str(source_id).strip()
     ]
+    answerability_meta = plan.get("answerability") if isinstance(plan, dict) else {}
+    answerability_state = (
+        str(answerability_meta.get("answerability") or "").strip().lower()
+        if isinstance(answerability_meta, dict)
+        else ""
+    )
+    seeded_with_uncertainty = bool(points) and points[0].strip().lower().startswith(
+        UNCERTAINTY_RESPONSE.lower()
+    )
 
     response_lines: List[str] = []
     if not bool(state.get("requires_evidence", False)):
@@ -2323,7 +2703,12 @@ def _build_source_faithful_response_text(
         return realized_text or fallback_text
 
     partial_summary = " ".join(points[:2]).strip() or fallback_text
-    if _is_identity_query(latest_query) and (len(context_data) < 2 or top_score < 0.65):
+    if _is_identity_query(latest_query) and (
+        answerability_state == "insufficient"
+        or seeded_with_uncertainty
+        or len(context_data) < 2
+        or top_score < 0.65
+    ):
         canonical_identity = _build_canonical_identity_response(state)
         question = (
             follow_up.strip()
