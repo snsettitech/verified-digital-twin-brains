@@ -317,6 +317,55 @@ async def reindex_twin(
     return r.json()
 
 
+async def get_twin_status(client: httpx.AsyncClient, jwt: str, twin_id: str) -> str:
+    """Get current twin status."""
+    r = await client.get(
+        f"{API_BASE}/twins/{twin_id}",
+        headers=_auth_headers(jwt),
+        timeout=30,
+    )
+    if r.status_code == 200:
+        return r.json().get("status", "unknown")
+    return "unknown"
+
+
+async def purge_test_accounts(personas: list) -> None:
+    """Delete all test Supabase auth accounts by email (admin API)."""
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    if not service_key:
+        print("ERROR: SUPABASE_SERVICE_KEY not set — cannot purge accounts")
+        return
+    async with httpx.AsyncClient() as client:
+        for persona in personas:
+            email = persona["email"]
+            # 1. List users by email to get their UUID
+            r = await client.get(
+                f"{SUPABASE_URL}/auth/v1/admin/users",
+                headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
+                params={"filter": email},
+                timeout=30,
+            )
+            if r.status_code != 200:
+                print(f"  [{email}] Could not list users: {r.status_code}")
+                continue
+            users = r.json().get("users", [])
+            matched = [u for u in users if u.get("email") == email]
+            if not matched:
+                print(f"  [{email}] No account found — skipping")
+                continue
+            user_id = matched[0]["id"]
+            # 2. Delete user
+            r2 = await client.delete(
+                f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}",
+                headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
+                timeout=30,
+            )
+            if r2.status_code in (200, 204):
+                print(f"  [{email}] Deleted (user_id={user_id})")
+            else:
+                print(f"  [{email}] Delete failed: {r2.status_code} {r2.text[:100]}")
+
+
 async def send_chat(
     client: httpx.AsyncClient, jwt: str, twin_id: str, question: str
 ) -> tuple[str, dict]:
@@ -485,17 +534,28 @@ async def run_persona_test(persona: dict, chat_only: bool = False, reset: bool =
                 print("      ✗ Research timed out")
                 return result
 
-            # Compile to twin
-            print(f"      Compiling to twin {result.twin_id}...")
-            try:
-                compile_result = await compile_to_twin(
-                    client, result.jwt, result.run_id, result.twin_id
-                )
-                print(f"      ✓ Compiled. Research took {result.research_elapsed_s}s")
-            except Exception as e:
-                result.errors.append(f"Compile failed: {e}")
-                print(f"      ✗ Compile failed: {e}")
-                return result
+            # Wait for auto-compile (worker handles it); fall back to manual compile
+            print("[5.5/6] Waiting for auto-compile (persona_built)...")
+            t_compile = time.time()
+            twin_status = ""
+            while time.time() - t_compile < 90:
+                twin_status = await get_twin_status(client, result.jwt, result.twin_id)
+                if twin_status == "persona_built":
+                    print(f"      ✓ Auto-compiled (status=persona_built)")
+                    break
+                await asyncio.sleep(5)
+
+            if twin_status != "persona_built":
+                print("      ! Auto-compile timed out — calling compile-to-twin manually...")
+                try:
+                    compile_result = await compile_to_twin(
+                        client, result.jwt, result.run_id, result.twin_id
+                    )
+                    print(f"      ✓ Manual compile: chunks={compile_result.get('chunks_indexed')} claims={compile_result.get('claims_ingested')}")
+                except Exception as e:
+                    result.errors.append(f"Compile failed: {e}")
+                    print(f"      ✗ Compile failed: {e}")
+                    return result
 
         # ── Step 6: Chat quality test ──
         questions = PERSONA_QUESTIONS.get(persona["name"], GENERIC_QUESTIONS)
@@ -566,6 +626,7 @@ async def main():
     parser.add_argument("--reset", action="store_true", help="Delete existing data before testing")
     parser.add_argument("--sequential", action="store_true", help="Run personas sequentially (default: parallel)")
     parser.add_argument("--reindex", action="store_true", help="Re-index existing compiled twins with granular vectors, then test chat")
+    parser.add_argument("--purge", action="store_true", help="Delete all test accounts from Supabase, then exit")
     args = parser.parse_args()
 
     if args.name:
@@ -575,6 +636,13 @@ async def main():
             personas = [{"name": args.name, "email": f"qa.{args.name.lower().replace(' ', '.')}@gmail.com", "hints": {}}]
     else:
         personas = DEFAULT_PERSONAS
+
+    # ── Purge mode: delete all test accounts from Supabase, then exit ─────────
+    if args.purge:
+        print("Purging test accounts...")
+        await purge_test_accounts(personas)
+        print("Done. Run without --purge to recreate personas from scratch.")
+        return
 
     # ── Reindex mode: fix existing twins compiled before granular indexing ────
     if args.reindex:
