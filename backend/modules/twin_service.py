@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import logging
 
 from modules.observability import supabase
+from modules.public_profile_pack import build_research_profile_projection, merge_materialized_profile_settings
 
 logger = logging.getLogger(__name__)
 
@@ -193,11 +194,24 @@ async def create_twin_for_name_research(
 
                 if not user_owned_rows and len(race_rows) == 1:
                     # Legacy fallback: one unclaimed tenant-scoped profile.
+                    # SECURITY FIX: claim ownership immediately so no second user can claim it.
                     row = race_rows[0]
                     settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
                     owner_user_id = str(settings.get("owner_user_id") or "").strip()
                     creator_id = str(row.get("creator_id") or "").strip()
                     if not owner_user_id and creator_id == f"tenant_{tenant_id}":
+                        # Claim this twin by writing owner_user_id to prevent another user
+                        # from claiming it in a parallel race.
+                        claimed_settings = dict(settings)
+                        claimed_settings["owner_user_id"] = user_id
+                        try:
+                            db.table("twins").update({"settings": claimed_settings}).eq("id", row["id"]).execute()
+                            logger.warning(
+                                "Race condition: claimed unclaimed tenant-scoped twin %s for user %s",
+                                row["id"], user_id,
+                            )
+                        except Exception as claim_err:
+                            logger.warning("Could not claim twin %s: %s", row["id"], claim_err)
                         user_owned_rows = [row]
 
                 if user_owned_rows:
@@ -259,7 +273,7 @@ async def update_twin_from_research(
     try:
         twin_row = (
             db.table("twins")
-            .select("id, settings")
+            .select("id, name, description, settings")
             .eq("id", twin_id)
             .eq("tenant_id", tenant_id)
             .limit(1)
@@ -287,6 +301,25 @@ async def update_twin_from_research(
             "name_first_state": "complete",
             "research_completed_at": research_result.get("crawl_stats", {}).get("run_completed_at"),
         }
+        projection = build_research_profile_projection(
+            {
+                "id": twin_id,
+                "name": twin_row.data[0].get("name") or current_settings.get("owner_name") or "",
+                "settings": current_settings,
+                "description": twin_row.data[0].get("description") or "",
+            },
+            research_result,
+            source_flow="name_first",
+        )
+        merged_settings = merge_materialized_profile_settings(merged_settings, projection)
+        projection_meta = projection.get("public_profile_meta") or {}
+        logger.info(
+            "name_first materialization complete twin=%s completeness=%s image_status=%s image_source_type=%s",
+            twin_id,
+            projection_meta.get("completeness_score"),
+            projection_meta.get("image_status"),
+            projection_meta.get("image_source_type"),
+        )
         
         # If we have a canonical name, update the twin name
         canonical_name = claimed_identity.get("canonical_name")
@@ -296,18 +329,18 @@ async def update_twin_from_research(
                 update_data["name"] = normalized_name
                 merged_settings["owner_name"] = normalized_name
         
-        # Update description with bio if available
-        short_bio = bio.get("short")
+        # Update description with the projected summary if available.
+        short_bio = projection.get("description") or bio.get("short")
         if short_bio:
             update_data["description"] = short_bio
         
         # Update specialization if expertise topics found
         expertise_topics = profile.get("expertise_topics", [])
-        if expertise_topics:
-            # Take top topic as specialization
+        top_topic = projection.get("specialization") or ""
+        if not top_topic and expertise_topics:
             top_topic = expertise_topics[0].get("topic", "")
-            if top_topic:
-                update_data["specialization"] = top_topic
+        if top_topic:
+            update_data["specialization"] = top_topic
         
         # Mark as active now that research is complete
         update_data["status"] = "active"

@@ -2075,7 +2075,14 @@ async def chat(
     query = request.query or request.message or ""
     if not query:
         raise HTTPException(status_code=422, detail="query is required")
-    
+    # BUG #18 FIX: reject oversized queries that can OOM the embedding call
+    _MAX_QUERY_LEN = 4096
+    if len(query) > _MAX_QUERY_LEN:
+        raise HTTPException(
+            status_code=422,
+            detail=f"query is too long (max {_MAX_QUERY_LEN} characters)"
+        )
+
     # Use trace_id from header or body (header takes precedence for frontend linking)
     trace_id = x_langfuse_trace_id or request.trace_id
     if trace_id:
@@ -2902,9 +2909,22 @@ async def chat(
                 print(f"[Chat] Fallback emitted: {fallback}")
                 yield json.dumps({"type": "content", "token": fallback, "content": fallback}) + "\n"
 
+            # BUG #19 FIX: Filter citations to only source_ids present in the
+            # final context so the client never receives stale/mismatched refs
+            if retrieved_context_snippets and citations:
+                _ctx_source_ids = {
+                    str(row.get("source_id") or "").strip()
+                    for row in retrieved_context_snippets
+                    if str(row.get("source_id") or "").strip()
+                }
+                _filtered = [c for c in citations if c in _ctx_source_ids]
+                if _filtered:
+                    citations = _filtered
+                # If all citations got filtered (edge case), keep originals
+
             # 5. Done event
             yield json.dumps({"type": "done"}) + "\n"
-            
+
             print(f"[Chat] Stream ended for twin_id={twin_id}")
             
             # 6. Run evaluation (fire-and-forget, non-blocking)
@@ -3035,11 +3055,25 @@ async def chat(
             except Exception as lf_err:
                 print(f"[Chat] Failed to tag Langfuse error: {lf_err}")
             yield json.dumps({"type": "error", "error": error_msg}) + "\n"
-        
+            # BUG #12 FIX: always emit terminal "done" so clients can
+            # close the stream cleanly even when an error occurs
+            yield json.dumps({"type": "done"}) + "\n"
+
         finally:
             # =================================================================
             # CRITICAL FIX H4: Proper cleanup on stream end or disconnect
+            # BUG #11 / #25 FIX: Cancel any pending agent task so it does not
+            # continue running after the client disconnects.
             # =================================================================
+            try:
+                if "pending_task" in dir() or "pending_task" in locals():
+                    _pt = locals().get("pending_task")
+                    if _pt is not None and not _pt.done():
+                        _pt.cancel()
+                        print("[Chat] Cancelled pending agent task on stream cleanup")
+            except Exception as _cancel_err:
+                print(f"[Chat] Task cancel error (non-critical): {_cancel_err}")
+
             try:
                 # Flush Langfuse traces if client is available.
                 if _langfuse_client:
@@ -3133,6 +3167,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
     query = request.query or request.message or ""
     if not query:
         raise HTTPException(status_code=422, detail="query is required")
+    # BUG #18 FIX: widget endpoint also needs max-length guard
+    _MAX_QUERY_LEN = 4096
+    if len(query) > _MAX_QUERY_LEN:
+        raise HTTPException(
+            status_code=422,
+            detail=f"query is too long (max {_MAX_QUERY_LEN} characters)"
+        )
     group_id = key_info.get("group_id")
     
     resolved_context = resolve_widget_context()

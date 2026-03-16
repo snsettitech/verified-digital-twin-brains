@@ -27,6 +27,7 @@ from modules.persona_claim_inference import (
     handle_clarification_answer,
 )
 from modules.persona_bio_generator import generate_and_store_bios
+from modules.public_profile_pack import build_existing_profile_projection, merge_materialized_profile_settings
 
 
 router = APIRouter(tags=["persona-link-compile"])
@@ -637,18 +638,34 @@ async def _process_job_impl(job_id: str):
         # Publish short bio to twin's public profile settings
         short_variant = bio_result.get("variants", {}).get("short")
         if short_variant and short_variant.bio_text:
-            twin_row = supabase.table("twins").select("settings").eq("id", twin_id).single().execute()
-            current_settings = (twin_row.data or {}).get("settings") or {}
+            twin_row = (
+                supabase.table("twins")
+                .select("id, name, description, settings")
+                .eq("id", twin_id)
+                .single()
+                .execute()
+            )
+            twin_payload = twin_row.data or {}
+            current_settings = twin_payload.get("settings") or {}
             current_public_profile = current_settings.get("public_profile") or {}
-            supabase.table("twins").update({
-                "settings": {
-                    **current_settings,
-                    "public_profile": {
-                        **current_public_profile,
-                        "bio": short_variant.bio_text,
-                    },
-                }
-            }).eq("id", twin_id).execute()
+            staged_settings = {
+                **current_settings,
+                "public_profile": {
+                    **current_public_profile,
+                    "bio": short_variant.bio_text,
+                },
+            }
+            projection = build_existing_profile_projection(
+                {
+                    "id": twin_id,
+                    "name": twin_payload.get("name"),
+                    "description": twin_payload.get("description"),
+                    "settings": staged_settings,
+                },
+                source_flow="link_first",
+            )
+            merged_settings = merge_materialized_profile_settings(staged_settings, projection)
+            supabase.table("twins").update({"settings": merged_settings}).eq("id", twin_id).execute()
 
         # Update job with results
         supabase.table("link_compile_jobs").update({

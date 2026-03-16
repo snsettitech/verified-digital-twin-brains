@@ -2340,17 +2340,19 @@ def _to_bool(value: Any, default: bool = True) -> bool:
 
 def _build_embedding_text(entry: Dict[str, Any], chunk_text_value: str) -> str:
     """
-    Keep embedding inputs answer-centric.
-    Prompt-question chunks use section descriptors to avoid polluting vector space
-    with questionnaire lines.
+    Build embedding text for a chunk entry.
+    For prompt_question blocks we prefix the section descriptor so the vector
+    carries context about which section the Q&A belongs to, while keeping the
+    full chunk text for semantic retrieval quality.
     """
     block_type = str(entry.get("block_type") or "").strip().lower()
     if block_type == "prompt_question":
         section_title = str(entry.get("section_title") or "").strip()
         section_path = str(entry.get("section_path") or "").strip()
         descriptor = section_title or section_path
-        if descriptor:
-            return descriptor
+        if descriptor and chunk_text_value:
+            # BUG #22 FIX: include chunk text so the full Q&A is searchable
+            return f"{descriptor}: {chunk_text_value}"
     return chunk_text_value
 
 
@@ -2460,9 +2462,10 @@ async def process_and_index_text(
         correlation_id=correlation_id,
         message="Chunking text",
     )
+    _MAX_CHUNK_ENTRIES = 5000  # BUG #8 FIX: guard against unbounded overrides
     try:
         chunk_entries = (
-            [entry for entry in (chunk_entries_override or []) if isinstance(entry, dict)]
+            [entry for entry in (chunk_entries_override or [])[:_MAX_CHUNK_ENTRIES] if isinstance(entry, dict)]
             if chunk_entries_override is not None
             else chunk_text_with_metadata(text)
         )
@@ -2499,12 +2502,10 @@ async def process_and_index_text(
         )
         raise
 
-    # 0. Cleanup existing chunks for this source (idempotency)
-    from modules.observability import supabase
-    try:
-        supabase.table("chunks").delete().eq("source_id", source_id).execute()
-    except Exception as e:
-        print(f"[Ingestion] Warning: Failed to clean old chunks for source {source_id}: {e}")
+    # BUG #3 FIX: Old chunk cleanup moved into the indexing step AFTER successful
+    # Pinecone upsert, so a failed embedding phase never leaves the source with
+    # zero chunks in the DB.
+    # (supabase is imported at module level — no inner import needed)
 
     # Step: embedded
     embed_event_id = start_step(
@@ -2567,6 +2568,11 @@ async def process_and_index_text(
 
             if metadata_override:
                 metadata.update(metadata_override)
+                # BUG #13 FIX: re-assert security fields so metadata_override
+                # cannot silently overwrite them with attacker-controlled values
+                metadata["twin_id"] = twin_id
+                metadata["source_id"] = source_id
+                metadata["chunk_id"] = chunk_id
 
             vector_payload = {
                 "id": vector_id,
@@ -2574,7 +2580,14 @@ async def process_and_index_text(
             }
             if not use_integrated_mode:
                 embedding_text = _build_embedding_text(entry, chunk)
-                vector_payload["values"] = get_embedding(embedding_text)
+                embedding = get_embedding(embedding_text)
+                # BUG #9 FIX: validate embedding before appending
+                if not embedding:
+                    raise ValueError(
+                        f"Embedding returned None/empty for chunk "
+                        f"(source_id={source_id}, chunk_id={chunk_id})"
+                    )
+                vector_payload["values"] = embedding
 
             vectors.append(vector_payload)
             
@@ -2629,17 +2642,16 @@ async def process_and_index_text(
         metadata={"vectors": len(vectors)},
     )
     try:
-        # Persist chunks to Supabase for citation grounding
-        if db_chunks:
-            supabase.table("chunks").insert(db_chunks).execute()
-            print(f"[Supabase] Persisted {len(db_chunks)} chunks for source_id={source_id}")
-
-        # Upsert vectors to Pinecone (advisor creator namespace with legacy fallback)
+        # BUG #24 + BUG #3 FIX: Upsert to Pinecone FIRST so that if the DB
+        # write fails, old data is still intact and Pinecone is up-to-date.
+        # Old DB chunks are deleted AFTER Pinecone succeeds so a Pinecone
+        # failure never wipes the previously-queryable source.
         if vectors:
             creator_id = resolve_creator_id_for_twin(twin_id)
             namespace = get_primary_namespace_for_twin(twin_id=twin_id, creator_id=creator_id)
             for vector in vectors:
-                md = vector.get("metadata") or {}
+                # BUG #4 FIX: copy metadata to avoid mutating the shared dict
+                md = dict(vector.get("metadata") or {})
                 if creator_id:
                     md["creator_id"] = creator_id
                 md["twin_id"] = twin_id
@@ -2647,6 +2659,17 @@ async def process_and_index_text(
 
             pinecone_adapter.upsert(vectors=vectors, namespace=namespace)
             print(f"[Pinecone] Upserted {len(vectors)} vectors to namespace={namespace}")
+
+        # Delete old DB chunks only after Pinecone succeeds (BUG #3 + #24 fix)
+        try:
+            supabase.table("chunks").delete().eq("source_id", source_id).execute()
+        except Exception as del_err:
+            print(f"[Ingestion] Warning: Failed to clean old chunks for source {source_id}: {del_err}")
+
+        # Persist new chunks to Supabase for citation grounding
+        if db_chunks:
+            supabase.table("chunks").insert(db_chunks).execute()
+            print(f"[Supabase] Persisted {len(db_chunks)} chunks for source_id={source_id}")
 
         # Ensure default group has access to this source (required for retrieval filtering)
         try:

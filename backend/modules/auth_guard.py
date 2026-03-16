@@ -479,14 +479,14 @@ def get_current_user(
     try:
         auth_context = authenticate_request(token)
 
-        # Best-effort tenant enrichment to reduce duplicate tenant lookups in
-        # downstream handlers. Auto-create tenant if missing to prevent 403 errors.
+        # Best-effort tenant enrichment. Never auto-create tenants here — this is a
+        # read-only dependency. Tenant creation is reserved for /auth/sync-user only.
         if not auth_context.get("tenant_id"):
             try:
                 auth_context["tenant_id"] = resolve_tenant_id(
                     user_id=auth_context.get("user_id"),
                     email=auth_context.get("email"),
-                    create_if_missing=True,
+                    create_if_missing=False,
                 )
             except HTTPException:
                 pass
@@ -537,22 +537,22 @@ def verify_owner(
                 headers={"WWW-Authenticate": "Bearer"}
             )
 
-    # Enrich auth context with tenant_id for routes that enforce tenant
-    # ownership but currently only depend on verify_owner.
-    # Auto-create tenant if missing to prevent 403 errors for new users.
+    # Enrich auth context with tenant_id. verify_owner is used for write operations
+    # so we allow tenant lookup but NOT auto-creation here. Call /auth/sync-user to
+    # create a tenant for new users before reaching any write endpoint.
     if not auth_context.get("tenant_id"):
         try:
             tenant_id = resolve_tenant_id(
                 user_id=auth_context.get("user_id"),
                 email=auth_context.get("email"),
-                create_if_missing=True,
+                create_if_missing=False,
             )
             auth_context["tenant_id"] = tenant_id
         except HTTPException as exc:
-            if exc.status_code == status.HTTP_404_NOT_FOUND:
+            if exc.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="User has no tenant association",
+                    detail="User has no tenant association. Call /auth/sync-user first.",
                 )
             raise
 
@@ -573,17 +573,17 @@ def require_tenant(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str
     tenant_id = user.get("tenant_id")
     if not tenant_id:
         try:
-            # Auto-create tenant for new users to prevent 403 errors
+            # Lookup only — no auto-creation. New users must call /auth/sync-user first.
             tenant_id = resolve_tenant_id(
                 user_id=user.get("user_id"),
                 email=user.get("email"),
-                create_if_missing=True,
+                create_if_missing=False,
             )
         except HTTPException as exc:
-            if exc.status_code == status.HTTP_404_NOT_FOUND:
+            if exc.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="User has no tenant association",
+                    detail="User has no tenant association. Call /auth/sync-user first.",
                 )
             raise
 
@@ -704,21 +704,20 @@ def verify_twin_ownership(twin_id: str, user: Dict[str, Any]) -> bool:
     tenant_id = user.get("tenant_id")
     if not tenant_id:
         try:
-            # Auto-create tenant for new users to prevent 403 errors
+            # Lookup only — no auto-creation for ownership checks.
             tenant_id = resolve_tenant_id(
                 user_id=user_id,
                 email=user.get("email"),
-                create_if_missing=True,
+                create_if_missing=False,
             )
         except HTTPException as exc:
-            # If tenant creation fails, propagate as 403
-            if exc.status_code == status.HTTP_404_NOT_FOUND:
+            if exc.status_code in (status.HTTP_404_NOT_FOUND, status.HTTP_403_FORBIDDEN):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="User has no tenant association",
+                    detail="User has no tenant association. Call /auth/sync-user first.",
                 )
             raise
-    
+
     try:
         if not tenant_id:
             raise HTTPException(
@@ -809,15 +808,15 @@ def verify_source_ownership(source_id: str, user: Dict[str, Any]) -> bool:
     tenant_id = user.get("tenant_id")
     if not tenant_id:
         try:
-            # Auto-create tenant for new users to prevent 403 errors
+            # Lookup only — no auto-creation for source ownership checks.
             tenant_id = resolve_tenant_id(
                 user_id=user_id,
                 email=user.get("email"),
-                create_if_missing=True,
+                create_if_missing=False,
             )
         except HTTPException:
             tenant_id = None
-    
+
     try:
         # Get source and its twin
         source_result = supabase.table("sources").select("twin_id").eq("id", source_id).single().execute()
@@ -980,7 +979,9 @@ def ensure_twin_active(twin_id: str) -> bool:
         
         # Check if twin is active (only when status field is present)
         twin_status = result.data.get("status")
-        allowed_statuses = {"active", "live", "persona_built", None}
+        # claims_ready = content ingested, claims extracted, persona compilation pending
+        # draft twins stay blocked (no content yet)
+        allowed_statuses = {"active", "live", "persona_built", "claims_ready", None}
         if twin_status and twin_status not in allowed_statuses:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

@@ -22,6 +22,7 @@ type ProfileDraft = {
 };
 
 type ProfileInsightsResponse = {
+  profile_pack?: PersonaProfilePack | null;
   metrics?: {
     combined?: TrainingMetricsData | null;
     twin_onboarding?: TrainingMetricsData | null;
@@ -34,6 +35,31 @@ type ProfileInsightsResponse = {
     run_id?: string;
     status?: string;
   } | null;
+};
+
+type PersonaProfilePack = {
+  name?: string;
+  occupation?: string;
+  headline?: string;
+  bio?: string;
+  short_description?: string;
+  avatar_url?: string;
+  image_url?: string;
+  birth_year?: number | null;
+  death_year?: number | null;
+  nationality?: string;
+  verified_profile?: boolean;
+  answerability_score?: number;
+  verified_claims_count?: number;
+  areas_of_expertise?: string[];
+  personality_traits?: string[];
+  key_achievements?: string[];
+  contributions?: string[];
+  speaking_style?: string;
+  social_links?: Record<string, string>;
+  pinned_questions?: string[];
+  education?: Array<{ institution?: string; degree?: string; field?: string; start_year?: number | null; end_year?: number | null }>;
+  work_experience?: Array<{ company?: string; role?: string; description?: string; start_year?: number | null; end_year?: number | null }>;
 };
 
 const DEFAULT_PINNED_QUESTIONS = [
@@ -74,6 +100,16 @@ function initials(fullName: string): string {
     .filter(Boolean)
     .slice(0, 2);
   return letters.join('').toUpperCase() || 'DT';
+}
+
+function profileLifeLine(profile: PersonaProfilePack | null): string {
+  if (!profile) return '';
+  const years =
+    profile.birth_year || profile.death_year
+      ? `${profile.birth_year || ''}${profile.birth_year || profile.death_year ? ' - ' : ''}${profile.death_year || 'Present'}`
+      : '';
+  if (profile.nationality && years) return `${profile.nationality} • ${years}`;
+  return profile.nationality || years;
 }
 
 function IconUser() {
@@ -311,6 +347,50 @@ function ProfilePageContent() {
     };
   }, [effectiveTwin?.name, effectiveTwin?.settings, user?.avatar_url, user?.full_name, effectiveTrainingMetrics]);
 
+  const previewProfile = useMemo<PersonaProfilePack>(() => {
+    const pack = profileInsights?.profile_pack;
+    const packSocial =
+      isRecord(pack?.social_links)
+        ? Object.fromEntries(
+            Object.entries(pack.social_links).filter(([, url]) => typeof url === 'string' && url.trim())
+          ) as Record<string, string>
+        : Object.fromEntries(
+            derivedProfile.socialLinks
+              .filter((link) => link.trim())
+              .map((link, index) => [`link${index + 1}`, link.trim()])
+          );
+
+    return {
+      name: pack?.name || derivedProfile.displayName,
+      occupation:
+        pack?.occupation ||
+        [derivedProfile.role, derivedProfile.organization].filter(Boolean).join(' at ') ||
+        derivedProfile.headline,
+      headline: pack?.headline || derivedProfile.headline,
+      bio: pack?.bio || derivedProfile.bio,
+      short_description: pack?.short_description || pack?.bio || derivedProfile.bio,
+      avatar_url: pack?.avatar_url || pack?.image_url || derivedProfile.avatarUrl,
+      birth_year: pack?.birth_year,
+      death_year: pack?.death_year,
+      nationality: pack?.nationality,
+      verified_profile: Boolean(pack?.verified_profile),
+      answerability_score: pack?.answerability_score,
+      verified_claims_count: pack?.verified_claims_count,
+      areas_of_expertise: normalizeStringArray(pack?.areas_of_expertise, [], 6),
+      personality_traits: normalizeStringArray(pack?.personality_traits, [], 6),
+      key_achievements: normalizeStringArray(pack?.key_achievements, [], 6),
+      contributions: normalizeStringArray(pack?.contributions, [], 6),
+      speaking_style: typeof pack?.speaking_style === 'string' ? pack.speaking_style : '',
+      social_links: packSocial,
+      pinned_questions: normalizeStringArray(pack?.pinned_questions, derivedProfile.pinnedQuestions, 5),
+      education: Array.isArray(pack?.education) ? pack.education : [],
+      work_experience: Array.isArray(pack?.work_experience) ? pack.work_experience : [],
+    };
+  }, [derivedProfile, profileInsights?.profile_pack]);
+
+  const previewLifeLine = useMemo(() => profileLifeLine(previewProfile), [previewProfile]);
+  const previewSocialLinks = useMemo(() => Object.entries(previewProfile.social_links || {}), [previewProfile]);
+
   const [draft, setDraft] = useState<ProfileDraft>(derivedProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -504,8 +584,13 @@ function ProfilePageContent() {
                   <div className="flex flex-wrap items-center gap-3 text-lg text-slate-600">
                     <span className="inline-flex items-center gap-2 rounded-full bg-[#f2f0ec] px-3 py-1 text-sm font-semibold text-slate-700">
                       <span className="inline-block h-2.5 w-2.5 rounded-full bg-orange-500" />
-                      {draft.headline || 'Add a headline in edit mode'}
+                      {previewProfile.occupation || previewProfile.headline || 'Add a headline in edit mode'}
                     </span>
+                    {previewProfile.verified_profile && (
+                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                        Verified
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -574,7 +659,9 @@ function ProfilePageContent() {
 
             {!isEditing && (
               <div className="relative flex flex-col gap-6 xl:pr-72">
-                <p className="max-w-3xl text-xl leading-relaxed text-slate-700">{draft.bio}</p>
+                <p className="max-w-3xl text-xl leading-relaxed text-slate-700">
+                  {previewProfile.short_description || previewProfile.bio || draft.bio}
+                </p>
                 <div className="hidden rounded-3xl bg-gradient-to-br from-orange-500 to-amber-500 p-6 text-white shadow-lg shadow-orange-500/20 xl:absolute xl:bottom-0 xl:right-0 xl:block xl:w-64">
                   <p className="text-2xl font-bold">Call {firstName(draft.displayName)}</p>
                   <p className="mt-1 text-sm text-orange-100">Have a live conversation with your persona.</p>
@@ -592,6 +679,148 @@ function ProfilePageContent() {
 
         {!isEditing ? (
           <div className="space-y-8 pb-12">
+            <section className="rounded-3xl border border-white/60 bg-white/80 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)] md:p-8">
+              <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="text-3xl font-bold text-slate-900">Marketplace Preview</h2>
+                    {previewLifeLine && (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600">
+                        {previewLifeLine}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+                    {previewProfile.short_description || previewProfile.bio || draft.bio}
+                  </p>
+
+                  {previewSocialLinks.length > 0 && (
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      {previewSocialLinks.map(([label, url]) => (
+                        <a
+                          key={`${label}-${url}`}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          {label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Answerability</p>
+                    <p className="mt-2 text-3xl font-bold text-slate-900">
+                      {Math.round(previewProfile.answerability_score || 0)}%
+                    </p>
+                  </div>
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Verified Claims</p>
+                    <p className="mt-2 text-3xl font-bold text-slate-900">
+                      {previewProfile.verified_claims_count || 0}
+                    </p>
+                  </div>
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Speaking Style</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {previewProfile.speaking_style || 'Direct, clear, and grounded in the public profile.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                {previewProfile.areas_of_expertise && previewProfile.areas_of_expertise.length > 0 && (
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Areas of Expertise</h3>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {previewProfile.areas_of_expertise.map((item) => (
+                        <span key={`expertise-${item}`} className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {previewProfile.key_achievements && previewProfile.key_achievements.length > 0 && (
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Key Achievements</h3>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {previewProfile.key_achievements.map((item) => (
+                        <span key={`achievement-${item}`} className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {previewProfile.personality_traits && previewProfile.personality_traits.length > 0 && (
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Personality Traits</h3>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {previewProfile.personality_traits.map((item) => (
+                        <span key={`trait-${item}`} className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {previewProfile.contributions && previewProfile.contributions.length > 0 && (
+                  <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Contributions</h3>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {previewProfile.contributions.map((item) => (
+                        <span key={`contribution-${item}`} className="rounded-full bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {((previewProfile.education && previewProfile.education.length > 0) ||
+                (previewProfile.work_experience && previewProfile.work_experience.length > 0)) && (
+                <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  {previewProfile.education && previewProfile.education.length > 0 && (
+                    <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                      <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Education</h3>
+                      <div className="mt-4 space-y-3">
+                        {previewProfile.education.slice(0, 4).map((entry, idx) => (
+                          <div key={`education-preview-${idx}`} className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                            <p className="font-medium text-slate-900">{entry.degree || entry.field || entry.institution || 'Education'}</p>
+                            {entry.institution && <p className="mt-1 text-sm text-slate-600">{entry.institution}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {previewProfile.work_experience && previewProfile.work_experience.length > 0 && (
+                    <div className="rounded-3xl bg-[#f8f7f4] p-5">
+                      <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Work Experience</h3>
+                      <div className="mt-4 space-y-3">
+                        {previewProfile.work_experience.slice(0, 4).map((entry, idx) => (
+                          <div key={`work-preview-${idx}`} className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+                            <p className="font-medium text-slate-900">{entry.role || entry.company || 'Experience'}</p>
+                            {entry.company && <p className="mt-1 text-sm text-slate-600">{entry.company}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+
             <section className="rounded-3xl border border-white/60 bg-white/75 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
               <div className="mb-4 flex items-baseline gap-3">
                 <h2 className="text-2xl font-bold text-slate-900">Pinned Questions</h2>

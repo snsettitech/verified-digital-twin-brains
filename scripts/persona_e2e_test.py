@@ -421,7 +421,7 @@ async def send_chat(
         f"{API_BASE}/chat",
         headers=_auth_headers(jwt),
         json={"query": question, "twin_id": twin_id},
-        timeout=60,
+        timeout=90,
     )
     if r.status_code != 200:
         return f"[ERROR {r.status_code}] {r.text[:200]}", {}

@@ -261,6 +261,14 @@ async def sync_user(request: Request, response: Response, user=Depends(get_curre
     user_id = user.get("user_id")
     email = (user.get("email", "") or "").strip().lower()
     print(f"[SYNC {correlation_id}] email: {email}")
+
+    # Validate email before any DB writes — empty or malformed emails break tenant linking
+    import re as _re
+    if not email or not _re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid or missing email in auth token. Got: '{email}'"
+        )
     
     # Check if user already exists in our users table
     print(f"[SYNC {correlation_id}] Checking if user exists...")
@@ -699,22 +707,42 @@ async def accept_invitation_endpoint(request: AcceptInvitationRequest):
 async def validate_share_token_endpoint(twin_id: str, token: str):
     """Validate a public share token and return twin info"""
     from modules.share_links import validate_share_token
+    from modules.public_profile_pack import build_public_profile_pack
     
     if not validate_share_token(token, twin_id):
         raise HTTPException(status_code=404, detail="Invalid or expired share link")
     
-    # Get twin name
-    try:
-        twin_response = supabase.table("twins").select("name").eq("id", twin_id).single().execute()
-        twin_name = twin_response.data.get("name", "AI Assistant") if twin_response.data else "AI Assistant"
-    except Exception:
-        twin_name = "AI Assistant"
-    
-    return {
+    payload = {
         "valid": True,
         "twin_id": twin_id,
-        "twin_name": twin_name
+        "twin_name": "AI Assistant",
     }
+
+    try:
+        try:
+            twin_response = (
+                supabase.table("twins")
+                .select("id, name, settings, status, is_active, created_at, updated_at")
+                .eq("id", twin_id)
+                .single()
+                .execute()
+            )
+        except Exception:
+            twin_response = (
+                supabase.table("twins")
+                .select("id, name, settings, status, created_at, updated_at")
+                .eq("id", twin_id)
+                .single()
+                .execute()
+            )
+        if twin_response.data:
+            profile_pack = build_public_profile_pack(twin_response.data)
+            payload.update(profile_pack)
+            payload["twin_name"] = profile_pack.get("name") or twin_response.data.get("name") or "AI Assistant"
+    except Exception:
+        pass
+
+    return payload
 
 
 # ============================================================================
@@ -751,14 +779,17 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
     user_id = user.get("user_id")
     user_email = user.get("email", "")
     tenant_id = user.get("tenant_id")
-    
+
     # Validate confirmation
     if request.confirmation not in ["DELETE", user_email]:
         raise HTTPException(
-            status_code=400, 
+            status_code=400,
             detail="Invalid confirmation. Type 'DELETE' or your email address to confirm."
         )
-    
+
+    if not user_id or not tenant_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
     try:
         # Log the deletion request
         AuditLogger.log(
@@ -769,10 +800,27 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
             actor_id=user_id,
             metadata={"email": user_email}
         )
-        
-        # 1. Get all twins owned by this user's tenant
-        twins_res = supabase.table("twins").select("id, name, settings").eq("tenant_id", tenant_id).execute()
-        twins_to_delete = twins_res.data or []
+
+        # SECURITY: Only allow deletion of twins this user owns (owner_user_id match)
+        # or twins they created. Never delete twins owned by other users in the same tenant.
+        all_twins_res = supabase.table("twins").select("id, name, settings, creator_id").eq("tenant_id", tenant_id).execute()
+        all_twins = all_twins_res.data or []
+
+        twins_to_delete = []
+        for twin in all_twins:
+            settings = twin.get("settings") or {}
+            owner_uid = str(settings.get("owner_user_id") or "").strip()
+            creator = str(twin.get("creator_id") or "").strip()
+            # Only include twins that belong to THIS user
+            if owner_uid == user_id or creator == user_id or creator == f"tenant_{tenant_id}":
+                twins_to_delete.append(twin)
+
+        # If user has no own twins but there are tenant twins owned by others, deny full deletion
+        if all_twins and not twins_to_delete:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot delete tenant data owned by other users. Contact the tenant owner."
+            )
         total_twins = len(twins_to_delete)
         
         deleted_count = 0
@@ -841,23 +889,31 @@ async def delete_account(request: DeleteAccountRequest, user=Depends(get_current
                     print(f"[ACCOUNT] Archive fallback failed for twin {twin_id}: {archive_err}")
                     cleanup_pending = True
         
-        # 2. Anonymize user data
-        try:
-            supabase.table("users").update({
-                "email": f"deleted_{user_id}@deleted.local",
-                "avatar_url": None,
-                "last_active_at": datetime.utcnow().isoformat()
-            }).eq("id", user_id).execute()
-        except Exception as e:
-            print(f"[ACCOUNT] Error anonymizing user: {e}")
-            cleanup_pending = True
-        
-        # 2b. Best-effort auth user deletion (Supabase)
+        # 2. Delete auth user first (Supabase auth layer)
         try:
             supabase.auth.admin.delete_user(user_id)
         except Exception as e:
             # Not fatal; some Supabase clients don't expose admin.delete_user
             print(f"[ACCOUNT] Auth admin delete failed or unsupported: {e}")
+            cleanup_pending = True
+
+        # 2b. Hard-delete the public.users row — do NOT just anonymize.
+        # Anonymizing leaves orphaned ghost records that break re-registration and GDPR compliance.
+        try:
+            supabase.table("users").delete().eq("id", user_id).execute()
+            print(f"[ACCOUNT] Deleted users row for {user_id}")
+        except Exception as e:
+            print(f"[ACCOUNT] Error deleting user row: {e}")
+            # Fallback: anonymize so PII is not retained if hard-delete fails
+            try:
+                supabase.table("users").update({
+                    "email": f"deleted_{user_id}@deleted.local",
+                    "avatar_url": None,
+                    "full_name": None,
+                    "last_active_at": datetime.utcnow().isoformat()
+                }).eq("id", user_id).execute()
+            except Exception as anon_err:
+                print(f"[ACCOUNT] Anonymization fallback also failed: {anon_err}")
             cleanup_pending = True
         
         # 3. Log the completed deletion

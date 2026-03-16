@@ -1671,8 +1671,31 @@ async def _execute_pinecone_queries(
                 )
         return normalized
 
+    def _enforce_twin_scope(matches: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Post-retrieval guard: discard any match whose metadata.twin_id does not
+        match the requested target_twin_id.  This is a defence-in-depth layer on
+        top of the Pinecone metadata filter.  Legacy chunks that pre-date the
+        twin_id field are allowed through (empty twin_id in metadata).
+        """
+        if not target_twin_id:
+            return matches
+        safe: List[Dict[str, Any]] = []
+        for m in matches:
+            metadata = m.get("metadata") or {}
+            match_twin = str(metadata.get("twin_id") or "").strip()
+            if not match_twin or match_twin == target_twin_id:
+                safe.append(m)
+            else:
+                print(
+                    f"[Retrieval] SECURITY: cross-twin match discarded "
+                    f"(expected={target_twin_id}, got={match_twin}, id={m.get('id')})"
+                )
+        return safe
+
     def _merge_matches(matches: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Keep best score for duplicate ids across namespaces.
+        # Twin-scope is already enforced by _enforce_twin_scope before this call.
         dedup: Dict[str, Dict[str, Any]] = {}
         for m in matches:
             mid = str(m.get("id"))
@@ -1787,6 +1810,7 @@ async def _execute_pinecone_queries(
                 continue
             
             matches = _exclude_tombstoned(_extract_matches(ns_result))
+            matches = _enforce_twin_scope(matches)  # BUG #2 fix: hard twin isolation
             for match in matches:
                 metadata = match.get("metadata") or {}
                 if not isinstance(metadata, dict):
@@ -1803,18 +1827,22 @@ async def _execute_pinecone_queries(
         if failed_namespaces:
             print(f"[Retrieval] Warning: {len(failed_namespaces)}/{len(namespace_candidates)} namespaces failed: {failed_namespaces}")
 
-        # Optional hotfix retry only when explicitly enabled.
-        if (
+        # BUG #14 FIX: Retry the primary namespace whenever it specifically failed,
+        # not just when ALL namespaces fail.  Partial failures (primary down,
+        # secondary up) previously returned sparse context silently.
+        _primary_ns_failed = (
             RETRIEVAL_PRIMARY_RETRY_ENABLED
-            and not merged_matches
-            and failed_namespaces
-            and len(failed_namespaces) == len(namespace_candidates)
-        ):
+            and namespace_candidates
+            and namespace_candidates[0] in failed_namespaces
+        )
+        if _primary_ns_failed:
             primary_ns = namespace_candidates[0]
             try:
+                _all_failed = len(failed_namespaces) == len(namespace_candidates)
                 print(
-                    f"[Retrieval] All namespace queries failed; retrying primary namespace "
-                    f"{primary_ns} with extended timeout"
+                    f"[Retrieval] Primary namespace failed"
+                    f"{' (all namespaces failed)' if _all_failed else ' (partial failure)'}; "
+                    f"retrying {primary_ns} with extended timeout"
                 )
 
                 def _retry_fetch():
@@ -1835,6 +1863,7 @@ async def _execute_pinecone_queries(
                     timeout=max(RETRIEVAL_PER_NAMESPACE_TIMEOUT * 2.5, 14.0),
                 )
                 retry_matches = _exclude_tombstoned(_extract_matches(retry_result))
+                retry_matches = _enforce_twin_scope(retry_matches)  # BUG #2 fix
                 if retry_matches:
                     merged_matches.extend(retry_matches)
                     success_count = max(success_count, 1)

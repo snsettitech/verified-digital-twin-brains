@@ -382,17 +382,23 @@ export default function ChatInterface({
 
         const data = await response.json();
         setIsSearching(false);
+        const responseType = data.response_type || (data.requires_user_input ? 'clarification' : 'answer');
+        const responseMessage = data.message || data.response || 'No response generated.';
+        const isClarification = data.status === 'queued' || responseType === 'clarification' || data.requires_user_input;
+        if (isClarification) {
+          setClarification(data);
+        }
         setMessages((prev) => {
           const next = [...prev];
           const lastMsg = { ...next[next.length - 1] };
 
-        if (data.status === 'queued') {
-          lastMsg.content = data.message || 'Queued for owner confirmation.';
+        if (isClarification) {
+          lastMsg.content = responseMessage || 'I need clarification.';
           lastMsg.confidence_score = 0;
           lastMsg.citations = [];
           emitStreamEvent('clarify', data);
         } else {
-          lastMsg.content = data.response || 'No response generated.';
+          lastMsg.content = responseMessage;
           lastMsg.confidence_score = data.confidence_score;
           lastMsg.citations = data.citations;
           lastMsg.citation_details = data.citation_details;
@@ -431,7 +437,7 @@ export default function ChatInterface({
         });
 
         setLastDebug({
-          decision: data.status === 'queued' ? 'CLARIFY_QUEUED' : (data.intent_label || 'ANSWER'),
+          decision: isClarification ? 'CLARIFY' : (data.intent_label || 'ANSWER'),
           used_owner_memory: Boolean(data.used_owner_memory),
           owner_memory_refs: Array.isArray(data.owner_memory_refs) ? data.owner_memory_refs : [],
           owner_memory_topics: Array.isArray(data.owner_memory_topics) ? data.owner_memory_topics : [],

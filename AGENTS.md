@@ -8,6 +8,80 @@
 
 The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creating trustworthy, auditable digital twins with multi-tenant isolation, governance layers, and agentic capabilities. It creates AI systems that can represent real people or organizations, use their authorized knowledge and preferences, and answer or act across tools with permissions, provenance, and auditability.
 
+## Bug Fix Status — ALL 5 PHASES COMPLETE ✅
+
+**78/78 tests passing** across 5 systematic fix phases.
+
+### Phase 0 — Security (COMPLETE ✅) — 16/16 tests
+
+| Bug | File | Fix |
+| --- | ---- | --- |
+| #1 CRITICAL: Cross-tenant account deletion | `routers/auth.py` | delete_account only deletes twins where `owner_user_id == user_id` |
+| #2 CRITICAL: Cross-twin data leakage | `modules/retrieval.py` | Added `_enforce_twin_scope()` post-retrieval guard |
+| #5 CRITICAL: Tenant auto-creation on reads | `modules/auth_guard.py` | All read deps use `create_if_missing=False` |
+| #6 HIGH: Orphaned user row on delete | `routers/auth.py` | Hard-deletes `public.users` row; anonymization is fallback only |
+| #20 MEDIUM: Unvalidated email in sync-user | `routers/auth.py` | Email regex validation before any DB writes |
+
+### Phase 1 — Twin Management (COMPLETE ✅) — 9/9 tests
+
+| Bug | File | Fix |
+| --- | ---- | --- |
+| #7 HIGH: Twin delete missing tenant scope | `routers/twins.py` | `.eq("tenant_id", twin_tenant_id)` added to final DELETE |
+| #15 MEDIUM: Race condition in twin creation | `modules/twin_service.py` | Immediately claim `owner_user_id` on unclaimed duplicate |
+
+### Phase 2 — Data Ingestion (COMPLETE ✅) — 28/28 tests
+
+| Bug | File | Fix |
+| --- | ---- | --- |
+| #3 CRITICAL: Partial ingestion without rollback | `modules/ingestion.py` | Pinecone upsert first, then delete old chunks, then insert new |
+| #4 CRITICAL: Metadata mutation in vector loop | `modules/ingestion.py` | `md = dict(vector.get("metadata") or {})` prevents in-place mutation |
+| #8 HIGH: No bounds on chunk_entries_override | `modules/ingestion.py` | Hard cap at 5000 entries |
+| #9 HIGH: Null embedding validation | `modules/ingestion.py` | `ValueError` if `get_embedding()` returns None or empty list |
+| #13 HIGH: metadata_override overwrites security fields | `modules/ingestion.py` | Re-assert `twin_id`, `source_id`, `chunk_id` after override |
+| #22 MEDIUM: Prompt questions lose text in embedding | `modules/ingestion.py` | Returns `"{descriptor}: {chunk}"` for full semantic searchability |
+| #24 MEDIUM: Stale chunk references before vector upsert | `modules/ingestion.py` | Same fix as #3 — ordering rewrite |
+
+### Phase 3 — Vector Retrieval (COMPLETE ✅) — 6/6 tests
+
+| Bug | File | Fix |
+| --- | ---- | --- |
+| #14 HIGH: Partial namespace failure not retried | `modules/retrieval.py` | Retry primary namespace whenever it specifically failed (not just when all fail) |
+
+### Phase 4 — Chat Pipeline (COMPLETE ✅) — 19/19 tests
+
+| Bug | File | Fix |
+| --- | ---- | --- |
+| #10 HIGH: Message ordering not guaranteed | `modules/observability.py` | Secondary `.order("id", desc=False)` for deterministic order |
+| #11 HIGH: Async tasks not cancelled on disconnect | `routers/chat.py` | `pending_task.cancel()` in stream generator finally block |
+| #12 HIGH: Stream missing done event on error | `routers/chat.py` | Always emit `{"type":"done"}` after error event |
+| #16 MEDIUM: Prompt injection in coreference | `modules/conversation_context.py` | Escape `{`/`}` in query before `.format()` |
+| #17 MEDIUM: Unescaped history in prompts | `modules/conversation_context.py` | Escape `{`/`}` in history content before returning |
+| #18 MEDIUM: Missing query max-length validation | `routers/chat.py` | Reject queries > 4096 chars with HTTP 422 |
+| #19 MEDIUM: Citation/context mismatch | `routers/chat.py` | Filter citations to only source_ids present in final context |
+| #25 LOW: Missing connection cleanup | `routers/chat.py` | Same fix as #11 — task cancel in finally |
+
+### Key Rules Established
+
+- `get_current_user`, `verify_owner`, `require_tenant`, `verify_twin_ownership`, `verify_source_ownership` — NEVER call `resolve_tenant_id(create_if_missing=True)`. Only `/auth/sync-user` creates tenants.
+- All twin-scoped retrievals run through `_enforce_twin_scope()` which filters cross-twin matches before dedup/merge.
+- Account deletion filters to user-owned twins only. Never deletes other users' twins in the same tenant.
+- User deletion = hard-delete `public.users` row. Anonymization is fallback if hard-delete fails.
+- Ingestion order: embed → Pinecone upsert → delete old DB chunks → insert new DB chunks. Never delete before embedding succeeds.
+- metadata_override can never overwrite `twin_id`, `source_id`, or `chunk_id` — always re-asserted after override.
+- All chat queries validated at entry: non-empty, max 4096 chars.
+- Stream errors always emit terminal `{"type":"done"}` so clients can close cleanly.
+- Ongoing bug fix tracking in `CRITICAL_BUG_FIX_PLAN.md` and `backend/tests/test_phase_*.py`.
+
+---
+
+## Persona Generation Learnings
+
+- Persona creation must materialize a clean canonical stored profile in `twins.settings.public_profile` during generation time. Do not treat late UI reconstruction as the primary source of persona truth.
+- Persona creation must also write a prompt-facing companion pack in `twins.settings.persona_identity_pack` so the chat runtime starts from stable identity facts instead of rebuilding identity from noisy retrieval.
+- Persona chat grounding must prefer this order: canonical profile, verified facts and approved profile fields, featured resources or top sources, vector retrieval, graph or memory context, final generation.
+- Public persona photo resolution is part of persona materialization when a strong public image exists. Prefer owner-provided or OAuth images first, then strong public profile images from official or high-confidence public sources.
+- Marketplace cards, public share pages, authenticated previews, and chat prompts should all read from the same canonical persona artifact first and only derive missing fields second.
+
 ### Key Stats
 - **Backend**: 40+ API routers, 70+ business logic modules
 - **Frontend**: Next.js 16 with App Router, 20+ dashboard sections

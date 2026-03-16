@@ -39,6 +39,7 @@ from modules.training_metrics import (
     format_number_compact,
     get_mind_score_label,
 )
+from modules.public_profile_pack import build_public_profile_pack
 
 
 
@@ -837,6 +838,7 @@ async def get_twin_profile_insights(twin_id: str, user=Depends(get_current_user)
         "twin_id": twin_id,
         "identity_name": identity_name,
         "latest_twin_research_run_id": latest_twin_research_run_id,
+        "profile_pack": build_public_profile_pack(twin),
         "name_deep_research": name_research_summary,
         "metrics": {
             "combined": combined_metrics,
@@ -1268,7 +1270,9 @@ async def delete_twin(
             )
         
         twin_name = twin_res.data.get("name", "Unknown")
-        
+        # Capture tenant_id from the verified twin record — used to scope all deletes
+        twin_tenant_id = twin_res.data.get("tenant_id") or user.get("tenant_id")
+
         # If not hard delete, perform archive instead
         if not hard:
             settings = twin_res.data.get("settings") or {}
@@ -1393,8 +1397,14 @@ async def delete_twin(
             except Exception as e:
                 print(f"[TWINS] Note: Could not delete Pinecone vectors: {e}")
             
-            # 11. Finally delete the twin
-            delete_res = supabase.table("twins").delete().eq("id", twin_id).execute()
+            # 11. Finally delete the twin — scope by BOTH id AND tenant_id for defence-in-depth
+            delete_res = (
+                supabase.table("twins")
+                .delete()
+                .eq("id", twin_id)
+                .eq("tenant_id", twin_tenant_id)
+                .execute()
+            )
             
             if not delete_res.data:
                 raise HTTPException(status_code=500, detail="Failed to delete twin from database")

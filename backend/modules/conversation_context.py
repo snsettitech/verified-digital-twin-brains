@@ -68,7 +68,8 @@ def format_history_for_prompt(history: List[Dict[str, Any]], max_messages: int =
     
     for msg in recent:
         role = msg.get("role", "unknown")
-        content = msg.get("content", "")[:150]  # Truncate
+        # BUG #17 FIX: escape braces so history text is safe inside .format() calls
+        content = msg.get("content", "")[:150].replace("{", "{{").replace("}", "}}")
         lines.append(f"{role}: {content}")
     
     return "\n".join(lines)
@@ -175,9 +176,12 @@ async def resolve_coreferences(
     client = get_async_openai_client()
     
     try:
+        # BUG #16 FIX: escape user-controlled strings before injecting them into
+        # the format template to prevent accidental KeyError / prompt injection
+        safe_query = query.replace("{", "{{").replace("}", "}}")
         prompt = COREFERENCE_RESOLUTION_PROMPT.format(
             history=history_text,
-            query=query
+            query=safe_query
         )
         
         response = await asyncio.wait_for(

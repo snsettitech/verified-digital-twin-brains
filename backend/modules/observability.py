@@ -238,7 +238,16 @@ def get_messages(conversation_id: str):
         return []
     
     try:
-        response = supabase.table("messages").select("*").eq("conversation_id", conversation_id).order("created_at", desc=False).execute()
+        # BUG #10 FIX: add secondary sort by id so messages with the same
+        # created_at timestamp return in a deterministic, stable order
+        response = (
+            supabase.table("messages")
+            .select("*")
+            .eq("conversation_id", conversation_id)
+            .order("created_at", desc=False)
+            .order("id", desc=False)
+            .execute()
+        )
         return response.data if response.data else []
     except Exception as e:
         print(f"Error fetching messages for conversation {conversation_id}: {e}")

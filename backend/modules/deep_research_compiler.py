@@ -15,6 +15,8 @@ import logging
 import uuid as _uuid
 from typing import Any, Dict, List, Tuple
 
+from modules.public_profile_pack import build_research_profile_projection, merge_materialized_profile_settings
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -328,22 +330,52 @@ async def compile_run_to_twin(
         raise
 
     # ------------------------------------------------------------------
-    # 6. Publish bio from deep research result to twin's public profile
+    # 6. Publish a clean public profile projection from the research result.
     # ------------------------------------------------------------------
     bio = result.get("bio") or {}
     bio_text = bio.get("short") or bio.get("medium") or ""
     bio_written = False
     if bio_text:
         try:
-            twin_row = db.table("twins").select("settings").eq("id", twin_id).single().execute()
-            current_settings = (twin_row.data or {}).get("settings") or {}
-            current_public_profile = current_settings.get("public_profile") or {}
-            db.table("twins").update({
-                "settings": {
-                    **current_settings,
-                    "public_profile": {**current_public_profile, "bio": bio_text},
-                }
-            }).eq("id", twin_id).execute()
+            twin_row = (
+                db.table("twins")
+                .select("id, name, description, settings")
+                .eq("id", twin_id)
+                .single()
+                .execute()
+            )
+            current_twin = twin_row.data or {}
+            current_settings = current_twin.get("settings") or {}
+            projection = build_research_profile_projection(
+                {
+                    "id": twin_id,
+                    "name": current_twin.get("name"),
+                    "description": current_twin.get("description"),
+                    "settings": current_settings,
+                },
+                result,
+                source_flow="deep_research_compile",
+            )
+            merged_settings = merge_materialized_profile_settings(current_settings, projection)
+            projection_meta = projection.get("public_profile_meta") or {}
+            logger.info(
+                "deep_research materialization complete twin=%s run=%s completeness=%s image_status=%s image_source_type=%s",
+                twin_id,
+                run_id,
+                projection_meta.get("completeness_score"),
+                projection_meta.get("image_status"),
+                projection_meta.get("image_source_type"),
+            )
+            update_payload = {
+                "settings": merged_settings
+            }
+            if projection.get("description") or current_twin.get("description") or bio_text:
+                update_payload["description"] = (
+                    projection.get("description") or current_twin.get("description") or bio_text
+                )
+            if projection.get("specialization"):
+                update_payload["specialization"] = projection["specialization"]
+            db.table("twins").update(update_payload).eq("id", twin_id).execute()
             bio_written = True
         except Exception as exc:
             logger.warning(

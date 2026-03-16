@@ -11,6 +11,10 @@ from typing import Dict, Any, List, Optional
 import logging
 
 from modules.observability import supabase
+from modules.public_profile_pack import (
+    build_marketplace_persona_payload,
+    build_public_profile_pack,
+)
 from modules.share_links import (
     build_public_share_path,
     is_marketplace_public_twin_record,
@@ -144,7 +148,10 @@ def _normalize_public_profile(twin: Dict[str, Any]) -> Dict[str, Any]:
 
 def _coerce_score(value: Any) -> float:
     try:
-        return float(value or 0)
+        score = float(value or 0)
+        if score <= 1.0:
+            score *= 100.0
+        return max(0.0, min(score, 100.0))
     except Exception:
         return 0.0
 
@@ -154,14 +161,18 @@ def _marketplace_search_blob(item: Dict[str, Any]) -> str:
         f"{topic.get('name', '')} {topic.get('slug', '')}".strip()
         for topic in item.get("public_topics", [])
     )
+    expertise = " ".join(str(value or "") for value in item.get("areas_of_expertise", []))
     return " ".join(
         [
             str(item.get("display_name") or ""),
+            str(item.get("occupation") or ""),
             str(item.get("headline") or ""),
             str(item.get("bio") or ""),
+            str(item.get("short_description") or ""),
             str(item.get("organization") or ""),
             str(item.get("role") or ""),
             str(item.get("handle") or ""),
+            expertise,
             topic_names,
         ]
     ).lower()
@@ -295,25 +306,15 @@ async def get_public_marketplace(
         if not twin_id:
             continue
 
-        profile = _normalize_public_profile(twin)
         public_topics = topics_map.get(twin_id, [])[:6]
-        item = {
-            "twin_id": twin_id,
-            "display_name": profile["display_name"],
-            "headline": profile["headline"],
-            "bio": profile["bio"],
-            "avatar_url": profile["avatar_url"],
-            "organization": profile["organization"],
-            "role": profile["role"],
-            "mind_label": profile["mind_label"],
-            "answerability_score": score_map.get(twin_id, 0.0),
-            "verified_claims_count": claims_map.get(twin_id, 0),
-            "public_topics": public_topics,
-            "pinned_questions": profile["pinned_questions"],
-            "handle": profile["handle"],
-            "updated_at": twin.get("updated_at") or twin.get("created_at") or "",
-            "settings": profile["settings"],
-        }
+        item = build_marketplace_persona_payload(
+            twin,
+            public_topics=public_topics,
+            answerability_score=score_map.get(twin_id, 0.0),
+            verified_claims_count=claims_map.get(twin_id, 0),
+        )
+        item["updated_at"] = twin.get("updated_at") or twin.get("created_at") or ""
+        item["settings"] = _normalize_public_profile(twin)["settings"]
 
         if normalized_topic:
             topic_slugs = {str(entry.get("slug") or "").lower() for entry in public_topics}
@@ -413,22 +414,6 @@ async def get_public_profile(twin_id: str, token: str):
             }
         )
 
-    answerability_score = 0
-    try:
-        score_result = (
-            supabase.table("person_answerability_scores")
-            .select("answerability_score")
-            .eq("twin_id", twin_id)
-            .eq("scope_type", "global")
-            .eq("scope_key", "global")
-            .single()
-            .execute()
-        )
-        if score_result.data:
-            answerability_score = score_result.data.get("answerability_score", 0)
-    except Exception:
-        pass
-
     policies = {
         "require_citation": True,
         "confidence_threshold": 0.5,
@@ -451,86 +436,12 @@ async def get_public_profile(twin_id: str, token: str):
     except Exception:
         pass
 
-    public_topics = []
-    topics_result = None
-    try:
-        topic_select_variants = [
-            ("slug, name, answerability_score", "slug", "name"),
-            ("topic_slug, name, answerability_score", "topic_slug", "name"),
-            ("topic_slug, topic_name, answerability_score", "topic_slug", "topic_name"),
-        ]
-
-        topic_slug_key = "slug"
-        topic_name_key = "name"
-        last_topic_exc: Optional[Exception] = None
-        for select_clause, topic_slug_key, topic_name_key in topic_select_variants:
-            try:
-                topics_result = (
-                    supabase.table("person_topic_profiles")
-                    .select(select_clause)
-                    .eq("twin_id", twin_id)
-                    .gte("answerability_score", 60)
-                    .order("answerability_score", desc=True)
-                    .limit(6)
-                    .execute()
-                )
-                break
-            except Exception as exc:
-                last_topic_exc = exc
-                if not any(
-                    _missing_column_error(exc, column_name)
-                    for column_name in ("slug", "topic_slug", "name", "topic_name")
-                ):
-                    logger.warning("Error fetching public topics: %s", exc)
-                    break
-        else:
-            if last_topic_exc:
-                logger.warning("Error fetching public topics: %s", last_topic_exc)
-            topic_slug_key = "slug"
-            topic_name_key = "name"
-    except Exception as exc:
-        logger.warning("Error fetching public topics: %s", exc)
-        topic_slug_key = "slug"
-        topic_name_key = "name"
-
-    for topic in (topics_result.data or []) if topics_result else []:
-        public_topics.append({
-            "slug": topic.get(topic_slug_key) or topic.get("slug") or topic.get("topic_slug"),
-            "name": topic.get(topic_name_key) or topic.get("name") or topic.get("topic_name"),
-            "answerability_score": topic.get("answerability_score", 0),
-        })
-
-    verified_claims_count = 0
-    try:
-        claims_result = (
-            supabase.table("person_claims")
-            .select("id", count="exact")
-            .eq("twin_id", twin_id)
-            .eq("verification_status", "verified")
-            .eq("public_visibility", "public")
-            .execute()
-        )
-        verified_claims_count = claims_result.count or 0
-    except Exception:
-        pass
-
-    public_profile = _normalize_public_profile(twin)
-
-    return {
-        "name": public_profile["display_name"],
-        "headline": public_profile["headline"] or settings.get("headline"),
-        "bio": public_profile["bio"],
-        "organization": public_profile["organization"],
-        "role": public_profile["role"],
-        "avatar_url": public_profile["avatar_url"],
-        "pinned_questions": public_profile["pinned_questions"],
-        "answerability_score": answerability_score,
-        "verified_claims_count": verified_claims_count,
-        "public_topics": public_topics,
-        "citations_enabled": policies["require_citation"],
-        "confidence_threshold": policies["confidence_threshold"],
-        "share_config": {
-            "allow_chat": True,
-            "show_topics": len(public_topics) > 0,
-        }
+    profile_pack = build_public_profile_pack(twin)
+    profile_pack["citations_enabled"] = policies["require_citation"]
+    profile_pack["confidence_threshold"] = policies["confidence_threshold"]
+    profile_pack["share_config"] = {
+        "allow_chat": True,
+        "show_topics": len(profile_pack.get("public_topics") or []) > 0,
     }
+
+    return profile_pack
