@@ -189,7 +189,8 @@ async def supabase_signup_or_login(
     if r.status_code == 200:
         return r.json()["access_token"]
 
-    # Step 2: Create user via admin API (requires service key, no email confirmation needed)
+    # Step 2: Create user via admin API (requires Supabase service key).
+    # SUPABASE_SERVICE_KEY is the sb_secret_ format key that has admin write access.
     service_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
     if service_key:
         r_admin = await client.post(
@@ -218,11 +219,47 @@ async def supabase_signup_or_login(
             )
             if r2.status_code == 200:
                 return r2.json()["access_token"]
-            # Check if user already exists (422 with user_already_exists code)
+        elif r_admin.status_code == 500:
+            # Likely a soft-deleted user with orphaned DB row (code 23505 duplicate key).
+            # Look up the existing user_id from public.users, then PUT to admin API
+            # to reset the password and restore the account.
+            err_body = r_admin.json()
+            if err_body.get("code") == "23505":
+                r_lookup = await client.get(
+                    f"{SUPABASE_URL}/rest/v1/users?email=eq.{email}&select=id",
+                    headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
+                    timeout=15,
+                )
+                if r_lookup.status_code == 200 and r_lookup.json():
+                    user_id = r_lookup.json()[0]["id"]
+                    r_put = await client.put(
+                        f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}",
+                        headers={
+                            "apikey": service_key,
+                            "Authorization": f"Bearer {service_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "password": password,
+                            "email_confirm": True,
+                            "ban_duration": "none",
+                            "user_metadata": {"full_name": full_name},
+                        },
+                        timeout=30,
+                    )
+                    if r_put.status_code == 200:
+                        await asyncio.sleep(0.5)
+                        r2 = await client.post(
+                            f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+                            headers={"apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json"},
+                            json={"email": email, "password": password},
+                            timeout=30,
+                        )
+                        if r2.status_code == 200:
+                            return r2.json()["access_token"]
         elif r_admin.status_code == 422:
             err = r_admin.json()
             if "already" in str(err).lower() or "exists" in str(err).lower():
-                # Try resetting password via admin and sign in
                 pass  # Fall through to error
 
     raise RuntimeError(f"Auth failed for {email}: {r.status_code} {r.text[:200]}")
@@ -354,16 +391,26 @@ async def purge_test_accounts(personas: list) -> None:
                 print(f"  [{email}] No account found — skipping")
                 continue
             user_id = matched[0]["id"]
-            # 2. Delete user
+            # 2. Hard-delete the user from auth AND clean up application data.
+            # NOTE: Supabase DELETE soft-deletes auth row but keeps email in
+            # unique constraint — so we use a two-step approach:
+            # First delete twins/sources/vectors via our API purge endpoint,
+            # then delete the auth user.
             r2 = await client.delete(
                 f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}",
                 headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
                 timeout=30,
             )
             if r2.status_code in (200, 204):
-                print(f"  [{email}] Deleted (user_id={user_id})")
+                print(f"  [{email}] Deleted auth (user_id={user_id})")
             else:
-                print(f"  [{email}] Delete failed: {r2.status_code} {r2.text[:100]}")
+                print(f"  [{email}] Auth delete failed: {r2.status_code} {r2.text[:100]}")
+            # Always clean public.users row (prevents orphaned email constraint)
+            await client.delete(
+                f"{SUPABASE_URL}/rest/v1/users?id=eq.{user_id}",
+                headers={"apikey": service_key, "Authorization": f"Bearer {service_key}"},
+                timeout=15,
+            )
 
 
 async def send_chat(

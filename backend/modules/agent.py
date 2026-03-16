@@ -101,10 +101,10 @@ ADAPTIVE_GROUNDING_MID_SCORE = float(os.getenv("ADAPTIVE_GROUNDING_MID_SCORE", "
 ADAPTIVE_GROUNDING_MID_OVERLAP = float(os.getenv("ADAPTIVE_GROUNDING_MID_OVERLAP", "0.12"))
 PLANNER_SECOND_PASS_RETRIEVAL_TOP_K = max(8, int(os.getenv("PLANNER_SECOND_PASS_RETRIEVAL_TOP_K", "12")))
 CONVERSATIONAL_REALIZER_ENABLED = (
-    os.getenv("CONVERSATIONAL_REALIZER_ENABLED", "false").lower() == "true"
+    os.getenv("CONVERSATIONAL_REALIZER_ENABLED", "true").lower() == "true"
 )
 CONVERSATIONAL_REALIZER_MIN_CONFIDENCE = float(
-    os.getenv("CONVERSATIONAL_REALIZER_MIN_CONFIDENCE", "0.65")
+    os.getenv("CONVERSATIONAL_REALIZER_MIN_CONFIDENCE", "0.0")
 )
 
 
@@ -151,6 +151,29 @@ def _merge_twin_row_settings(twin_row: Optional[Dict[str, Any]]) -> Dict[str, An
         merged["tenant_id"] = tenant_id
 
     return merged
+
+
+def _load_active_persona_spec_v2_row(twin_id: str) -> Optional[Dict[str, Any]]:
+    """Synchronously load the active v2 persona spec row for prompt/render paths."""
+    try:
+        from modules.persona_spec_v2 import is_v2_spec
+
+        result = (
+            supabase.table("persona_specs")
+            .select("*")
+            .eq("twin_id", twin_id)
+            .eq("status", "active")
+            .order("published_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+        for row in result.data or []:
+            spec_data = row.get("spec", {})
+            if is_v2_spec(spec_data):
+                return row
+    except Exception as exc:
+        print(f"[AGENT] Warning: Failed to load active v2 persona spec for {twin_id}: {exc}")
+    return None
 
 def get_checkpointer():
     """
@@ -213,12 +236,14 @@ async def get_owner_style_profile(twin_id: str, force_refresh: bool = False) -> 
         
         # B. Fetch some OPINION chunks from Pinecone for style variety
         from modules.clients import get_pinecone_index
+        from modules.embeddings import _resolve_target_dimension
         from modules.twin_namespace import get_namespace_candidates_for_twin
         index = get_pinecone_index()
         try:
+            metadata_probe_vector = [0.1] * int(_resolve_target_dimension() or 3072)
             for namespace in get_namespace_candidates_for_twin(twin_id=twin_id, include_legacy=True):
                 opinion_search = index.query(
-                    vector=[0.1] * 3072, # Use non-zero vector for metadata filtering
+                    vector=metadata_probe_vector, # Use non-zero vector for metadata filtering
                     filter={"category": {"$eq": "OPINION"}},
                     top_k=20, # Increased for better analysis
                     include_metadata=True,
@@ -460,8 +485,7 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
     
     if has_v2_persona:
         try:
-            from modules.persona_spec_store_v2 import get_active_persona_spec_v2
-            v2_row = get_active_persona_spec_v2(twin_id)
+            v2_row = _load_active_persona_spec_v2_row(twin_id)
             if v2_row and v2_row.get("spec"):
                 v2_persona_spec = v2_row.get("spec")
                 # Build persona section from v2 spec
@@ -2116,23 +2140,11 @@ def _should_use_conversational_realizer(
 
     if not CONVERSATIONAL_REALIZER_ENABLED:
         return False
+    # Only run LLM realizer for owner chat (not public/visitor sessions)
     if str(state.get("interaction_context") or "").strip().lower() != "owner_chat":
         return False
-    if answerability_state not in {"direct", "derivable"}:
-        return False
-    if not citations:
-        return False
-    if float(confidence or 0.0) < CONVERSATIONAL_REALIZER_MIN_CONFIDENCE:
-        return False
+    # Never paraphrase verbatim-quote or strict-grounding requests
     if quote_intent or strict_grounding:
-        return False
-    if len(context_data) < 2:
-        return False
-    if top_score <= 0.55:
-        return False
-    if not owner_directed:
-        return False
-    if not namespace_resolved:
         return False
     action = ""
     if isinstance(state.get("routing_decision"), dict):
@@ -2189,7 +2201,7 @@ def _build_source_faithful_response_text(
         return realized_text or fallback_text
 
     partial_summary = " ".join(points[:2]).strip() or fallback_text
-    if len(context_data) < 2 or top_score < 0.65:
+    if len(context_data) < 1 or top_score < 0.40:
         brief_take = partial_summary
         if not brief_take or brief_take == fallback_text:
             if context_data:
@@ -2671,7 +2683,14 @@ async def planner_node(state: TwinState):
                 "teaching_questions": clarification_questions[:3],
                 "clarification_options": clarification_options,
                 "clarification_hint": clarification_hint,
-                "render_strategy": "source_faithful",
+                # Use conversational_realizer even for thin-evidence — the system prompt
+                # handles it with "WHEN EVIDENCE IS THIN" instructions (persona-quality fallback).
+                "render_strategy": (
+                    "conversational_realizer"
+                    if CONVERSATIONAL_REALIZER_ENABLED
+                    and str(state.get("interaction_context") or "").strip().lower() == "owner_chat"
+                    else "source_faithful"
+                ),
                 "reasoning_trace": str(answerability.get("reasoning") or ""),
                 "answerability": answerability,
                 "telemetry": planner_telemetry,
@@ -3331,8 +3350,7 @@ async def run_agent_stream(
         if final_response_text and settings.get("persona_v2_source") == "link-compile":
             try:
                 # Get persona spec for validation
-                from modules.persona_spec_store_v2 import get_active_persona_spec_v2
-                persona_row = get_active_persona_spec_v2(twin_id)
+                persona_row = _load_active_persona_spec_v2_row(twin_id)
                 if persona_row and persona_row.get("spec"):
                     validation_result = await validate_link_first_response(
                         response_text=final_response_text,
