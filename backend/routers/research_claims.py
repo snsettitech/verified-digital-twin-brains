@@ -44,25 +44,6 @@ router = APIRouter(tags=["research-claims"])
 PC_TRIGGER_ON_RUNTIME_PUBLISH = os.getenv("PC_TRIGGER_ON_RUNTIME_PUBLISH", "true").lower() == "true"
 
 
-# =============================================================================
-# Compatibility phase-check hooks (always enabled)
-# =============================================================================
-
-def _check_phase_8_enabled():
-    """No-op: Phase 8 is always enabled."""
-    return None
-
-
-def _check_phase_9_enabled():
-    """No-op: Phase 9 is always enabled."""
-    return None
-
-
-def _check_phase_10_enabled():
-    """No-op: Phase 10 is always enabled."""
-    return None
-
-
 async def _trigger_person_completeness_pipeline(
     twin_id: str,
     research_run_id: str,
@@ -219,9 +200,6 @@ async def continue_claims_endpoint(
     Enrichment extracts claims from confirmed sources and verifies them
     against ingested content.
     """
-    # Check feature flag
-    _check_phase_8_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -288,9 +266,6 @@ async def get_claims_status_endpoint(
     
     Returns current enrichment progress and claim counts by status.
     """
-    # Check feature flag
-    _check_phase_8_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -365,9 +340,6 @@ async def list_claims_endpoint(
     - verification_status: pending, supported, insufficient_evidence, conflicting, needs_review
     - claim_type: preference, belief, heuristic, value, experience, boundary, uncertain
     """
-    # Check feature flag
-    _check_phase_8_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -469,9 +441,6 @@ async def resolve_claim_endpoint(
     
     Allows users to confirm, reject, or mark claims for review.
     """
-    # Check feature flag
-    _check_phase_8_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -676,9 +645,6 @@ async def continue_web_verification_endpoint(
     Web verification searches public web sources to verify claims
     extracted during Phase 8.
     """
-    # Check feature flags
-    _check_phase_9_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -747,9 +713,6 @@ async def get_web_verification_status_endpoint(
     
     Returns current verification progress and claim counts by status.
     """
-    # Check feature flags
-    _check_phase_9_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -895,9 +858,6 @@ async def get_web_evidence_endpoint(
     
     Returns supporting/conflicting evidence found during web verification.
     """
-    # Check feature flags
-    _check_phase_9_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -961,9 +921,6 @@ async def resolve_web_verification_endpoint(
     
     Allows users to override web verification results.
     """
-    # Check feature flags
-    _check_phase_9_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1193,9 +1150,6 @@ async def continue_claim_finalization_endpoint(
     Finalization combines Phase 8 local + Phase 9 web verification into
     final claim decisions and runs consistency checks.
     """
-    # Check feature flags
-    _check_phase_10_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1263,9 +1217,6 @@ async def get_finalization_status_endpoint(
     
     Returns current finalization progress and claim/issue counts.
     """
-    # Check feature flags
-    _check_phase_10_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1336,9 +1287,6 @@ async def list_finalized_claims_endpoint(
     Filters:
     - final_status: accepted, rejected, needs_review, unresolved, overridden
     """
-    # Check feature flags
-    _check_phase_10_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1419,9 +1367,6 @@ async def list_consistency_issues_endpoint(
     - status: open, resolved, dismissed
     - severity: low, medium, high
     """
-    # Check feature flags
-    _check_phase_10_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1501,9 +1446,6 @@ async def resolve_consistency_issue_endpoint(
     - claims_updated: Underlying claims were modified
     - manual_override: Manual resolution applied
     """
-    # Check feature flags
-    _check_phase_10_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1573,9 +1515,6 @@ async def finalize_override_endpoint(
     
     Use with caution - creates audit trail with user ID and reason.
     """
-    # Check feature flags
-    _check_phase_10_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1656,11 +1595,6 @@ from datetime import datetime  # Import at end to avoid circular issues
 # =============================================================================
 # Phase 11: Human Adjudication + Canonical Claim Review
 # =============================================================================
-
-def _check_phase_11_enabled():
-    """No-op: Phase 11 is always enabled."""
-    return None
-
 
 # Phase 11 schemas
 class ReviewQueueItemResponse(BaseModel):
@@ -1815,7 +1749,6 @@ async def get_review_queue_endpoint(
     
     Returns claims that need review with their current canonical status.
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -1896,7 +1829,6 @@ async def get_review_queue_summary_endpoint(
     """
     Get summary statistics for the review queue (Phase 11).
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -1953,7 +1885,6 @@ async def adjudicate_claim_endpoint(
     
     Idempotent via idempotency_key.
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2031,7 +1962,6 @@ async def lock_claim_endpoint(
     
     Only admins can unlock locked claims.
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2104,7 +2034,6 @@ async def unlock_claim_endpoint(
     
     Requires admin privileges if locked by another user.
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2174,7 +2103,6 @@ async def get_adjudication_history_endpoint(
     """
     Get the adjudication history (audit trail) for a claim (Phase 11).
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2244,7 +2172,6 @@ async def apply_issue_action_endpoint(
     
     Actions: confirm_conflict, dismiss, merge_duplicate, split_context, defer
     """
-    _check_phase_11_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2301,11 +2228,6 @@ async def apply_issue_action_endpoint(
 # =============================================================================
 # Phase 12: Runtime Publication + Deployment Readiness
 # =============================================================================
-
-def _check_phase_12_enabled():
-    """No-op: Phase 12 is always enabled."""
-    return None
-
 
 # Phase 12 schemas
 class PublishRuntimeClaimsRequest(BaseModel):
@@ -2430,7 +2352,6 @@ async def publish_runtime_claims_endpoint(
     Idempotent: Can be safely retried. Uses correlation_id for tracing.
     Applies publication rules to determine which claims are publishable.
     """
-    _check_phase_12_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2514,7 +2435,6 @@ async def list_runtime_claims_endpoint(
     
     Returns claims in the runtime publication layer with their publication status.
     """
-    _check_phase_12_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2598,7 +2518,6 @@ async def get_publication_status_endpoint(
     """
     Get the publication status for a research run (Phase 12).
     """
-    _check_phase_12_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
@@ -2661,8 +2580,6 @@ async def backfill_publication_endpoint(
     
     Admin-only endpoint. Supports dry-run mode for preview.
     """
-    _check_phase_12_enabled()
-    
     # Check admin access (simplified - should use proper admin check)
     if not user.get("is_admin", False):
         raise HTTPException(
@@ -2732,7 +2649,6 @@ async def export_runtime_claims_endpoint(
     
     Formats: json, csv
     """
-    _check_phase_12_enabled()
     verify_twin_ownership(twin_id, user)
     
     try:
