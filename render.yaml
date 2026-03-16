@@ -90,11 +90,11 @@ services:
       - key: INFERENCE_PROVIDER
         value: "openai"
       - key: OPENAI_MODEL
-        value: "gpt-4o"
+        value: "gpt-4.1"
       - key: OPENAI_JSON_MODEL
-        value: "gpt-4o-mini"
+        value: "gpt-4.1-mini"
       - key: GEMINI_MODEL
-        value: "gemini-2.0-flash"
+        value: "gemini-2.5-flash"
       - key: GEMINI_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: CONVERSATIONAL_REALIZER_ENABLED
@@ -106,9 +106,9 @@ services:
         value: "true"
       - key: QUERY_REWRITING_ENABLED
         value: "true"
-      # LLM Model Selection (Latest: gpt-4o, Cost-effective: gpt-4o-mini)
+      # LLM Model Selection (gpt-4.1 released April 2025)
       - key: QUERY_REWRITING_MODEL
-        value: "gpt-4o"  # Latest OpenAI model (gpt-4o, gpt-4o-mini, o1-preview, o1-mini)
+        value: "gpt-4.1-mini"
       - key: QUERY_REWRITING_MAX_HISTORY
         value: "5"
       - key: QUERY_REWRITING_MIN_CONFIDENCE
@@ -235,11 +235,11 @@ services:
       - key: INFERENCE_PROVIDER
         value: "openai"
       - key: OPENAI_MODEL
-        value: "gpt-4o"
+        value: "gpt-4.1"
       - key: OPENAI_JSON_MODEL
-        value: "gpt-4o-mini"
+        value: "gpt-4.1-mini"
       - key: GEMINI_MODEL
-        value: "gemini-2.0-flash"
+        value: "gemini-2.5-flash"
       - key: GEMINI_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: CONVERSATIONAL_REALIZER_ENABLED
@@ -252,7 +252,7 @@ services:
       - key: QUERY_REWRITING_ENABLED
         value: "true"
       - key: QUERY_REWRITING_MODEL
-        value: "gpt-4o"  # Latest OpenAI model
+        value: "gpt-4.1-mini"
       - key: QUERY_REWRITING_MAX_HISTORY
         value: "5"
       - key: QUERY_REWRITING_MIN_CONFIDENCE
