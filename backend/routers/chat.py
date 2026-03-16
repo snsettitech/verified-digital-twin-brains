@@ -1251,10 +1251,21 @@ async def resolve_share_handle(handle: str):
     Resolve a twin handle to its twin_id and share_token.
     This is used to support /share/handle style URLs.
     """
+    from modules.share_links import ensure_share_token, is_publicly_accessible_twin_record
+
     try:
         # Search twins by handle in settings
         # In a high-traffic system, we'd use a indexed column or specific lookup
-        res = supabase.table("twins").select("id, settings").execute()
+        try:
+            res = supabase.table("twins").select("id, settings, status, is_active").execute()
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "is_active" in msg and (
+                "does not exist" in msg or "could not find" in msg or "pgrst204" in msg
+            ):
+                res = supabase.table("twins").select("id, settings, status").execute()
+            else:
+                raise
         
         target_twin = None
         for twin in res.data:
@@ -1270,8 +1281,15 @@ async def resolve_share_handle(handle: str):
         widget_settings = settings.get("widget_settings", {})
         share_token = widget_settings.get("share_token")
         
-        if not widget_settings.get("public_share_enabled") or not share_token:
-             raise HTTPException(status_code=403, detail="Sharing is disabled for this twin")
+        if not is_publicly_accessible_twin_record(target_twin):
+            raise HTTPException(status_code=403, detail="Sharing is disabled for this twin")
+
+        if not share_token:
+            share_token = ensure_share_token(
+                target_twin["id"],
+                enable_public_share=bool(widget_settings.get("public_share_enabled", False)),
+                twin_row=target_twin,
+            )
 
         return {
             "twin_id": target_twin["id"],

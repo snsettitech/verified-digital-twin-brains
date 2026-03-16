@@ -335,32 +335,50 @@ async def compile_deep_research_to_twin(
         )
 
     # ------------------------------------------------------------------
-    # 1. Build a natural-language text document for Pinecone indexing
+    # 1. Build text document + granular chunk list for Pinecone indexing
+    #
+    # Each Q&A pair, claim, and timeline event is a separate vector so
+    # retrieval can surface the most relevant fact for each query rather
+    # than always returning the same monolithic bio blob.
     # ------------------------------------------------------------------
     lines: list[str] = []
+    chunk_entries: list[dict] = []  # per-item chunks for chunk_entries_override
+
     bio = result.get("bio") or {}
     if bio.get("medium"):
         lines.append(bio["medium"])
+        chunk_entries.append({"text": bio["medium"], "block_type": "answer_text", "is_answer_text": True})
 
     profile_summary = result.get("profile_summary") or {}
+    summary_parts: list[str] = []
     if profile_summary.get("what_they_do"):
-        lines.append("What they do: " + "; ".join(profile_summary["what_they_do"]))
+        summary_parts.append("What they do: " + "; ".join(profile_summary["what_they_do"]))
     if profile_summary.get("public_roles"):
-        lines.append("Public roles: " + ", ".join(profile_summary["public_roles"]))
+        summary_parts.append("Public roles: " + ", ".join(profile_summary["public_roles"]))
     if profile_summary.get("organizations"):
-        lines.append("Organizations: " + ", ".join(profile_summary["organizations"]))
+        summary_parts.append("Organizations: " + ", ".join(profile_summary["organizations"]))
+    if summary_parts:
+        summary_text = "\n".join(summary_parts)
+        lines.append(summary_text)
+        chunk_entries.append({"text": summary_text, "block_type": "answer_text", "is_answer_text": True})
 
     for item in result.get("timeline") or []:
         if item.get("event"):
-            lines.append(f"{item.get('date_or_range', '')}: {item['event']}")
+            event_text = f"{item.get('date_or_range', '')}: {item['event']}"
+            lines.append(event_text)
+            chunk_entries.append({"text": event_text, "block_type": "answer_text", "is_answer_text": True})
 
     for claim in result.get("claims") or []:
         if claim.get("text"):
             lines.append(claim["text"])
+            chunk_entries.append({"text": claim["text"], "block_type": "answer_text", "is_answer_text": True})
 
     for qa in result.get("prepared_question_answers") or []:
         if qa.get("question") and qa.get("answer"):
-            lines.append(f"Q: {qa['question']}\nA: {qa['answer']}")
+            qa_text = f"Q: {qa['question']}\nA: {qa['answer']}"
+            lines.append(qa_text)
+            # Index Q&A pairs as separate vectors — critical for per-question retrieval
+            chunk_entries.append({"text": qa_text, "block_type": "answer_text", "is_answer_text": True})
 
     text_doc = "\n\n".join(lines).strip()
     if not text_doc:
@@ -383,11 +401,14 @@ async def compile_deep_research_to_twin(
         "status": "processing",
     }).execute()
 
+    # Use per-item chunks so each Q&A pair / claim gets its own vector.
+    # Falls back to automatic chunking if the override list is empty.
     await process_and_index_text(
         source_id=source_id,
         twin_id=twin_id,
         text=text_doc,
         provider="deep_research",
+        chunk_entries_override=chunk_entries if chunk_entries else None,
     )
 
     supabase.table("sources").update({"status": "live"}).eq("id", source_id).execute()

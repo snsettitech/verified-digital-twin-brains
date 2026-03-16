@@ -46,6 +46,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
     {
         title: 'Publish',
         items: [
+            { name: 'Marketplace', href: '/marketplace',                   icon: 'group' },
             { name: 'Share',    href: '/dashboard/share',               icon: 'share' },
             { name: 'Preview',  href: '/dashboard/simulator/public',    icon: 'profile' },
             { name: 'Widget',   href: '/dashboard/widget',              icon: 'code'  },

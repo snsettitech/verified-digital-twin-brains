@@ -43,3 +43,7 @@ def test_access_groups_compat_routes_exist():
 def test_link_compile_compat_routes_exist():
     assert _has_route("/persona/link-compile/twins/{twin_id}/claims/{claim_id}/verify", "POST")
     assert _has_route("/twins/{twin_id}/transition/{target_state}", "POST")
+
+
+def test_public_marketplace_route_exists():
+    assert _has_route("/public/marketplace", "GET")

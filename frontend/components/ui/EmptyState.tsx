@@ -17,6 +17,7 @@ interface EmptyStateProps {
   description: string;
   primaryAction?: EmptyStateAction;
   secondaryAction?: EmptyStateAction;
+  theme?: 'light' | 'dark';
   className?: string;
 }
 
@@ -166,8 +167,12 @@ export function EmptyState({
   description,
   primaryAction,
   secondaryAction,
+  theme = 'light',
   className = '',
 }: EmptyStateProps) {
+  const titleClass = theme === 'dark' ? 'text-white' : 'text-slate-900';
+  const descriptionClass = theme === 'dark' ? 'text-slate-300' : 'text-slate-500';
+
   return (
     <div className={`flex flex-col items-center justify-center text-center p-8 ${className}`}>
       {/* Illustration */}
@@ -176,12 +181,12 @@ export function EmptyState({
       </div>
 
       {/* Title */}
-      <h3 className="text-xl font-bold text-slate-900 mb-2">
+      <h3 className={`text-xl font-bold mb-2 ${titleClass}`}>
         {title}
       </h3>
 
       {/* Description */}
-      <p className="text-slate-500 max-w-sm mb-6">
+      <p className={`max-w-sm mb-6 ${descriptionClass}`}>
         {description}
       </p>
 

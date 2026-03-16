@@ -129,6 +129,10 @@ export default function Home() {
                 Pricing
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
               </button>
+              <Link href="/marketplace" className="text-sm text-slate-400 hover:text-white transition-colors relative group">
+                Marketplace
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
+              </Link>
               <button onClick={() => scrollToSection('faq')} className="text-sm text-slate-400 hover:text-white transition-colors relative group">
                 FAQ
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
@@ -184,6 +188,7 @@ export default function Home() {
               <button onClick={() => scrollToSection('features')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">Features</button>
               <button onClick={() => scrollToSection('how-it-works')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">How It Works</button>
               <button onClick={() => scrollToSection('pricing')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">Pricing</button>
+              <Link href="/marketplace" className="block text-sm text-slate-400 hover:text-white transition-colors">Marketplace</Link>
               <button onClick={() => scrollToSection('faq')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">FAQ</button>
               {user ? (
                 <>
