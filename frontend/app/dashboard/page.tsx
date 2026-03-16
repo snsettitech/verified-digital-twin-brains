@@ -530,7 +530,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-black text-emerald-600">{stats.responseRate.toFixed(1)}%</p>
                 </div>
                 <p className="text-xs text-emerald-500 mt-2">
-                  {stats.responseRate >= 90 ? '✅ Excellent! Your twin responds to most questions.' :
+                  {stats.responseRate >= 90 ? '✅ Excellent! Your persona responds to most questions.' :
                     stats.responseRate >= 70 ? '⚠️ Good, but some questions may need more verified knowledge.' :
                       '❌ Low response rate. Consider adding more knowledge.'}
                 </p>

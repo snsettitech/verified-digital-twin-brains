@@ -2005,7 +2005,16 @@ async def continue_finalize_endpoint(
             research_run_id=research_run_id,
             twin_id=twin_id,
         )
-        
+
+        # Advance twin status to persona_built so the chat gate is unlocked.
+        # Mirror what deep_research.py does on the LinkedIn path.
+        try:
+            from modules.observability import supabase as _supabase
+            _supabase.table("twins").update({"status": "persona_built"}).eq("id", twin_id).execute()
+            logger.info("Twin %s status set to persona_built after research finalization", twin_id)
+        except Exception as _e:
+            logger.warning("Could not advance twin status to persona_built for %s: %s", twin_id, _e)
+
         return ContinueFinalizeResponse(
             research_run_id=research_run_id,
             twin_id=twin_id,

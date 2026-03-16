@@ -479,8 +479,8 @@ export default function Home() {
 
           <div className="space-y-4">
             {[
-              { q: 'How is this different from ChatGPT?', a: 'Your twin only answers from your verified knowledge sources—no hallucinations, no generic answers. It learns your specific voice, decision style, and expertise boundaries through structured training, not just prompt engineering.' },
-              { q: 'Can I update my twin\'s knowledge?', a: 'Yes! Add new documents, URLs, or text anytime. Your twin automatically incorporates new knowledge while maintaining version control—you can roll back to previous versions if needed.' },
+              { q: 'How is this different from ChatGPT?', a: 'Your persona only answers from your verified knowledge sources—no hallucinations, no generic answers. It learns your specific voice, decision style, and expertise boundaries through structured training, not just prompt engineering.' },
+              { q: 'Can I update my persona\'s knowledge?', a: 'Yes! Add new documents, URLs, or text anytime. Your persona automatically incorporates new knowledge while maintaining version control—you can roll back to previous versions if needed.' },
               { q: 'Is my data private?', a: 'Absolutely. Your training data and knowledge sources are isolated per tenant with Row Level Security in PostgreSQL. We never use your data to train models for other users. Full export and deletion supported.' },
               { q: 'What platforms can I share to?', a: 'Share via public link, embed as a widget on your website, or integrate via API into Slack, Discord, WhatsApp, or your own application. Full white-label options available on Pro and Enterprise plans.' },
             ].map((faq, i) => (

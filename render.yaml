@@ -124,7 +124,7 @@ services:
         value: "true"
       # Deep Research Runtime Controls
       - key: DEEP_RESEARCH_ENABLED
-        value: "false"
+        value: "true"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
         value: "true"
       - key: NAME_RESEARCH_METRICS_QA_ENABLED
@@ -144,6 +144,23 @@ services:
       - key: OPENAI_DEEP_RESEARCH_MODEL
         value: "o3"
       - key: RUNTIME_CONFIDENCE_GATE_ENABLED
+        value: "false"
+      # Graph Memory (Neo4j + Graphiti) — values set in Render dashboard
+      - key: GRAPH_MEMORY_ENABLED
+        value: "true"
+      - key: SINGLE_PROFILE_SCOPE_ENABLED
+        value: "true"
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      # Redis (caching) — value set in Render dashboard
+      - key: REDIS_URL
+        sync: false
+      # Production mode
+      - key: DEV_MODE
         value: "false"
 
     # Ephemeral disk for temp files
@@ -243,7 +260,7 @@ services:
       - key: RETRIEVAL_HYDE_ENABLED
         value: "true"
       - key: DEEP_RESEARCH_ENABLED
-        value: "false"
+        value: "true"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
         value: "true"
       - key: NAME_RESEARCH_METRICS_QA_ENABLED
@@ -258,3 +275,17 @@ services:
         value: "exa"
       - key: OPENAI_DEEP_RESEARCH_MODEL
         value: "o3"
+      # Graph Memory (Neo4j + Graphiti) — values set in Render dashboard
+      - key: GRAPH_MEMORY_ENABLED
+        value: "true"
+      - key: SINGLE_PROFILE_SCOPE_ENABLED
+        value: "true"
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      # Production mode
+      - key: DEV_MODE
+        value: "false"

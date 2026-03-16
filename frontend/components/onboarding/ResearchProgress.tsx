@@ -502,11 +502,11 @@ export function ResearchProgress({
 
             {summary.readiness?.is_ready ? (
               <div className="text-green-400 text-sm">
-                ✓ Your twin is ready to chat!
+                ✓ Your persona is ready to chat!
               </div>
             ) : (
               <div className="text-amber-400 text-sm">
-                ⚠️ Your twin can chat but may need more sources for better responses.
+                ⚠️ Your persona can chat but may need more sources for better responses.
               </div>
             )}
           </div>

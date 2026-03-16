@@ -53,7 +53,7 @@ const KnowledgeInsights = ({ profile }: { profile: KnowledgeProfile | null }) =>
             style={{ width: `${opinionPercent}%` }}
           ></div>
         </div>
-        <p className="text-[10px] mt-4 opacity-60 font-medium">Your twin is {opinionPercent > factPercent ? 'more opinionated' : 'more factual'}.</p>
+        <p className="text-[10px] mt-4 opacity-60 font-medium">Your persona is {opinionPercent > factPercent ? 'more opinionated' : 'more factual'}.</p>
       </div>
 
       {/* Tone Profile Card */}

@@ -192,7 +192,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
       <div>
         <h3 className="text-lg font-semibold text-slate-900">Voice Settings</h3>
         <p className="text-sm text-slate-500 mt-1">
-          Configure how your twin sounds when reading responses aloud.
+          Configure how your persona sounds when reading responses aloud.
         </p>
       </div>
 

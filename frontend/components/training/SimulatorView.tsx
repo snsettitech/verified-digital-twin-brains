@@ -44,7 +44,7 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
             <div className="flex flex-col h-full bg-[#f8fafc] text-slate-900 font-sans p-6 md:p-10 rounded-2xl">
                 <div className="flex items-center justify-center flex-1">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-600"></div>
-                    <span className="ml-3 text-slate-600">Loading your twin...</span>
+                    <span className="ml-3 text-slate-600">Loading your persona...</span>
                 </div>
             </div>
         );

@@ -217,10 +217,10 @@ export function EmptyTwinNoActivity({ twinName }: { twinName?: string }) {
   return (
     <EmptyState
       illustration="robot-sleeping"
-      title={twinName ? `${twinName} is ready` : 'Your twin is ready'}
-      description="Your twin is ready but hasn't had any conversations yet. Test it out!"
+      title={twinName ? `${twinName} is ready` : 'Your persona is ready'}
+      description="Your persona is ready but hasn't had any conversations yet. Test it out!"
       primaryAction={{
-        label: 'Test Your Twin',
+        label: 'Test Your Persona',
         href: '/dashboard/simulator',
       }}
     />
@@ -232,9 +232,9 @@ export function EmptyEscalations() {
     <EmptyState
       illustration="checkmark"
       title="You're all caught up!"
-      description="No questions need your review. Your twin is handling things beautifully."
+      description="No questions need your review. Your persona is handling things beautifully."
       primaryAction={{
-        label: 'Test Your Twin',
+        label: 'Test Your Persona',
         href: '/dashboard/simulator',
       }}
     />
@@ -246,7 +246,7 @@ export function EmptyKnowledge({ onAddSource }: { onAddSource?: () => void }) {
     <EmptyState
       illustration="knowledge-empty"
       title="Build your knowledge base"
-      description="Upload documents, connect URLs, or paste text to build your twin knowledge."
+      description="Upload documents, connect URLs, or paste text to build your persona knowledge."
       primaryAction={{
         label: 'Add Source',
         onClick: onAddSource,
