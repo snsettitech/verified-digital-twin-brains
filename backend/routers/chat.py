@@ -29,6 +29,7 @@ from modules.clarification_manager import build_clarification
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from modules.grounding_policy import get_grounding_policy
 from modules.deepagents_policy import classify_deepagents_intent
+from modules.fastpath_intent_router import classify_fastpath_intent
 import modules.inference_router as inference_router
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
@@ -112,6 +113,101 @@ _GROUNDING_STOPWORDS = {
 
 def _uncertainty_message(interaction_context: Optional[str]) -> str:
     return f"{UNCERTAINTY_RESPONSE}{owner_guidance_suffix(interaction_context)}"
+
+
+def _first_sentence(text: Any) -> str:
+    normalized = re.sub(r"\s+", " ", str(text or "").strip())
+    if not normalized:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)
+    return parts[0].strip()
+
+
+def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, str]]:
+    try:
+        result = (
+            supabase.table("twins")
+            .select("id, name, description, settings")
+            .eq("id", twin_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.debug("Public identity snapshot load failed for %s: %s", twin_id, exc)
+        return None
+
+    row = (result.data or [None])[0]
+    if not isinstance(row, dict):
+        return None
+
+    settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
+    public_profile = settings.get("public_profile") if isinstance(settings.get("public_profile"), dict) else {}
+
+    display_name = (
+        str(public_profile.get("display_name") or "").strip()
+        or str(settings.get("name") or "").strip()
+        or str(row.get("name") or "").strip()
+    )
+    headline = str(public_profile.get("headline") or settings.get("tagline") or "").strip()
+    role = str(public_profile.get("role") or "").strip()
+    organization = str(public_profile.get("organization") or "").strip()
+    bio = (
+        str(public_profile.get("bio") or "").strip()
+        or str(settings.get("public_intro") or "").strip()
+        or str(settings.get("description") or "").strip()
+        or str(row.get("description") or "").strip()
+    )
+
+    if not display_name:
+        return None
+
+    return {
+        "display_name": display_name,
+        "headline": headline,
+        "role": role,
+        "organization": organization,
+        "bio": bio,
+    }
+
+
+def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
+    snapshot = _load_public_identity_snapshot(twin_id)
+    if not snapshot:
+        return None
+
+    display_name = snapshot["display_name"]
+    role = snapshot["role"]
+    organization = snapshot["organization"]
+    headline = snapshot["headline"]
+    bio_sentence = _first_sentence(snapshot["bio"])
+
+    descriptor = ""
+    if role and organization:
+        descriptor = f"{role} at {organization}"
+    elif role:
+        descriptor = role
+    elif headline:
+        descriptor = headline
+
+    if intent == "authenticity_disclosure":
+        base = f"I'm a public digital version of {display_name}"
+        if descriptor:
+            base += f", {descriptor}"
+        base += "."
+    elif intent == "scope_help":
+        scope = descriptor or "the areas this profile is known for"
+        base = f"I can help you think through {scope} from {display_name}'s perspective."
+        if bio_sentence:
+            base = f"{base} {bio_sentence}"
+    else:
+        base = f"I'm {display_name}"
+        if descriptor:
+            base += f", {descriptor}"
+        base += "."
+        if bio_sentence:
+            base = f"{base} {bio_sentence}"
+
+    return f"{base.strip()} What are you trying to figure out right now?"
 
 
 def _build_identity_gate_clarification_hint(gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -3529,7 +3625,106 @@ async def public_chat_endpoint(
     allowed, status = check_rate_limit(rate_key, "ip", "requests_per_minute", 10)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
-    
+
+    public_fastpath = classify_fastpath_intent(request.message)
+    public_fastpath_text = None
+    if public_fastpath.get("matched"):
+        public_fastpath_text = _build_public_fastpath_message(
+            twin_id,
+            str(public_fastpath.get("intent") or "").strip(),
+        )
+    if public_fastpath_text:
+        decision_payload = {
+            "intent": "answer",
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+            "action": "answer",
+            "confidence": float(public_fastpath.get("confidence") or 0.0),
+            "required_inputs_missing": [],
+            "clarifying_questions": [],
+        }
+        return {
+            "status": "answer",
+            "message": public_fastpath_text,
+            "response": public_fastpath_text,
+            "response_type": "answer",
+            "requires_user_input": False,
+            "citations": [],
+            "citation_details": [],
+            "confidence_score": float(public_fastpath.get("confidence") or 0.0),
+            "owner_memory_refs": [],
+            "owner_memory_topics": [],
+            "clarification_hint": None,
+            "clarification_options": [],
+            "dialogue_mode": "IDENTITY_FACT",
+            "intent_label": "meta_or_system",
+            "workflow_intent": "answer",
+            "module_ids": [],
+            "routing_decision": decision_payload,
+            "render_strategy": "source_faithful",
+            "query_class": "identity",
+            "quote_intent": False,
+            "answerability_state": "direct",
+            "planner_action": "answer",
+            "retrieval_stats": {
+                "chunk_count": 0,
+                "dense_top1": 0.0,
+                "dense_top5_avg": 0.0,
+                "sparse_top1": 0.0,
+                "sparse_top5_avg": 0.0,
+                "rerank_top1": 0.0,
+                "rerank_top5_avg": 0.0,
+                "evidence_block_counts": {},
+            },
+            "selected_evidence_block_types": [],
+            "debug_snapshot": {
+                "query_class": "identity",
+                "requires_evidence": False,
+                "quote_intent": False,
+                "answerability_state": "direct",
+                "planner_action": "answer",
+                "retrieval_stats": {
+                    "chunk_count": 0,
+                    "dense_top1": 0.0,
+                    "dense_top5_avg": 0.0,
+                    "sparse_top1": 0.0,
+                    "sparse_top5_avg": 0.0,
+                    "rerank_top1": 0.0,
+                    "rerank_top5_avg": 0.0,
+                    "evidence_block_counts": {},
+                },
+                "selected_evidence_block_types": [],
+            },
+            "grounding_verifier": {
+                "supported": None,
+                "support_ratio": None,
+                "total_claims": 0,
+                "supported_claims": 0,
+                "unsupported_claims": [],
+            },
+            "online_eval": {
+                "enabled": False,
+                "ran": False,
+                "skipped_reason": "public_fastpath",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            },
+            "runtime_confidence_gate": {
+                "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+                "applied": False,
+                "decision": "skipped",
+                "skip_reason": "public_fastpath",
+            },
+            "used_owner_memory": False,
+            "model_used": inference_router.get_active_model(),
+            "provider_used": inference_router.get_active_provider(),
+            "identity_gate_mode": "public",
+            **context_trace,
+        }
+
     # Get public group for context (with fallback to default group)
     public_group = get_public_group_for_twin(twin_id)
     if public_group:
