@@ -223,12 +223,104 @@ async def compile_run_to_twin(
         raise
 
     # ------------------------------------------------------------------
-    # 5. Compile persona from stored claims
+    # 5. Compile persona spec from claims, enrich with research identity,
+    #    and publish as active — this is what the chat system prompt uses.
     # ------------------------------------------------------------------
     try:
+        from modules.persona_spec_store_v2 import create_persona_spec_v2, publish_persona_spec_v2
+        from modules.persona_spec_v2 import (
+            CommunicationPatterns,
+            IdentityFrame,
+            PersonaSpecV2,
+        )
+
         compiler = PersonaFromClaimsCompiler(db)
-        await compiler.compile_persona(twin_id)
-        logger.info("compile_run_to_twin: persona compiled twin=%s run=%s", twin_id, run_id)
+        compile_result = await compiler.compile_persona(twin_id)
+        persona_spec: PersonaSpecV2 = compile_result["persona_spec"]
+
+        # Enrich IdentityFrame from research data — this is what produces a
+        # specific, grounded persona voice instead of the generic fallback.
+        bio = result.get("bio") or {}
+        profile_summary = result.get("profile_summary") or {}
+        input_name = (result.get("input") or {}).get("name", "") or twin_id
+
+        public_roles = profile_summary.get("public_roles") or []
+        role_definition = public_roles[0] if public_roles else input_name
+        expertise_raw = profile_summary.get("expertise_topics") or []
+        expertise_domains = [
+            t.get("topic", t) if isinstance(t, dict) else str(t)
+            for t in expertise_raw
+        ][:6]
+        background_summary = bio.get("medium") or bio.get("short") or ""
+        organizations = profile_summary.get("organizations") or []
+        what_they_do = profile_summary.get("what_they_do") or []
+
+        # Pull quotes from Q&A pairs as signature phrases — these are the
+        # person's actual words from verified web sources.
+        signature_phrases: List[str] = []
+        for qa in (result.get("prepared_question_answers") or [])[:10]:
+            answer = (qa.get("answer") or "").strip()
+            if answer and len(answer) < 120:
+                signature_phrases.append(answer)
+        # Fall back to short bio sentence fragments
+        if not signature_phrases and bio.get("short"):
+            signature_phrases = [bio["short"][:100]]
+
+        persona_spec.identity_frame = IdentityFrame(
+            role_definition=role_definition,
+            expertise_domains=expertise_domains,
+            background_summary=background_summary,
+            reasoning_style="first_principles",
+            relationship_to_user="advisor",
+            communication_tendencies={
+                "directness": "direct",
+                "formality": "professional",
+                "verbosity": "concise",
+                "organizations": ", ".join(organizations[:3]) if organizations else "",
+                "what_they_do": "; ".join(what_they_do[:3]) if what_they_do else "",
+            },
+        )
+
+        # CommunicationPatterns: banned phrases enforce no-AI-tell, signature
+        # phrases ground the voice in the person's actual language.
+        persona_spec.communication_patterns = CommunicationPatterns(
+            signature_phrases=signature_phrases[:5],
+            anti_patterns=[
+                "Great question!",
+                "I'd be happy to help!",
+                "Certainly!",
+                "Absolutely!",
+                "As an AI",
+                "as a language model",
+                "Let me break this down",
+                "Here are some key points:",
+                "In conclusion,",
+                "It depends.",
+            ],
+            brevity_preference="concise",
+        )
+
+        # Save and publish so agent.py picks it up on the next chat request.
+        spec_row = await create_persona_spec_v2(
+            twin_id=twin_id,
+            tenant_id=tenant_id,
+            created_by="system:deep_research_compiler",
+            spec=persona_spec,
+            status="draft",
+            source="deep_research",
+            notes=f"Auto-compiled from deep research run {run_id}",
+        )
+        if spec_row:
+            await publish_persona_spec_v2(twin_id=twin_id, version=spec_row["version"])
+            logger.info(
+                "compile_run_to_twin: persona spec v=%s published twin=%s run=%s",
+                spec_row["version"], twin_id, run_id,
+            )
+        else:
+            logger.warning(
+                "compile_run_to_twin: persona spec save returned nothing twin=%s run=%s",
+                twin_id, run_id,
+            )
     except Exception as exc:
         logger.error(
             "compile_run_to_twin: persona compile failed twin=%s run=%s: %s", twin_id, run_id, exc

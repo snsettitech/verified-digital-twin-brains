@@ -129,6 +129,29 @@ def _ensure_closing_question(response_text: str, query: str) -> str:
     )
     return response_text.rstrip() + fallback_question
 
+
+def _merge_twin_row_settings(twin_row: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Merge canonical twin row fields into settings for prompt-building paths."""
+    if not isinstance(twin_row, dict):
+        return {}
+
+    settings = twin_row.get("settings")
+    merged: Dict[str, Any] = dict(settings) if isinstance(settings, dict) else {}
+
+    name = str(twin_row.get("name") or "").strip()
+    if name and not str(merged.get("name") or "").strip():
+        merged["name"] = name
+
+    twin_id = str(twin_row.get("id") or "").strip()
+    if twin_id and not str(merged.get("twin_id") or "").strip():
+        merged["twin_id"] = twin_id
+
+    tenant_id = str(twin_row.get("tenant_id") or "").strip()
+    if tenant_id and not str(merged.get("tenant_id") or "").strip():
+        merged["tenant_id"] = tenant_id
+
+    return merged
+
 def get_checkpointer():
     """
     Get or create Postgres checkpointer instance (P1-A).
@@ -544,124 +567,90 @@ def build_system_prompt(state: TwinState) -> str:
 def _build_prompt_from_v2_persona(spec: Dict[str, Any], twin_name: str) -> str:
     """
     Build system prompt text from 5-Layer Persona Spec v2.
-    
-    This creates a readable prompt from structured persona data.
-    Includes Link-First citation enforcement if source is link-first.
+
+    Renders identity, voice, knowledge domains, guardrails, and response
+    architecture so each twin sounds like the actual person — not a generic AI.
     """
     identity = spec.get("identity_frame", {})
     cognitive = spec.get("cognitive_heuristics", {})
     values = spec.get("value_hierarchy", {})
     communication = spec.get("communication_patterns", {})
-    
-    # Check if this is a Link-First persona (has source metadata)
-    source = spec.get("source", "")
-    is_link_first = "link" in source.lower() or source == "link-compile"
-    
+
     # Layer 1: Identity
-    role = identity.get("role_definition", f"{twin_name}")
-    expertise = identity.get("expertise_domains", [])
-    background = identity.get("background_summary", "")
-    reasoning_style = identity.get("reasoning_style", "balanced")
-    relationship = identity.get("relationship_to_user", "advisor")
-    
-    # Layer 4: Communication
-    brevity = communication.get("brevity_preference", "balanced")
-    signature_phrases = communication.get("signature_phrases", [])
-    
-    prompt_parts = [
-        f"You are {twin_name}, {role}.",
-        "",
-        f"EXPERTISE: {', '.join(expertise) if expertise else 'General knowledge'}",
+    role = identity.get("role_definition") or twin_name
+    expertise = identity.get("expertise_domains") or []
+    background = (identity.get("background_summary") or "").strip()
+    comm_tendencies = identity.get("communication_tendencies") or {}
+    organizations = comm_tendencies.get("organizations", "")
+    what_they_do = comm_tendencies.get("what_they_do", "")
+
+    # Layer 4: Communication patterns
+    signature_phrases = communication.get("signature_phrases") or []
+    anti_patterns = communication.get("anti_patterns") or []
+
+    # Layer 3: Values
+    value_items = values.get("values") or []
+    top_values = [
+        v.get("name", "").replace("_", " ").title()
+        for v in value_items[:4]
+        if v.get("name")
     ]
-    
+
+    # Layer 2: Cognitive heuristics
+    heuristics = cognitive.get("heuristics") or []
+    active_heuristics = [h for h in heuristics if h.get("active", True)][:3]
+
+    parts: List[str] = []
+
+    # Identity block
+    parts.append(f"PERSONA: {twin_name} — {role}")
+    if expertise:
+        parts.append(f"EXPERTISE: {', '.join(expertise[:6])}")
+    if organizations:
+        parts.append(f"ORGANIZATIONS: {organizations}")
+    if what_they_do:
+        parts.append(f"WHAT THEY DO: {what_they_do}")
     if background:
-        prompt_parts.extend(["", f"BACKGROUND:\n{background}"])
-    
-    prompt_parts.extend([
-        "",
-        f"COMMUNICATION STYLE:",
-        f"- Brevity preference: {brevity}",
-        f"- Reasoning style: {reasoning_style}",
-        f"- Relationship to user: {relationship}",
-    ])
-    
+        parts.append(f"\nBACKGROUND (ground your answers in this):\n{background}")
+
+    # Voice block
+    parts.append("\nVOICE:")
+    parts.append("- You ARE this person. First person always.")
+    parts.append("- Lead with the answer or strong take. Never build up to it.")
+    parts.append("- Specific numbers and examples over vague generalities.")
+    parts.append("- Connected paragraphs. No bullet-point dumping.")
     if signature_phrases:
-        prompt_parts.append(f"- Signature phrases: {', '.join(signature_phrases[:3])}")
-    
-    # Layer 2: Cognitive Framework
-    framework = cognitive.get("default_framework", "evidence_based")
-    prompt_parts.extend([
-        "",
-        f"DECISION FRAMEWORK: {framework}",
-        "- Base assessments on available evidence",
-        "- Disclose uncertainty when information is insufficient",
-        "- Ask clarifying questions when needed",
-    ])
-    
-    # Link-First: Add verification requirements for Layer 2
-    heuristics = cognitive.get("heuristics", [])
-    verification_required_heuristics = [
-        h for h in heuristics 
-        if h.get("verification_required", True)
+        quoted = ", ".join(f'"{p}"' for p in signature_phrases[:4])
+        parts.append(f"- Draw on their voice and cadence. Examples: {quoted}")
+    banned = anti_patterns[:8] or [
+        "Great question!", "Certainly!", "I'd be happy to help!",
+        "As an AI", "Let me break this down", "Here are some key points:",
     ]
-    
-    if is_link_first and verification_required_heuristics:
-        prompt_parts.extend([
-            "",
-            "INFERENCE HONESTY (Layer 2 - Cognitive Heuristics):",
-            "The following heuristics REQUIRE source verification:",
-        ])
-        for h in verification_required_heuristics[:5]:
-            prompt_parts.append(f"- {h.get('name', 'Unnamed')}: Cite claims when applying")
-    
-    # Layer 3: Values (prioritized)
-    value_items = values.get("values", [])
-    if value_items:
-        top_values = [v.get("name", "").replace("_", " ").title() for v in value_items[:3]]
-        prompt_parts.extend([
-            "",
-            f"CORE VALUES (in priority order): {', '.join(top_values)}",
-        ])
-        
-        # Link-First: Add verification requirements for Layer 3
-        if is_link_first:
-            verification_required_values = [
-                v for v in value_items 
-                if v.get("verification_required", True)
-            ]
-            if verification_required_values:
-                prompt_parts.extend([
-                    "",
-                    "INFERENCE HONESTY (Layer 3 - Values):",
-                    "Value-based claims REQUIRE documented evidence:",
-                ])
-                for v in verification_required_values[:3]:
-                    prompt_parts.append(f"- {v.get('name', 'Unnamed')}: Link to source claims")
-    
-    # Link-First: Citation Enforcement Rules
-    if is_link_first:
-        prompt_parts.extend([
-            "",
-            "CITATION RULES (Link-First Persona):",
-            "1. Every owner-specific factual claim MUST cite [claim_id]",
-            "2. If no claim supports a statement, ask a clarification question",
-            "3. Do NOT make assumptions beyond the documented claims",
-            "4. Uncertainty is preferred to unsupported assertions",
-            "",
-            "CITATION FORMAT: 'I prefer B2B investments [claim_abc123]'",
-        ])
-    
-    # Layer 5: Safety
-    boundaries = spec.get("safety_boundaries", [])
-    if boundaries:
-        prompt_parts.extend([
-            "",
-            "SAFETY BOUNDARIES:",
-            "- Provide perspective, not professional advice (legal, medical, investment)",
-            "- Clarify when information is insufficient",
-        ])
-    
-    return "\n".join(prompt_parts)
+    parts.append(f"- NEVER say: {', '.join(f'{chr(34)}{p}{chr(34)}' for p in banned)}")
+
+    # Values
+    if top_values:
+        parts.append(f"\nCORE VALUES: {', '.join(top_values)}")
+
+    # Cognitive heuristics
+    if active_heuristics:
+        parts.append("\nHOW THIS PERSON THINKS:")
+        for h in active_heuristics:
+            desc = (h.get("description") or h.get("name") or "").strip()
+            if desc:
+                parts.append(f"- {desc}")
+
+    # Response architecture
+    parts.append(
+        "\nLENGTH:\n"
+        "- Greeting / simple factual: 2-3 sentences.\n"
+        "- Criteria / context question: 2-3 paragraphs.\n"
+        "- Strategic / multi-part: 3-5 paragraphs. Hard cap at 6.\n"
+        "- End every response with one specific diagnostic question about the\n"
+        "  user's actual situation. Not 'Does that help?' Not a list of options."
+    )
+
+    return "\n".join(parts)
 
 
 # =============================================================================
@@ -3182,7 +3171,7 @@ async def run_agent_stream(
     # 1. Fetch full twin settings for persona encoding
     # RLS Fix: Use RPC
     twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
-    settings = twin_res.data["settings"] if twin_res.data else {}
+    settings = _merge_twin_row_settings(twin_res.data)
     
     # 2. Load group settings if group_id provided
     if group_id:
@@ -3200,7 +3189,7 @@ async def run_agent_stream(
         # Re-fetch after analysis
         # RLS Fix: Use RPC
         twin_res = supabase.rpc("get_twin_system", {"t_id": twin_id}).single().execute()
-        settings = twin_res.data["settings"] if twin_res.data else {}
+        settings = _merge_twin_row_settings(twin_res.data)
         # Re-merge group settings if needed
         if group_id:
             try:
