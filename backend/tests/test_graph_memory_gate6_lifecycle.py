@@ -14,6 +14,8 @@ from modules.graph_outbox import reset_outbox
 from modules.graph_extraction_cache import reset_cache
 from modules.observability import supabase
 
+pytestmark = pytest.mark.network
+
 
 @pytest.fixture(autouse=True)
 def reset_state(monkeypatch):

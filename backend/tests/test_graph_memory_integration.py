@@ -16,6 +16,8 @@ import asyncio
 import uuid
 from datetime import datetime
 
+pytestmark = pytest.mark.network
+
 neo4j_uri = os.getenv("NEO4J_URI", "")
 neo4j_password = os.getenv("NEO4J_PASSWORD", "")
 neo4j_user = os.getenv("NEO4J_USER", "neo4j")
