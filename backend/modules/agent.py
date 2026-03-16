@@ -5,6 +5,7 @@ import re
 import re as _re
 import time
 from typing import Annotated, TypedDict, List, Dict, Any, Union, Optional, Tuple
+from urllib.parse import urlparse
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
@@ -36,7 +37,6 @@ from modules.persona_profile_store import (
     get_persona_profile,
     is_profile_eligible_for_fastpath,
 )
-from modules.public_profile_pack import normalize_social_links
 from modules.fastpath_intent_router import (
     classify_fastpath_intent,
     is_persona_fastpath_enabled,
@@ -198,6 +198,47 @@ def _clean_profile_strings(values: Any, *, limit: int = 6) -> List[str]:
     return cleaned
 
 
+def _social_key_from_url(url: str) -> str:
+    try:
+        host = urlparse(url).netloc.lower()
+    except Exception:
+        return "website"
+    if "wikipedia.org" in host:
+        return "wikipedia"
+    if "linkedin.com" in host:
+        return "linkedin"
+    if "github.com" in host:
+        return "github"
+    if "youtube.com" in host or "youtu.be" in host:
+        return "youtube"
+    if "instagram.com" in host:
+        return "instagram"
+    if "x.com" in host or "twitter.com" in host:
+        return "twitter"
+    return "website"
+
+
+def _normalize_social_links(value: Any) -> Dict[str, str]:
+    if isinstance(value, dict):
+        return {
+            re.sub(r"\s+", " ", str(key or "").strip()).lower(): re.sub(r"\s+", " ", str(url or "").strip())
+            for key, url in value.items()
+            if re.sub(r"\s+", " ", str(url or "").strip())
+        }
+
+    links: Dict[str, str] = {}
+    if not isinstance(value, list):
+        return links
+
+    for raw in value:
+        url = re.sub(r"\s+", " ", str(raw or "").strip())
+        if not url:
+            continue
+        key = _social_key_from_url(url)
+        links.setdefault(key, url)
+    return links
+
+
 def _build_profile_fact_block(full_settings: Optional[Dict[str, Any]]) -> str:
     if not isinstance(full_settings, dict):
         return ""
@@ -272,7 +313,7 @@ def _build_profile_fact_block(full_settings: Optional[Dict[str, Any]]) -> str:
         str(public_profile.get("speaking_style") or "").strip()
         or ", ".join(_clean_profile_strings(identity_pack.get("tone_tags"), limit=3))
     )
-    social_links = normalize_social_links(
+    social_links = _normalize_social_links(
         public_profile.get("social_links") or identity_pack.get("social_links")
     )
 
@@ -607,7 +648,7 @@ def _build_clean_canonical_fastpath_profile(full_settings: Optional[Dict[str, An
             limit=4,
         )
 
-    social_links = normalize_social_links(
+    social_links = _normalize_social_links(
         public_profile.get("social_links") or identity_pack.get("social_links")
     )
 
@@ -945,6 +986,7 @@ def build_system_prompt_with_trace(state: TwinState) -> tuple[str, Dict[str, Any
         "module_ids": [],
         "persona_spec_version": None,
         "persona_prompt_variant": DEFAULT_PERSONA_PROMPT_VARIANT,
+        "grounding_order": "canonical_profile>verified_facts>featured_sources>vector_retrieval>graph_memory",
     }
     active_variant_row = get_active_persona_prompt_variant(twin_id=twin_id)
     active_variant_id = (
