@@ -62,8 +62,8 @@ function initials(name: string): string {
 
 function yearRange(start?: number | null, end?: number | null): string {
   if (!start && !end) return '';
-  if (start && end) return `${start} - ${end}`;
-  if (start) return `${start} - Present`;
+  if (start && end) return `${start} – ${end}`;
+  if (start) return `${start} – Present`;
   return `${end}`;
 }
 
@@ -78,12 +78,24 @@ function socialLabel(label: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+const SAFE_URL_PROTOCOLS = new Set(['http:', 'https:']);
+
+function sanitizeHref(url: string | null | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return SAFE_URL_PROTOCOLS.has(parsed.protocol) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function Section({ title, items }: { title: string; items?: string[] }) {
   if (!items || items.length === 0) return null;
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</h2>
-      <div className="mt-4 flex flex-wrap gap-2">
+    <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">{title}</h2>
+      <div className="mt-3 flex flex-wrap gap-2">
         {items.map((item) => (
           <span key={`${title}-${item}`} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm text-slate-700">
             {item}
@@ -94,10 +106,30 @@ function Section({ title, items }: { title: string; items?: string[] }) {
   );
 }
 
+/* ─── Conversion bar — acquisition surface ─── */
+function ConversionBar({ name }: { name: string }) {
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200/70 bg-white/92 backdrop-blur-sm px-4 py-2.5">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <p className="text-sm text-slate-500">
+          <span className="font-semibold text-slate-800">{name}</span>{' '}
+          is powered by <span className="font-semibold text-slate-800">PersonaOn AI</span>
+        </p>
+        <Link
+          href="/auth/signup"
+          className="shrink-0 rounded-full bg-[#F97316] px-4 py-1.5 text-sm font-semibold text-white shadow-[0_0_14px_rgba(249,115,22,0.35)] transition-shadow duration-200 hover:shadow-[0_0_20px_rgba(249,115,22,0.50)]"
+        >
+          Build yours free →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function PublicSharePage() {
   const params = useParams();
-  const twinId = params?.twin_id as string;
-  const shareToken = params?.token as string;
+  const twinId = Array.isArray(params?.twin_id) ? params.twin_id[0] : (params?.twin_id ?? '');
+  const shareToken = Array.isArray(params?.token) ? params.token[0] : (params?.token ?? '');
   const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
   const storageKey = useMemo(() => (twinId && shareToken ? `public_chat_${twinId}_${shareToken.slice(0, 8)}` : null), [shareToken, twinId]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -133,7 +165,8 @@ export default function PublicSharePage() {
   useEffect(() => {
     if (!storageKey || messages.length === 0) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(messages));
+      const payload = JSON.stringify(messages.slice(-50));
+      if (payload.length < 200_000) localStorage.setItem(storageKey, payload);
     } catch {
       // Ignore storage errors.
     }
@@ -147,10 +180,11 @@ export default function PublicSharePage() {
     const validate = async () => {
       if (!twinId || !shareToken) return;
       try {
-        const response = await fetch(`${apiBaseUrl}/public/validate-share/${twinId}/${shareToken}`);
+        const response = await fetch(`${apiBaseUrl}/share/${twinId}/${shareToken}/profile`);
         if (!response.ok) {
           setIsValid(false);
-          setError('This share link is invalid or has expired.');
+          const body = await response.text().catch(() => '');
+          setError(getErrorFromResponse(response.status, body).message);
           return;
         }
         const data = (await response.json()) as PublicProfile;
@@ -243,16 +277,33 @@ export default function PublicSharePage() {
     }
   };
 
+  /* ─── Loading state ─── */
   if (isValid === null) {
-    return <div className="flex min-h-screen items-center justify-center bg-[#f6f2ea] text-sm text-slate-500">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f6f2ea]">
+        <div className="flex items-center gap-3 text-sm text-slate-500">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+          Loading persona…
+        </div>
+      </div>
+    );
   }
 
+  /* ─── Invalid link ─── */
   if (!isValid) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f6f2ea] p-4">
-        <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-semibold text-slate-950">Link not found</h1>
-          <p className="mt-2 text-slate-500">{error}</p>
+        <div className="w-full max-w-md rounded-[24px] border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100">
+            <svg className="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-semibold text-slate-900">Link not found</h1>
+          <p className="mt-2 text-sm text-slate-500">{error}</p>
+          <Link href="/marketplace" className="mt-6 inline-block rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700">
+            Browse personas
+          </Link>
         </div>
       </div>
     );
@@ -263,45 +314,89 @@ export default function PublicSharePage() {
   const socials = Object.entries(profile?.social_links || {});
 
   return (
-    <div className="min-h-screen bg-[#f6f2ea] text-slate-950">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.18),transparent_28%),radial-gradient(circle_at_88%_12%,rgba(15,118,110,0.10),transparent_24%)]" />
+    /* Extra bottom padding = ConversionBar height (~52px) */
+    <div className="min-h-screen bg-[#f6f2ea] text-slate-950 pb-14">
 
-      <header className="relative border-b border-slate-200/80 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
-          <div className="flex items-center gap-4">
-            <Link href="/marketplace" className="text-sm font-medium text-slate-600 hover:text-slate-950">Marketplace</Link>
-            <span className="text-sm text-slate-300">/</span>
-            <span className="text-sm font-medium text-slate-950">{twinName}</span>
+      {/* Subtle radial warm accent — kept from original */}
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.12),transparent_28%),radial-gradient(circle_at_88%_12%,rgba(15,118,110,0.07),transparent_24%)]" />
+
+      {/* ─── Nav bar ─── */}
+      <header className="relative border-b border-slate-200/80 bg-white/80 backdrop-blur-sm sticky top-0 z-20">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3 lg:px-10">
+          <div className="flex items-center gap-3 text-sm">
+            <Link href="/marketplace" className="font-medium text-slate-500 hover:text-slate-900 transition-colors">
+              Marketplace
+            </Link>
+            <span className="text-slate-300">/</span>
+            <span className="font-medium text-slate-900">{twinName}</span>
           </div>
-          <div className="text-sm text-slate-500">Public share profile</div>
+          {/* Always On indicator */}
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            Always On
+          </div>
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-7xl px-6 pb-16 pt-10 lg:px-10">
-        <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
-          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+      <main className="relative mx-auto max-w-7xl px-4 pb-6 pt-8 lg:px-10 lg:pt-10">
+
+        {/* ─── Profile hero ─── */}
+        <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
+
+            {/* Left: identity */}
             <div className="flex gap-5">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt={twinName} className="h-24 w-24 rounded-[28px] object-cover" />
+                <img
+                  src={profile.avatar_url}
+                  alt={twinName}
+                  className="h-20 w-20 shrink-0 rounded-[20px] object-cover shadow-sm sm:h-24 sm:w-24"
+                />
               ) : (
-                <div className="flex h-24 w-24 items-center justify-center rounded-[28px] bg-[linear-gradient(135deg,#f59e0b,#f97316)] text-2xl font-semibold text-white">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#f59e0b,#f97316)] text-2xl font-semibold text-white shadow-sm sm:h-24 sm:w-24">
                   {initials(twinName) || 'P'}
                 </div>
               )}
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-4xl font-semibold text-slate-950">{twinName}</h1>
+
+              <div className="min-w-0">
+                {/* Name row */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <h1 className="text-3xl font-semibold text-slate-950 sm:text-4xl">{twinName}</h1>
                   {Boolean(profile?.verified_profile) && (
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Verified</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200/60 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-700">
+                      <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0112 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 013.498 1.307 4.491 4.491 0 011.307 3.497A4.49 4.49 0 0121.75 12a4.49 4.49 0 01-1.549 3.397 4.491 4.491 0 01-1.307 3.497 4.491 4.491 0 01-3.497 1.307A4.49 4.49 0 0112 21.75a4.49 4.49 0 01-3.397-1.549 4.49 4.49 0 01-3.498-1.306 4.491 4.491 0 01-1.307-3.498A4.49 4.49 0 012.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 011.307-3.497 4.49 4.49 0 013.497-1.307zm7.007 6.387a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
+                      </svg>
+                      Verified
+                    </span>
                   )}
                 </div>
-                <p className="mt-2 text-lg text-slate-700">{profile?.occupation || profile?.headline || 'Public digital persona'}</p>
-                {lifeLine(profile) && <p className="mt-2 text-sm text-slate-500">{lifeLine(profile)}</p>}
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">{summary}</p>
+
+                {/* Headline */}
+                <p className="mt-1.5 text-base text-slate-600 sm:text-lg">
+                  {profile?.headline || profile?.occupation || 'Public digital persona'}
+                </p>
+                {lifeLine(profile) && (
+                  <p className="mt-1 text-sm text-slate-400">{lifeLine(profile)}</p>
+                )}
+
+                {/* Bio */}
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 sm:text-base">{summary}</p>
+
+                {/* Social links */}
                 {socials.length > 0 && (
-                  <div className="mt-5 flex flex-wrap gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {socials.map(([label, url]) => (
-                      <a key={`${label}-${url}`} href={url} target="_blank" rel="noreferrer" className="rounded-full bg-slate-100 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-200">
+                      <a
+                        key={`${label}-${url}`}
+                        href={sanitizeHref(url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:border-slate-300 hover:text-slate-900 transition-colors"
+                      >
                         {socialLabel(label)}
                       </a>
                     ))}
@@ -309,93 +404,86 @@ export default function PublicSharePage() {
                 )}
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-              <div className="rounded-[24px] bg-[#f8f5ef] p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Answerability</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">{Math.round(profile?.answerability_score || 0)}%</p>
+
+            {/* Right: stats */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-4 lg:grid-cols-1">
+              <div className="rounded-[18px] bg-[#f8f5ef] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Answerability</p>
+                <p className="mt-1.5 text-2xl font-semibold text-slate-900">{Math.round(profile?.answerability_score || 0)}%</p>
               </div>
-              <div className="rounded-[24px] bg-[#f8f5ef] p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Verified Claims</p>
-                <p className="mt-2 text-3xl font-semibold text-slate-950">{profile?.verified_claims_count || 0}</p>
+              <div className="rounded-[18px] bg-[#f8f5ef] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Verified Claims</p>
+                <p className="mt-1.5 text-2xl font-semibold text-slate-900">{profile?.verified_claims_count || 0}</p>
               </div>
-              <div className="rounded-[24px] bg-[#f8f5ef] p-5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Speaking Style</p>
-                <p className="mt-2 text-sm leading-6 text-slate-700">{profile?.speaking_style || 'Direct, clear, and grounded in the public profile.'}</p>
+              <div className="rounded-[18px] bg-[#f8f5ef] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Speaking Style</p>
+                <p className="mt-1.5 text-sm leading-6 text-slate-700">{profile?.speaking_style || 'Direct and grounded.'}</p>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="mt-8 grid gap-8 lg:grid-cols-[0.92fr_1.08fr]">
-          <div className="space-y-6">
-            <Section title="Key Achievements" items={profile?.key_achievements} />
-            <Section title="Areas of Expertise" items={expertise} />
-            <Section title="Personality Traits" items={profile?.personality_traits} />
-            <Section title="Contributions" items={profile?.contributions} />
+        {/* ─── Chat + Profile details ─────────────────────────────
+            DOM order: chat first → visible above fold on mobile.
+            On desktop: CSS order flips — details left, chat right.
+        ─────────────────────────────────────────────────────────── */}
+        <section className="mt-6 grid gap-6 lg:grid-cols-[0.92fr_1.08fr] lg:gap-8">
 
-            {profile?.education && profile.education.length > 0 && (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Education</h2>
-                <div className="mt-4 space-y-4">
-                  {profile.education.map((entry, index) => (
-                    <div key={`education-${index}`} className="rounded-2xl bg-slate-50 p-4">
-                      <p className="font-medium text-slate-950">{entry.degree || entry.field || entry.institution || 'Education'}</p>
-                      {entry.institution && <p className="mt-1 text-sm text-slate-600">{entry.institution}</p>}
-                      {yearRange(entry.start_year, entry.end_year) && <p className="mt-1 text-sm text-slate-500">{yearRange(entry.start_year, entry.end_year)}</p>}
+          {/* Chat — first in DOM = first on mobile */}
+          <section className="order-first lg:order-last lg:sticky lg:top-20">
+            <div className="flex h-[76vh] min-h-[560px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+
+              {/* Chat header */}
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2.5">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt={twinName} className="h-8 w-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(135deg,#f59e0b,#f97316)] text-xs font-semibold text-white">
+                        {initials(twinName) || 'P'}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{twinName}</p>
+                      <div className="flex items-center gap-1 text-[11px] text-emerald-600">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        Always on
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {profile?.work_experience && profile.work_experience.length > 0 && (
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-500">Work Experience</h2>
-                <div className="mt-4 space-y-4">
-                  {profile.work_experience.map((entry, index) => (
-                    <div key={`work-${index}`} className="rounded-2xl bg-slate-50 p-4">
-                      <p className="font-medium text-slate-950">{entry.role || entry.company || 'Experience'}</p>
-                      {entry.company && <p className="mt-1 text-sm text-slate-600">{entry.company}</p>}
-                      {yearRange(entry.start_year, entry.end_year) && <p className="mt-1 text-sm text-slate-500">{yearRange(entry.start_year, entry.end_year)}</p>}
-                      {entry.description && <p className="mt-3 text-sm leading-6 text-slate-600">{entry.description}</p>}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-
-          <section className="lg:sticky lg:top-6">
-            <div className="flex h-[72vh] min-h-[680px] flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-              <div className="border-b border-slate-200 px-6 py-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xl font-semibold text-slate-950">{twinName}</p>
-                    <p className="mt-1 text-sm text-slate-600">{profile?.occupation || profile?.headline || 'Public persona chat'}</p>
                   </div>
                   {messages.length > 0 && (
-                    <button onClick={clearHistory} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-950">
+                    <button
+                      onClick={clearHistory}
+                      className="cursor-pointer rounded-xl border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:border-slate-300 hover:text-slate-800 transition-colors"
+                    >
                       Clear
                     </button>
                   )}
                 </div>
-                <div className="mt-4 rounded-2xl bg-[#f8f5ef] px-4 py-3 text-sm text-slate-600">
-                  Public share mode: responses are limited to published knowledge and profile facts.
-                  {profile?.citations_enabled === false ? '' : ' Citations appear when available.'}
-                </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-6">
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto px-5 py-5" aria-live="polite" aria-atomic="false" aria-label="Conversation">
                 {messages.length === 0 ? (
-                  <div className="flex h-full flex-col items-center justify-center text-center">
-                    <div className="flex h-20 w-20 items-center justify-center rounded-[28px] bg-slate-100 text-slate-700">
-                      <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                  <div className="flex h-full flex-col items-center justify-center text-center px-4">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-slate-50 shadow-sm">
+                      <svg className="h-8 w-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
                     </div>
-                    <h3 className="mt-6 text-2xl font-semibold text-slate-950">Start a Conversation</h3>
-                    <p className="mt-3 max-w-md text-sm leading-6 text-slate-500">Ask about background, work, expertise, and the public profile details shown on this page.</p>
-                    <div className="mt-6 flex max-w-lg flex-wrap justify-center gap-2">
+                    <h3 className="mt-4 text-lg font-semibold text-slate-900">Ask {twinName} anything</h3>
+                    <p className="mt-2 max-w-xs text-sm leading-6 text-slate-400">
+                      Answers are grounded in their published knowledge and profile.
+                    </p>
+                    {/* Pinned question chips — above fold */}
+                    <div className="mt-5 flex max-w-sm flex-wrap justify-center gap-2">
                       {suggestedQuestions.map((question) => (
-                        <button key={question} onClick={() => { setInput(question); window.setTimeout(() => { void sendMessage(question); }, 100); }} className="rounded-full bg-slate-100 px-4 py-2 text-sm text-slate-700 hover:bg-slate-200">
+                        <button
+                          key={question}
+                          onClick={() => void sendMessage(question)}
+                          className="cursor-pointer rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                        >
                           {question}
                         </button>
                       ))}
@@ -405,63 +493,132 @@ export default function PublicSharePage() {
                   <div className="space-y-4">
                     {messages.map((message, index) => (
                       <div key={`${message.role}-${index}`} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] rounded-[24px] px-4 py-3 ${message.role === 'user' ? 'bg-slate-950 text-white' : message.isError ? 'border border-rose-200 bg-rose-50 text-rose-700' : 'border border-slate-200 bg-slate-50 text-slate-800'}`}>
-                          <p className="whitespace-pre-wrap text-sm leading-6">{message.content}</p>
-                          {message.role === 'assistant' && !message.isError && (
-                            <div className="mt-3 border-t border-slate-200 pt-3">
-                              <div className="flex flex-wrap gap-2">
-                                {message.confidence_score !== undefined && <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-700">{(message.confidence_score * 100).toFixed(0)}%</span>}
-                                {message.citations?.map((source, citationIndex) => {
-                                  const detail = message.citation_details?.[citationIndex];
-                                  const label = detail?.filename || source || `Source ${citationIndex + 1}`;
-                                  const href = detail?.citation_url || undefined;
-                                  return (
-                                    <span key={`${label}-${citationIndex}`} className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200">
-                                      {href ? <a href={href} target="_blank" rel="noreferrer" className="hover:text-slate-950 hover:underline">{label}</a> : <span>{label}</span>}
-                                    </span>
-                                  );
-                                })}
-                              </div>
+                        <div className={`max-w-[85%] rounded-[20px] px-4 py-3 text-sm leading-6 ${
+                          message.role === 'user'
+                            ? 'bg-slate-900 text-white'
+                            : message.isError
+                              ? 'border border-rose-200 bg-rose-50 text-rose-700'
+                              : 'border border-slate-200 bg-slate-50 text-slate-800'
+                        }`}>
+                          <p className="whitespace-pre-wrap">{message.content}</p>
+                          {message.role === 'assistant' && !message.isError && (message.confidence_score !== undefined || (message.citations && message.citations.length > 0)) && (
+                            <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-slate-200/60 pt-2.5">
+                              {message.confidence_score !== undefined && (
+                                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-emerald-700">
+                                  {(message.confidence_score * 100).toFixed(0)}% confidence
+                                </span>
+                              )}
+                              {message.citations?.map((source, citationIndex) => {
+                                const detail = message.citation_details?.[citationIndex];
+                                const label = detail?.filename || source || `Source ${citationIndex + 1}`;
+                                const href = sanitizeHref(detail?.citation_url);
+                                return (
+                                  <span key={`${label}-${citationIndex}`} className="rounded-full bg-white px-2.5 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
+                                    {href ? (
+                                      <a href={href} target="_blank" rel="noreferrer" className="hover:text-slate-800 hover:underline">{label}</a>
+                                    ) : (
+                                      <span>{label}</span>
+                                    )}
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
                       </div>
                     ))}
-                    {isLoading && <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">Generating response...</div>}
+                    {isLoading && (
+                      <div className="flex items-center gap-2 rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-400">
+                        <div className="h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-500" />
+                        Thinking…
+                      </div>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
               </div>
 
+              {/* Retry banner */}
               {requestError && requestError.canRetry && !isLoading && (
-                <div className="border-t border-rose-200 bg-rose-50 px-6 py-3">
+                <div className="border-t border-rose-100 bg-rose-50 px-5 py-2.5">
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-sm text-rose-700">{requestError.message}</p>
-                    <button onClick={retryLastMessage} className="rounded-xl border border-rose-200 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100">Retry</button>
+                    <p className="text-sm text-rose-600">{requestError.message}</p>
+                    <button onClick={retryLastMessage} className="cursor-pointer rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 transition-colors">
+                      Retry
+                    </button>
                   </div>
                 </div>
               )}
 
-              <div className="border-t border-slate-200 p-4">
-                <div className="flex gap-3">
+              {/* Input row */}
+              <div className="border-t border-slate-100 p-4">
+                <div className="flex gap-2.5">
                   <input
                     type="text"
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
                     onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) void sendMessage(); }}
-                    placeholder="Type your message..."
+                    placeholder={`Ask ${twinName} anything…`}
                     disabled={isLoading}
-                    className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-950 placeholder:text-slate-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-60"
+                    aria-label={`Message ${twinName}`}
+                    className="flex-1 rounded-[14px] border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-200/60 disabled:opacity-60 transition-colors"
                   />
-                  <button onClick={() => { void sendMessage(); }} disabled={isLoading || !input.trim()} className="rounded-2xl bg-slate-950 px-5 py-3 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+                  <button
+                    onClick={() => { void sendMessage(); }}
+                    disabled={isLoading || !input.trim()}
+                    aria-label="Send message"
+                    className="cursor-pointer shrink-0 rounded-[14px] bg-[#2563EB] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-40"
+                  >
                     Send
                   </button>
                 </div>
               </div>
             </div>
           </section>
+
+          {/* Profile details — second in DOM = below chat on mobile, left column on desktop */}
+          <div className="order-last lg:order-first space-y-4">
+            <Section title="Key Achievements" items={profile?.key_achievements} />
+            <Section title="Areas of Expertise" items={expertise} />
+            <Section title="Personality Traits" items={profile?.personality_traits} />
+            <Section title="Contributions" items={profile?.contributions} />
+
+            {profile?.education && profile.education.length > 0 && (
+              <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Education</h2>
+                <div className="mt-4 space-y-3">
+                  {profile.education.map((entry, index) => (
+                    <div key={`education-${index}`} className="rounded-[16px] bg-slate-50 p-4">
+                      <p className="font-medium text-slate-900">{entry.degree || entry.field || entry.institution || 'Education'}</p>
+                      {entry.institution && <p className="mt-1 text-sm text-slate-600">{entry.institution}</p>}
+                      {yearRange(entry.start_year, entry.end_year) && <p className="mt-1 text-xs text-slate-400">{yearRange(entry.start_year, entry.end_year)}</p>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {profile?.work_experience && profile.work_experience.length > 0 && (
+              <section className="rounded-[24px] border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Work Experience</h2>
+                <div className="mt-4 space-y-3">
+                  {profile.work_experience.map((entry, index) => (
+                    <div key={`work-${index}`} className="rounded-[16px] bg-slate-50 p-4">
+                      <p className="font-medium text-slate-900">{entry.role || entry.company || 'Experience'}</p>
+                      {entry.company && <p className="mt-1 text-sm text-slate-600">{entry.company}</p>}
+                      {yearRange(entry.start_year, entry.end_year) && <p className="mt-1 text-xs text-slate-400">{yearRange(entry.start_year, entry.end_year)}</p>}
+                      {entry.description && <p className="mt-3 text-sm leading-6 text-slate-600">{entry.description}</p>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
         </section>
       </main>
+
+      {/* ─── Conversion bar — acquisition surface ─── */}
+      <ConversionBar name={twinName} />
     </div>
   );
 }

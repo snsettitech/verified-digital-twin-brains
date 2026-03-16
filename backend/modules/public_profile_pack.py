@@ -532,6 +532,30 @@ def _build_public_profile_meta(
     }
 
 
+def _fetch_existing_source_candidates(twin_id: str, *, limit: int = 24) -> List[Dict[str, Any]]:
+    if not _clean_text(twin_id):
+        return []
+    select_variants = (
+        "id, citation_url, filename, source_type",
+        "id, citation_url, filename",
+    )
+    for select_clause in select_variants:
+        try:
+            response = (
+                supabase.table("sources")
+                .select(select_clause)
+                .eq("twin_id", twin_id)
+                .limit(limit)
+                .execute()
+            )
+            rows = response.data or []
+            if isinstance(rows, list):
+                return [_safe_dict(row) for row in rows]
+        except Exception:
+            continue
+    return []
+
+
 def normalize_public_profile(twin: Dict[str, Any]) -> Dict[str, Any]:
     settings = _safe_dict(twin.get("settings"))
     public_profile = _safe_dict(settings.get("public_profile"))
@@ -542,10 +566,20 @@ def normalize_public_profile(twin: Dict[str, Any]) -> Dict[str, Any]:
         or _clean_text(twin.get("name"))
         or "Persona"
     )
-    organization = _clean_text(public_profile.get("organization"))
-    role = _clean_text(public_profile.get("role"))
-    headline = _clean_text(public_profile.get("headline")) or _clean_text(settings.get("tagline"))
-    bio = _clean_text(public_profile.get("bio")) or _clean_text(settings.get("public_intro"))
+    organization = _clean_text(public_profile.get("organization")) or _clean_text(settings.get("organization"))
+    role = _clean_text(public_profile.get("role")) or _clean_text(settings.get("role"))
+    headline = (
+        _clean_text(public_profile.get("headline"))
+        or _clean_text(settings.get("headline"))
+        or _clean_text(settings.get("tagline"))
+    )
+    bio = (
+        _clean_text(public_profile.get("bio"))
+        or _clean_text(settings.get("public_intro"))
+        or _clean_text(twin.get("description"))
+        or _clean_text(settings.get("description"))
+        or headline
+    )
     avatar_url = _clean_text(public_profile.get("avatar_url"))
     pinned_questions = _clean_unique_strings(public_profile.get("pinned_questions") or [], limit=4)
 
@@ -553,7 +587,7 @@ def normalize_public_profile(twin: Dict[str, Any]) -> Dict[str, Any]:
         "display_name": display_name,
         "organization": organization,
         "role": role,
-        "occupation": _clean_text(public_profile.get("occupation")),
+        "occupation": _clean_text(public_profile.get("occupation")) or _clean_text(settings.get("occupation")),
         "headline": headline,
         "bio": bio,
         "short_description": _clean_text(public_profile.get("short_description")),
@@ -1375,6 +1409,12 @@ def build_existing_profile_projection(
     existing_public_profile = _safe_dict(settings.get("public_profile"))
     existing_identity_pack = _safe_dict(settings.get("persona_identity_pack"))
     existing_meta = _safe_dict(settings.get("public_profile_meta"))
+    source_rows = _fetch_existing_source_candidates(str(twin.get("id") or ""))
+    source_urls = [
+        _clean_text(row.get("citation_url"))
+        for row in source_rows
+        if _clean_text(row.get("citation_url"))
+    ]
 
     display_name = normalized["display_name"]
     role = normalized["role"]
@@ -1383,32 +1423,66 @@ def build_existing_profile_projection(
         [
             *normalized.get("areas_of_expertise", []),
             *_safe_list(existing_identity_pack.get("expertise_areas")),
+            _clean_text(settings.get("specialization")),
+            _clean_text(settings.get("headline")),
         ],
         limit=6,
     )
-    image_url = _clean_text(normalized.get("image_url") or normalized.get("avatar_url"))
-    image_source_type = _clean_text(existing_meta.get("image_source_type")).lower()
-    image_resolution = {
-        "status": "resolved" if image_url else "missing",
-        "image_url": image_url,
-        "image_source_type": image_source_type or ("existing" if image_url else ""),
-        "image_source_url": _clean_text(existing_meta.get("image_source_url")) or image_url,
-        "image_confidence": _coerce_ratio(existing_meta.get("image_confidence") or (0.7 if image_url else 0.0)),
-    }
+    fallback_social_links = normalize_social_links(source_urls)
+    social_links = normalized["social_links"] or fallback_social_links
+    image_resolution = _resolve_profile_image(
+        {
+            "input": {
+                "hints": {
+                    "website": social_links.get("website") or social_links.get("wikipedia") or "",
+                }
+            },
+            "sources": [
+                {
+                    "source_id": row.get("id"),
+                    "url": _clean_text(row.get("citation_url")),
+                    "title": _clean_text(row.get("filename")),
+                    "source_type": (
+                        _clean_text(row.get("source_type"))
+                        or ("profile" if "wikipedia.org" in _clean_host(row.get("citation_url")) else "website")
+                    ),
+                    "used_in_final": True,
+                    "identity_match_confidence": 0.82,
+                }
+                for row in source_rows
+                if _clean_text(row.get("citation_url"))
+            ],
+        },
+        existing_public_profile,
+        existing_meta,
+    )
+    image_url = _clean_text(
+        image_resolution.get("image_url")
+        or normalized.get("image_url")
+        or normalized.get("avatar_url")
+    )
 
     public_profile = {
         **existing_public_profile,
         "display_name": display_name,
         "role": role,
         "organization": organization,
-        "occupation": _build_occupation(existing_public_profile, expertise),
+        "occupation": _build_occupation(
+            {
+                "occupation": existing_public_profile.get("occupation") or settings.get("occupation"),
+                "role": role,
+                "organization": organization,
+                "headline": normalized["headline"] or settings.get("headline"),
+            },
+            expertise,
+        ),
         "headline": normalized["headline"],
         "bio": normalized["bio"],
         "short_description": normalized["short_description"] or _first_sentence(normalized["bio"]) or normalized["bio"],
         "avatar_url": _clean_text(normalized.get("avatar_url")) or image_url,
         "image_url": image_url,
         "pinned_questions": normalized["pinned_questions"],
-        "social_links": normalized["social_links"],
+        "social_links": social_links,
         "areas_of_expertise": expertise,
         "key_achievements": normalized["key_achievements"],
         "contributions": normalized["contributions"],
@@ -1440,10 +1514,10 @@ def build_existing_profile_projection(
         "summary": normalized["short_description"] or normalized["bio"] or _clean_text(existing_identity_pack.get("summary")),
         "biography": normalized["bio"] or _clean_text(existing_identity_pack.get("biography")),
         "expertise_areas": expertise,
-        "social_links": normalized["social_links"],
+        "social_links": social_links,
         "preferred_contact_channel": (
             _clean_text(existing_identity_pack.get("preferred_contact_channel"))
-            or next(iter(normalized["social_links"].keys()), "")
+            or next(iter(social_links.keys()), "")
         ),
     }
     return {

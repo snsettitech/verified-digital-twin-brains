@@ -216,6 +216,55 @@ def _mark_source_live(source_id: str, chunk_count: Optional[int] = None) -> None
             raise
 
 
+def _load_source_claim_chunks(source_id: str, *, fallback_url: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Load actual ingested chunk text for claim extraction, with source-text fallback."""
+    try:
+        chunk_rows = (
+            supabase.table("chunks")
+            .select("id, content")
+            .eq("source_id", source_id)
+            .limit(24)
+            .execute()
+        )
+        rows = chunk_rows.data or []
+        extracted = [
+            {
+                "source_id": source_id,
+                "chunk_id": row.get("id"),
+                "text": str(row.get("content") or "").strip(),
+            }
+            for row in rows
+            if str(row.get("content") or "").strip()
+        ]
+        if extracted:
+            return extracted
+    except Exception:
+        pass
+
+    try:
+        source_row = (
+            supabase.table("sources")
+            .select("id, content_text, citation_url")
+            .eq("id", source_id)
+            .single()
+            .execute()
+        )
+        payload = source_row.data or {}
+        source_text = str(payload.get("content_text") or "").strip()
+        if source_text:
+            return [
+                {
+                    "source_id": source_id,
+                    "text": source_text,
+                    "citation_url": payload.get("citation_url") or fallback_url,
+                }
+            ]
+    except Exception:
+        pass
+
+    return []
+
+
 # =============================================================================
 # Phase 1: Ingestion Modes
 # =============================================================================
@@ -480,7 +529,8 @@ async def _process_job_impl(job_id: str):
     _set_twin_status(twin_id, "ingesting")
 
     try:
-        chunks = []
+        claim_chunks: List[Dict[str, Any]] = []
+        processed_source_count = 0
 
         if mode == "A":
             source_files = job.get("source_files", []) or []
@@ -510,7 +560,8 @@ async def _process_job_impl(job_id: str):
                     metadata_override=metadata_override,
                 )
                 _mark_source_live(source_id, num_chunks)
-                chunks.append({"text": content, "source_id": source_id})
+                claim_chunks.append({"text": content, "source_id": source_id})
+                processed_source_count += 1
         
         elif mode == "B":
             source_files = job.get("source_files", []) or []
@@ -539,7 +590,8 @@ async def _process_job_impl(job_id: str):
                     metadata_override=metadata_override,
                 )
                 _mark_source_live(source_id, num_chunks)
-                chunks = [{"text": content, "source_id": source_id}]
+                claim_chunks = [{"text": content, "source_id": source_id}]
+                processed_source_count = 1
         
         elif mode == "C":
             urls = job.get("source_urls", [])
@@ -547,7 +599,12 @@ async def _process_job_impl(job_id: str):
             for url in urls:
                 try:
                     source_id = await ingest_url(twin_id, url)
-                    chunks.append({"source_id": source_id, "text": f"Content from {url}"})
+                    ingested_chunks = _load_source_claim_chunks(source_id, fallback_url=url)
+                    if ingested_chunks:
+                        claim_chunks.extend(ingested_chunks)
+                    else:
+                        claim_chunks.append({"source_id": source_id, "text": f"URL submitted: {url}", "citation_url": url})
+                    processed_source_count += 1
                 except Exception as e:
                     error_str = str(e).lower()
                     # Classify error for better user feedback
@@ -565,7 +622,7 @@ async def _process_job_impl(job_id: str):
             
             # If all URLs failed, try to create fallback sources with metadata
             # This ensures the job doesn't fail completely
-            if not chunks and failed_urls:
+            if not claim_chunks and failed_urls:
                 # Create fallback chunks from metadata for failed URLs
                 for fail_info in failed_urls:
                     url = fail_info["url"]
@@ -589,16 +646,17 @@ async def _process_job_impl(job_id: str):
                             },
                         )
                         _mark_source_live(source_id, num_chunks)
-                        chunks.append({
+                        claim_chunks.append({
                             "source_id": source_id, 
                             "text": f"Fallback metadata for {url}",
                             "fetch_failed": True,
                             "error_type": fail_info['type']
                         })
+                        processed_source_count += 1
                     except Exception as fallback_error:
                         print(f"[ModeC] Fallback metadata creation failed for {url}: {fallback_error}")
 
-        if not chunks:
+        if not claim_chunks:
             raise ValueError(
                 "No processable content found in submitted sources. "
                 "All URLs failed to fetch. This can happen if:\n"
@@ -611,11 +669,11 @@ async def _process_job_impl(job_id: str):
         # Update progress
         supabase.table("link_compile_jobs").update({
             "status": "extracting_claims",
-            "processed_sources": len(chunks),
+            "processed_sources": processed_source_count,
         }).eq("id", job_id).execute()
         
         # Phase 2: Extract claims
-        extraction_result = await extract_and_store_claims(chunks, twin_id, supabase)
+        extraction_result = await extract_and_store_claims(claim_chunks, twin_id, supabase)
         
         supabase.table("link_compile_jobs").update({
             "status": "compiling_persona",
@@ -635,37 +693,41 @@ async def _process_job_impl(job_id: str):
         
         bio_result = await generate_and_store_bios(twin_id, all_claims, supabase)
 
-        # Publish short bio to twin's public profile settings
+        # Always materialize the canonical public profile from the latest twin state.
+        # If bio generation produced a short variant, seed it first; otherwise still
+        # publish the improved profile shell using source-derived links/image/headline.
         short_variant = bio_result.get("variants", {}).get("short")
+        twin_row = (
+            supabase.table("twins")
+            .select("id, name, description, settings")
+            .eq("id", twin_id)
+            .single()
+            .execute()
+        )
+        twin_payload = twin_row.data or {}
+        current_settings = twin_payload.get("settings") or {}
+        current_public_profile = current_settings.get("public_profile") or {}
+        staged_public_profile = {
+            **current_public_profile,
+        }
         if short_variant and short_variant.bio_text:
-            twin_row = (
-                supabase.table("twins")
-                .select("id, name, description, settings")
-                .eq("id", twin_id)
-                .single()
-                .execute()
-            )
-            twin_payload = twin_row.data or {}
-            current_settings = twin_payload.get("settings") or {}
-            current_public_profile = current_settings.get("public_profile") or {}
-            staged_settings = {
-                **current_settings,
-                "public_profile": {
-                    **current_public_profile,
-                    "bio": short_variant.bio_text,
-                },
-            }
-            projection = build_existing_profile_projection(
-                {
-                    "id": twin_id,
-                    "name": twin_payload.get("name"),
-                    "description": twin_payload.get("description"),
-                    "settings": staged_settings,
-                },
-                source_flow="link_first",
-            )
-            merged_settings = merge_materialized_profile_settings(staged_settings, projection)
-            supabase.table("twins").update({"settings": merged_settings}).eq("id", twin_id).execute()
+            staged_public_profile["bio"] = short_variant.bio_text
+
+        staged_settings = {
+            **current_settings,
+            "public_profile": staged_public_profile,
+        }
+        projection = build_existing_profile_projection(
+            {
+                "id": twin_id,
+                "name": twin_payload.get("name"),
+                "description": twin_payload.get("description"),
+                "settings": staged_settings,
+            },
+            source_flow="link_first",
+        )
+        merged_settings = merge_materialized_profile_settings(staged_settings, projection)
+        supabase.table("twins").update({"settings": merged_settings}).eq("id", twin_id).execute()
 
         # Update job with results
         supabase.table("link_compile_jobs").update({

@@ -1455,6 +1455,28 @@ def _upsert_source_resilient(payload: Dict[str, Any]) -> None:
             raise
 
 
+def _update_source_resilient(source_id: str, payload: Dict[str, Any], *, twin_id: Optional[str] = None) -> None:
+    """Update source row while tolerating optional-column drift across deployments."""
+    data = dict(payload)
+    while True:
+        try:
+            query = supabase.table("sources").update(data).eq("id", source_id)
+            if twin_id:
+                query = query.eq("twin_id", twin_id)
+            query.execute()
+            return
+        except Exception as e:
+            removed = None
+            for optional_column in ("staging_status", "content_hash", "extracted_text_length", "chunk_count"):
+                if optional_column in data and _source_update_missing_column(e, optional_column):
+                    removed = optional_column
+                    break
+            if removed:
+                data.pop(removed, None)
+                continue
+            raise
+
+
 def _mark_source_live_resilient(source_id: str, chunk_count: int) -> None:
     """Mark source live while tolerating optional-column drift across deployments."""
     update_payload: Dict[str, Any] = {
@@ -1907,7 +1929,7 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
     provider = "web"
 
     try:
-        supabase.table("sources").upsert({
+        _upsert_source_resilient({
             "id": source_id,
             "twin_id": twin_id,
             "filename": f"Web: {url}"[:240],
@@ -1916,7 +1938,7 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
             "status": "processing",
             "staging_status": "staged",
             "citation_url": url,
-        }).execute()
+        })
     except Exception as e:
         print(f"[Web] Warning: Failed to upsert source record: {e}")
 
@@ -1958,9 +1980,9 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
 
                 if fc_title and fc_title != url:
                     try:
-                        supabase.table("sources").update({
+                        _update_source_resilient(source_id, {
                             "filename": f"Web: {fc_title}"[:240],
-                        }).eq("id", source_id).eq("twin_id", twin_id).execute()
+                        }, twin_id=twin_id)
                     except Exception as title_e:
                         print(f"[Web] Warning: Could not update title: {title_e}")
             else:
@@ -2057,7 +2079,7 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
             raise ValueError(f"Insufficient text extracted from page: {len(text)} chars")
 
         content_hash = calculate_content_hash(text)
-        supabase.table("sources").update({
+        _update_source_resilient(source_id, {
             "filename": f"Web: {title}"[:240],
             "file_size": len(text),
             "content_text": text,
@@ -2066,7 +2088,7 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
             "staging_status": "staged",
             "extracted_text_length": len(text),
             "citation_url": url,
-        }).eq("id", source_id).eq("twin_id", twin_id).execute()
+        }, twin_id=twin_id)
 
         finish_step(
             event_id=parsed_event_id,
@@ -2120,11 +2142,7 @@ async def ingest_web_url(source_id: str, twin_id: str, url: str, correlation_id:
         correlation_id=correlation_id,
     )
 
-    supabase.table("sources").update({
-        "status": "live",
-        "staging_status": "live",
-        "chunk_count": num_chunks,
-    }).eq("id", source_id).execute()
+    _mark_source_live_resilient(source_id, num_chunks)
 
     live_event_id = start_step(
         source_id=source_id,

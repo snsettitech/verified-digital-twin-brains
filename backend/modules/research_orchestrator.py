@@ -1490,27 +1490,68 @@ class ResearchOrchestrator:
         try:
             # Import here to avoid circular dependencies
             from modules.persona_bio_generator import generate_and_store_bios
-            from modules.persona_claim_extractor import extract_and_store_claims, ClaimExtractor
-            from modules.retrieval import retrieve_for_twin
+            from modules.persona_claim_extractor import ClaimExtractor
             
             logger.info(f"Phase 4: Triggering persona bio generation for twin {twin_id} with {len(source_urls)} sources")
             
-            # Step 1: Retrieve chunks for the confirmed sources
-            # This uses the already-ingested content from Phase 3.5
+            # Step 1: Load already-ingested content for the confirmed source URLs.
             all_chunks = []
-            for url in source_urls:
+            try:
+                source_result = (
+                    supabase.table("sources")
+                    .select("id, citation_url, content_text")
+                    .eq("twin_id", twin_id)
+                    .in_("citation_url", source_urls)
+                    .limit(max(20, len(source_urls) * 4))
+                    .execute()
+                )
+                source_rows = source_result.data or []
+            except Exception as e:
+                logger.warning(f"Phase 4: Failed to load sources for bio generation: {e}")
+                source_rows = []
+
+            for source_row in source_rows:
+                source_id = source_row.get("id")
+                if not source_id:
+                    continue
                 try:
-                    # Retrieve chunks for this URL
-                    chunks = retrieve_for_twin(
-                        twin_id=twin_id,
-                        query=f"content from {url}",
-                        top_k=10,
-                        filters={"citation_url": url},
+                    chunk_result = (
+                        supabase.table("chunks")
+                        .select("id, content")
+                        .eq("source_id", source_id)
+                        .limit(24)
+                        .execute()
                     )
-                    if chunks:
-                        all_chunks.extend(chunks)
+                    chunk_rows = chunk_result.data or []
                 except Exception as e:
-                    logger.warning(f"Phase 4: Failed to retrieve chunks for {url}: {e}")
+                    logger.warning(f"Phase 4: Failed to load chunks for source {source_id}: {e}")
+                    chunk_rows = []
+
+                for chunk_row in chunk_rows:
+                    chunk_text = str(chunk_row.get("content") or "").strip()
+                    if not chunk_text:
+                        continue
+                    all_chunks.append(
+                        {
+                            "source_id": source_id,
+                            "chunk_id": chunk_row.get("id"),
+                            "text": chunk_text,
+                            "citation_url": source_row.get("citation_url"),
+                        }
+                    )
+
+                if chunk_rows:
+                    continue
+
+                source_text = str(source_row.get("content_text") or "").strip()
+                if source_text:
+                    all_chunks.append(
+                        {
+                            "source_id": source_id,
+                            "text": source_text,
+                            "citation_url": source_row.get("citation_url"),
+                        }
+                    )
             
             if not all_chunks:
                 return {
@@ -1535,7 +1576,12 @@ class ResearchOrchestrator:
             logger.info(f"Phase 4: Generating bios from {len(claims)} claims")
             bio_result = await generate_and_store_bios(
                 twin_id=twin_id,
-                claims=[c.to_dict() if hasattr(c, 'to_dict') else c for c in claims],
+                claims=[
+                    c.model_dump() if hasattr(c, "model_dump")
+                    else c.to_dict() if hasattr(c, "to_dict")
+                    else c
+                    for c in claims
+                ],
                 supabase_client=supabase,
             )
             

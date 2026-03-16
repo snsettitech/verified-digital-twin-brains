@@ -68,8 +68,6 @@ const DEFAULT_PINNED_QUESTIONS = [
   'What are the best ways to connect with you?',
 ];
 
-const DEFAULT_SOCIAL_LINKS = ['instagram.com/', 'linkedin.com/in/', 'youtube.com/@', 'tiktok.com/@'];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -85,6 +83,69 @@ function normalizeStringArray(
     .filter((item) => item.length > 0);
   const next = cleaned.slice(0, max);
   return next.length > 0 ? next : [...fallback];
+}
+
+function normalizeSocialLinkArray(value: unknown, max = 8): string[] {
+  if (isRecord(value)) {
+    return normalizeStringArray(Object.values(value), [], max);
+  }
+  return normalizeStringArray(value, [], max);
+}
+
+function inferSocialLinkLabel(url: string, index: number): string {
+  try {
+    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes('linkedin.com')) return 'linkedin';
+    if (host.includes('instagram.com')) return 'instagram';
+    if (host.includes('youtube.com') || host.includes('youtu.be')) return 'youtube';
+    if (host.includes('x.com') || host.includes('twitter.com')) return 'twitter';
+    if (host.includes('github.com')) return 'github';
+    if (host.includes('wikipedia.org')) return 'wikipedia';
+    return index === 0 ? 'website' : `link${index + 1}`;
+  } catch {
+    return index === 0 ? 'website' : `link${index + 1}`;
+  }
+}
+
+function socialLinksToRecord(links: string[]): Record<string, string> {
+  return links.reduce<Record<string, string>>((accumulator, link, index) => {
+    const cleaned = link.trim();
+    if (!cleaned) return accumulator;
+    const normalized = cleaned.startsWith('http') ? cleaned : `https://${cleaned}`;
+    const baseLabel = inferSocialLinkLabel(normalized, index);
+    let label = baseLabel;
+    let suffix = 2;
+    while (accumulator[label] && accumulator[label] !== normalized) {
+      label = `${baseLabel}_${suffix}`;
+      suffix += 1;
+    }
+    accumulator[label] = normalized;
+    return accumulator;
+  }, {});
+}
+
+function trainingMetricStrength(metrics: TrainingMetricsData | null | undefined): number {
+  if (!metrics || typeof metrics !== 'object') return -1;
+  const words = typeof metrics.words_processed === 'number' ? metrics.words_processed : 0;
+  const questions = typeof metrics.questions_answerable_est === 'number' ? metrics.questions_answerable_est : 0;
+  const mindScore = typeof metrics.mind_score === 'number' ? metrics.mind_score : 0;
+  return words + questions + mindScore;
+}
+
+function chooseBestTrainingMetrics(
+  ...candidates: Array<TrainingMetricsData | null | undefined>
+): TrainingMetricsData | null {
+  let best: TrainingMetricsData | null = null;
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const score = trainingMetricStrength(candidate);
+    if (score > bestScore) {
+      best = candidate ?? null;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 function firstName(fullName: string): string {
@@ -289,11 +350,12 @@ function ProfilePageContent() {
   }, [effectiveTwin?.id]);
 
   const effectiveTrainingMetrics = useMemo<TrainingMetricsData | null>(() => {
-    const combined = profileInsights?.metrics?.combined;
-    if (combined && typeof combined === 'object') {
-      return combined;
-    }
-    return trainingMetrics;
+    return chooseBestTrainingMetrics(
+      profileInsights?.metrics?.combined,
+      profileInsights?.metrics?.name_deep_research,
+      profileInsights?.metrics?.twin_onboarding,
+      trainingMetrics,
+    );
   }, [profileInsights, trainingMetrics]);
 
   const derivedProfile = useMemo<ProfileDraft>(() => {
@@ -317,7 +379,7 @@ function ProfilePageContent() {
       publicIntro ||
       'Add a short bio so visitors know what this twin can help with.';
     const pinnedQuestions = normalizeStringArray(profile.pinned_questions, DEFAULT_PINNED_QUESTIONS, 5);
-    const socialLinks = normalizeStringArray(profile.social_links, DEFAULT_SOCIAL_LINKS, 8);
+    const socialLinks = normalizeSocialLinkArray(profile.social_links, 8);
     const profileVideoEnabled =
       typeof profile.profile_video_enabled === 'boolean' ? profile.profile_video_enabled : true;
     const avatarUrl =
@@ -500,7 +562,7 @@ function ProfilePageContent() {
         headline: draft.headline.trim(),
         bio: draft.bio.trim(),
         pinned_questions: cleanedPinned,
-        social_links: cleanedSocial,
+        social_links: socialLinksToRecord(cleanedSocial),
         profile_video_enabled: draft.profileVideoEnabled,
         avatar_url: draft.avatarUrl.trim(),
         mind_label: draft.mindLabel.trim() || '16.5K Mind',
@@ -863,17 +925,21 @@ function ProfilePageContent() {
             <section className="rounded-3xl border border-white/60 bg-white/75 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
               <h2 className="text-2xl font-bold text-slate-900">Follow {firstName(draft.displayName)} for more...</h2>
               <div className="mt-4 flex flex-wrap gap-3">
-                {draft.socialLinks.map((link, idx) => (
-                  <a
-                    key={`${link}-${idx}`}
-                    href={link.startsWith('http') ? link : `https://${link}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                  >
-                    {link}
-                  </a>
-                ))}
+                {previewSocialLinks.length > 0 ? (
+                  previewSocialLinks.map(([label, url]) => (
+                    <a
+                      key={`${label}-${url}`}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      {label}
+                    </a>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">Public links will appear here once they are added to the profile.</p>
+                )}
               </div>
               <p className="mt-8 text-sm text-slate-500">(c) 2026 Delphi | Terms | Privacy</p>
             </section>

@@ -254,3 +254,50 @@ def test_build_existing_profile_projection_materializes_meta_from_seeded_profile
     assert projection["public_profile_meta"]["source_flow"] == "link_first"
     assert projection["public_profile_meta"]["image_status"] == "resolved"
     assert projection["public_profile_meta"]["completeness_score"] > 0
+
+
+def test_build_existing_profile_projection_uses_legacy_headline_and_source_candidates(monkeypatch):
+    monkeypatch.setattr(
+        profile_pack,
+        "_fetch_existing_source_candidates",
+        lambda _twin_id: [
+            {
+                "id": "src-1",
+                "citation_url": "https://www.narendramodi.in/",
+                "filename": "Official Website",
+            },
+            {
+                "id": "src-2",
+                "citation_url": "https://en.wikipedia.org/wiki/Narendra_Modi",
+                "filename": "Wikipedia",
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        profile_pack,
+        "_fetch_wikipedia_thumbnail",
+        lambda _url: "https://upload.wikimedia.org/wikipedia/commons/modi-backfill.jpg",
+    )
+    monkeypatch.setattr(profile_pack, "_fetch_remote_text", lambda _url, **_kwargs: "")
+
+    projection = profile_pack.build_existing_profile_projection(
+        {
+            "id": "twin-legacy",
+            "name": "Narendra Modi",
+            "description": "",
+            "settings": {
+                "headline": "Prime Minister of India",
+                "specialization": "Public Administration",
+                "public_profile": {},
+            },
+        },
+        source_flow="backfill",
+    )
+
+    public_profile = projection["public_profile"]
+    assert public_profile["headline"] == "Prime Minister of India"
+    assert public_profile["occupation"] == "Prime Minister of India"
+    assert public_profile["social_links"]["website"] == "https://www.narendramodi.in/"
+    assert public_profile["social_links"]["wikipedia"] == "https://en.wikipedia.org/wiki/Narendra_Modi"
+    assert public_profile["image_url"] == "https://upload.wikimedia.org/wikipedia/commons/modi-backfill.jpg"
+    assert projection["public_profile_meta"]["image_source_type"] == "wikipedia"
