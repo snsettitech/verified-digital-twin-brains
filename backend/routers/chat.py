@@ -119,8 +119,39 @@ def _first_sentence(text: Any) -> str:
     normalized = re.sub(r"\s+", " ", str(text or "").strip())
     if not normalized:
         return ""
-    parts = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)
-    return parts[0].strip()
+    parts = re.split(r"(?<=[.!?])\s+", normalized)
+    if not parts:
+        return ""
+    first = parts[0].strip()
+    if (
+        len(parts) > 1
+        and first.lower().endswith((" mr.", " mrs.", " ms.", " dr.", " prof.", " sr.", " jr."))
+    ):
+        first = f"{first} {parts[1].strip()}".strip()
+    return first
+
+
+def _sanitize_public_profile_sentence(text: Any, display_name: str) -> str:
+    sentence = _first_sentence(text)
+    if not sentence:
+        return ""
+    sentence = re.sub(
+        r"\[(?:[0-9a-f]{8,}(?:-[0-9a-f]{4,})+)(?:[;,](?:[0-9a-f]{8,}(?:-[0-9a-f]{4,})+))*\]",
+        "",
+        sentence,
+        flags=re.IGNORECASE,
+    )
+    sentence = re.sub(r"\s+", " ", sentence).strip(" .")
+    lowered = sentence.lower()
+    if not sentence:
+        return ""
+    if lowered.startswith("digital twin"):
+        return ""
+    if lowered.startswith(("he ", "she ", "they ")):
+        return ""
+    if display_name and lowered == display_name.lower():
+        return ""
+    return f"{sentence}."
 
 
 def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, str]]:
@@ -179,7 +210,7 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     role = snapshot["role"]
     organization = snapshot["organization"]
     headline = snapshot["headline"]
-    bio_sentence = _first_sentence(snapshot["bio"])
+    bio_sentence = _sanitize_public_profile_sentence(snapshot["bio"], display_name)
 
     descriptor = ""
     if role and organization:
