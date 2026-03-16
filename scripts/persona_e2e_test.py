@@ -19,6 +19,10 @@ Usage:
 
     # Reset accounts and restart from scratch
     python scripts/persona_e2e_test.py --reset
+
+    # Fix existing twins compiled before granular indexing (re-runs vector indexing only)
+    python scripts/persona_e2e_test.py --reindex
+    python scripts/persona_e2e_test.py --name "Elon Musk" --reindex
 """
 
 import argparse
@@ -299,6 +303,20 @@ async def compile_to_twin(
     return r.json()
 
 
+async def reindex_twin(
+    client: httpx.AsyncClient, jwt: str, run_id: str, twin_id: str
+) -> dict:
+    """Re-index a compiled run with granular per-item Pinecone vectors."""
+    r = await client.post(
+        f"{API_BASE}/deep-research/runs/{run_id}/reindex",
+        headers=_auth_headers(jwt),
+        json={"twin_id": twin_id},
+        timeout=120,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 async def send_chat(
     client: httpx.AsyncClient, jwt: str, twin_id: str, question: str
 ) -> tuple[str, dict]:
@@ -547,6 +565,7 @@ async def main():
     parser.add_argument("--chat-only", action="store_true", help="Skip research, test chat only")
     parser.add_argument("--reset", action="store_true", help="Delete existing data before testing")
     parser.add_argument("--sequential", action="store_true", help="Run personas sequentially (default: parallel)")
+    parser.add_argument("--reindex", action="store_true", help="Re-index existing compiled twins with granular vectors, then test chat")
     args = parser.parse_args()
 
     if args.name:
@@ -556,6 +575,61 @@ async def main():
             personas = [{"name": args.name, "email": f"qa.{args.name.lower().replace(' ', '.')}@gmail.com", "hints": {}}]
     else:
         personas = DEFAULT_PERSONAS
+
+    # ── Reindex mode: fix existing twins compiled before granular indexing ────
+    if args.reindex:
+        print(f"PersonaOn AI — Reindex Mode (granular vector fix)")
+        print(f"Personas: {', '.join(p['name'] for p in personas)}")
+        print(f"API: {API_BASE}")
+        print()
+
+        async def _reindex_persona(persona: dict) -> None:
+            print(f"[{persona['name']}] Authenticating...")
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                try:
+                    jwt = await supabase_signup_or_login(client, persona["email"], TEST_PASSWORD, persona["name"])
+                    twins = await get_my_twins(client, jwt)
+                    if not twins:
+                        print(f"  [{persona['name']}] No twin found — skipping")
+                        return
+                    twin_id = twins[0]["id"]
+
+                    # Find the most recent completed run for this twin
+                    r = await client.get(
+                        f"{API_BASE}/deep-research/runs",
+                        headers=_auth_headers(jwt),
+                        params={"twin_id": twin_id},
+                        timeout=30,
+                    )
+                    # If the list endpoint doesn't exist, try getting runs from the run stored on the twin
+                    run_id = None
+                    if r.status_code == 200:
+                        runs = r.json() if isinstance(r.json(), list) else r.json().get("runs", [])
+                        completed = [x for x in runs if x.get("status") == "completed"]
+                        if completed:
+                            run_id = completed[0]["id"]
+
+                    if not run_id:
+                        print(f"  [{persona['name']}] No completed run found to reindex")
+                        return
+
+                    print(f"  [{persona['name']}] Reindexing run={run_id} twin={twin_id}...")
+                    res = await reindex_twin(client, jwt, run_id, twin_id)
+                    print(
+                        f"  [{persona['name']}] OK — deleted={res.get('sources_deleted')} "
+                        f"chunks={res.get('chunks_indexed')}"
+                    )
+                except Exception as e:
+                    print(f"  [{persona['name']}] FAILED: {e}")
+
+        if args.sequential:
+            for p in personas:
+                await _reindex_persona(p)
+        else:
+            await asyncio.gather(*[_reindex_persona(p) for p in personas])
+
+        print("\nReindex complete. Run with --chat-only to verify improved responses.")
+        return
 
     print(f"PersonaOn AI — E2E Test Suite")
     print(f"Testing {len(personas)} persona(s): {', '.join(p['name'] for p in personas)}")

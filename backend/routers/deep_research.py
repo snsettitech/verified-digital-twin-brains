@@ -5,6 +5,8 @@ Endpoints:
 - POST /deep-research/runs
 - GET /deep-research/runs/{id}
 - GET /deep-research/runs/{id}/result.json
+- POST /deep-research/runs/{id}/compile-to-twin
+- POST /deep-research/runs/{id}/reindex
 """
 
 from __future__ import annotations
@@ -12,14 +14,14 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid as _uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from modules.auth_guard import require_tenant, verify_twin_ownership
-from modules.ingestion import process_and_index_text
+from modules.ingestion import delete_source, process_and_index_text
 from modules.name_deep_research_service import (
     NameDeepResearchService,
     get_name_deep_research_service,
@@ -276,6 +278,54 @@ async def get_deep_research_result_json(
 # Deep Research → Twin Compilation
 # -----------------------------------------------------------------------------
 
+def _build_deep_research_chunks(result: Dict[str, Any]) -> Tuple[str, List[Dict[str, Any]]]:
+    """
+    Convert a deep research result artifact into a flat text document and a
+    list of granular chunk entries for per-item Pinecone vector indexing.
+
+    Returns:
+        (text_doc, chunk_entries) — text_doc is the full concatenated text for
+        the sources table; chunk_entries is passed as chunk_entries_override to
+        process_and_index_text so each Q&A pair, claim, and timeline event gets
+        its own embedding vector.
+    """
+    lines: List[str] = []
+    chunk_entries: List[Dict[str, Any]] = []
+
+    def _add(text: str) -> None:
+        lines.append(text)
+        chunk_entries.append({"text": text, "block_type": "answer_text", "is_answer_text": True})
+
+    bio = result.get("bio") or {}
+    if bio.get("medium"):
+        _add(bio["medium"])
+
+    profile_summary = result.get("profile_summary") or {}
+    summary_parts: List[str] = []
+    if profile_summary.get("what_they_do"):
+        summary_parts.append("What they do: " + "; ".join(profile_summary["what_they_do"]))
+    if profile_summary.get("public_roles"):
+        summary_parts.append("Public roles: " + ", ".join(profile_summary["public_roles"]))
+    if profile_summary.get("organizations"):
+        summary_parts.append("Organizations: " + ", ".join(profile_summary["organizations"]))
+    if summary_parts:
+        _add("\n".join(summary_parts))
+
+    for item in result.get("timeline") or []:
+        if item.get("event"):
+            _add(f"{item.get('date_or_range', '')}: {item['event']}")
+
+    for claim in result.get("claims") or []:
+        if claim.get("text"):
+            _add(claim["text"])
+
+    for qa in result.get("prepared_question_answers") or []:
+        if qa.get("question") and qa.get("answer"):
+            _add(f"Q: {qa['question']}\nA: {qa['answer']}")
+
+    return "\n\n".join(lines).strip(), chunk_entries
+
+
 _DR_CLAIM_TYPE_MAP: Dict[str, str] = {
     "credential": "belief",
     "experience": "experience",
@@ -336,51 +386,8 @@ async def compile_deep_research_to_twin(
 
     # ------------------------------------------------------------------
     # 1. Build text document + granular chunk list for Pinecone indexing
-    #
-    # Each Q&A pair, claim, and timeline event is a separate vector so
-    # retrieval can surface the most relevant fact for each query rather
-    # than always returning the same monolithic bio blob.
     # ------------------------------------------------------------------
-    lines: list[str] = []
-    chunk_entries: list[dict] = []  # per-item chunks for chunk_entries_override
-
-    bio = result.get("bio") or {}
-    if bio.get("medium"):
-        lines.append(bio["medium"])
-        chunk_entries.append({"text": bio["medium"], "block_type": "answer_text", "is_answer_text": True})
-
-    profile_summary = result.get("profile_summary") or {}
-    summary_parts: list[str] = []
-    if profile_summary.get("what_they_do"):
-        summary_parts.append("What they do: " + "; ".join(profile_summary["what_they_do"]))
-    if profile_summary.get("public_roles"):
-        summary_parts.append("Public roles: " + ", ".join(profile_summary["public_roles"]))
-    if profile_summary.get("organizations"):
-        summary_parts.append("Organizations: " + ", ".join(profile_summary["organizations"]))
-    if summary_parts:
-        summary_text = "\n".join(summary_parts)
-        lines.append(summary_text)
-        chunk_entries.append({"text": summary_text, "block_type": "answer_text", "is_answer_text": True})
-
-    for item in result.get("timeline") or []:
-        if item.get("event"):
-            event_text = f"{item.get('date_or_range', '')}: {item['event']}"
-            lines.append(event_text)
-            chunk_entries.append({"text": event_text, "block_type": "answer_text", "is_answer_text": True})
-
-    for claim in result.get("claims") or []:
-        if claim.get("text"):
-            lines.append(claim["text"])
-            chunk_entries.append({"text": claim["text"], "block_type": "answer_text", "is_answer_text": True})
-
-    for qa in result.get("prepared_question_answers") or []:
-        if qa.get("question") and qa.get("answer"):
-            qa_text = f"Q: {qa['question']}\nA: {qa['answer']}"
-            lines.append(qa_text)
-            # Index Q&A pairs as separate vectors — critical for per-question retrieval
-            chunk_entries.append({"text": qa_text, "block_type": "answer_text", "is_answer_text": True})
-
-    text_doc = "\n\n".join(lines).strip()
+    text_doc, chunk_entries = _build_deep_research_chunks(result)
     if not text_doc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -388,11 +395,28 @@ async def compile_deep_research_to_twin(
         )
 
     # ------------------------------------------------------------------
-    # 2. Register source and index to Pinecone
+    # 2. Delete any prior deep-research sources for this twin to prevent
+    #    duplicate vectors from a double compile-to-twin call.
+    # ------------------------------------------------------------------
+    prior_sources = (
+        supabase.table("sources")
+        .select("id")
+        .eq("twin_id", twin_id)
+        .like("filename", "Deep Research:%")
+        .execute()
+    )
+    for prior in prior_sources.data or []:
+        try:
+            await delete_source(source_id=prior["id"], twin_id=twin_id)
+        except Exception as exc:
+            logger.warning("Could not delete prior deep-research source %s: %s", prior["id"], exc)
+
+    # ------------------------------------------------------------------
+    # 3. Register new source and index to Pinecone with granular chunks
     # ------------------------------------------------------------------
     input_name = (result.get("input") or {}).get("name", "Profile")
     source_id = str(_uuid.uuid4())
-    supabase.table("sources").upsert({
+    supabase.table("sources").insert({
         "id": source_id,
         "twin_id": twin_id,
         "filename": f"Deep Research: {input_name}"[:240],
@@ -401,8 +425,6 @@ async def compile_deep_research_to_twin(
         "status": "processing",
     }).execute()
 
-    # Use per-item chunks so each Q&A pair / claim gets its own vector.
-    # Falls back to automatic chunking if the override list is empty.
     await process_and_index_text(
         source_id=source_id,
         twin_id=twin_id,
@@ -414,7 +436,7 @@ async def compile_deep_research_to_twin(
     supabase.table("sources").update({"status": "live"}).eq("id", source_id).execute()
 
     # ------------------------------------------------------------------
-    # 3. Map deep research claims → PersonaClaim and store
+    # 4. Map deep research claims → PersonaClaim and store
     # ------------------------------------------------------------------
     claims_to_store: list[PersonaClaim] = []
     for item in result.get("claims") or []:
@@ -443,13 +465,13 @@ async def compile_deep_research_to_twin(
     await claim_store.save_claims(claims_to_store)
 
     # ------------------------------------------------------------------
-    # 4. Compile persona from stored claims
+    # 5. Compile persona from stored claims
     # ------------------------------------------------------------------
     compiler = PersonaFromClaimsCompiler(supabase)
     await compiler.compile_persona(twin_id)
 
     # ------------------------------------------------------------------
-    # 5. Publish bio from deep research result to twin's public profile
+    # 6. Publish bio from deep research result to twin's public profile
     # ------------------------------------------------------------------
     bio_text = bio.get("short") or bio.get("medium") or ""
     if bio_text:
@@ -464,7 +486,7 @@ async def compile_deep_research_to_twin(
         }).eq("id", twin_id).execute()
 
     # ------------------------------------------------------------------
-    # 6. Advance status to persona_built (unlocks chat gate)
+    # 7. Advance status to persona_built (unlocks chat gate)
     # ------------------------------------------------------------------
     supabase.table("twins").update({"status": "persona_built"}).eq("id", twin_id).execute()
 
@@ -473,4 +495,137 @@ async def compile_deep_research_to_twin(
         "twin_id": twin_id,
         "claims_ingested": len(claims_to_store),
         "bio_written": bool(bio_text),
+        "chunks_indexed": len(chunk_entries),
+    }
+
+
+# -----------------------------------------------------------------------------
+# Reindex — re-run granular vector indexing on an already-compiled run
+# -----------------------------------------------------------------------------
+
+
+class ReindexRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    twin_id: str = Field(..., min_length=1)
+
+
+@router.post(
+    "/deep-research/runs/{run_id}/reindex",
+    responses={
+        404: {"description": "Run or result not found"},
+        409: {"description": "Run not completed"},
+        503: {"description": "Feature disabled"},
+    },
+)
+async def reindex_deep_research(
+    run_id: str,
+    request: ReindexRequest,
+    user: dict = Depends(require_tenant),
+    service: NameDeepResearchService = Depends(get_name_deep_research_service),
+) -> Dict[str, Any]:
+    """
+    Re-index an already-compiled deep research run with granular per-item
+    Pinecone vectors.
+
+    Use this to fix twins compiled before the granular indexing fix was deployed.
+    The endpoint:
+    1. Deletes all existing "Deep Research:" sources for the twin (Pinecone + Supabase).
+    2. Re-indexes the result with chunk_entries_override so each Q&A pair,
+       claim, and timeline event gets its own embedding vector.
+    3. Does NOT re-run persona compilation or overwrite the bio — those are
+       already correct from the original compile-to-twin call.
+    """
+    _check_feature_enabled()
+    twin_id = request.twin_id
+    tenant_id = user["tenant_id"]
+
+    run = await service.get_run(run_id=run_id, tenant_id=tenant_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": f"No run found for id={run_id}"},
+        )
+    if run.get("status") != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": f"Run not yet completed (status={run.get('status')})"},
+        )
+
+    verify_twin_ownership(twin_id, user)
+
+    result = await service.get_result(run_id=run_id, tenant_id=tenant_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "No result artifact found for this run"},
+        )
+
+    text_doc, chunk_entries = _build_deep_research_chunks(result)
+    if not text_doc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "Deep research result contains no indexable content"},
+        )
+
+    # Delete all existing deep-research sources for this twin so stale
+    # single-chunk vectors are removed from Pinecone before re-indexing.
+    prior_sources = (
+        supabase.table("sources")
+        .select("id")
+        .eq("twin_id", twin_id)
+        .like("filename", "Deep Research:%")
+        .execute()
+    )
+    deleted_count = 0
+    for prior in prior_sources.data or []:
+        try:
+            await delete_source(source_id=prior["id"], twin_id=twin_id)
+            deleted_count += 1
+        except Exception as exc:
+            logger.warning("Could not delete prior source %s during reindex: %s", prior["id"], exc)
+
+    # Create fresh source record and re-index with granular chunks.
+    input_name = (result.get("input") or {}).get("name", "Profile")
+    source_id = str(_uuid.uuid4())
+    supabase.table("sources").insert({
+        "id": source_id,
+        "twin_id": twin_id,
+        "filename": f"Deep Research: {input_name}"[:240],
+        "file_size": len(text_doc),
+        "content_text": text_doc,
+        "status": "processing",
+    }).execute()
+
+    try:
+        await process_and_index_text(
+            source_id=source_id,
+            twin_id=twin_id,
+            text=text_doc,
+            provider="deep_research",
+            chunk_entries_override=chunk_entries if chunk_entries else None,
+        )
+    except Exception as exc:
+        # Mark source as failed so it's visible in the dashboard rather than
+        # silently stuck in "processing".
+        supabase.table("sources").update({"status": "failed"}).eq("id", source_id).execute()
+        logger.exception("Reindex failed for twin %s run %s: %s", twin_id, run_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"Reindex failed: {exc}"},
+        ) from exc
+
+    supabase.table("sources").update({"status": "live"}).eq("id", source_id).execute()
+
+    logger.info(
+        "Reindex complete: twin=%s run=%s sources_deleted=%d chunks_indexed=%d",
+        twin_id, run_id, deleted_count, len(chunk_entries),
+    )
+
+    return {
+        "status": "completed",
+        "twin_id": twin_id,
+        "run_id": run_id,
+        "source_id": source_id,
+        "sources_deleted": deleted_count,
+        "chunks_indexed": len(chunk_entries),
     }
