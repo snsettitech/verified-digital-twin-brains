@@ -150,7 +150,113 @@ def _merge_twin_row_settings(twin_row: Optional[Dict[str, Any]]) -> Dict[str, An
     if tenant_id and not str(merged.get("tenant_id") or "").strip():
         merged["tenant_id"] = tenant_id
 
+    description = str(twin_row.get("description") or "").strip()
+    if description and not str(merged.get("description") or "").strip():
+        merged["description"] = description
+
     return merged
+
+
+def _canonical_identity_follow_up_question() -> str:
+    return "What are you trying to figure out right now?"
+
+
+def _first_sentence(text: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(text or "").strip())
+    if not normalized:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)
+    return parts[0].strip()
+
+
+def _strip_identity_prefix(text: str, display_name: str) -> str:
+    normalized = re.sub(r"\s+", " ", str(text or "").strip())
+    if not normalized or not display_name:
+        return normalized
+    pattern = rf"^{re.escape(display_name)}\s+(is|was)\s+"
+    return re.sub(pattern, "", normalized, flags=re.IGNORECASE).strip()
+
+
+def _build_canonical_fastpath_profile(full_settings: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not isinstance(full_settings, dict):
+        return None
+
+    public_profile = full_settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+
+    display_name = (
+        str(full_settings.get("name") or "").strip()
+        or str(public_profile.get("display_name") or "").strip()
+    )
+    if not display_name:
+        return None
+
+    headline = str(public_profile.get("headline") or full_settings.get("tagline") or "").strip()
+    role = str(public_profile.get("role") or "").strip()
+    organization = str(public_profile.get("organization") or "").strip()
+    description = _strip_identity_prefix(
+        str(full_settings.get("description") or "").strip(),
+        display_name,
+    )
+    public_intro = str(full_settings.get("public_intro") or "").strip()
+    bio = str(public_profile.get("bio") or "").strip()
+
+    descriptor = ""
+    if headline:
+        descriptor = headline.rstrip(". ")
+    elif role and organization:
+        descriptor = f"{role} at {organization}"
+    elif role:
+        descriptor = role
+    elif description:
+        descriptor = description.rstrip(". ")
+
+    if descriptor:
+        one_line_intro = f"I'm {display_name} — {descriptor}."
+    elif public_intro.lower().startswith(("i'm ", "i am ")):
+        one_line_intro = public_intro.rstrip(". ") + "."
+    else:
+        one_line_intro = f"I'm {display_name}."
+
+    short_parts: List[str] = [one_line_intro]
+    lead_sentence = _first_sentence(public_intro or bio)
+    if lead_sentence:
+        lowered = lead_sentence.lower()
+        if not lowered.startswith(("he ", "she ", "they ", display_name.lower() + " ")):
+            if lead_sentence.rstrip(". ") != one_line_intro.rstrip(". "):
+                short_parts.append(lead_sentence.rstrip(". ") + ".")
+
+    expertise_areas: List[str] = []
+    raw_topics = full_settings.get("public_topics")
+    if isinstance(raw_topics, list):
+        expertise_areas = [
+            str(item.get("name") or item.get("slug") or "").strip()
+            for item in raw_topics
+            if isinstance(item, dict) and str(item.get("name") or item.get("slug") or "").strip()
+        ][:4]
+
+    social_links = public_profile.get("social_links")
+    social_links = social_links if isinstance(social_links, dict) else {}
+
+    return {
+        "profile_status": "approved",
+        "display_name": display_name,
+        "one_line_intro": one_line_intro,
+        "short_intro": " ".join(part.strip() for part in short_parts if part.strip()).strip(),
+        "disclosure_line": f"I'm a digital version of {display_name}, not the person directly.",
+        "contact_handoff_line": "For direct contact, please use the public channels listed in this profile.",
+        "preferred_contact_channel": str(public_profile.get("preferred_contact_channel") or "").strip(),
+        "social_links": social_links,
+        "expertise_areas": expertise_areas,
+        "follow_up_question": _canonical_identity_follow_up_question(),
+    }
+
+
+def _build_canonical_identity_response(state: Dict[str, Any]) -> Optional[str]:
+    profile = _build_canonical_fastpath_profile(state.get("full_settings"))
+    if not profile:
+        return None
+    return str(profile.get("short_intro") or profile.get("one_line_intro") or "").strip()
 
 
 def _load_active_persona_spec_v2_row(twin_id: str) -> Optional[Dict[str, Any]]:
@@ -1179,9 +1285,13 @@ async def router_node(state: TwinState):
 
     # STEP 1.5: Persona identity fast-path (optional, feature-flagged).
     # Keeps retrieval path unchanged unless explicitly enabled and profile is eligible.
-    if is_persona_fastpath_enabled():
-        fastpath_match = classify_fastpath_intent(effective_query)
-        if fastpath_match.get("matched") and twin_id:
+    fastpath_match = classify_fastpath_intent(effective_query)
+    if fastpath_match.get("matched") and twin_id:
+        fastpath_payload: Optional[Dict[str, Any]] = None
+        fastpath_profile_status = "unavailable"
+        router_reason = "persona_fastpath_canonical"
+
+        if is_persona_fastpath_enabled():
             allow_draft = is_persona_draft_profile_allowed()
             profile = get_persona_profile(str(twin_id))
             if profile and is_profile_eligible_for_fastpath(profile, allow_draft=allow_draft):
@@ -1190,68 +1300,80 @@ async def router_node(state: TwinState):
                     profile=profile,
                     query=effective_query,
                 )
-                if str(fastpath_payload.get("text") or "").strip():
-                    router_reason = "persona_fastpath_identity"
-                    decision_payload = {
-                        "intent": "answer",
-                        "chosen_workflow": "answer",
-                        "output_schema": "workflow.answer.v1",
-                        "action": "answer",
-                        "confidence": float(fastpath_match.get("confidence") or 0.0),
-                        "required_inputs_missing": [],
-                        "clarifying_questions": [],
-                    }
-                    print(
-                        "[PersonaFastPath] hit "
-                        f"twin_id={twin_id} intent={fastpath_payload.get('intent')} "
-                        f"profile_status={profile.get('profile_status')}"
-                    )
-                    try:
-                        langfuse_context.update_current_observation(
-                            metadata={
-                                "router_mode": "IDENTITY_FACT",
-                                "router_intent_label": "meta_or_system",
-                                "router_requires_evidence": False,
-                                "router_target_owner_scope": False,
-                                "router_interaction_context": interaction_context,
-                                "router_knowledge_available": bool(knowledge_available),
-                                "router_reason": router_reason,
-                                "persona_fastpath_hit": True,
-                                "persona_fastpath_intent": fastpath_payload.get("intent"),
-                                "persona_fastpath_profile_status": profile.get("profile_status"),
-                            }
-                        )
-                    except Exception:
-                        pass
-
-                    return {
-                        "dialogue_mode": "IDENTITY_FACT",
-                        "intent_label": "meta_or_system",
-                        "target_owner_scope": False,
-                        "requires_evidence": False,
-                        "sub_queries": [],
-                        "router_reason": router_reason,
-                        "router_knowledge_available": knowledge_available,
-                        "workflow_intent": "answer",
-                        "routing_decision": decision_payload,
-                        "fastpath_intent": fastpath_payload.get("intent"),
-                        "fastpath_response": fastpath_payload,
-                        "query_class": "identity",
-                        "quote_intent": False,
-                        "execution_lane": False,
-                        "deepagents_plan": None,
-                        "original_query": user_query,
-                        "effective_query": effective_query,
-                        "query_rewrite_result": rewrite_result.model_dump() if rewrite_result else None,
-                        "reasoning_history": (state.get("reasoning_history") or [])
-                        + [f"Router: persona fast-path ({fastpath_payload.get('intent')})."],
-                    }
+                fastpath_profile_status = str(profile.get("profile_status") or "approved")
+                router_reason = "persona_fastpath_identity"
             else:
                 print(
                     "[PersonaFastPath] miss "
                     f"twin_id={twin_id} reason={'no_profile' if not profile else 'profile_not_eligible'} "
                     f"allow_draft={allow_draft}"
                 )
+
+        if not fastpath_payload:
+            canonical_profile = _build_canonical_fastpath_profile(state.get("full_settings"))
+            if canonical_profile:
+                fastpath_payload = build_fastpath_response(
+                    intent=str(fastpath_match.get("intent")),
+                    profile=canonical_profile,
+                    query=effective_query,
+                )
+                fastpath_profile_status = "canonical"
+
+        if fastpath_payload and str(fastpath_payload.get("text") or "").strip():
+            decision_payload = {
+                "intent": "answer",
+                "chosen_workflow": "answer",
+                "output_schema": "workflow.answer.v1",
+                "action": "answer",
+                "confidence": float(fastpath_match.get("confidence") or 0.0),
+                "required_inputs_missing": [],
+                "clarifying_questions": [],
+            }
+            print(
+                "[PersonaFastPath] hit "
+                f"twin_id={twin_id} intent={fastpath_payload.get('intent')} "
+                f"profile_status={fastpath_profile_status}"
+            )
+            try:
+                langfuse_context.update_current_observation(
+                    metadata={
+                        "router_mode": "IDENTITY_FACT",
+                        "router_intent_label": "meta_or_system",
+                        "router_requires_evidence": False,
+                        "router_target_owner_scope": False,
+                        "router_interaction_context": interaction_context,
+                        "router_knowledge_available": bool(knowledge_available),
+                        "router_reason": router_reason,
+                        "persona_fastpath_hit": True,
+                        "persona_fastpath_intent": fastpath_payload.get("intent"),
+                        "persona_fastpath_profile_status": fastpath_profile_status,
+                    }
+                )
+            except Exception:
+                pass
+
+            return {
+                "dialogue_mode": "IDENTITY_FACT",
+                "intent_label": "meta_or_system",
+                "target_owner_scope": False,
+                "requires_evidence": False,
+                "sub_queries": [],
+                "router_reason": router_reason,
+                "router_knowledge_available": knowledge_available,
+                "workflow_intent": "answer",
+                "routing_decision": decision_payload,
+                "fastpath_intent": fastpath_payload.get("intent"),
+                "fastpath_response": fastpath_payload,
+                "query_class": "identity",
+                "quote_intent": False,
+                "execution_lane": False,
+                "deepagents_plan": None,
+                "original_query": user_query,
+                "effective_query": effective_query,
+                "query_rewrite_result": rewrite_result.model_dump() if rewrite_result else None,
+                "reasoning_history": (state.get("reasoning_history") or [])
+                + [f"Router: persona fast-path ({fastpath_payload.get('intent')})."],
+            }
     
     # STEP 2: Apply grounding policy to effective query
     query_policy = get_grounding_policy(effective_query, interaction_context=interaction_context)
@@ -2201,6 +2323,15 @@ def _build_source_faithful_response_text(
         return realized_text or fallback_text
 
     partial_summary = " ".join(points[:2]).strip() or fallback_text
+    if _is_identity_query(latest_query) and (len(context_data) < 2 or top_score < 0.65):
+        canonical_identity = _build_canonical_identity_response(state)
+        question = (
+            follow_up.strip()
+            if isinstance(follow_up, str) and follow_up.strip()
+            else _canonical_identity_follow_up_question()
+        )
+        if canonical_identity:
+            return f"{canonical_identity} {question}".strip()
     if len(context_data) < 1 or top_score < 0.40:
         brief_take = partial_summary
         if not brief_take or brief_take == fallback_text:
@@ -2320,7 +2451,7 @@ async def planner_node(state: TwinState):
             "planning_output": {
                 "answer_points": [fastpath_text],
                 "citations": [],
-                "follow_up_question": "",
+                "follow_up_question": str(fastpath_payload.get("follow_up_question") or "").strip(),
                 "confidence": confidence,
                 "teaching_questions": [],
                 "render_strategy": "source_faithful",

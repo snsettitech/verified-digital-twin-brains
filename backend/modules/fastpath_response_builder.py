@@ -7,7 +7,7 @@ Builds concise, disclosure-safe identity responses from canonical profile data.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 def _safe_str(value: Any) -> str:
@@ -25,7 +25,7 @@ def _safe_dict(value: Any) -> Dict[str, Any]:
 def _default_disclosure(display_name: str) -> str:
     template = os.getenv(
         "PERSONA_DISCLOSURE_TEMPLATE",
-        "I’m a digital AI representation of {display_name}, not the real person directly.",
+        "I'm a digital version of {display_name}, not the person directly.",
     )
     name = display_name or "this person"
     return template.format(display_name=name)
@@ -48,24 +48,23 @@ def build_fastpath_response(
     expertise = [str(x).strip() for x in _safe_list(profile.get("expertise_areas")) if str(x).strip()]
     restricted = [str(x).strip() for x in _safe_list(profile.get("restricted_topics")) if str(x).strip()]
     social_links = _safe_dict(profile.get("social_links"))
+    follow_up_question = _safe_str(profile.get("follow_up_question")) or (
+        "What are you trying to figure out right now?"
+    )
 
     text = ""
     if intent == "identity_intro":
-        primary = one_line_intro or short_intro or f"I’m {display_name}."
-        text = primary
+        text = one_line_intro or short_intro or f"I'm {display_name}."
 
     elif intent == "identity_about":
-        primary = short_intro or one_line_intro or f"I’m {display_name}."
-        text = primary
+        text = short_intro or one_line_intro or f"I'm {display_name}."
 
     elif intent == "authenticity_disclosure":
-        intro = one_line_intro or short_intro or f"I’m {display_name}."
+        intro = one_line_intro or short_intro or f"I'm {display_name}."
         text = f"{intro} {disclosure_line}"
 
     elif intent == "contact_handoff":
-        channel_hint = ""
-        if preferred_channel:
-            channel_hint = f" Preferred channel: {preferred_channel}."
+        channel_hint = f" Preferred channel: {preferred_channel}." if preferred_channel else ""
         link_hint = ""
         if social_links:
             ordered = []
@@ -80,16 +79,17 @@ def build_fastpath_response(
         if expertise:
             text = f"I can help with {', '.join(expertise[:4])}."
         else:
-            text = "I can help with topics grounded in this twin’s sources and profile."
+            text = "I can help with topics grounded in this twin's sources and profile."
         if restricted:
             text = f"{text} I avoid {', '.join(restricted[:3])}."
 
     else:
-        text = one_line_intro or short_intro or f"I’m {display_name}."
+        text = one_line_intro or short_intro or f"I'm {display_name}."
 
     return {
         "intent": intent,
         "text": " ".join(text.split()).strip(),
+        "follow_up_question": follow_up_question,
         "disclosure_included": intent in {"authenticity_disclosure", "contact_handoff"},
         "profile_status": _safe_str(profile.get("profile_status")) or "draft",
     }

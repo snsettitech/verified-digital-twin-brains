@@ -93,3 +93,32 @@ async def test_flags_off_keeps_existing_router_behavior(monkeypatch):
         assert len(out["sub_queries"]) == 1
         assert out["fastpath_response"] is None
         assert out["fastpath_intent"] is None
+
+
+@pytest.mark.asyncio
+async def test_canonical_identity_fastpath_uses_public_profile_when_profile_pack_missing(monkeypatch):
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("PERSONA_FASTPATH_ENABLED", "false")
+        m.setattr("modules.agent._twin_has_groundable_knowledge", lambda _twin_id: True)
+
+        routed = await router_node(
+            {
+                "twin_id": "twin-1",
+                "messages": [HumanMessage(content="Who are you?")],
+                "interaction_context": "public_share",
+                "reasoning_history": [],
+                "full_settings": {
+                    "name": "Elon Musk",
+                    "description": "Tech entrepreneur, CEO of Tesla and SpaceX, founder of xAI.",
+                    "public_profile": {
+                        "bio": "He believes humanity must become a multi-planetary species.",
+                    },
+                },
+            }
+        )
+
+        assert routed["requires_evidence"] is False
+        assert routed["fastpath_intent"] == "identity_intro"
+        assert isinstance(routed["fastpath_response"], dict)
+        assert "Elon Musk" in routed["fastpath_response"]["text"]
+        assert "digital" not in routed["fastpath_response"]["text"].lower()

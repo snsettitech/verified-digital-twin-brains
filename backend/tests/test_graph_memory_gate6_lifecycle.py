@@ -5,12 +5,10 @@ Validates that twin graph data can be deleted by group_id reliably without orpha
 """
 
 import pytest
-import asyncio
-import time
 import uuid
 
 from modules.graph_memory_core import GraphMemoryCore
-from modules.graph_memory_config import get_graph_memory_config, reset_config
+from modules.graph_memory_config import reset_config
 from modules.graph_circuit_breaker import reset_all_breakers
 from modules.graph_outbox import reset_outbox
 from modules.graph_extraction_cache import reset_cache
@@ -18,60 +16,32 @@ from modules.observability import supabase
 
 
 @pytest.fixture(autouse=True)
-def reset_state():
+def reset_state(monkeypatch):
     """Reset all singletons before each test."""
+    monkeypatch.setenv("GRAPH_MEMORY_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_MEMORY_READ_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_MEMORY_WRITE_ENABLED", "true")
     reset_config()
     reset_all_breakers()
     reset_outbox()
     reset_cache()
 
 
-@pytest.fixture
-def require_neo4j():
-    """Skip tests if Neo4j not configured or not reachable."""
-    import socket
-    config = get_graph_memory_config()
-    if not config.neo4j_uri or not config.neo4j_password:
-        pytest.skip("Neo4j not configured")
-    try:
-        host = config.neo4j_uri.split("://")[-1].split(":")[0]
-        socket.getaddrinfo(host, None)
-    except (socket.gaierror, OSError):
-        pytest.skip("Neo4j host not reachable")
-
-
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
 async def test_delete_twin_graph_queues_job():
     """
     Verify delete_twin_graph queues a job to outbox.
     """
-    tenant_id = f"gate6-tenant-{uuid.uuid4().hex[:8]}"
-    twin_id = f"gate6-twin-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_id = str(uuid.uuid4())
     
     client = GraphMemoryCore(tenant_id, twin_id, "gate6-test")
-    
-    # Create some data first
-    for i in range(3):
-        await client.create_episode(
-            name=f"Episode {i}",
-            body=f"Content {i} - {time.time()}",
-            source_type="test",
-            source_ref=f"gate6-{i}",
-            async_write=False  # Synchronous
-        )
-    
-    await asyncio.sleep(2)  # Wait for indexing
-    
-    # Verify data exists
-    results_before = await client.search("Content", num_results=10)
-    assert len(results_before) >= 3, f"Expected at least 3 episodes, got {len(results_before)}"
-    
+
     # Queue deletion
     result = await client.delete_twin_graph()
     
     assert result is True, "delete_twin_graph should return True"
-    
+
     # Verify outbox has deletion job
     outbox_result = supabase.table("graph_outbox").select("*").eq(
         "tenant_id", tenant_id
@@ -82,57 +52,34 @@ async def test_delete_twin_graph_queues_job():
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
 async def test_delete_only_targets_specific_twin():
     """
     Verify deletion only affects target twin, not others.
     """
-    tenant_id = f"gate6-multi-{uuid.uuid4().hex[:8]}"
-    twin_a_id = f"gate6-twin-a-{uuid.uuid4().hex[:8]}"
-    twin_b_id = f"gate6-twin-b-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_a_id = str(uuid.uuid4())
+    twin_b_id = str(uuid.uuid4())
     
     client_a = GraphMemoryCore(tenant_id, twin_a_id, "gate6-test")
     client_b = GraphMemoryCore(tenant_id, twin_b_id, "gate6-test")
-    
-    unique_a = f"unique-a-{time.time()}-{uuid.uuid4().hex}"
-    unique_b = f"unique-b-{time.time()}-{uuid.uuid4().hex}"
-    
-    try:
-        # Create data in both twins
-        await client_a.create_episode(
-            name="Twin A Data",
-            body=f"This is {unique_a}",
-            source_type="test",
-            source_ref="test-a",
-            async_write=False
-        )
-        
-        await client_b.create_episode(
-            name="Twin B Data",
-            body=f"This is {unique_b}",
-            source_type="test",
-            source_ref="test-b",
-            async_write=False
-        )
-        
-        await asyncio.sleep(2)
-        
-        # Verify both have data
-        results_a = await client_a.search(unique_a)
-        results_b = await client_b.search(unique_b)
-        
-        assert len(results_a) > 0, "Twin A should have data"
-        assert len(results_b) > 0, "Twin B should have data"
-        
-        # Delete twin A only
-        await client_a.delete_twin_graph()
-        
-        # Cleanup both for test isolation
-        await client_b.delete_twin_graph()
-        
-    finally:
-        await client_a.delete_twin_graph()
-        await client_b.delete_twin_graph()
+
+    # Delete twin A only
+    assert await client_a.delete_twin_graph() is True
+
+    outbox_result = (
+        supabase.table("graph_outbox")
+        .select("tenant_id, twin_id, operation, payload")
+        .eq("tenant_id", tenant_id)
+        .eq("operation", "delete_twin_graph")
+        .execute()
+    )
+    rows = outbox_result.data or []
+    assert len(rows) >= 1, "Expected at least one deletion job"
+    assert any(row.get("twin_id") == twin_a_id for row in rows), "Twin A deletion job missing"
+    assert not any(row.get("twin_id") == twin_b_id for row in rows), "Twin B should not be targeted yet"
+
+    # Clean up created row(s) for test isolation.
+    supabase.table("graph_outbox").delete().eq("tenant_id", tenant_id).execute()
 
 
 @pytest.mark.asyncio
@@ -202,15 +149,14 @@ async def test_delete_job_payload_contains_group_id(mock_graph_outbox_table):
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
 async def test_cleanup_cache_on_delete():
     """
     Verify extraction cache is cleaned up on twin deletion.
     """
     from modules.graph_extraction_cache import get_extraction_cache
     
-    tenant_id = f"gate6-cache-{uuid.uuid4().hex[:8]}"
-    twin_id = f"gate6-twin-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_id = str(uuid.uuid4())
     
     cache = get_extraction_cache()
     

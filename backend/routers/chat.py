@@ -3119,6 +3119,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         )
         return {
             "status": "clarification",
+            "message": clarification_payload["message"],
             "response": clarification_payload["message"],
             "response_type": clarification_payload["response_type"],
             "requires_user_input": clarification_payload["requires_user_input"],
@@ -3614,6 +3615,7 @@ async def public_chat_endpoint(
         )
         return {
             "status": "clarification",
+            "message": clarification_payload["message"],
             "response": clarification_payload["message"],
             "response_type": clarification_payload["response_type"],
             "requires_user_input": clarification_payload["requires_user_input"],
@@ -3659,6 +3661,8 @@ async def public_chat_endpoint(
             planning_output = {}
             routing_decision: Optional[Dict[str, Any]] = None
             retrieved_context_snippets: List[Dict[str, Any]] = []
+            inference_provider = inference_router.get_active_provider()
+            inference_model = inference_router.get_active_model()
             async for event in run_agent_stream(
                 twin_id,
                 request.message,
@@ -3720,6 +3724,12 @@ async def public_chat_endpoint(
                                 context_trace["persona_spec_version"] = msg.additional_kwargs["persona_spec_version"]
                             if msg.additional_kwargs.get("persona_prompt_variant"):
                                 context_trace["persona_prompt_variant"] = msg.additional_kwargs["persona_prompt_variant"]
+                            next_provider = msg.additional_kwargs.get("provider_used") or msg.additional_kwargs.get("inference_provider")
+                            if isinstance(next_provider, str) and next_provider.strip():
+                                inference_provider = next_provider
+                            next_model = msg.additional_kwargs.get("model_used") or msg.additional_kwargs.get("inference_model")
+                            if isinstance(next_model, str) and next_model.strip():
+                                inference_model = next_model
                         final_response = msg.content
 
             retrieved_context_snippets, removed_context_count = _filter_contexts_to_allowed_sources(
@@ -3949,9 +3959,20 @@ async def public_chat_endpoint(
             except Exception as audit_err:
                 logger.debug(f"Public runtime audit persistence failed (non-blocking): {audit_err}")
 
+            status_value = _resolve_chat_status(routing_decision)
+            response_type = (
+                "clarification"
+                if (dialogue_mode == "CLARIFY" or bool(clarification_hint) or bool(clarification_options))
+                else "answer"
+            )
+            requires_user_input = response_type == "clarification"
+
             return {
-                "status": _resolve_chat_status(routing_decision),
+                "status": status_value,
+                "message": final_response,
                 "response": final_response,
+                "response_type": response_type,
+                "requires_user_input": requires_user_input,
                 "citations": citations,
                 "citation_details": citation_details,
                 "confidence_score": confidence_score,
@@ -3976,6 +3997,8 @@ async def public_chat_endpoint(
                 "online_eval": online_eval_result,
                 "runtime_confidence_gate": runtime_gate_meta,
                 "used_owner_memory": False,
+                "model_used": inference_model,
+                "provider_used": inference_provider,
                 "identity_gate_mode": gate.get("gate_mode"),
                 **context_trace,
             }

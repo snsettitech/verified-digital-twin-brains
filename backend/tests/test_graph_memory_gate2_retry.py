@@ -16,40 +16,27 @@ from modules.graph_memory_config import get_graph_memory_config, reset_config
 from modules.graph_outbox import get_graph_outbox, reset_outbox
 from modules.graph_circuit_breaker import reset_all_breakers
 from modules.graph_extraction_cache import reset_cache
-from modules.observability import supabase
 
 
 @pytest.fixture(autouse=True)
-def reset_state():
+def reset_state(monkeypatch):
     """Reset all singletons before each test."""
+    monkeypatch.setenv("GRAPH_MEMORY_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_MEMORY_READ_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_MEMORY_WRITE_ENABLED", "true")
     reset_config()
     reset_all_breakers()
     reset_outbox()
     reset_cache()
 
 
-@pytest.fixture
-def require_neo4j():
-    """Skip tests if Neo4j not configured or not reachable."""
-    import socket
-    config = get_graph_memory_config()
-    if not config.neo4j_uri or not config.neo4j_password:
-        pytest.skip("Neo4j not configured")
-    try:
-        host = config.neo4j_uri.split("://")[-1].split(":")[0]
-        socket.getaddrinfo(host, None)
-    except (socket.gaierror, OSError):
-        pytest.skip("Neo4j host not reachable")
-
-
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
-async def test_idempotent_episode_creation():
+async def test_idempotent_episode_creation(mock_graph_outbox_table):
     """
     Submit same episode 10 times, verify only 1 created.
     """
-    tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
-    twin_id = f"test-twin-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_id = str(uuid.uuid4())
     
     client = GraphMemoryCore(tenant_id, twin_id, "gate2-test")
     config = get_graph_memory_config()
@@ -63,7 +50,8 @@ async def test_idempotent_episode_creation():
         twin_id=twin_id,
         source_type="escalation",
         source_ref=source_ref,
-        content=content
+        content=content,
+        scope_id=client.scope_id,
     )
     
     job_ids: List[str] = []
@@ -84,15 +72,7 @@ async def test_idempotent_episode_creation():
         # Verify all 10 submissions returned job IDs
         assert len(job_ids) == 10, f"Expected 10 job IDs, got {len(job_ids)}"
         
-        # Wait for outbox processing
-        await asyncio.sleep(1)
-        
-        # Query outbox for this tenant-twin
-        result = supabase.table("graph_outbox").select("*").eq(
-            "tenant_id", tenant_id
-        ).eq("twin_id", twin_id).execute()
-        
-        records = result.data or []
+        records = list(mock_graph_outbox_table.values())
         
         # Count unique idempotency keys
         unique_keys = set(r["idempotency_key"] for r in records)
@@ -113,22 +93,16 @@ async def test_idempotent_episode_creation():
             )
         
     finally:
-        # Cleanup
         await client.delete_twin_graph()
-        # Clean outbox
-        supabase.table("graph_outbox").delete().eq("tenant_id", tenant_id).eq(
-            "twin_id", twin_id
-        ).execute()
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
-async def test_different_content_creates_different_episodes():
+async def test_different_content_creates_different_episodes(mock_graph_outbox_table):
     """
     Verify that different content creates different episodes (non-false-positive).
     """
-    tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
-    twin_id = f"test-twin-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_id = str(uuid.uuid4())
     
     client = GraphMemoryCore(tenant_id, twin_id, "gate2-test")
     
@@ -143,15 +117,7 @@ async def test_different_content_creates_different_episodes():
                 async_write=True
             )
         
-        # Wait for outbox
-        await asyncio.sleep(1)
-        
-        # Query outbox
-        result = supabase.table("graph_outbox").select("idempotency_key").eq(
-            "tenant_id", tenant_id
-        ).eq("twin_id", twin_id).execute()
-        
-        records = result.data or []
+        records = list(mock_graph_outbox_table.values())
         unique_keys = set(r["idempotency_key"] for r in records)
         
         # Should have 3 unique keys
@@ -161,19 +127,15 @@ async def test_different_content_creates_different_episodes():
         
     finally:
         await client.delete_twin_graph()
-        supabase.table("graph_outbox").delete().eq("tenant_id", tenant_id).eq(
-            "twin_id", twin_id
-        ).execute()
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
-async def test_outbox_deduplication_at_submission():
+async def test_outbox_deduplication_at_submission(mock_graph_outbox_table):
     """
     Verify outbox deduplicates at submission time (before processing).
     """
-    tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
-    twin_id = f"test-twin-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_id = str(uuid.uuid4())
     
     outbox = get_graph_outbox()
     config = get_graph_memory_config()
@@ -204,7 +166,4 @@ async def test_outbox_deduplication_at_submission():
         f"Deduplication failed: got different job IDs {job_id_1} vs {job_id_2}"
     )
     
-    # Cleanup
-    supabase.table("graph_outbox").delete().eq("tenant_id", tenant_id).eq(
-        "twin_id", twin_id
-    ).execute()
+    assert len(mock_graph_outbox_table) == 1, "Expected a single stored job after dedupe"

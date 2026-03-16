@@ -270,11 +270,10 @@ def enable_graph_memory(monkeypatch):
     monkeypatch.setenv("NEO4J_URI", "bolt://mock:7687")
     monkeypatch.setenv("NEO4J_PASSWORD", "mock-password")
     
-    # Force config reload
-    import modules.graph_memory_config as config_module
-    config_module._config_instance = None
+    from modules.graph_memory_config import reset_config
+    reset_config()
     
     yield
     
     # Cleanup
-    config_module._config_instance = None
+    reset_config()

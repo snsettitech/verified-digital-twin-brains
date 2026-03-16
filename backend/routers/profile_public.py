@@ -55,19 +55,46 @@ def _fetch_public_twin(twin_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _fetch_marketplace_twin_rows() -> List[Dict[str, Any]]:
+    base_fields = "id, name, settings, status, created_at"
     try:
         result = (
             supabase.table("twins")
-            .select("id, name, settings, status, is_active, created_at, updated_at")
+            .select(f"{base_fields}, is_active, updated_at")
             .execute()
         )
     except Exception as exc:
         if _missing_column_error(exc, "is_active"):
-            result = (
-                supabase.table("twins")
-                .select("id, name, settings, status, created_at, updated_at")
-                .execute()
-            )
+            try:
+                result = (
+                    supabase.table("twins")
+                    .select(f"{base_fields}, updated_at")
+                    .execute()
+                )
+            except Exception as nested_exc:
+                if _missing_column_error(nested_exc, "updated_at"):
+                    result = (
+                        supabase.table("twins")
+                        .select(base_fields)
+                        .execute()
+                    )
+                else:
+                    raise
+        elif _missing_column_error(exc, "updated_at"):
+            try:
+                result = (
+                    supabase.table("twins")
+                    .select(f"{base_fields}, is_active")
+                    .execute()
+                )
+            except Exception as nested_exc:
+                if _missing_column_error(nested_exc, "is_active"):
+                    result = (
+                        supabase.table("twins")
+                        .select(base_fields)
+                        .execute()
+                    )
+                else:
+                    raise
         else:
             raise
     return result.data or []
@@ -165,17 +192,39 @@ def _get_score_rows(twin_ids: List[str]) -> Dict[str, float]:
 def _get_public_topics(twin_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
     if not twin_ids:
         return {}
-    try:
-        result = (
-            supabase.table("person_topic_profiles")
-            .select("twin_id, slug, name, answerability_score")
-            .in_("twin_id", twin_ids)
-            .gte("answerability_score", 60)
-            .order("answerability_score", desc=True)
-            .execute()
-        )
-    except Exception as exc:
-        logger.warning("Error fetching marketplace public topics: %s", exc)
+    result = None
+    slug_key = "slug"
+    name_key = "name"
+    topic_select_variants = [
+        ("twin_id, slug, name, answerability_score", "slug", "name"),
+        ("twin_id, topic_slug, name, answerability_score", "topic_slug", "name"),
+        ("twin_id, topic_slug, topic_name, answerability_score", "topic_slug", "topic_name"),
+    ]
+
+    last_exc: Optional[Exception] = None
+    for select_clause, slug_key, name_key in topic_select_variants:
+        try:
+            result = (
+                supabase.table("person_topic_profiles")
+                .select(select_clause)
+                .in_("twin_id", twin_ids)
+                .gte("answerability_score", 60)
+                .order("answerability_score", desc=True)
+                .execute()
+            )
+            break
+        except Exception as exc:
+            last_exc = exc
+            if not any(
+                _missing_column_error(exc, column_name)
+                for column_name in ("slug", "topic_slug", "name", "topic_name")
+            ):
+                logger.warning("Error fetching marketplace public topics: %s", exc)
+                return {}
+
+    if result is None:
+        if last_exc:
+            logger.warning("Error fetching marketplace public topics: %s", last_exc)
         return {}
 
     topics: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -185,8 +234,8 @@ def _get_public_topics(twin_ids: List[str]) -> Dict[str, List[Dict[str, Any]]]:
             continue
         topics[twin_id].append(
             {
-                "slug": row.get("slug"),
-                "name": row.get("name"),
+                "slug": row.get(slug_key) or row.get("slug") or row.get("topic_slug"),
+                "name": row.get(name_key) or row.get("name") or row.get("topic_name") or row.get(slug_key),
                 "answerability_score": _coerce_score(row.get("answerability_score")),
             }
         )
@@ -403,25 +452,53 @@ async def get_public_profile(twin_id: str, token: str):
         pass
 
     public_topics = []
+    topics_result = None
     try:
-        topics_result = (
-            supabase.table("person_topic_profiles")
-            .select("slug, name, answerability_score")
-            .eq("twin_id", twin_id)
-            .gte("answerability_score", 60)
-            .order("answerability_score", desc=True)
-            .limit(6)
-            .execute()
-        )
+        topic_select_variants = [
+            ("slug, name, answerability_score", "slug", "name"),
+            ("topic_slug, name, answerability_score", "topic_slug", "name"),
+            ("topic_slug, topic_name, answerability_score", "topic_slug", "topic_name"),
+        ]
 
-        for topic in topics_result.data or []:
-            public_topics.append({
-                "slug": topic.get("slug"),
-                "name": topic.get("name"),
-                "answerability_score": topic.get("answerability_score", 0),
-            })
+        topic_slug_key = "slug"
+        topic_name_key = "name"
+        last_topic_exc: Optional[Exception] = None
+        for select_clause, topic_slug_key, topic_name_key in topic_select_variants:
+            try:
+                topics_result = (
+                    supabase.table("person_topic_profiles")
+                    .select(select_clause)
+                    .eq("twin_id", twin_id)
+                    .gte("answerability_score", 60)
+                    .order("answerability_score", desc=True)
+                    .limit(6)
+                    .execute()
+                )
+                break
+            except Exception as exc:
+                last_topic_exc = exc
+                if not any(
+                    _missing_column_error(exc, column_name)
+                    for column_name in ("slug", "topic_slug", "name", "topic_name")
+                ):
+                    logger.warning("Error fetching public topics: %s", exc)
+                    break
+        else:
+            if last_topic_exc:
+                logger.warning("Error fetching public topics: %s", last_topic_exc)
+            topic_slug_key = "slug"
+            topic_name_key = "name"
     except Exception as exc:
         logger.warning("Error fetching public topics: %s", exc)
+        topic_slug_key = "slug"
+        topic_name_key = "name"
+
+    for topic in (topics_result.data or []) if topics_result else []:
+        public_topics.append({
+            "slug": topic.get(topic_slug_key) or topic.get("slug") or topic.get("topic_slug"),
+            "name": topic.get(topic_name_key) or topic.get("name") or topic.get("topic_name"),
+            "answerability_score": topic.get("answerability_score", 0),
+        })
 
     verified_claims_count = 0
     try:

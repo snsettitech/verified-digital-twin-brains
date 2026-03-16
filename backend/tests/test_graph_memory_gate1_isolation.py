@@ -9,7 +9,6 @@ import pytest
 import asyncio
 import time
 import uuid
-from typing import Optional
 
 from modules.graph_memory_core import GraphMemoryCore
 from modules.graph_memory_config import reset_config, get_graph_memory_config
@@ -19,8 +18,11 @@ from modules.graph_extraction_cache import reset_cache
 
 
 @pytest.fixture(autouse=True)
-def reset_state():
+def reset_state(monkeypatch):
     """Reset all singletons before each test."""
+    monkeypatch.setenv("GRAPH_MEMORY_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_MEMORY_READ_ENABLED", "true")
+    monkeypatch.setenv("GRAPH_MEMORY_WRITE_ENABLED", "true")
     reset_config()
     reset_all_breakers()
     reset_outbox()
@@ -29,16 +31,23 @@ def reset_state():
 
 @pytest.fixture
 def require_neo4j():
-    """Skip tests if Neo4j not configured or not reachable."""
-    import socket
+    """Skip tests if Neo4j is not actually connectable."""
     config = get_graph_memory_config()
     if not config.neo4j_uri or not config.neo4j_password:
         pytest.skip("Neo4j not configured")
     try:
-        host = config.neo4j_uri.split("://")[-1].split(":")[0]
-        socket.getaddrinfo(host, None)
-    except (socket.gaierror, OSError):
-        pytest.skip("Neo4j host not reachable")
+        from neo4j import GraphDatabase
+
+        driver = GraphDatabase.driver(
+            config.neo4j_uri,
+            auth=(config.neo4j_user or "neo4j", config.neo4j_password),
+        )
+        try:
+            driver.verify_connectivity()
+        finally:
+            driver.close()
+    except Exception:
+        pytest.skip("Neo4j not reachable")
 
 
 @pytest.mark.asyncio
@@ -50,10 +59,10 @@ async def test_cross_tenant_isolation_via_graphiti():
     This test validates isolation through Graphiti's retrieval API,
     not assumptions about Neo4j labels.
     """
-    tenant_a_id = f"test-tenant-a-{uuid.uuid4().hex[:8]}"
-    tenant_b_id = f"test-tenant-b-{uuid.uuid4().hex[:8]}"
-    twin_a_id = f"test-twin-a-{uuid.uuid4().hex[:8]}"
-    twin_b_id = f"test-twin-b-{uuid.uuid4().hex[:8]}"
+    tenant_a_id = str(uuid.uuid4())
+    tenant_b_id = str(uuid.uuid4())
+    twin_a_id = str(uuid.uuid4())
+    twin_b_id = str(uuid.uuid4())
     
     client_a = GraphMemoryCore(tenant_a_id, twin_a_id, "gate1-test")
     client_b = GraphMemoryCore(tenant_b_id, twin_b_id, "gate1-test")
@@ -114,9 +123,9 @@ async def test_same_tenant_different_twin_isolation():
     """
     Verify that twinA and twinB under same tenant are isolated.
     """
-    tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
-    twin_a_id = f"test-twin-a-{uuid.uuid4().hex[:8]}"
-    twin_b_id = f"test-twin-b-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_a_id = str(uuid.uuid4())
+    twin_b_id = str(uuid.uuid4())
     
     client_a = GraphMemoryCore(tenant_id, twin_a_id, "gate1-test")
     client_b = GraphMemoryCore(tenant_id, twin_b_id, "gate1-test")
@@ -151,17 +160,16 @@ async def test_same_tenant_different_twin_isolation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.usefixtures("require_neo4j")
 async def test_group_id_format():
     """
-    Verify group_id format is {tenant_id}:{twin_id}
+    Verify group_id format is {tenant_id}__{twin_id}
     """
-    tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
-    twin_id = f"test-twin-{uuid.uuid4().hex[:8]}"
+    tenant_id = str(uuid.uuid4())
+    twin_id = str(uuid.uuid4())
     
     client = GraphMemoryCore(tenant_id, twin_id, "gate1-test")
     
-    expected_group_id = f"{tenant_id}:{twin_id}"
+    expected_group_id = f"{tenant_id}__{twin_id}"
     assert client.group_id == expected_group_id, (
         f"Group ID mismatch: expected {expected_group_id}, got {client.group_id}"
     )

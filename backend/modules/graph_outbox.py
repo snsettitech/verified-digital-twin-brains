@@ -52,6 +52,21 @@ class GraphOutbox:
     
     def __init__(self):
         self.config = get_graph_memory_config()
+
+    @staticmethod
+    def _normalize_db_uuid(value: Optional[str], *, namespace: str) -> str:
+        """
+        Normalize identifiers for UUID-backed graph_outbox columns.
+
+        Production tenant/twin IDs are already UUIDs, but tests and a few legacy
+        fallback paths can still pass descriptive strings such as "default" or
+        "test-tenant-a-1234". Those values should not crash outbox submission.
+        """
+        raw = str(value or "").strip() or f"{namespace}:default"
+        try:
+            return str(uuid.UUID(raw))
+        except Exception:
+            return str(uuid.uuid5(uuid.NAMESPACE_URL, f"graph-outbox:{namespace}:{raw}"))
     
     @staticmethod
     def _is_missing_column_error(error: Exception, column: str) -> bool:
@@ -98,7 +113,12 @@ class GraphOutbox:
         """
         job_id = str(uuid.uuid4())
         op_value = operation.value if hasattr(operation, "value") else str(operation)
-        
+        db_tenant_id = self._normalize_db_uuid(tenant_id, namespace="tenant")
+        db_twin_id = self._normalize_db_uuid(
+            twin_id or scope_id or creator_id or "default",
+            namespace="twin",
+        )
+
         # CRITICAL FIX: Scope-isolated deduplication
         # This prevents cross-scope collisions where scope A and scope B
         # could have jobs with the same idempotency_key
@@ -107,7 +127,7 @@ class GraphOutbox:
                 # Single-profile mode: filter by scope_id
                 try:
                     existing = supabase.table("graph_outbox").select("id, status").eq(
-                        "tenant_id", tenant_id
+                        "tenant_id", db_tenant_id
                     ).eq("scope_id", scope_id).eq(
                         "idempotency_key", idempotency_key
                     ).in_("status", ["pending", "processing", "completed"]).execute()
@@ -118,8 +138,8 @@ class GraphOutbox:
                             "[GraphOutbox] scope_id column missing; falling back to twin_id dedupe"
                         )
                         existing = supabase.table("graph_outbox").select("id, status").eq(
-                            "tenant_id", tenant_id
-                        ).eq("twin_id", twin_id).eq(
+                            "tenant_id", db_tenant_id
+                        ).eq("twin_id", db_twin_id).eq(
                             "idempotency_key", idempotency_key
                         ).in_("status", ["pending", "processing", "completed"]).execute()
                     else:
@@ -127,8 +147,8 @@ class GraphOutbox:
             else:
                 # Legacy mode: filter by twin_id (backward compatibility during rollout)
                 existing = supabase.table("graph_outbox").select("id, status").eq(
-                    "tenant_id", tenant_id
-                ).eq("twin_id", twin_id).eq(
+                    "tenant_id", db_tenant_id
+                ).eq("twin_id", db_twin_id).eq(
                     "idempotency_key", idempotency_key
                 ).in_("status", ["pending", "processing", "completed"]).execute()
             
@@ -147,8 +167,8 @@ class GraphOutbox:
         now = datetime.utcnow().isoformat()
         outbox_record = {
             "id": job_id,
-            "tenant_id": tenant_id,
-            "twin_id": twin_id,
+            "tenant_id": db_tenant_id,
+            "twin_id": db_twin_id,
             "scope_id": scope_id,  # NEW: Single-profile scope
             "creator_id": creator_id,  # NEW: Creator ID for quick reference
             "operation": op_value,
