@@ -519,22 +519,48 @@ class GraphMemoryCore:
             raise GraphMemoryUnavailable("Neo4j driver not available")
         
         async def execute_query():
-            cypher = """
-            MATCH (e:Episode)
-            WHERE e.group_id = $gid
-              AND (e.content CONTAINS $q OR e.name CONTAINS $q)
-            RETURN e.content as content, e.name as name 
-            LIMIT $lim
-            """
+            normalized_query = (query or "").strip()
+            if normalized_query in {"", "*", "__all__", "__recent__"}:
+                cypher = """
+                MATCH (e:Episode)
+                WHERE e.group_id = $gid
+                RETURN
+                    coalesce(e.content, e.episode_body, e.body, e.text, '') as content,
+                    coalesce(e.name, e.source_description, 'Episode') as name
+                ORDER BY coalesce(e.created_at, e.createdAt, '') DESC
+                LIMIT $lim
+                """
+                params = {"gid": self.group_id, "lim": num_results}
+            else:
+                cypher = """
+                MATCH (e:Episode)
+                WHERE e.group_id = $gid
+                  AND (
+                    coalesce(e.content, '') CONTAINS $q
+                    OR coalesce(e.name, '') CONTAINS $q
+                    OR coalesce(e.body, '') CONTAINS $q
+                    OR coalesce(e.text, '') CONTAINS $q
+                  )
+                RETURN
+                    coalesce(e.content, e.episode_body, e.body, e.text, '') as content,
+                    coalesce(e.name, e.source_description, 'Episode') as name
+                LIMIT $lim
+                """
+                params = {"gid": self.group_id, "q": normalized_query, "lim": num_results}
             
             session_kwargs = {}
             if self.config.neo4j_database:
                 session_kwargs["database"] = self.config.neo4j_database
             async with driver.session(**session_kwargs) as session:
-                result = await session.run(cypher, gid=self.group_id, q=query, lim=num_results)
+                result = await session.run(cypher, **params)
                 records = []
                 async for record in result:
-                    records.append({"content": record.get("content", "")})
+                    records.append(
+                        {
+                            "content": record.get("content", ""),
+                            "name": record.get("name", ""),
+                        }
+                    )
                 return records
         
         try:

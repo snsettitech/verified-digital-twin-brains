@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from modules.graph_contradiction_detector import process_contradiction_evaluation_job
+from modules.graph_memory_core import GraphMemoryCore
 from modules.graph_outbox import GraphOperationType
 from modules.graph_snapshot_manager import refresh_scope_snapshot, refresh_twin_snapshot
 from modules.observability import supabase
@@ -283,16 +284,48 @@ async def _persist_claims(
 
 
 async def _process_create_episode(job: Dict[str, Any]) -> bool:
-    # Episode persistence to Neo4j is best-effort. For the write-path verification
-    # we mark this operation complete and rely on claim/snapshot materialization.
     payload = job.get("payload") or {}
     episode_name = str(payload.get("name") or "Deep Research Episode")
+    episode_body = str(payload.get("body") or payload.get("content") or "").strip()
+    tenant_id = str(job.get("tenant_id") or "")
+    twin_id = str(job.get("twin_id") or "")
+    if not tenant_id or not twin_id:
+        raise ValueError("create_episode job missing tenant_id or twin_id")
+    if not episode_body:
+        raise ValueError("create_episode job missing body")
+
+    scope_id = str(payload.get("scope_id") or job.get("scope_id") or "").strip() or None
+    creator_id = str(payload.get("creator_id") or job.get("creator_id") or "").strip() or None
+    correlation_id = str(job.get("correlation_id") or payload.get("correlation_id") or "")
+
     logger.info(
         "[GraphOutboxWorker] processing create_episode job=%s name=%s",
         job.get("id"),
         episode_name[:120],
     )
     print(f"[GraphOutboxWorker] processing job={job.get('id')} operation=create_episode")
+
+    client = GraphMemoryCore(
+        tenant_id=tenant_id,
+        twin_id=twin_id,
+        correlation_id=correlation_id or None,
+        creator_id=creator_id or None,
+        scope_id=scope_id,
+    )
+    await client.create_episode(
+        name=episode_name,
+        body=episode_body,
+        source_type=str(payload.get("source_type") or "graph_outbox"),
+        source_ref=str(payload.get("source_ref") or job.get("id") or "unknown"),
+        timestamp=str(payload.get("timestamp") or ""),
+        async_write=False,
+    )
+    await _refresh_snapshot(
+        tenant_id=tenant_id,
+        twin_id=twin_id,
+        correlation_id=correlation_id or None,
+        scope_id=scope_id,
+    )
     return True
 
 
