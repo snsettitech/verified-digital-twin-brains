@@ -13,11 +13,16 @@ from modules.fastpath_intent_router import classify_fastpath_intent
 
 def test_fastpath_intent_classifier_identity_and_fallback():
     hit = classify_fastpath_intent("Who are you?")
+    role_hit = classify_fastpath_intent("What public role is Narendra Modi associated with?")
     miss = classify_fastpath_intent("Summarize this PDF in 3 bullets")
 
     assert hit["matched"] is True
     assert hit["intent"] == "identity_intro"
     assert hit["confidence"] > 0.9
+
+    assert role_hit["matched"] is True
+    assert role_hit["intent"] == "identity_role"
+    assert role_hit["confidence"] > 0.9
 
     assert miss["matched"] is False
     assert miss["intent"] is None
@@ -128,6 +133,35 @@ async def test_canonical_identity_fastpath_uses_public_profile_when_profile_pack
         assert "digital" not in routed["fastpath_response"]["text"].lower()
 
 
+@pytest.mark.asyncio
+async def test_canonical_role_fastpath_uses_public_profile_role(monkeypatch):
+    with pytest.MonkeyPatch.context() as m:
+        m.setenv("PERSONA_FASTPATH_ENABLED", "false")
+        m.setattr("modules.agent._twin_has_groundable_knowledge", lambda _twin_id: True)
+
+        routed = await router_node(
+            {
+                "twin_id": "twin-1",
+                "messages": [HumanMessage(content="What public role is Narendra Modi associated with?")],
+                "interaction_context": "public_share",
+                "reasoning_history": [],
+                "full_settings": {
+                    "name": "Narendra Modi",
+                    "public_profile": {
+                        "role": "Prime Minister of India",
+                        "organization": "Government of India",
+                        "headline": "Heads the Government of India",
+                    },
+                },
+            }
+        )
+
+        assert routed["requires_evidence"] is False
+        assert routed["fastpath_intent"] == "identity_role"
+        assert isinstance(routed["fastpath_response"], dict)
+        assert "Prime Minister of India" in routed["fastpath_response"]["text"]
+
+
 def test_source_faithful_identity_prefers_canonical_profile_when_planner_is_insufficient():
     text = _build_source_faithful_response_text(
         {
@@ -166,3 +200,32 @@ def test_source_faithful_identity_prefers_canonical_profile_when_planner_is_insu
     assert text.startswith("I'm Elon Musk")
     assert "I don't know based on available sources." not in text
     assert text.endswith("?")
+
+
+def test_source_faithful_role_query_prefers_canonical_profile_when_planner_is_insufficient():
+    text = _build_source_faithful_response_text(
+        {
+            "answer_points": ["I don't know based on available sources."],
+            "follow_up_question": "",
+            "answerability": {"answerability": "insufficient"},
+        },
+        state={
+            "messages": [HumanMessage(content="What public role is Narendra Modi associated with?")],
+            "requires_evidence": True,
+            "retrieved_context": {"results": []},
+            "full_settings": {
+                "name": "Narendra Modi",
+                "public_profile": {
+                    "role": "Prime Minister of India",
+                    "organization": "Government of India",
+                    "headline": "Heads the Government of India",
+                    "bio": "Narendra Modi is the 14th Prime Minister of India.",
+                },
+            },
+        },
+        fallback_text="I don't know based on available sources.",
+    )
+
+    assert "Narendra Modi" in text
+    assert "Prime Minister of India" in text
+    assert "I don't know based on available sources." not in text

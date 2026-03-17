@@ -59,6 +59,21 @@ def build_fastpath_response(
     elif intent == "identity_about":
         text = short_intro or one_line_intro or f"I'm {display_name}."
 
+    elif intent == "identity_role":
+        role_line = ""
+        role = _safe_str(profile.get("role"))
+        organization = _safe_str(profile.get("organization"))
+        headline = _safe_str(profile.get("headline"))
+        if role and organization:
+            role_line = f"{display_name} is the {role} at {organization}."
+        elif role:
+            role_line = f"{display_name} is the {role}."
+        elif headline:
+            role_line = f"{display_name} is associated with {headline}."
+        else:
+            role_line = one_line_intro or short_intro or f"I'm {display_name}."
+        text = role_line
+
     elif intent == "authenticity_disclosure":
         intro = one_line_intro or short_intro or f"I'm {display_name}."
         text = f"{intro} {disclosure_line}"

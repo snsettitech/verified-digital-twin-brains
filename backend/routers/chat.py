@@ -225,6 +225,15 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
         if descriptor:
             base += f", {descriptor}"
         base += "."
+    elif intent == "identity_role":
+        if role and organization:
+            base = f"{display_name} is the {role} at {organization}."
+        elif role:
+            base = f"{display_name} is the {role}."
+        elif headline:
+            base = f"{display_name} is associated with {headline}."
+        else:
+            base = f"{display_name} is associated with this public profile."
     elif intent == "scope_help":
         scope = descriptor or "the areas this profile is known for"
         base = f"I can help you think through {scope} from {display_name}'s perspective."

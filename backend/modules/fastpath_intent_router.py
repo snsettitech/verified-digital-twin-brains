@@ -30,6 +30,19 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
         ("identity_intro", (r"\bwho are you\b", r"\bintroduce yourself\b"), 0.96),
         ("identity_about", (r"\btell me about yourself\b", r"\babout you\b"), 0.94),
         (
+            "identity_role",
+            (
+                r"\bwhat public role\b",
+                r"\bwhat role\b",
+                r"\bwhat position\b",
+                r"\bwhat office\b",
+                r"\bwhat title\b",
+                r"\bwhat are you associated with\b",
+                r"\bwhat role are you associated with\b",
+            ),
+            0.95,
+        ),
+        (
             "authenticity_disclosure",
             (
                 r"\bare you really\b",
@@ -70,6 +83,7 @@ def is_identity_fastpath_intent(intent: Optional[str]) -> bool:
     return intent in {
         "identity_intro",
         "identity_about",
+        "identity_role",
         "authenticity_disclosure",
         "contact_handoff",
         "scope_help",

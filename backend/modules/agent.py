@@ -2288,6 +2288,12 @@ def _is_identity_query(query: str) -> bool:
         "introduce yourself",
         "what do you do",
         "your background",
+        "what public role",
+        "what role",
+        "what position",
+        "what office",
+        "what title",
+        "associated with",
     )
     return any(marker in q for marker in markers)
 
