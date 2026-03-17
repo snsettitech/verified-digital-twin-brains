@@ -24,7 +24,6 @@ const EVENT_TYPES = [
     { value: 'message_received', label: 'Message Received', icon: '💬' },
     { value: 'answer_sent', label: 'Answer Sent', icon: '📤' },
     { value: 'escalation_created', label: 'Escalation Created', icon: '⚠️' },
-    { value: 'confidence_low', label: 'Low Confidence Response', icon: '📉' },
     { value: 'idle_timeout', label: 'Idle Timeout', icon: '⏱️' },
 ];
 

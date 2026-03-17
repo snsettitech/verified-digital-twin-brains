@@ -14,7 +14,9 @@ type ContextSnapshot = {
   queryClass?: string;
   answerabilityState?: string;
   plannerAction?: string;
-  confidenceScore?: number;
+  sourceTier?: string;
+  reviewRequired?: boolean;
+  reviewReason?: string | null;
   citations?: string[];
   citationDetails?: Array<{
     id: string;
@@ -163,7 +165,9 @@ function DashboardChatPageContent() {
       queryClass: payload.query_class,
       answerabilityState: payload.answerability_state,
       plannerAction: payload.planner_action,
-      confidenceScore: payload.confidence_score,
+      sourceTier: payload.source_tier,
+      reviewRequired: Boolean(payload.review_required),
+      reviewReason: payload.review_reason,
       citations: Array.isArray(payload.citations) ? payload.citations : [],
       citationDetails: Array.isArray(payload.citation_details) ? payload.citation_details : [],
       usedOwnerMemory: Boolean(payload.owner_memory_refs?.length || payload.used_owner_memory),

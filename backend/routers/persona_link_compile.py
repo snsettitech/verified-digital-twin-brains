@@ -835,7 +835,7 @@ async def get_clarification_questions(
     user=Depends(get_current_user),
 ):
     """
-    Get clarification questions for low-confidence Layer 2/3 items.
+    Get clarification questions for low-support Layer 2/3 items.
     """
     user = _require_authenticated_user(user)
     verify_twin_ownership(twin_id, user)
@@ -846,7 +846,7 @@ async def get_clarification_questions(
     return {
         "twin_id": twin_id,
         "questions": result["clarification_questions"],
-        "low_confidence_count": len(result["clarification_questions"]),
+        "clarification_count": len(result["clarification_questions"]),
     }
 
 

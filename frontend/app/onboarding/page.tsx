@@ -20,7 +20,7 @@ interface Twin {
 }
 
 // =============================================================================
-// Wikipedia identity confidence check
+// Wikipedia identity match check
 // =============================================================================
 
 interface WikiSummary {

@@ -541,7 +541,7 @@ def test_owner_chat_accepts_node_update_stream_shape():
     )
 
     async def _fake_node_update_stream(*_args, **_kwargs):
-        yield {"retrieve": {"citations": ["src-node-1"], "confidence_score": 0.73}}
+        yield {"retrieve": {"citations": ["src-node-1"], "answerability_state": "direct", "source_tier": "retrieved"}}
         msg = AIMessage(content="node-shape answer")
         msg.additional_kwargs = {
             "intent_label": "factual_with_evidence",
@@ -619,7 +619,7 @@ def test_owner_chat_source_faithful_skips_persona_audit_rewrite():
     )
 
     async def _fake_source_faithful_stream(*_args, **_kwargs):
-        yield {"retrieve": {"citations": ["src-faithful-1"], "confidence_score": 0.91}}
+        yield {"retrieve": {"citations": ["src-faithful-1"], "answerability_state": "direct", "source_tier": "retrieved"}}
         msg = AIMessage(content="Use managed containers first for faster MVP iteration.")
         msg.additional_kwargs = {
             "intent_label": "factual_with_evidence",
@@ -701,7 +701,8 @@ def test_owner_chat_grounding_verifier_downgrades_strict_unsupported_answer():
         yield {
             "retrieve": {
                 "citations": ["src-unsupported-1"],
-                "confidence_score": 0.87,
+                "answerability_state": "insufficient",
+                "source_tier": "retrieved",
                 "retrieved_context": {
                     "results": [
                         {
@@ -791,7 +792,8 @@ def test_owner_chat_requires_evidence_does_not_force_hard_downgrade_for_non_stri
         yield {
             "retrieve": {
                 "citations": ["src-general-1"],
-                "confidence_score": 0.84,
+                "answerability_state": "derivable",
+                "source_tier": "retrieved",
                 "retrieved_context": {
                     "results": [
                         {
@@ -1117,7 +1119,8 @@ def test_owner_chat_async_eval_uses_retrieved_chunk_text_context():
         yield {
             "retrieve": {
                 "citations": ["src-eval-1"],
-                "confidence_score": 0.88,
+                "answerability_state": "derivable",
+                "source_tier": "retrieved",
                 "retrieved_context": {
                     "results": [
                         {

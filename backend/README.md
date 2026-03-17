@@ -20,7 +20,7 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
   - `inference_router.py`: Active multi-provider text/JSON inference routing.
   - `answering.py`: Legacy compatibility answer generation surface.
   - `auth_guard.py`: JWT verification and role-based access control.
-  - `escalation.py`: Logic for flagging low-confidence responses.
+  - `escalation.py`: Logic for flagging unsupported or review-required responses.
 
 ## API Endpoints
 
@@ -33,7 +33,7 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
 ### Chat & Reasoning
 - `POST /chat/{twin_id}`: Query the digital twin.
   - Returns grounded answer with citations.
-  - Automatically creates an escalation if confidence < 0.7.
+  - Automatically creates an escalation when a response is unsupported or marked for review.
 
 ## Setup
 
@@ -80,7 +80,7 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    CONVERSATIONAL_REALIZER_ENABLED=false
    QUERY_REWRITE_ENABLED=true
    QUERY_REWRITING_ENABLED=true
-   RUNTIME_CONFIDENCE_GATE_ENABLED=false
+   RUNTIME_SUPPORT_POLICY_ENABLED=false
    GOOGLE_API_KEY=...
    RETRIEVAL_HYDE_ENABLED=true
    DEEP_RESEARCH_ENABLED=false

@@ -79,7 +79,7 @@
     ],
     "follow_up_behavior": {
         "max_follow_ups_per_slot": 2,
-        "skip_if_confidence_above": 0.85,
-        "escalate_if_confidence_below": 0.4
+        "skip_when_supported": true,
+        "escalate_when_insufficient": true
     }
 }

@@ -24,11 +24,11 @@ def _normalize(text: str) -> str:
 def classify_fastpath_intent(query: str) -> Dict[str, Any]:
     q = _normalize(query)
     if not q:
-        return {"matched": False, "intent": None, "confidence": 0.0}
+        return {"matched": False, "intent": None}
 
     intent_patterns = [
-        ("identity_intro", (r"\bwho are you\b", r"\bintroduce yourself\b"), 0.96),
-        ("identity_about", (r"\btell me about yourself\b", r"\babout you\b"), 0.94),
+        ("identity_intro", (r"\bwho are you\b", r"\bintroduce yourself\b")),
+        ("identity_about", (r"\btell me about yourself\b", r"\babout you\b")),
         (
             "identity_role",
             (
@@ -40,7 +40,6 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
                 r"\bwhat are you associated with\b",
                 r"\bwhat role are you associated with\b",
             ),
-            0.95,
         ),
         (
             "identity_background",
@@ -55,7 +54,6 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
                 r"\bget into politics\b",
                 r"\bpublic life\b",
             ),
-            0.93,
         ),
         (
             "authenticity_disclosure",
@@ -64,7 +62,6 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
                 r"\bare you the real\b",
                 r"\bare you actually\b",
             ),
-            0.95,
         ),
         (
             "contact_handoff",
@@ -74,7 +71,6 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
                 r"\bhow do i reach\b",
                 r"\bdirectly\b",
             ),
-            0.92,
         ),
         (
             "scope_help",
@@ -86,15 +82,14 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
                 r"\bwhat subjects\b",
                 r"\bwhat are your areas\b",
             ),
-            0.93,
         ),
     ]
 
-    for intent, patterns, confidence in intent_patterns:
+    for intent, patterns in intent_patterns:
         if any(re.search(pattern, q) for pattern in patterns):
-            return {"matched": True, "intent": intent, "confidence": confidence}
+            return {"matched": True, "intent": intent}
 
-    return {"matched": False, "intent": None, "confidence": 0.0}
+    return {"matched": False, "intent": None}
 
 
 def is_identity_fastpath_intent(intent: Optional[str]) -> bool:

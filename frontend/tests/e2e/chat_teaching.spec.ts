@@ -95,7 +95,9 @@ test.describe('Teaching UX', () => {
         body: json({
           response: 'Public response only.',
           citations: [],
-          confidence_score: 0.8,
+          answerability_state: 'direct',
+          source_tier: 'canonical',
+          review_required: false,
         }),
       });
     });

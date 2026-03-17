@@ -828,12 +828,12 @@ def _build_canonical_fastpath_profile(full_settings: Optional[Dict[str, Any]]) -
     bio = str(public_profile.get("bio") or "").strip()
 
     descriptor = ""
-    if headline:
-        descriptor = headline.rstrip(". ")
-    elif role and organization:
+    if role and organization:
         descriptor = f"{role} at {organization}"
     elif role:
         descriptor = role
+    elif headline:
+        descriptor = headline.rstrip(". ")
     elif description:
         descriptor = description.rstrip(". ")
 
@@ -867,6 +867,9 @@ def _build_canonical_fastpath_profile(full_settings: Optional[Dict[str, Any]]) -
     return {
         "profile_status": "approved",
         "display_name": display_name,
+        "role": role,
+        "organization": organization,
+        "headline": headline,
         "one_line_intro": one_line_intro,
         "short_intro": " ".join(part.strip() for part in short_parts if part.strip()).strip(),
         "disclosure_line": f"I'm a digital version of {display_name}, not the person directly.",
@@ -919,12 +922,12 @@ def _build_clean_canonical_fastpath_profile(full_settings: Optional[Dict[str, An
     )
 
     descriptor = ""
-    if headline:
-        descriptor = headline.rstrip(". ")
-    elif role and organization:
+    if role and organization:
         descriptor = f"{role} at {organization}"
     elif role:
         descriptor = role
+    elif headline:
+        descriptor = headline.rstrip(". ")
     elif description:
         descriptor = description.rstrip(". ")
 
@@ -982,7 +985,20 @@ def _build_canonical_identity_response(state: Dict[str, Any]) -> Optional[str]:
     profile = _build_clean_canonical_fastpath_profile(state.get("full_settings"))
     if not profile:
         return None
-    return str(profile.get("short_intro") or profile.get("one_line_intro") or "").strip()
+    latest_query = next(
+        (m.content for m in reversed(state.get("messages") or []) if isinstance(m, HumanMessage)),
+        "",
+    ).strip()
+    intent = "identity_role" if _is_identity_query(latest_query) and any(
+        marker in latest_query.lower()
+        for marker in ("role", "position", "office", "title", "associated with")
+    ) else "identity_about"
+    response = build_fastpath_response(
+        intent=intent,
+        profile=profile,
+        query=latest_query,
+    )
+    return str(response.get("text") or profile.get("short_intro") or profile.get("one_line_intro") or "").strip()
 
 
 def _load_active_persona_spec_v2_row(twin_id: str) -> Optional[Dict[str, Any]]:
@@ -1148,7 +1164,6 @@ class TwinState(TypedDict):
     """
     messages: Annotated[List[BaseMessage], add_messages]
     twin_id: str
-    confidence_score: float
     citations: List[str]
     # Path B: Agentic RAG additions
     sub_queries: Optional[List[str]]
@@ -2069,7 +2084,6 @@ async def router_node(state: TwinState):
                 "chosen_workflow": "answer",
                 "output_schema": "workflow.answer.v1",
                 "action": "answer",
-                "confidence": float(fastpath_match.get("confidence") or 0.0),
                 "required_inputs_missing": [],
                 "clarifying_questions": [],
             }
@@ -2290,13 +2304,11 @@ async def deepagents_node(state: TwinState):
         if isinstance(result.get("error"), dict)
         else ""
     )
-    confidence = 0.0
     answer_points: List[str] = []
     teaching_questions: List[str] = []
     answerability: Dict[str, Any] = {
         "answerability": "direct",
         "answerable": True,
-        "confidence": 0.72,
         "reasoning": "Execution lane handled action/tool request without document planner.",
         "missing_information": [],
         "ambiguity_level": "low",
@@ -2305,7 +2317,6 @@ async def deepagents_node(state: TwinState):
 
     if status in {"disabled", "forbidden"}:
         action = "refuse"
-        confidence = 0.0
         error = result.get("error") if isinstance(result.get("error"), dict) else {}
         default_message = (
             "Action execution is unavailable in this context."
@@ -2317,7 +2328,6 @@ async def deepagents_node(state: TwinState):
         answerability = {
             "answerability": "insufficient",
             "answerable": False,
-            "confidence": 0.0,
             "reasoning": (
                 "Execution lane is forbidden for public/anonymous contexts."
                 if status == "forbidden"
@@ -2328,7 +2338,6 @@ async def deepagents_node(state: TwinState):
         }
     elif status == "missing_params":
         action = "clarify"
-        confidence = 0.35
         question = build_single_missing_param_question(plan)
         teaching_questions = [question]
         answer_points = [question]
@@ -2336,13 +2345,11 @@ async def deepagents_node(state: TwinState):
         answerability = {
             "answerability": "insufficient",
             "answerable": False,
-            "confidence": confidence,
             "reasoning": "Execution lane requires concrete action parameters before planning can run.",
             "missing_information": missing_params[:3],
             "ambiguity_level": "medium",
         }
     elif status == "needs_approval":
-        confidence = 0.76
         action_id = str(result.get("action_id") or "").strip()
         summary = summarize_deepagents_plan(plan)
         answer_points = [
@@ -2351,21 +2358,18 @@ async def deepagents_node(state: TwinState):
             f"Action ID: {action_id}" if action_id else "Action ID: unavailable",
         ]
     elif status == "approved":
-        confidence = 0.8
         action_id = str(result.get("action_id") or "").strip()
         answer_points = [
             str(result.get("message") or "Action approved.").strip(),
             f"Action ID: {action_id}" if action_id else "Action ID: unavailable",
         ]
     elif status == "canceled":
-        confidence = 0.78
         action_id = str(result.get("action_id") or "").strip()
         answer_points = [
             str(result.get("message") or "Action canceled.").strip(),
             f"Action ID: {action_id}" if action_id else "Action ID: unavailable",
         ]
     elif status == "executed":
-        confidence = 0.84
         execution_id = str(result.get("execution_id") or "").strip()
         action_type = str(result.get("action_type") or plan.get("action_type") or "action").strip()
         answer_points = [
@@ -2374,14 +2378,12 @@ async def deepagents_node(state: TwinState):
         ]
     else:
         action = "escalate"
-        confidence = 0.2
         answer_points = [
             str(result.get("message") or "I could not execute that action safely.").strip(),
         ]
         answerability = {
             "answerability": "insufficient",
             "answerable": False,
-            "confidence": confidence,
             "reasoning": "Execution lane returned a failure state.",
             "missing_information": [],
             "ambiguity_level": "medium",
@@ -2390,7 +2392,6 @@ async def deepagents_node(state: TwinState):
     updated_routing_decision = {
         **routing_decision,
         "action": action,
-        "confidence": confidence,
         "required_inputs_missing": answerability.get("missing_information") or [],
         "clarifying_questions": teaching_questions[:1],
     }
@@ -2418,7 +2419,6 @@ async def deepagents_node(state: TwinState):
             "answer_points": answer_points[:3],
             "citations": [],
             "follow_up_question": "",
-            "confidence": confidence,
             "teaching_questions": teaching_questions[:1],
             "render_strategy": "source_faithful",
             "reasoning_trace": str(answerability.get("reasoning") or ""),
@@ -2426,7 +2426,6 @@ async def deepagents_node(state: TwinState):
             "execution_lane": execution_lane_meta,
             "telemetry": telemetry,
         },
-        "confidence_score": confidence,
         "routing_decision": updated_routing_decision,
         "workflow_intent": str(updated_routing_decision.get("intent") or "write"),
         "intent_label": "action_or_tool_execution",
@@ -2558,30 +2557,6 @@ def _grounding_coverage_score(context_data: List[Dict[str, Any]]) -> float:
     answer_ratio = answer_rows / float(max(len(context_data), 1))
     source_diversity = min(len(source_ids) / 3.0, 1.0)
     return max(0.0, min(1.0, (0.65 * answer_ratio) + (0.35 * source_diversity)))
-
-
-def _calibrate_confidence_score(
-    *,
-    raw_confidence: float,
-    answerability_state: str,
-    context_data: List[Dict[str, Any]],
-) -> float:
-    stats = _extract_retrieval_stats(context_data)
-    retrieval_signal = _select_retrieval_signal(stats, context_data)
-    coverage_signal = _grounding_coverage_score(context_data)
-
-    base = max(0.0, min(1.0, float(raw_confidence or 0.0)))
-    calibrated = (0.35 * base) + (0.40 * retrieval_signal) + (0.25 * coverage_signal)
-
-    state = str(answerability_state or "").strip().lower()
-    if state == "direct":
-        calibrated += 0.08
-    elif state == "derivable":
-        calibrated += 0.03
-    elif state == "insufficient":
-        calibrated = min(calibrated, 0.30)
-
-    return max(0.05, min(0.97, calibrated))
 
 
 def _is_evaluative_query(query: str) -> bool:
@@ -2988,7 +2963,6 @@ def _should_use_conversational_realizer(
     state: TwinState,
     answerability_state: str,
     citations: List[str],
-    confidence: float,
     quote_intent: bool,
     strict_grounding: bool,
 ) -> bool:
@@ -3186,7 +3160,6 @@ async def planner_node(state: TwinState):
     fastpath_payload = state.get("fastpath_response")
     if isinstance(fastpath_payload, dict) and str(fastpath_payload.get("text") or "").strip():
         fastpath_text = str(fastpath_payload.get("text") or "").strip()
-        confidence = max(0.0, min(1.0, float(fastpath_payload.get("confidence") or 0.92)))
         routing_decision = (
             dict(state.get("routing_decision"))
             if isinstance(state.get("routing_decision"), dict)
@@ -3199,14 +3172,12 @@ async def planner_node(state: TwinState):
         updated_routing_decision = {
             **routing_decision,
             "action": "answer",
-            "confidence": confidence,
             "required_inputs_missing": [],
             "clarifying_questions": [],
         }
         answerability = {
             "answerability": "direct",
             "answerable": True,
-            "confidence": confidence,
             "reasoning": "Persona fast-path response from canonical profile.",
             "missing_information": [],
             "ambiguity_level": "low",
@@ -3216,14 +3187,12 @@ async def planner_node(state: TwinState):
                 "answer_points": [fastpath_text],
                 "citations": [],
                 "follow_up_question": str(fastpath_payload.get("follow_up_question") or "").strip(),
-                "confidence": confidence,
                 "teaching_questions": [],
                 "render_strategy": "source_faithful",
                 "reasoning_trace": "Planner fast-path identity response.",
                 "answerability": answerability,
                 "telemetry": _build_planner_telemetry(),
             },
-            "confidence_score": confidence,
             "routing_decision": updated_routing_decision,
             "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
             "reasoning_history": (state.get("reasoning_history") or [])
@@ -3338,25 +3307,21 @@ async def planner_node(state: TwinState):
                             "answer_points": v2_result.answer_points,
                             "citations": [],
                             "follow_up_question": "",
-                            "confidence": 0.0,
                             "teaching_questions": [],
                             "render_strategy": "source_faithful",
                             "reasoning_trace": "5-Layer Persona: Safety boundary triggered.",
                             "answerability": {
                                 "answerability": "insufficient",
                                 "answerable": False,
-                                "confidence": 0.0,
                                 "reasoning": "Request blocked by safety boundaries.",
                                 "missing_information": [],
                                 "ambiguity_level": "low",
                             },
                             "telemetry": _build_planner_telemetry(),
                         },
-                        "confidence_score": 0.0,
                         "routing_decision": {
                             **routing_decision,
                             "action": "refuse",
-                            "confidence": 0.0,
                         },
                         "workflow_intent": "refuse",
                         "intent_label": persona_trace.get("intent_label"),
@@ -3380,11 +3345,9 @@ async def planner_node(state: TwinState):
         _full_settings = state.get("full_settings") or {}
         twin_name = str(_full_settings.get("name") or "").strip()
         answer_text = _smalltalk_response(user_query, twin_name=twin_name, full_settings=_full_settings)
-        smalltalk_confidence = 0.9
         smalltalk_answerability = {
             "answerability": "direct",
             "answerable": True,
-            "confidence": smalltalk_confidence,
             "reasoning": "Smalltalk bypass: conversational message handled without retrieval/evaluator.",
             "missing_information": [],
             "ambiguity_level": "low",
@@ -3392,7 +3355,6 @@ async def planner_node(state: TwinState):
         updated_routing_decision = {
             **routing_decision,
             "action": "answer",
-            "confidence": smalltalk_confidence,
             "required_inputs_missing": [],
             "clarifying_questions": [],
         }
@@ -3401,7 +3363,6 @@ async def planner_node(state: TwinState):
                 "answer_points": [answer_text],
                 "citations": [],
                 "follow_up_question": "",
-                "confidence": smalltalk_confidence,
                 "teaching_questions": [],
                 "render_strategy": (
                     "conversational_realizer"
@@ -3414,7 +3375,6 @@ async def planner_node(state: TwinState):
                 "answerability": smalltalk_answerability,
                 "telemetry": _build_planner_telemetry(),
             },
-            "confidence_score": smalltalk_confidence,
             "routing_decision": updated_routing_decision,
             "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
             "intent_label": persona_trace.get("intent_label"),
@@ -3433,7 +3393,6 @@ async def planner_node(state: TwinState):
         answerability = {
             "answerability": "insufficient",
             "answerable": False,
-            "confidence": 0.0,
             "reasoning": "Answerability evaluation failed.",
             "missing_information": ["the specific evidence needed to answer this question"],
             "ambiguity_level": "high",
@@ -3516,7 +3475,6 @@ async def planner_node(state: TwinState):
         answerability["answerability"] = "derivable"
         answerability["answerable"] = True
         answerability["missing_information"] = []
-        answerability["confidence"] = max(float(answerability.get("confidence") or 0.0), 0.52)
         answerability["ambiguity_level"] = "medium"
         reason = re.sub(r"\s+", " ", str(answerability.get("reasoning") or "").strip())
         answerability["reasoning"] = (
@@ -3543,11 +3501,6 @@ async def planner_node(state: TwinState):
                 evidence_chunks=context_data,
                 limit=3,
             )
-        insufficient_confidence = _calibrate_confidence_score(
-            raw_confidence=float(answerability.get("confidence") or 0.0),
-            answerability_state=answerability_state,
-            context_data=context_data,
-        )
         answer_points = []
         if clarification_hint and clarification_questions:
             answer_points.append(clarification_questions[0])
@@ -3563,7 +3516,6 @@ async def planner_node(state: TwinState):
         updated_routing_decision = {
             **routing_decision,
             "action": "clarify",
-            "confidence": insufficient_confidence,
             "required_inputs_missing": [str(v) for v in missing_information[:3]],
             "clarifying_questions": clarification_questions[:3],
         }
@@ -3582,7 +3534,6 @@ async def planner_node(state: TwinState):
                 "answer_points": answer_points,
                 "citations": [],
                 "follow_up_question": "",
-                "confidence": insufficient_confidence,
                 "teaching_questions": clarification_questions[:3],
                 "clarification_options": clarification_options,
                 "clarification_hint": clarification_hint,
@@ -3598,7 +3549,6 @@ async def planner_node(state: TwinState):
                 "answerability": answerability,
                 "telemetry": planner_telemetry,
             },
-            "confidence_score": insufficient_confidence,
             "routing_decision": updated_routing_decision,
             "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
             "intent_label": persona_trace.get("intent_label"),
@@ -3632,7 +3582,6 @@ Return STRICT JSON:
 {{
   "answer_points": ["point 1", "point 2"],
   "citations": ["source_id"],
-  "confidence": 0.0,
   "reasoning_trace": "short trace"
 }}
 
@@ -3664,7 +3613,6 @@ Rules:
         plan = {
             "answer_points": fallback_points or ["Answer: The retrieved evidence supports a concise response."],
             "citations": fallback_citations or valid_source_ids[:3],
-            "confidence": float(answerability.get("confidence") or 0.5),
             "reasoning_trace": "Planner composition fallback used.",
         }
 
@@ -3688,25 +3636,12 @@ Rules:
     if not citations and valid_source_ids:
         citations = valid_source_ids[:3]
 
-    raw_confidence = max(
-        0.0,
-        min(
-            1.0,
-            float(plan.get("confidence", answerability.get("confidence", 0.5)) or 0.5),
-        ),
-    )
-    confidence = _calibrate_confidence_score(
-        raw_confidence=raw_confidence,
-        answerability_state=answerability_state,
-        context_data=context_data,
-    )
     render_strategy = (
         "conversational_realizer"
         if _should_use_conversational_realizer(
             state=state,
             answerability_state=answerability_state,
             citations=citations,
-            confidence=confidence,
             quote_intent=quote_intent,
             strict_grounding=strict_grounding,
         )
@@ -3716,7 +3651,6 @@ Rules:
     updated_routing_decision = {
         **routing_decision,
         "action": "answer",
-        "confidence": confidence,
         "required_inputs_missing": [],
         "clarifying_questions": [],
     }
@@ -3736,7 +3670,6 @@ Rules:
             "answer_points": answer_points[:3],
             "citations": citations[:3],
             "follow_up_question": "",
-            "confidence": confidence,
             "teaching_questions": [],
             "clarification_options": [],
             "clarification_hint": None,
@@ -3745,7 +3678,6 @@ Rules:
             "answerability": answerability,
             "telemetry": planner_telemetry,
         },
-        "confidence_score": confidence,
         "routing_decision": updated_routing_decision,
         "workflow_intent": str(updated_routing_decision.get("intent") or "answer"),
         "intent_label": persona_trace.get("intent_label"),
@@ -3775,7 +3707,6 @@ def _build_realizer_message(
     state: TwinState,
     mode: str,
     render_strategy: str,
-    confidence_score: float,
     route_meta: Optional[Dict[str, Any]] = None,
 ) -> AIMessage:
     latest_query = next(
@@ -3800,7 +3731,6 @@ def _build_realizer_message(
     msg.additional_kwargs["router_knowledge_available"] = state.get("router_knowledge_available")
     msg.additional_kwargs["render_strategy"] = render_strategy
     msg.additional_kwargs["workflow_intent"] = state.get("workflow_intent")
-    msg.additional_kwargs["confidence_score"] = confidence_score
     if isinstance(state.get("routing_decision"), dict):
         msg.additional_kwargs["routing_decision"] = state.get("routing_decision")
     if state.get("persona_spec_version"):
@@ -3822,7 +3752,6 @@ async def realizer_node(state: TwinState):
     plan = state.get("planning_output", {})
     mode = state.get("dialogue_mode", "QA_FACT")
     render_strategy = str(plan.get("render_strategy", "")).strip().lower() if isinstance(plan, dict) else ""
-    confidence_score = float(plan.get("confidence", state.get("confidence_score", 0.0)) or 0.0)
     citations = plan.get("citations", []) if isinstance(plan, dict) else []
     context_data = [
         row
@@ -3846,13 +3775,11 @@ async def realizer_node(state: TwinState):
             state=state,
             mode=mode,
             render_strategy="source_faithful",
-            confidence_score=confidence_score,
         )
 
         return {
             "messages": [res],
             "citations": citations,
-            "confidence_score": confidence_score,
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Realizer: source-faithful deterministic rendering (no paraphrase)."
             ],
@@ -3901,14 +3828,12 @@ CONSTRAINTS:
             state=state,
             mode=mode,
             render_strategy=render_strategy or "conversational_realizer",
-            confidence_score=confidence_score,
             route_meta=route_meta,
         )
         
         return {
             "messages": [res],
             "citations": citations,
-            "confidence_score": confidence_score,
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Realizer: conversational rewrite completed."
             ]
@@ -3934,13 +3859,11 @@ CONSTRAINTS:
             state=state,
             mode=mode,
             render_strategy="source_faithful",
-            confidence_score=confidence_score,
         )
 
         return {
             "messages": [fallback_msg],
             "citations": citations,
-            "confidence_score": confidence_score,
             "reasoning_history": (state.get("reasoning_history") or []) + [
                 "Realizer: deterministic source-faithful fallback used after exception."
             ],
@@ -4103,7 +4026,6 @@ async def run_agent_stream(
         refusal_ai = AIMessage(content=refusal_message)
         refusal_ai.additional_kwargs["routing_decision"] = {
             "intent": "answer",
-            "confidence": 1.0,
             "required_inputs_missing": [],
             "chosen_workflow": "answer",
             "output_schema": "workflow.answer.v1",
@@ -4195,7 +4117,6 @@ async def run_agent_stream(
     state = {
         "messages": initial_messages,
         "twin_id": twin_id,
-        "confidence_score": 0.0,
         "citations": [],
         "sub_queries": [],
         "reasoning_history": [],
@@ -4225,7 +4146,6 @@ async def run_agent_stream(
         "tenant_id": tenant_id,
         "routing_decision": {
             "intent": "answer",
-            "confidence": 1.0,
             "required_inputs_missing": [],
             "chosen_workflow": "answer",
             "output_schema": "workflow.answer.v1",

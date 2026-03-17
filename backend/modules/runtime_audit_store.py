@@ -33,7 +33,6 @@ def persist_routing_decision(
         "interaction_context": interaction_context,
         "router_mode": router_mode,
         "intent": str(decision.get("intent") or "answer"),
-        "confidence": float(decision.get("confidence") or 0.0),
         "required_inputs_missing": decision.get("required_inputs_missing") or [],
         "chosen_workflow": str(decision.get("chosen_workflow") or "answer"),
         "output_schema": str(decision.get("output_schema") or "workflow.answer.v1"),
@@ -61,7 +60,10 @@ def persist_response_audit(
     intent_label: Optional[str],
     workflow_intent: Optional[str],
     response_action: str,
-    confidence_score: Optional[float],
+    answerability_state: Optional[str],
+    source_tier: Optional[str],
+    review_required: Optional[bool],
+    review_reason: Optional[str],
     citations: Optional[List[str]],
     sources_used: Optional[List[Dict[str, Any]]],
     refusal_reason: Optional[str],
@@ -80,13 +82,24 @@ def persist_response_audit(
         "intent_label": intent_label,
         "workflow_intent": workflow_intent,
         "response_action": response_action,
-        "confidence_score": confidence_score,
         "citations": citations or [],
         "sources_used": sources_used or [],
         "refusal_reason": refusal_reason,
         "escalation_reason": escalation_reason,
-        "retrieval_summary": retrieval_summary or {},
-        "artifacts_used": artifacts_used or {},
+        "retrieval_summary": {
+            **(retrieval_summary or {}),
+            "answerability_state": answerability_state,
+            "source_tier": source_tier,
+            "review_required": review_required,
+            "review_reason": review_reason,
+        },
+        "artifacts_used": {
+            **(artifacts_used or {}),
+            "answerability_state": answerability_state,
+            "source_tier": source_tier,
+            "review_required": review_required,
+            "review_reason": review_reason,
+        },
     }
     try:
         res = supabase.table("conversation_response_audits").insert(payload).execute()
@@ -166,4 +179,3 @@ def resolve_owner_review_queue_item(
     except Exception as e:
         print(f"[RuntimeAudit] resolve_owner_review_queue_item failed: {e}")
         return None
-

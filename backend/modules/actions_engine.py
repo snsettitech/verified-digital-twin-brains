@@ -48,7 +48,6 @@ class EventEmitter:
         'escalation_resolved',
         'idle_timeout',
         'source_ingested',
-        'confidence_low',
         'action_executed',
         'action_failed'
     ]
@@ -148,7 +147,7 @@ class TriggerMatcher:
         Supported conditions:
         - intent_contains: List of keywords that must appear in user_message
         - keywords: List of keywords (any match)
-        - confidence_below: Confidence threshold
+        - review_required: Require review-state payloads only
         - group_id: Must match specific group
         """
         # Check intent_contains (all must match)
@@ -165,11 +164,10 @@ class TriggerMatcher:
             if not any(kw.lower() in user_message for kw in keywords):
                 return False
         
-        # Check confidence_below
-        if "confidence_below" in conditions:
-            threshold = float(conditions["confidence_below"])
-            confidence = float(payload.get("confidence_score", 1.0))
-            if confidence >= threshold:
+        # Check review_required
+        if "review_required" in conditions:
+            required = bool(conditions["review_required"])
+            if bool(payload.get("review_required")) != required:
                 return False
         
         # Check group_id
@@ -725,7 +723,10 @@ class ActionExecutor:
             "conversation_id": conversation_id,
             "role": "assistant",
             "content": message_content,
-            "confidence_score": 0.0  # Low confidence triggers escalation
+            "answerability_state": "insufficient",
+            "source_tier": "mixed",
+            "review_required": True,
+            "review_reason": "escalation_created",
         }).execute()
         
         message_id = msg_response.data[0]["id"] if msg_response.data else None

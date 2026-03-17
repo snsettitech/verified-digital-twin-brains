@@ -163,7 +163,7 @@ def test_build_research_profile_projection_preserves_owner_locked_image():
                 "public_profile_meta": {
                     "image_source_type": "owner_uploaded",
                     "image_source_url": "https://cdn.example.com/owner-uploaded.jpg",
-                    "image_confidence": 1.0,
+                    "image_source_tier": "owner",
                 },
             },
         },

@@ -143,8 +143,6 @@ services:
         value: "false"
       - key: OPENAI_DEEP_RESEARCH_MODEL
         value: "o3"
-      - key: RUNTIME_CONFIDENCE_GATE_ENABLED
-        value: "false"
       # Graph Memory (Neo4j + Graphiti) — values set in Render dashboard
       - key: GRAPH_MEMORY_ENABLED
         value: "true"

@@ -37,17 +37,17 @@ Your responsibilities:
 Guidelines:
 - Be helpful, accurate, and concise
 - Always ground answers in the knowledge base when possible
-- If confidence is low, say so and offer to escalate
+- If the answer is unsupported or still needs review, say so and offer to escalate
 - Maintain a professional yet approachable tone"""
 
     def get_default_triggers(self) -> List[Dict[str, Any]]:
         """Return standardized default triggers for twins."""
         return [
             {
-                "name": "Low Confidence Alert",
-                "description": "Notify owner when confidence drops below threshold",
-                "event_type": "confidence_low",
-                "conditions": {"confidence_below": 0.6},
+                "name": "Review Required Alert",
+                "description": "Notify owner when a response needs review",
+                "event_type": "answer_sent",
+                "conditions": {"review_required": True},
                 "action_type": "notify_owner",
                 "requires_approval": False
             },

@@ -44,6 +44,24 @@ function getInitials(name: string): string {
     .join('');
 }
 
+function asText(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : [];
+}
+
+function asWorkEntries(value: unknown): WorkEntry[] {
+  return Array.isArray(value) ? value.filter((item): item is WorkEntry => typeof item === 'object' && item !== null) : [];
+}
+
+function asEducationEntries(value: unknown): EducationEntry[] {
+  return Array.isArray(value) ? value.filter((item): item is EducationEntry => typeof item === 'object' && item !== null) : [];
+}
+
 function LabeledInput({
   label,
   value,
@@ -123,23 +141,23 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
         if (!res.ok) throw new Error(`Failed to load profile (${res.status})`);
         const twin = await res.json();
         const pp: Record<string, unknown> = twin?.settings?.public_profile ?? {};
+        const meta: Record<string, unknown> = twin?.settings?.public_profile_meta ?? {};
         // Store the full compiled profile — edited fields will be merged on top
         setFullPublicProfile(pp);
         setFields({
-          display_name: pp.display_name ?? twin?.name ?? '',
-          headline: pp.headline ?? '',
-          bio: pp.bio ?? '',
-          short_description: pp.short_description ?? '',
-          areas_of_expertise: (pp.areas_of_expertise ?? []).join('\n'),
-          pinned_questions: (pp.pinned_questions ?? []).join('\n'),
-          nationality: pp.nationality ?? '',
+          display_name: asText(pp.display_name) || asText(twin?.name),
+          headline: asText(pp.headline),
+          bio: asText(pp.bio),
+          short_description: asText(pp.short_description),
+          areas_of_expertise: asStringList(pp.areas_of_expertise).join('\n'),
+          pinned_questions: asStringList(pp.pinned_questions).join('\n'),
+          nationality: asText(pp.nationality),
           birth_year: pp.birth_year ? String(pp.birth_year) : '',
         });
-        setImageUrl(pp.image_url ?? pp.avatar_url ?? null);
-        setWorkExperience(pp.work_experience ?? []);
-        setEducation(pp.education ?? []);
+        setImageUrl(asText(pp.image_url) || asText(pp.avatar_url) || null);
+        setWorkExperience(asWorkEntries(pp.work_experience));
+        setEducation(asEducationEntries(pp.education));
         // Completeness score for sparse-profile nudge
-        const meta = twin?.settings?.public_profile_meta ?? {};
         if (typeof meta.completeness_score === 'number') {
           setCompletenessScore(meta.completeness_score);
         }

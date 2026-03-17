@@ -7,7 +7,9 @@ interface ContextPanelProps {
     queryClass?: string;
     answerabilityState?: string;
     plannerAction?: string;
-    confidenceScore?: number;
+    sourceTier?: string;
+    reviewRequired?: boolean;
+    reviewReason?: string | null;
     citations?: string[];
     citationDetails?: Array<{
       id: string;
@@ -19,12 +21,6 @@ interface ContextPanelProps {
     retrievalStats?: Record<string, any>;
     selectedEvidenceBlockTypes?: string[];
   } | null;
-}
-
-function renderPercent(value: unknown): string {
-  const num = Number(value);
-  if (Number.isNaN(num)) return 'n/a';
-  return `${Math.round(num * 100)}%`;
 }
 
 export default function ContextPanel({ snapshot }: ContextPanelProps) {
@@ -51,9 +47,8 @@ export default function ContextPanel({ snapshot }: ContextPanelProps) {
           <div className="mt-1 text-slate-700">Class: <strong>{snapshot?.queryClass || 'unknown'}</strong></div>
           <div className="text-slate-700">Answerability: <strong>{snapshot?.answerabilityState || 'unknown'}</strong></div>
           <div className="text-slate-700">Action: <strong>{snapshot?.plannerAction || 'unknown'}</strong></div>
-          <div className="text-slate-700">
-            Confidence: <strong>{snapshot?.confidenceScore !== undefined ? renderPercent(snapshot?.confidenceScore) : 'n/a'}</strong>
-          </div>
+          <div className="text-slate-700">Source tier: <strong>{snapshot?.sourceTier || 'unknown'}</strong></div>
+          <div className="text-slate-700">Review: <strong>{snapshot?.reviewRequired ? (snapshot?.reviewReason || 'required') : 'not needed'}</strong></div>
         </section>
 
         <section className="rounded-xl border border-slate-100 bg-slate-50 p-3">

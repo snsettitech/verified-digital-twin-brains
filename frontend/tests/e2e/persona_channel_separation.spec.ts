@@ -54,7 +54,9 @@ test.describe('Persona Channel Separation (UI)', () => {
           citations: [],
           used_owner_memory: false,
           owner_memory_topics: [],
-          confidence_score: 0.92,
+          answerability_state: 'direct',
+          source_tier: 'canonical',
+          review_required: false,
         }),
       });
     });

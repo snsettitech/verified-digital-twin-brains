@@ -31,7 +31,7 @@ export interface BuildStatus {
   stage: string;
   progress_percent: number;
   stats: Record<string, any>;
-  quality_tier?: 'high_confidence' | 'with_gaps' | 'low_confidence' | 'failed';
+  quality_tier?: 'strong' | 'with_gaps' | 'needs_review' | 'failed';
   last_updated_at?: string;
 }
 

@@ -68,7 +68,6 @@ export interface NameDeepResearchTrainingMetrics {
 export interface NameDeepResearchPreparedQA {
   question: string;
   answer: string;
-  confidence: number;
   citations: string[];
 }
 
@@ -84,18 +83,17 @@ export interface NameDeepResearchResult {
     text: string;
     claim_type: string;
     status: string;
-    confidence: number;
+    support_tier?: string;
     citations: string[];
     notes: string;
   }>;
   timeline: Array<{
     date_or_range: string;
     event: string;
-    confidence: number;
+    support_tier?: string;
     citations: string[];
   }>;
   quality: {
-    overall_confidence: number;
     freshness_score: number;
     coverage_score: number;
     hallucination_risk: 'low' | 'medium' | 'high';

@@ -18,15 +18,12 @@ def test_fastpath_intent_classifier_identity_and_fallback():
 
     assert hit["matched"] is True
     assert hit["intent"] == "identity_intro"
-    assert hit["confidence"] > 0.9
 
     assert role_hit["matched"] is True
     assert role_hit["intent"] == "identity_role"
-    assert role_hit["confidence"] > 0.9
 
     assert miss["matched"] is False
     assert miss["intent"] is None
-    assert miss["confidence"] == 0.0
 
 
 @pytest.mark.asyncio

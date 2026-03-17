@@ -197,7 +197,10 @@ def log_interaction(
     role: str,
     content: str,
     citations: list = None,
-    confidence_score: float = None,
+    answerability_state: str = None,
+    source_tier: str = None,
+    review_required: bool = None,
+    review_reason: str = None,
     interaction_context: str = None,
 ):
     data = {
@@ -207,8 +210,14 @@ def log_interaction(
     }
     if citations:
         data["citations"] = citations
-    if confidence_score is not None:
-        data["confidence_score"] = confidence_score
+    if answerability_state:
+        data["answerability_state"] = answerability_state
+    if source_tier:
+        data["source_tier"] = source_tier
+    if review_required is not None:
+        data["review_required"] = review_required
+    if review_reason:
+        data["review_reason"] = review_reason
     if interaction_context:
         data["interaction_context"] = interaction_context
 
@@ -223,8 +232,6 @@ def log_interaction(
         }
         if citations:
             fallback["citations"] = citations
-        if confidence_score is not None:
-            fallback["confidence_score"] = confidence_score
         response = supabase.table("messages").insert(fallback).execute()
     return response.data[0] if response.data else None
 

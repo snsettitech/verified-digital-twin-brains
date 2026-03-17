@@ -1,12 +1,12 @@
 import pytest
 
-from routers.chat import _maybe_build_public_profile_seed_fallback
+from modules.public_persona_answerer import maybe_build_public_persona_fallback
 
 
 @pytest.mark.asyncio
 async def test_public_profile_seed_fallback_answers_biographical_question(monkeypatch):
     monkeypatch.setattr(
-        "routers.chat._load_public_twin_settings",
+        "modules.public_persona_answerer._load_public_twin_settings",
         lambda _twin_id: {
             "name": "Narendra Modi",
             "public_profile": {
@@ -39,15 +39,24 @@ async def test_public_profile_seed_fallback_answers_biographical_question(monkey
                     "I got into politics through the Bharatiya Janata Party and then built a longer public career in Gujarat before becoming prime minister."
                 ],
                 "citations": [],
-                "confidence": 0.74,
+                "answerability_state": "derivable",
             },
             {},
         )
 
-    monkeypatch.setattr("routers.chat.inference_router.invoke_json", _fake_invoke_json)
+    async def _fake_invoke_text(*_args, **_kwargs):
+        return (
+            "I got into politics through the Bharatiya Janata Party and then built a longer public career in Gujarat before becoming prime minister.",
+            {"provider": "gemini", "model": "gemini-2.5-flash"},
+        )
 
-    result = await _maybe_build_public_profile_seed_fallback("twin-1", "how you got into politics?")
+    monkeypatch.setattr("modules.public_persona_answerer.inference_router.invoke_json", _fake_invoke_json)
+    monkeypatch.setattr("modules.public_persona_answerer.inference_router.invoke_text", _fake_invoke_text)
+
+    result = await maybe_build_public_persona_fallback("twin-1", "how you got into politics?")
 
     assert result is not None
-    assert "bharatiya janata party" in result["response"].lower()
-    assert result["confidence"] >= 0.58
+    assert "bharatiya janata party" in result.response.lower()
+    assert result.answerability_state == "derivable"
+    assert result.source_tier == "canonical"
+    assert result.provider_used == "gemini"

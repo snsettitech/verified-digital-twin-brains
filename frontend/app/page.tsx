@@ -467,7 +467,7 @@ export default function Home() {
               { q: 'Can I update my persona\'s knowledge?', a: 'Yes. Add new documents, URLs, or text anytime. Your persona automatically incorporates new knowledge while maintaining the same consistent voice.' },
               { q: 'Is my data private?', a: 'Your training data and knowledge sources are isolated per user with Row Level Security. We never use your data to train models for other users. Full export and deletion supported.' },
               { q: 'Is it really free?', a: 'Yes — build your persona and share it at no cost. We believe everyone should have access to this technology.' },
-              { q: 'What happens if someone asks something I haven\'t covered?', a: 'Low-confidence questions are automatically escalated and queued in your dashboard for review. You can respond directly or add the topic to your knowledge base.' },
+              { q: 'What happens if someone asks something I haven\'t covered?', a: 'Unsupported or review-worthy questions are queued in your dashboard so you can answer them directly or add the topic to your knowledge base.' },
             ].map((faq, i) => (
               <div
                 key={i}

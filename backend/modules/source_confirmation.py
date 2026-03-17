@@ -112,6 +112,23 @@ def format_score_for_display(normalized_score: Optional[float]) -> Optional[int]
     return int(normalized_score * 100)
 
 
+def score_to_identity_match_tier(
+    normalized_score: Optional[float],
+    content_quality: Optional[ContentQuality] = None,
+) -> Optional[str]:
+    if content_quality in (ContentQuality.BLOCKED, ContentQuality.MANUAL_NEEDED):
+        return "unclear"
+    if normalized_score is None:
+        return None
+    if normalized_score >= 0.9:
+        return "exact"
+    if normalized_score >= AUTO_CONFIRM_THRESHOLD:
+        return "likely"
+    if normalized_score >= AUTO_REJECT_THRESHOLD:
+        return "unclear"
+    return "mismatch"
+
+
 # ============================================================================
 # Confirmation Status Contract (Phase 3.3)
 # ============================================================================
@@ -229,8 +246,7 @@ class PendingConfirmationItem:
     title: Optional[str]
     snippet: Optional[str]
     content_quality: str
-    identity_confidence_score: Optional[float]  # Normalized 0.0-1.0
-    identity_confidence_percent: Optional[int]  # 0-100
+    identity_match_tier: Optional[str]
     match_details: Optional[Dict[str, Any]]
     submitted_root_url: Optional[str]
     status: str
@@ -527,6 +543,11 @@ class SourceConfirmationManager:
             for row in response.data or []:
                 raw_score = row.get("identity_confidence_score")
                 normalized = normalize_identity_score_for_thresholds(raw_score)
+                quality_str = row.get("content_quality", "full")
+                try:
+                    content_quality = ContentQuality(quality_str)
+                except ValueError:
+                    content_quality = ContentQuality.FULL
                 
                 items.append(PendingConfirmationItem(
                     confirmation_id=row["id"],
@@ -536,8 +557,10 @@ class SourceConfirmationManager:
                     title=row.get("title"),
                     snippet=row.get("snippet"),
                     content_quality=row.get("content_quality", "full"),
-                    identity_confidence_score=normalized,
-                    identity_confidence_percent=format_score_for_display(normalized),
+                    identity_match_tier=score_to_identity_match_tier(
+                        normalized,
+                        content_quality=content_quality,
+                    ),
                     match_details=row.get("match_details"),
                     submitted_root_url=row.get("submitted_root_url"),
                     status=row["confirmation_status"],

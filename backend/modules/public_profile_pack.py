@@ -516,6 +516,22 @@ def _candidate_priority(candidate: Dict[str, Any]) -> float:
     return priority_map.get(source_type, 0.4) + confidence
 
 
+def _image_source_tier(source_type: str, status: str) -> str:
+    normalized_type = _clean_text(source_type).lower()
+    normalized_status = _clean_text(status).lower()
+    if normalized_status != "resolved":
+        return "rejected" if normalized_status == "rejected" else "missing"
+    if normalized_type in {"owner_uploaded", "oauth"}:
+        return "owner"
+    if normalized_type == "official_profile":
+        return "official"
+    if normalized_type in {"wikipedia", "direct_public_image", "existing"}:
+        return "reference"
+    if normalized_type in {"generic_public", "linkedin_public"}:
+        return "generic"
+    return "reference"
+
+
 def _resolve_profile_image(
     result: Dict[str, Any],
     existing_public_profile: Dict[str, Any],
@@ -533,7 +549,8 @@ def _resolve_profile_image(
             "image_url": existing_image_url,
             "image_source_type": existing_source_type,
             "image_source_url": _clean_text(existing_meta.get("image_source_url")) or existing_image_url,
-            "image_confidence": round(existing_confidence, 3),
+            "image_source_tier": _clean_text(existing_meta.get("image_source_tier"))
+            or _image_source_tier(existing_source_type, "resolved"),
         }
 
     candidates: Dict[str, Dict[str, Any]] = {}
@@ -650,7 +667,8 @@ def _resolve_profile_image(
             "image_url": existing_image_url,
             "image_source_type": existing_source_type,
             "image_source_url": _clean_text(existing_meta.get("image_source_url")),
-            "image_confidence": round(existing_confidence, 3) if existing_image_url else 0.0,
+            "image_source_tier": _clean_text(existing_meta.get("image_source_tier"))
+            or _image_source_tier(existing_source_type, "resolved" if existing_image_url else "missing"),
         }
 
     best = max(candidates.values(), key=_candidate_priority)
@@ -659,7 +677,7 @@ def _resolve_profile_image(
         "image_url": _clean_text(best.get("url")),
         "image_source_type": _clean_text(best.get("source_type")).lower(),
         "image_source_url": _clean_text(best.get("source_url")),
-        "image_confidence": round(_coerce_ratio(best.get("confidence")), 3),
+        "image_source_tier": _image_source_tier(_clean_text(best.get("source_type")).lower(), "resolved"),
     }
 
 
@@ -683,9 +701,12 @@ def _build_public_profile_meta(
         or _clean_text(existing_meta.get("image_source_type")),
         "image_source_url": _clean_text(image_resolution.get("image_source_url"))
         or _clean_text(existing_meta.get("image_source_url")),
-        "image_confidence": round(
-            _coerce_ratio(image_resolution.get("image_confidence") or existing_meta.get("image_confidence")),
-            3,
+        "image_source_tier": _clean_text(image_resolution.get("image_source_tier"))
+        or _clean_text(existing_meta.get("image_source_tier"))
+        or _image_source_tier(
+            _clean_text(image_resolution.get("image_source_type"))
+            or _clean_text(existing_meta.get("image_source_type")),
+            image_status,
         ),
     }
 
@@ -756,6 +777,7 @@ def normalize_public_profile(twin: Dict[str, Any]) -> Dict[str, Any]:
         "pinned_questions": pinned_questions,
         "social_links": normalize_social_links(public_profile.get("social_links")),
         "featured_content": _safe_list(public_profile.get("featured_content")),
+        "conversation_profile": _safe_dict(public_profile.get("conversation_profile")),
         "personality_traits": _clean_unique_strings(public_profile.get("personality_traits") or [], limit=6),
         "key_achievements": _clean_unique_strings(public_profile.get("key_achievements") or [], limit=6),
         "areas_of_expertise": _clean_unique_strings(public_profile.get("areas_of_expertise") or [], limit=6),
@@ -795,6 +817,56 @@ def _build_occupation(profile: Dict[str, Any], expertise: Optional[List[str]] = 
     if expertise:
         return ", ".join(expertise[:3])
     return "Public persona"
+
+
+def _build_conversation_profile(
+    *,
+    display_name: str,
+    occupation: str,
+    short_description: str,
+    expertise: List[str],
+    speaking_style: str,
+    existing_profile: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    existing = _safe_dict(existing_profile)
+    help_areas = _clean_unique_strings(
+        existing.get("help_areas") or existing.get("areas") or expertise,
+        limit=6,
+    )
+    if help_areas:
+        if len(help_areas) == 1:
+            capability_intro = f"I can help with {help_areas[0]}."
+        elif len(help_areas) == 2:
+            capability_intro = f"I can help with {help_areas[0]} and {help_areas[1]}."
+        else:
+            capability_intro = (
+                f"I can help with {help_areas[0]}, {help_areas[1]}, {help_areas[2]}, and more."
+            )
+    elif occupation:
+        capability_intro = f"I can help from my perspective as {occupation}."
+    else:
+        capability_intro = "I can help you think through the topics I am known for."
+
+    greeting = (
+        _clean_text(existing.get("greeting"))
+        or f"Hi, it's {display_name}'s AI. {capability_intro} What would you like to dig into?"
+    )
+    authenticity_disclosure = (
+        _clean_text(existing.get("authenticity_disclosure"))
+        or (
+            f"I'm a digital mind based on public information about {display_name}. "
+            "I can share the perspective captured here, but I am not the real person."
+        )
+    )
+
+    return {
+        "greeting": greeting,
+        "help_areas": help_areas,
+        "capability_intro": _clean_text(existing.get("capability_intro")) or capability_intro,
+        "authenticity_disclosure": authenticity_disclosure,
+        "tone": _clean_text(existing.get("tone")) or speaking_style or "direct and conversational",
+        "summary": _clean_text(existing.get("summary")) or short_description,
+    }
 
 
 def _fetch_answerability_score(twin_id: str) -> float:
@@ -1481,6 +1553,14 @@ def build_research_profile_projection(
         },
         existing_seeds=existing_public_profile.get("public_response_seeds"),
     )
+    conversation_profile = _build_conversation_profile(
+        display_name=display_name,
+        occupation=occupation,
+        short_description=short_description or bio_text,
+        expertise=expertise,
+        speaking_style=_clean_text(existing_public_profile.get("speaking_style")),
+        existing_profile=existing_public_profile.get("conversation_profile"),
+    )
 
     public_profile = {
         **existing_public_profile,
@@ -1507,6 +1587,7 @@ def build_research_profile_projection(
         "contributions": contributions,
         "personality_traits": _clean_unique_strings(existing_public_profile.get("personality_traits") or [], limit=6),
         "speaking_style": _clean_text(existing_public_profile.get("speaking_style")),
+        "conversation_profile": conversation_profile,
         "public_response_seeds": public_response_seeds,
         "education": education,
         "work_experience": work_experience,
@@ -1725,6 +1806,22 @@ def build_existing_profile_projection(
         },
         existing_seeds=existing_public_profile.get("public_response_seeds"),
     )
+    conversation_profile = _build_conversation_profile(
+        display_name=display_name,
+        occupation=_build_occupation(
+            {
+                "occupation": existing_public_profile.get("occupation") or settings.get("occupation"),
+                "role": role,
+                "organization": organization,
+                "headline": normalized["headline"] or settings.get("headline"),
+            },
+            expertise,
+        ),
+        short_description=normalized["short_description"] or _first_sentence(normalized["bio"]) or normalized["bio"],
+        expertise=expertise,
+        speaking_style=normalized["speaking_style"],
+        existing_profile=existing_public_profile.get("conversation_profile"),
+    )
 
     public_profile = {
         **existing_public_profile,
@@ -1752,6 +1849,7 @@ def build_existing_profile_projection(
         "contributions": normalized["contributions"],
         "personality_traits": normalized["personality_traits"],
         "speaking_style": normalized["speaking_style"],
+        "conversation_profile": conversation_profile,
         "public_response_seeds": public_response_seeds,
         "education": normalized["education"],
         "work_experience": normalized["work_experience"],
@@ -1954,6 +2052,7 @@ def build_public_profile_pack(twin: Dict[str, Any]) -> Dict[str, Any]:
         "work_experience": _build_work_entries(claims, timeline_events, profile.get("work_experience")),
         "pinned_questions": profile["pinned_questions"],
         "featured_content": _safe_list(profile.get("featured_content")),
+        "conversation_profile": _safe_dict(profile.get("conversation_profile")),
         "mind_label": profile["mind_label"],
         "profile_meta": profile_meta,
         "completeness_score": profile_meta.get("completeness_score"),

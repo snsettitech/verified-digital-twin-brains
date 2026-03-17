@@ -11,7 +11,10 @@ type Message = {
   content: string;
   citations?: string[];
   citation_details?: Array<{ id: string; filename?: string | null; citation_url?: string | null }>;
-  confidence_score?: number;
+  answerability_state?: string;
+  source_tier?: string;
+  review_required?: boolean;
+  review_reason?: string | null;
   isError?: boolean;
 };
 
@@ -239,7 +242,10 @@ export default function PublicSharePage() {
               : data.response || 'No response',
             citations: data.citations || [],
             citation_details: data.citation_details || [],
-            confidence_score: data.confidence_score,
+            answerability_state: data.answerability_state,
+            source_tier: data.source_tier,
+            review_required: data.review_required,
+            review_reason: data.review_reason,
             isError: false,
           },
         ]);
@@ -501,13 +507,18 @@ export default function PublicSharePage() {
                               : 'border border-slate-200 bg-slate-50 text-slate-800'
                         }`}>
                           <p className="whitespace-pre-wrap">{message.content}</p>
-                          {message.role === 'assistant' && !message.isError && (message.confidence_score !== undefined || (message.citations && message.citations.length > 0)) && (
+                          {message.role === 'assistant' && !message.isError && ((message.citations && message.citations.length > 0) || message.source_tier || message.review_required) && (
                             <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-slate-200/60 pt-2.5">
-                              {message.confidence_score !== undefined && (
-                                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-emerald-700">
-                                  {(message.confidence_score * 100).toFixed(0)}% confidence
+                              {message.source_tier ? (
+                                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-slate-700">
+                                  {message.source_tier}
                                 </span>
-                              )}
+                              ) : null}
+                              {message.review_required ? (
+                                <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-amber-700">
+                                  Needs review
+                                </span>
+                              ) : null}
                               {message.citations?.map((source, citationIndex) => {
                                 const detail = message.citation_details?.[citationIndex];
                                 const label = detail?.filename || source || `Source ${citationIndex + 1}`;

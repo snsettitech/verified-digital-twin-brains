@@ -1,12 +1,12 @@
 import pytest
 
-from routers.chat import _maybe_answer_from_public_profile
+from modules.public_persona_answerer import maybe_answer_public_persona_query
 
 
 @pytest.mark.asyncio
 async def test_public_profile_first_answer_handles_background_question(monkeypatch):
     monkeypatch.setattr(
-        "routers.chat._load_public_twin_settings",
+        "modules.public_persona_answerer._load_public_twin_settings",
         lambda _twin_id: {
             "name": "Narendra Modi",
             "public_profile": {
@@ -40,19 +40,29 @@ async def test_public_profile_first_answer_handles_background_question(monkeypat
                     "before becoming prime minister."
                 ),
                 "citations": [],
-                "confidence": 0.77,
+                "answerability_state": "derivable",
             },
             {},
         )
 
-    monkeypatch.setattr("routers.chat.inference_router.invoke_json", _fake_invoke_json)
+    async def _fake_invoke_text(*_args, **_kwargs):
+        return (
+            "I got into politics through the Bharatiya Janata Party and built my public career in Gujarat before becoming prime minister.",
+            {"provider": "gemini", "model": "gemini-2.5-flash"},
+        )
 
-    result = await _maybe_answer_from_public_profile(
+    monkeypatch.setattr("modules.public_persona_answerer.inference_router.invoke_json", _fake_invoke_json)
+    monkeypatch.setattr("modules.public_persona_answerer.inference_router.invoke_text", _fake_invoke_text)
+    monkeypatch.setattr("modules.public_persona_answerer._load_public_profile_pack", lambda _twin_id: None)
+
+    result = await maybe_answer_public_persona_query(
         "twin-1",
         "how you got into politics?",
-        {"query_class": "factual"},
+        query_policy={"query_class": "factual"},
     )
 
     assert result is not None
-    assert "bharatiya janata party" in result["response"].lower()
-    assert result["confidence"] >= 0.62
+    assert "bharatiya janata party" in result.response.lower()
+    assert result.answerability_state == "derivable"
+    assert result.source_tier == "canonical"
+    assert result.provider_used == "gemini"

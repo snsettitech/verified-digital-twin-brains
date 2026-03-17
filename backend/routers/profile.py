@@ -60,7 +60,7 @@ class BuildStatusResponse(BaseModel):
     stage: str
     progress_percent: int
     stats: Dict[str, Any]
-    quality_tier: Optional[str] = None  # 'high_confidence' | 'with_gaps' | 'low_confidence' | 'failed'
+    quality_tier: Optional[str] = None  # 'strong' | 'with_gaps' | 'needs_review' | 'failed'
     last_updated_at: Optional[str] = None
 
 
@@ -713,11 +713,11 @@ async def get_build_status(user: dict = Depends(require_tenant)):
     if build_status == "ready":
         score = profile.get("answerability_score", 0)
         if score >= 75:
-            quality_tier = "high_confidence"
+            quality_tier = "strong"
         elif score >= 50:
             quality_tier = "with_gaps"
         else:
-            quality_tier = "low_confidence"
+            quality_tier = "needs_review"
 
     return {
         "profile_id": twin_id,

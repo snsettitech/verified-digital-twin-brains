@@ -40,7 +40,6 @@ interface GraphClaim {
   claim_id: string;
   claim_text: string;
   claim_type: string;
-  confidence?: number;
   source_type?: string;
   source_ref?: string;
   extracted_at?: string;
@@ -488,9 +487,7 @@ export default function AdminDiagnosticsPage() {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="text-sm font-medium text-slate-900">{claim.claim_type}</div>
                           <div className="text-xs text-slate-500">
-                            {typeof claim.confidence === 'number'
-                              ? `${Math.round(claim.confidence * 100)}% confidence`
-                              : 'Confidence unknown'}
+                            {claim.source_type || 'Source type unknown'}
                           </div>
                         </div>
                         <div className="mt-1 text-sm text-slate-600">{truncate(claim.claim_text, 220)}</div>

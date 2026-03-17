@@ -146,8 +146,7 @@ export interface PendingConfirmationItem {
   title: string;
   snippet: string;
   content_quality: ContentQuality;
-  identity_confidence_score: number;
-  identity_confidence_percent: number;
+  identity_match_tier?: string;
   match_details?: {
     name_match?: boolean;
     email_match?: boolean;
@@ -252,7 +251,7 @@ export interface ResearchSource {
   url: string;
   title: string;
   canonical_url: string;
-  identity_confidence_score: number;
+  identity_match_tier?: string;
   content_quality: ContentQuality;
   created_at: string;
 }

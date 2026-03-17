@@ -74,7 +74,8 @@ class ExtractedMemory(BaseModel):
     type: str  # intent, goal, constraint, preference, boundary
     value: str
     evidence: str
-    confidence: float
+    support_tier: str = "supported"
+    confidence: float = Field(default=0.0, exclude=True)
     timestamp: str
     session_id: str
     source: str = "interview_mode"
@@ -89,6 +90,14 @@ class FinalizeSessionResponse(BaseModel):
     proposed_failed_count: int = 0
     notes: List[str] = Field(default_factory=list)
     status: str
+
+
+def _memory_support_tier(score: float) -> str:
+    if score >= 0.8:
+        return "strong"
+    if score >= INTERVIEW_MEMORY_MIN_CONFIDENCE:
+        return "supported"
+    return "thin"
 
 
 class RealtimeSessionRequest(BaseModel):
@@ -326,6 +335,7 @@ async def _extract_memories_from_transcript(
             type=mem.type,
             value=mem.value,
             evidence=mem.evidence,
+            support_tier=_memory_support_tier(float(mem.confidence)),
             confidence=mem.confidence,
             timestamp=mem.timestamp,
             session_id=mem.session_id,
@@ -487,7 +497,7 @@ async def finalize_interview_session(
     twin_id = session_row.get("twin_id")
     proposed_count = 0
     proposed_failed_count = 0
-    low_confidence_skipped = 0
+    below_support_threshold_skipped = 0
     notes: List[str] = []
     memory_status = "verified" if AUTO_APPROVE_OWNER_MEMORY else "proposed"
 
@@ -495,7 +505,7 @@ async def finalize_interview_session(
         for memory in extracted_memories:
             try:
                 if memory.confidence < INTERVIEW_MEMORY_MIN_CONFIDENCE:
-                    low_confidence_skipped += 1
+                    below_support_threshold_skipped += 1
                     continue
                 mapped_type = _map_interview_memory_type(memory.type)
                 topic_normalized = suggest_topic_from_value(memory.value)
@@ -522,9 +532,9 @@ async def finalize_interview_session(
                 print(f"[Interview] Failed to propose owner memory: {e}")
                 proposed_failed_count += 1
 
-        if low_confidence_skipped > 0:
+        if below_support_threshold_skipped > 0:
             notes.append(
-                f"{low_confidence_skipped} low-confidence memories were skipped "
+                f"{below_support_threshold_skipped} low-support memories were skipped "
                 f"(<{INTERVIEW_MEMORY_MIN_CONFIDENCE})."
             )
         if proposed_failed_count > 0:
@@ -577,7 +587,7 @@ async def finalize_interview_session(
         "extracted_count": len(extracted_memories),
         "proposed_count": proposed_count,
         "proposed_failed_count": proposed_failed_count,
-        "low_confidence_skipped": low_confidence_skipped,
+        "below_support_threshold_skipped": below_support_threshold_skipped,
         "memory_status_target": memory_status,
         "auto_approve_owner_memory": AUTO_APPROVE_OWNER_MEMORY,
     })

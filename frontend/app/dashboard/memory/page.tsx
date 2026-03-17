@@ -12,7 +12,6 @@ type OwnerMemory = {
   memory_type: string;
   value: string;
   status?: string;
-  confidence?: number;
   provenance?: Record<string, any>;
   created_at?: string;
   updated_at?: string;

@@ -164,9 +164,22 @@ def _build_prompt(query: str, contexts: List[Dict]) -> str:
     )
 
 
-def _calculate_confidence(contexts: List[Dict]) -> float:
-    """Calculate average confidence score from contexts."""
-    return sum([c.get('score', 0) for c in contexts]) / len(contexts) if contexts else 0
+def _derive_support_state(contexts: List[Dict[str, Any]]) -> str:
+    if not contexts:
+        return "insufficient"
+    strong_hits = [
+        float(chunk.get("score", chunk.get("vector_score", 0.0)) or 0.0)
+        for chunk in contexts
+        if isinstance(chunk, dict)
+    ]
+    top_score = max(strong_hits, default=0.0)
+    return "direct" if top_score >= 0.7 else "derivable"
+
+
+def _derive_source_tier(contexts: List[Dict[str, Any]]) -> str:
+    if not contexts:
+        return "mixed"
+    return "retrieved"
 
 
 def _generate_answer_openai(query: str, contexts: List[Dict]) -> Dict[str, Any]:
@@ -185,12 +198,13 @@ def _generate_answer_openai(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     )
     
     answer = response.choices[0].message.content
-    avg_score = _calculate_confidence(contexts)
-    
     return {
         "answer": answer,
-        "confidence_score": avg_score,
         "citations": [c['source_id'] for c in contexts],
+        "answerability_state": _derive_support_state(contexts),
+        "source_tier": _derive_source_tier(contexts),
+        "review_required": False,
+        "review_reason": None,
         "provider": "openai",
         "model": OPENAI_MODEL
     }
@@ -212,12 +226,13 @@ def _generate_answer_gemini(query: str, contexts: List[Dict]) -> Dict[str, Any]:
     )
 
     answer = response.choices[0].message.content
-    avg_score = _calculate_confidence(contexts)
-
     return {
         "answer": answer,
-        "confidence_score": avg_score,
         "citations": [c['source_id'] for c in contexts],
+        "answerability_state": _derive_support_state(contexts),
+        "source_tier": _derive_source_tier(contexts),
+        "review_required": False,
+        "review_reason": None,
         "provider": "gemini",
         "model": GEMINI_MODEL
     }
@@ -240,12 +255,13 @@ def _generate_answer_cerebras(query: str, contexts: List[Dict]) -> Dict[str, Any
     )
     
     answer = response.choices[0].message.content
-    avg_score = _calculate_confidence(contexts)
-    
     return {
         "answer": answer,
-        "confidence_score": avg_score,
         "citations": [c['source_id'] for c in contexts],
+        "answerability_state": _derive_support_state(contexts),
+        "source_tier": _derive_source_tier(contexts),
+        "review_required": False,
+        "review_reason": None,
         "provider": "cerebras",
         "model": client.model
     }
@@ -268,7 +284,7 @@ def generate_answer(query: str, contexts: List[Dict]) -> Dict[str, Any]:
         contexts: List of context dicts with 'text', 'score', 'source_id'
         
     Returns:
-        Dict with 'answer', 'confidence_score', 'citations', 'provider', 'model'
+        Dict with 'answer', 'citations', 'answerability_state', 'source_tier', 'provider', 'model'
     """
     # Try primary provider
     if INFERENCE_PROVIDER == "cerebras":

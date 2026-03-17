@@ -17,6 +17,18 @@ export interface ChatStreamEvent {
   payload?: any;
 }
 
+function buildWelcomeMessage(personaName?: string | null, specialization?: string | null): string {
+  const cleanedName = (personaName || '').trim();
+  const cleanedSpecialization = (specialization || '').trim();
+  if (cleanedName && cleanedSpecialization) {
+    return `Hi, it's ${cleanedName}'s AI. I can help with ${cleanedSpecialization.toLowerCase()} and related questions. What's on your mind?`;
+  }
+  if (cleanedName) {
+    return `Hi, it's ${cleanedName}'s AI. How can I help?`;
+  }
+  return 'Hi. How can I help?';
+}
+
 export default function ChatInterface({
   twinId,
   conversationId,
@@ -44,14 +56,14 @@ export default function ChatInterface({
   presetQuestions?: string[];
   initialInput?: string | null;
 }) {
-  const { user } = useTwin();
+  const { user, activeTwin, twins } = useTwin();
   const isE2EBypass =
     process.env.NODE_ENV !== 'production' &&
     process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === '1';
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
+      content: 'Hi. How can I help?',
       timestamp: Date.now(),
     }
   ]);
@@ -91,6 +103,18 @@ export default function ChatInterface({
     return `simulator_chat_${resolvedTenantId}_${twinId}_${contextStorageKey}`;
   }, [tenantId, user?.tenant_id, twinId, contextStorageKey]);
   const apiBaseUrl = useMemo(() => resolveApiBaseUrl(), []);
+  const resolvedTwin = useMemo(() => {
+    return twins.find((candidate) => candidate.id === twinId) || (activeTwin?.id === twinId ? activeTwin : null);
+  }, [activeTwin, twinId, twins]);
+  const welcomeMessage = useMemo(
+    () => buildWelcomeMessage(
+      resolvedTwin?.name || activeTwin?.name || null,
+      (resolvedTwin as { specialization?: string | null; description?: string | null } | null)?.specialization
+        || (resolvedTwin as { specialization?: string | null; description?: string | null } | null)?.description
+        || null,
+    ),
+    [activeTwin?.name, resolvedTwin],
+  );
 
   const emitStreamEvent = useCallback((type: ChatStreamEventType, payload?: any) => {
     if (!onStreamEvent) return;
@@ -273,7 +297,7 @@ export default function ChatInterface({
         if (!restored) {
           setMessages([{
             role: 'assistant',
-            content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
+            content: welcomeMessage,
             timestamp: Date.now(),
           }]);
         }
@@ -293,11 +317,14 @@ export default function ChatInterface({
             role: m.role,
             content: m.content,
             citations: m.citations,
-            confidence_score: m.confidence_score
+            answerability_state: m.answerability_state,
+            source_tier: m.source_tier,
+            review_required: m.review_required,
+            review_reason: m.review_reason,
           }));
           setMessages(history.length > 0 ? history : [{
             role: 'assistant',
-            content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
+            content: welcomeMessage,
             timestamp: Date.now(),
           }]);
         }
@@ -306,7 +333,7 @@ export default function ChatInterface({
       }
     };
     loadHistory();
-  }, [conversationId, storageKey]);
+  }, [conversationId, storageKey, apiBaseUrl, welcomeMessage]);
 
   useEffect(() => {
     persistMessages(messages);
@@ -321,12 +348,12 @@ export default function ChatInterface({
     }
     setMessages([{
       role: 'assistant',
-      content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
+      content: welcomeMessage,
       timestamp: Date.now(),
     }]);
     setLastError(null);
     setLastUserMessage(null);
-  }, [resetKey, storageKey]);
+  }, [resetKey, storageKey, welcomeMessage]);
 
   const sendMessage = async (overrideText?: string, options?: { retry?: boolean }) => {
     const text = (overrideText ?? input).trim();
@@ -394,22 +421,29 @@ export default function ChatInterface({
 
         if (isClarification) {
           lastMsg.content = responseMessage || 'I need clarification.';
-          lastMsg.confidence_score = 0;
           lastMsg.citations = [];
+          lastMsg.answerability_state = 'insufficient';
+          lastMsg.review_required = true;
+          lastMsg.review_reason = 'clarify';
           emitStreamEvent('clarify', data);
         } else {
           lastMsg.content = responseMessage;
-          lastMsg.confidence_score = data.confidence_score;
           lastMsg.citations = data.citations;
           lastMsg.citation_details = data.citation_details;
+          lastMsg.answerability_state = data.answerability_state;
+          lastMsg.source_tier = data.source_tier;
+          lastMsg.review_required = data.review_required;
+          lastMsg.review_reason = data.review_reason;
             lastMsg.owner_memory_refs = data.owner_memory_refs || [];
             lastMsg.owner_memory_topics = data.owner_memory_topics || [];
             lastMsg.used_owner_memory = Boolean(data.used_owner_memory);
           lastMsg.teaching_questions = [];
           emitStreamEvent('metadata', {
-            confidence_score: data.confidence_score,
             citations: data.citations,
             citation_details: data.citation_details,
+            source_tier: data.source_tier,
+            review_required: data.review_required,
+            review_reason: data.review_reason,
             owner_memory_refs: data.owner_memory_refs || [],
             owner_memory_topics: data.owner_memory_topics || [],
             used_owner_memory: Boolean(data.used_owner_memory),
@@ -550,9 +584,12 @@ export default function ChatInterface({
         setMessages((prev) => {
           const last = [...prev];
           const lastMsg = { ...last[last.length - 1] };
-          lastMsg.confidence_score = data.confidence_score as number | undefined;
           lastMsg.citations = data.citations as string[] | undefined;
           lastMsg.citation_details = data.citation_details as Message['citation_details'];
+          lastMsg.answerability_state = data.answerability_state as string | undefined;
+          lastMsg.source_tier = data.source_tier as string | undefined;
+          lastMsg.review_required = data.review_required as boolean | undefined;
+          lastMsg.review_reason = data.review_reason as string | null | undefined;
           lastMsg.graph_used = graphUsed;
           lastMsg.owner_memory_refs = ownerMemoryRefs;
           lastMsg.owner_memory_topics = ownerMemoryTopics;
@@ -622,7 +659,7 @@ export default function ChatInterface({
     }
     setMessages([{
       role: 'assistant',
-      content: "Hello! I am your PersonaOn AI persona. Ask me anything.",
+      content: welcomeMessage,
       timestamp: Date.now(),
     }]);
     setLastError(null);

@@ -1,11 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useTwin, Twin, getOnboardingResumeUrl } from '@/lib/context/TwinContext';
-import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
+
 import { EmptyState, EmptyTwinNoActivity } from '@/components/ui/EmptyState';
 import { API_BASE_URL, API_ENDPOINTS } from '@/lib/constants';
+import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
+import { getOnboardingResumeUrl, useTwin } from '@/lib/context/TwinContext';
+
+interface AnswerMix {
+  direct: number;
+  derivable: number;
+  insufficient: number;
+}
 
 interface Stats {
   conversations: number;
@@ -13,8 +20,10 @@ interface Stats {
   userMessages: number;
   assistantMessages: number;
   responseRate: number;
-  avgConfidence: number;
-  escalationRate: number;
+  reviewRate: number;
+  citationRate: number;
+  unsupportedRate: number;
+  answerMix: AnswerMix;
 }
 
 interface Conversation {
@@ -22,7 +31,10 @@ interface Conversation {
   created_at: string;
   message_count: number;
   last_message: string | null;
-  avg_confidence: number;
+  last_answerability_state: string | null;
+  last_source_tier: string | null;
+  review_required: boolean;
+  citation_rate: number;
 }
 
 interface ActivityItem {
@@ -33,186 +45,201 @@ interface ActivityItem {
   time: string;
 }
 
-export default function DashboardPage() {
+function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  return `${Math.floor(diffInSeconds / 86400)}d ago`;
+}
+
+function stateTone(state?: string | null): string {
+  switch (state) {
+    case 'direct':
+      return 'bg-emerald-100 text-emerald-700';
+    case 'derivable':
+      return 'bg-amber-100 text-amber-700';
+    case 'insufficient':
+      return 'bg-rose-100 text-rose-700';
+    default:
+      return 'bg-slate-100 text-slate-700';
+  }
+}
+
+export default function DashboardPage(): React.JSX.Element {
+  const { activeTwin, twins, isLoading: twinsLoading } = useTwin();
+
   const [systemStatus, setSystemStatus] = useState<'checking' | 'online' | 'offline' | 'degraded'>('checking');
-  const [twinId, setTwinId] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
     conversations: 0,
     messages: 0,
     userMessages: 0,
     assistantMessages: 0,
     responseRate: 0,
-    avgConfidence: 0,
-    escalationRate: 0
+    reviewRate: 0,
+    citationRate: 0,
+    unsupportedRate: 0,
+    answerMix: { direct: 0, derivable: 0, insufficient: 0 },
   });
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Use TwinContext as single source of truth for active twin
-  const { activeTwin, twins, isLoading: twinsLoading } = useTwin();
-
-  // Filter non-active twins for "Continue Setup" section
-  const nonActiveTwins = twins.filter(t => t.status && t.status !== 'active');
-
-  // Modal states
+  const [loadingConversations, setLoadingConversations] = useState(false);
   const [showConversationsModal, setShowConversationsModal] = useState(false);
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loadingConversations, setLoadingConversations] = useState(false);
 
-  // Check system health on mount
+  const nonActiveTwins = useMemo(
+    () => twins.filter((twin) => twin.status && twin.status !== 'active'),
+    [twins]
+  );
+
   useEffect(() => {
-    const checkHealth = async () => {
+    const checkHealth = async (): Promise<void> => {
       try {
         const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.HEALTH}`);
-        if (response.ok) {
-          const data = await response.json();
-          setSystemStatus(data.status === 'online' ? 'online' : 'degraded');
-        } else {
+        if (!response.ok) {
           setSystemStatus('offline');
+          return;
         }
+        const payload = await response.json();
+        setSystemStatus(payload.status === 'online' ? 'online' : 'degraded');
       } catch {
         setSystemStatus('offline');
       }
     };
-    checkHealth();
+
+    void checkHealth();
     const interval = setInterval(checkHealth, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // Format time ago - moved here to fix hoisting issue
-  const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-    return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  };
-
-  // Get twin ID and fetch real stats
-  // REFACTORED: Now uses activeTwin from TwinContext instead of redundant fetch
   useEffect(() => {
-    const fetchData = async () => {
-      // Wait for TwinContext to hydrate
+    const fetchData = async (): Promise<void> => {
       if (twinsLoading) return;
-
       setLoading(true);
-      const currentTwinId = activeTwin?.id || null;
-      setTwinId(currentTwinId);
 
-      if (currentTwinId) {
-        // Fetch real dashboard stats
-        try {
-          const statsResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_DASHBOARD(currentTwinId)}?days=30`);
-          if (statsResponse.ok) {
-            const data = await statsResponse.json();
-            setStats({
-              conversations: data.conversations,
-              messages: data.messages,
-              userMessages: data.user_messages,
-              assistantMessages: data.assistant_messages,
-              responseRate: data.response_rate,
-              avgConfidence: data.avg_confidence,
-              escalationRate: data.escalation_rate
-            });
-          }
-        } catch (error) {
-          console.error('Failed to fetch stats:', error);
-        }
+      const twinId = activeTwin?.id;
+      if (!twinId) {
+        setLoading(false);
+        return;
+      }
 
-        // Fetch real activity feed
-        try {
-          const activityResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_ACTIVITY(currentTwinId)}?limit=5`);
-          if (activityResponse.ok) {
-            const data: ActivityItem[] = await activityResponse.json();
-            setRecentActivity(data.map((item) => ({
-              id: item.id,
-              type: item.type,
-              title: item.title,
-              description: item.description,
-              time: formatTimeAgo(item.time)
-            })));
-          }
-        } catch (error) {
-          console.error('Failed to fetch activity:', error);
+      try {
+        const statsResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_DASHBOARD(twinId)}?days=30`);
+        if (statsResponse.ok) {
+          const data = await statsResponse.json();
+          setStats({
+            conversations: data.conversations ?? 0,
+            messages: data.messages ?? 0,
+            userMessages: data.user_messages ?? 0,
+            assistantMessages: data.assistant_messages ?? 0,
+            responseRate: data.response_rate ?? 0,
+            reviewRate: data.review_rate ?? 0,
+            citationRate: data.citation_rate ?? 0,
+            unsupportedRate: data.unsupported_rate ?? 0,
+            answerMix: {
+              direct: data.answer_mix?.direct ?? 0,
+              derivable: data.answer_mix?.derivable ?? 0,
+              insufficient: data.answer_mix?.insufficient ?? 0,
+            },
+          });
         }
+      } catch (error) {
+        console.error('Failed to fetch dashboard stats:', error);
+      }
+
+      try {
+        const activityResponse = await authFetchStandalone(`${API_ENDPOINTS.METRICS_ACTIVITY(twinId)}?limit=5`);
+        if (activityResponse.ok) {
+          const data: ActivityItem[] = await activityResponse.json();
+          setRecentActivity(
+            data.map((item) => ({
+              ...item,
+              time: formatTimeAgo(item.time),
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('Failed to fetch activity feed:', error);
       }
 
       setLoading(false);
     };
 
-    fetchData();
+    void fetchData();
   }, [activeTwin?.id, twinsLoading]);
 
-
-
-  // Fetch conversations when modal opens
-  const handleConversationsClick = async () => {
+  const handleConversationsClick = async (): Promise<void> => {
     setShowConversationsModal(true);
-    if (!twinId) return;
+    if (!activeTwin?.id) return;
 
     setLoadingConversations(true);
     try {
-      const response = await authFetchStandalone(`${API_ENDPOINTS.METRICS_CONVERSATIONS(twinId)}?limit=20`);
+      const response = await authFetchStandalone(`${API_ENDPOINTS.METRICS_CONVERSATIONS(activeTwin.id)}?limit=20`);
       if (response.ok) {
         const data = await response.json();
         setConversations(data);
       }
     } catch (error) {
-      console.error('Failed to fetch conversations:', error);
+      console.error('Failed to fetch conversation summaries:', error);
+    } finally {
+      setLoadingConversations(false);
     }
-    setLoadingConversations(false);
   };
+
+  const answerMixTotal =
+    stats.answerMix.direct + stats.answerMix.derivable + stats.answerMix.insufficient;
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1">Welcome back! Here&apos;s how your persona is performing.</p>
+          <p className="mt-1 text-slate-500">Track how your persona is responding, citing, and getting reviewed.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full border bg-white shadow-sm">
-            <span className={`w-2.5 h-2.5 rounded-full ${systemStatus === 'online' ? 'bg-emerald-500 animate-pulse' :
-              systemStatus === 'degraded' ? 'bg-yellow-500' :
-                systemStatus === 'offline' ? 'bg-red-500' : 'bg-slate-300 animate-pulse'
-              }`} />
-            <span className="text-sm font-semibold text-slate-700 capitalize">
-              {systemStatus}
-            </span>
-          </div>
+        <div className="flex items-center gap-2 rounded-full border bg-white px-4 py-2 shadow-sm">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${
+              systemStatus === 'online'
+                ? 'bg-emerald-500 animate-pulse'
+                : systemStatus === 'degraded'
+                  ? 'bg-amber-500'
+                  : systemStatus === 'offline'
+                    ? 'bg-rose-500'
+                    : 'bg-slate-300 animate-pulse'
+            }`}
+          />
+          <span className="text-sm font-semibold capitalize text-slate-700">{systemStatus}</span>
         </div>
       </div>
 
-      {/* Non-Active Twins - Continue Setup */}
       {nonActiveTwins.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
-          <h2 className="text-lg font-bold text-amber-900 mb-4 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-amber-900">
+            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
             Continue Setup ({nonActiveTwins.length})
           </h2>
           <div className="space-y-3">
             {nonActiveTwins.map((twin) => (
-              <div 
+              <div
                 key={twin.id}
-                className="flex items-center justify-between bg-white rounded-xl p-4 border border-amber-100"
+                className="flex items-center justify-between rounded-xl border border-amber-100 bg-white p-4"
               >
                 <div>
                   <p className="font-semibold text-slate-900">{twin.name}</p>
-                  <p className="text-sm text-slate-500 capitalize">
+                  <p className="text-sm capitalize text-slate-500">
                     Status: {twin.status?.replace('_', ' ') || 'Draft'}
                   </p>
                 </div>
-                <Link 
+                <Link
                   href={getOnboardingResumeUrl(twin.id)}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600"
                 >
-                  Continue Setup →
+                  Continue Setup
                 </Link>
               </div>
             ))}
@@ -220,142 +247,91 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Stats Cards - CLICKABLE */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Conversations Card */}
-        <button
-          onClick={handleConversationsClick}
-          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-2xl">💬</span>
-            <span className="px-2 py-1 text-[10px] font-bold text-white rounded-full bg-gradient-to-r from-blue-500 to-cyan-500">
-              {stats.conversations > 0 ? 'LIVE' : 'NEW'}
-            </span>
-          </div>
-          <p className="text-2xl font-black text-slate-900">{stats.conversations.toLocaleString()}</p>
-          <p className="text-sm text-slate-500 mt-1">Conversations</p>
-          <p className="text-xs text-blue-500 mt-2">Click to view →</p>
-        </button>
-
-        {/* Messages Card */}
-        <button
-          onClick={() => setShowMessagesModal(true)}
-          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-2xl">📨</span>
-            <span className="px-2 py-1 text-[10px] font-bold text-white rounded-full bg-blue-500">
-              TOTAL
-            </span>
-          </div>
-          <p className="text-2xl font-black text-slate-900">{stats.messages.toLocaleString()}</p>
-          <p className="text-sm text-slate-500 mt-1">Messages</p>
-          <p className="text-xs text-blue-500 mt-2">Click for breakdown →</p>
-        </button>
-
-        {/* Response Rate Card */}
-        <button
-          onClick={() => setShowAnalysisModal(true)}
-          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all text-left"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-2xl">⚡</span>
-            <span className={`px-2 py-1 text-[10px] font-bold text-white rounded-full bg-gradient-to-r ${stats.responseRate >= 90 ? 'from-emerald-500 to-teal-500' :
-              stats.responseRate >= 70 ? 'from-yellow-500 to-orange-500' :
-                'from-red-500 to-pink-500'
-              }`}>
-              {stats.responseRate >= 90 ? 'GREAT' : stats.responseRate >= 70 ? 'GOOD' : 'LOW'}
-            </span>
-          </div>
-          <p className="text-2xl font-black text-slate-900">{stats.responseRate.toFixed(1)}%</p>
-          <p className="text-sm text-slate-500 mt-1">Response Rate</p>
-          <p className="text-xs text-emerald-500 mt-2">Click for analysis →</p>
-        </button>
-
-        {/* Avg Confidence Card */}
-        <button
-          onClick={() => setShowAnalysisModal(true)}
-          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-orange-300 transition-all text-left"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-2xl">🎯</span>
-            <span className={`px-2 py-1 text-[10px] font-bold text-white rounded-full bg-gradient-to-r ${stats.avgConfidence >= 85 ? 'from-emerald-500 to-teal-500' :
-              stats.avgConfidence >= 70 ? 'from-yellow-500 to-orange-500' :
-                'from-red-500 to-pink-500'
-              }`}>
-              {stats.avgConfidence >= 85 ? 'HIGH' : stats.avgConfidence >= 70 ? 'MED' : 'LOW'}
-            </span>
-          </div>
-          <p className="text-2xl font-black text-slate-900">{stats.avgConfidence.toFixed(1)}%</p>
-          <p className="text-sm text-slate-500 mt-1">Avg Confidence</p>
-          <p className="text-xs text-orange-500 mt-2">Click for analysis →</p>
-        </button>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {[
+          {
+            title: 'Conversations',
+            value: stats.conversations.toLocaleString(),
+            subtitle: 'Recent sessions',
+            tone: 'bg-blue-500',
+            onClick: handleConversationsClick,
+          },
+          {
+            title: 'Messages',
+            value: stats.messages.toLocaleString(),
+            subtitle: `${stats.userMessages} user / ${stats.assistantMessages} assistant`,
+            tone: 'bg-slate-900',
+            onClick: () => setShowMessagesModal(true),
+          },
+          {
+            title: 'Citation Rate',
+            value: `${stats.citationRate.toFixed(1)}%`,
+            subtitle: 'Answers with citations',
+            tone: 'bg-emerald-500',
+            onClick: () => setShowAnalysisModal(true),
+          },
+          {
+            title: 'Review Rate',
+            value: `${stats.reviewRate.toFixed(1)}%`,
+            subtitle: 'Answers flagged for review',
+            tone: 'bg-amber-500',
+            onClick: () => setShowAnalysisModal(true),
+          },
+        ].map((card) => (
+          <button
+            key={card.title}
+            onClick={() => void card.onClick()}
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-all hover:border-blue-300 hover:shadow-md"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white ${card.tone}`}>
+                {card.title}
+              </span>
+            </div>
+            <p className="text-2xl font-black text-slate-900">{card.value}</p>
+            <p className="mt-1 text-sm text-slate-500">{card.subtitle}</p>
+          </button>
+        ))}
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Interview Twin - ISSUE-001: Changed from "Train" to "Interview" for clarity */}
+      <div className="grid gap-6 md:grid-cols-3">
         <Link href="/dashboard/simulator" className="group">
-          <div className="bg-blue-700 p-6 rounded-2xl text-white shadow-xl shadow-blue-200 hover:shadow-2xl transition-all duration-300 h-full relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-6 opacity-10">
-              <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-bold mb-1">Interview Your Persona</h3>
-            <p className="text-blue-100 text-sm opacity-90">Capture your voice and decisions</p>
-            <div className="mt-4 inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-wider">
+          <div className="relative h-full overflow-hidden rounded-2xl bg-blue-700 p-6 text-white shadow-xl shadow-blue-200 transition-all duration-300 hover:shadow-2xl">
+            <div className="mb-4 inline-block rounded-full bg-white/20 px-3 py-1 text-xs font-bold uppercase tracking-wider">
               Recommended
             </div>
+            <h3 className="text-xl font-bold">Interview Your Persona</h3>
+            <p className="mt-1 text-sm text-blue-100">Capture voice, decision patterns, and better conversation coverage.</p>
           </div>
         </Link>
 
-        {/* Add Knowledge */}
         <Link href="/dashboard/studio" className="group">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 h-full">
-            <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Add Knowledge</h3>
-            <p className="text-slate-500 text-sm">Upload files & URLs</p>
+          <div className="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">Add Knowledge</h3>
+            <p className="mt-1 text-sm text-slate-500">Upload files, URLs, and structured material.</p>
           </div>
         </Link>
 
-        {/* Test Twin */}
         <Link href="/dashboard/simulator" className="group">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 h-full">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">Test Your Persona</h3>
-            <p className="text-slate-500 text-sm">Chat in simulator</p>
+          <div className="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition-all duration-300 hover:shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">Test Conversations</h3>
+            <p className="mt-1 text-sm text-slate-500">See how the persona sounds before sharing it publicly.</p>
           </div>
         </Link>
       </div>
 
-      {/* Activity & Quick Links Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Activity - REAL DATA */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-5">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-5 flex items-center justify-between">
             <h2 className="text-lg font-bold text-slate-900">Recent Activity</h2>
-            <Link href="/dashboard/insights" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
-              View All →
+            <Link href="/dashboard/insights" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+              View All
             </Link>
           </div>
+
           <div className="space-y-4">
             {loading ? (
-              <div className="text-center py-8 text-slate-400">Loading activity...</div>
+              <div className="py-8 text-center text-slate-400">Loading activity...</div>
             ) : recentActivity.length === 0 ? (
               activeTwin?.name ? (
                 <EmptyTwinNoActivity twinName={activeTwin.name} />
@@ -364,24 +340,20 @@ export default function DashboardPage() {
                   illustration="chat-bubble"
                   title="No activity yet"
                   description="Start a conversation to see activity here."
-                  primaryAction={{
-                    label: 'Start Chatting',
-                    href: '/dashboard/simulator',
-                  }}
+                  primaryAction={{ label: 'Start Chatting', href: '/dashboard/simulator' }}
                 />
               )
             ) : (
               recentActivity.map((activity) => (
-                <div key={activity.id} className="flex items-start gap-3 pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${activity.type === 'conversation' ? 'bg-blue-100 text-blue-600' :
-                    activity.type === 'escalation' ? 'bg-amber-100 text-amber-600' :
-                      'bg-emerald-100 text-emerald-600'
-                    }`}>
-                    {activity.type === 'conversation' ? '💬' : activity.type === 'escalation' ? '⚠️' : '📄'}
+                <div key={activity.id} className="flex items-start gap-3 border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold uppercase text-slate-600">
+                    {activity.type.slice(0, 1)}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-900 font-medium truncate">{activity.title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{activity.description} • {activity.time}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-900">{activity.title}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {activity.description} · {activity.time}
+                    </p>
                   </div>
                 </div>
               ))
@@ -389,81 +361,97 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Quick Links */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-5">Quick Links</h2>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-5 text-lg font-bold text-slate-900">Conversation Quality</h2>
+
+          <div className="space-y-4">
             {[
-              { name: 'Share Link', href: '/dashboard/share', icon: '🔗' },
-              { name: 'Embed Widget', href: '/dashboard/widget', icon: '📱' },
-              { name: 'Escalations', href: '/dashboard/escalations', icon: '📬', badge: stats.escalationRate > 0 ? Math.ceil(stats.escalationRate) : undefined },
-              { name: 'Verified Q&A', href: '/dashboard/verified-qna', icon: '✅' },
-              { name: 'Analytics', href: '/dashboard/insights', icon: '📊' },
-              { name: 'Settings', href: '/dashboard/settings', icon: '⚙️' },
-            ].map((link) => (
-              <Link
-                key={link.name}
-                href={link.href}
-                className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors"
-              >
-                <span className="text-lg">{link.icon}</span>
-                <span className="text-sm font-medium text-slate-700">{link.name}</span>
-                {link.badge && (
-                  <span className="ml-auto px-2 py-0.5 text-xs font-bold text-white bg-red-500 rounded-full">
-                    {link.badge}
-                  </span>
-                )}
-              </Link>
-            ))}
+              {
+                label: 'Direct answers',
+                value: stats.answerMix.direct,
+                tone: 'bg-emerald-500',
+              },
+              {
+                label: 'Derivable answers',
+                value: stats.answerMix.derivable,
+                tone: 'bg-amber-500',
+              },
+              {
+                label: 'Insufficient turns',
+                value: stats.answerMix.insufficient,
+                tone: 'bg-rose-500',
+              },
+            ].map((item) => {
+              const percent = answerMixTotal > 0 ? (item.value / answerMixTotal) * 100 : 0;
+              return (
+                <div key={item.label}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className="font-medium text-slate-700">{item.label}</span>
+                    <span className="text-slate-500">{item.value}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100">
+                    <div className={`h-2 rounded-full ${item.tone}`} style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="grid grid-cols-2 gap-3 pt-4">
+              <div className="rounded-xl bg-slate-50 p-4">
+                <div className="text-sm font-medium text-slate-600">Unsupported Rate</div>
+                <div className="mt-1 text-2xl font-black text-slate-900">{stats.unsupportedRate.toFixed(1)}%</div>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4">
+                <div className="text-sm font-medium text-slate-600">Response Rate</div>
+                <div className="mt-1 text-2xl font-black text-slate-900">{stats.responseRate.toFixed(1)}%</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Conversations Modal */}
       {showConversationsModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-xl font-bold text-slate-900">Conversations ({stats.conversations})</h2>
-              <button
-                onClick={() => setShowConversationsModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+              <button onClick={() => setShowConversationsModal(false)} className="rounded-lg p-2 hover:bg-slate-100">
+                <span className="sr-only">Close</span>
+                ×
               </button>
             </div>
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
+            <div className="max-h-[60vh] overflow-y-auto p-6">
               {loadingConversations ? (
-                <div className="text-center py-8 text-slate-400">Loading conversations...</div>
+                <div className="py-8 text-center text-slate-400">Loading conversations...</div>
               ) : conversations.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <p className="text-4xl mb-3">💬</p>
-                  <p>No conversations yet</p>
-                  <p className="text-sm mt-1">Start chatting with your persona to see conversations here</p>
+                <div className="py-8 text-center text-slate-400">
+                  <p>No conversations yet.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {conversations.map((conv) => (
-                    <div key={conv.id} className="p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-900">
-                          {conv.message_count} messages
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          {formatTimeAgo(conv.created_at)}
-                        </span>
+                  {conversations.map((conversation) => (
+                    <div key={conversation.id} className="rounded-xl bg-slate-50 p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-900">{conversation.message_count} messages</span>
+                        <span className="text-xs text-slate-400">{formatTimeAgo(conversation.created_at)}</span>
                       </div>
-                      {conv.last_message && (
-                        <p className="text-sm text-slate-600 truncate">{conv.last_message}</p>
+                      {conversation.last_message && (
+                        <p className="truncate text-sm text-slate-600">{conversation.last_message}</p>
                       )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${conv.avg_confidence >= 85 ? 'bg-emerald-100 text-emerald-700' :
-                          conv.avg_confidence >= 70 ? 'bg-amber-100 text-amber-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
-                          {conv.avg_confidence.toFixed(0)}% confidence
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateTone(conversation.last_answerability_state)}`}>
+                          {conversation.last_answerability_state || 'direct'}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          {conversation.last_source_tier || 'mixed'}
+                        </span>
+                        {conversation.review_required && (
+                          <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
+                            review
+                          </span>
+                        )}
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          {conversation.citation_rate.toFixed(0)}% cited
                         </span>
                       </div>
                     </div>
@@ -475,87 +463,65 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Messages Modal */}
       {showMessagesModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-6">
               <h2 className="text-xl font-bold text-slate-900">Message Breakdown</h2>
-              <button
-                onClick={() => setShowMessagesModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+              <button onClick={() => setShowMessagesModal(false)} className="rounded-lg p-2 hover:bg-slate-100">
+                <span className="sr-only">Close</span>
+                ×
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="p-4 bg-blue-50 rounded-xl">
+            <div className="space-y-4 p-6">
+              <div className="rounded-xl bg-blue-50 p-4">
                 <p className="text-2xl font-black text-blue-600">{stats.userMessages}</p>
-                <p className="text-sm text-blue-600">User Messages (Questions)</p>
+                <p className="text-sm text-blue-600">User messages</p>
               </div>
-              <div className="p-4 bg-blue-50 rounded-xl">
-                <p className="text-2xl font-black text-blue-600">{stats.assistantMessages}</p>
-                <p className="text-sm text-blue-600">Twin Responses</p>
+              <div className="rounded-xl bg-emerald-50 p-4">
+                <p className="text-2xl font-black text-emerald-600">{stats.assistantMessages}</p>
+                <p className="text-sm text-emerald-600">Assistant responses</p>
               </div>
-              <div className="p-4 bg-slate-50 rounded-xl">
+              <div className="rounded-xl bg-slate-50 p-4">
                 <p className="text-2xl font-black text-slate-900">{stats.messages}</p>
-                <p className="text-sm text-slate-500">Total Messages</p>
+                <p className="text-sm text-slate-500">Total messages</p>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Analysis Modal */}
       {showAnalysisModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-slate-900">Performance Analysis</h2>
-              <button
-                onClick={() => setShowAnalysisModal(false)}
-                className="p-2 hover:bg-slate-100 rounded-lg"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-6">
+              <h2 className="text-xl font-bold text-slate-900">Conversation Analysis</h2>
+              <button onClick={() => setShowAnalysisModal(false)} className="rounded-lg p-2 hover:bg-slate-100">
+                <span className="sr-only">Close</span>
+                ×
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="p-4 bg-emerald-50 rounded-xl">
+            <div className="space-y-4 p-6">
+              <div className="rounded-xl bg-emerald-50 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-emerald-600 font-medium">Response Rate</p>
-                  <p className="text-2xl font-black text-emerald-600">{stats.responseRate.toFixed(1)}%</p>
+                  <p className="text-sm font-medium text-emerald-700">Citation Rate</p>
+                  <p className="text-2xl font-black text-emerald-700">{stats.citationRate.toFixed(1)}%</p>
                 </div>
-                <p className="text-xs text-emerald-500 mt-2">
-                  {stats.responseRate >= 90 ? '✅ Excellent! Your persona responds to most questions.' :
-                    stats.responseRate >= 70 ? '⚠️ Good, but some questions may need more verified knowledge.' :
-                      '❌ Low response rate. Consider adding more knowledge.'}
-                </p>
+                <p className="mt-2 text-xs text-emerald-600">How often responses include supporting citations.</p>
               </div>
-              <div className="p-4 bg-orange-50 rounded-xl">
+              <div className="rounded-xl bg-amber-50 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-orange-600 font-medium">Average Confidence</p>
-                  <p className="text-2xl font-black text-orange-600">{stats.avgConfidence.toFixed(1)}%</p>
+                  <p className="text-sm font-medium text-amber-700">Review Rate</p>
+                  <p className="text-2xl font-black text-amber-700">{stats.reviewRate.toFixed(1)}%</p>
                 </div>
-                <p className="text-xs text-orange-500 mt-2">
-                  {stats.avgConfidence >= 85 ? '✅ High confidence in responses.' :
-                    stats.avgConfidence >= 70 ? '⚠️ Moderate confidence. Review escalations.' :
-                      '❌ Low confidence. Add more verified Q&As.'}
-                </p>
+                <p className="mt-2 text-xs text-amber-600">Turns flagged for owner review or follow-up.</p>
               </div>
-              <div className="p-4 bg-red-50 rounded-xl">
+              <div className="rounded-xl bg-rose-50 p-4">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-red-600 font-medium">Escalation Rate</p>
-                  <p className="text-2xl font-black text-red-600">{stats.escalationRate.toFixed(1)}%</p>
+                  <p className="text-sm font-medium text-rose-700">Unsupported Rate</p>
+                  <p className="text-2xl font-black text-rose-700">{stats.unsupportedRate.toFixed(1)}%</p>
                 </div>
-                <p className="text-xs text-red-500 mt-2">
-                  {stats.escalationRate <= 5 ? '✅ Very few questions escalated.' :
-                    stats.escalationRate <= 15 ? '⚠️ Some questions need owner review.' :
-                      '❌ High escalation rate. Add more verified knowledge.'}
-                </p>
+                <p className="mt-2 text-xs text-rose-600">Turns that ended in an insufficient answer state.</p>
               </div>
             </div>
           </div>

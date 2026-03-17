@@ -304,7 +304,7 @@ export function ClaimsReview({
                       {getClaimTypeLabel(claim.claim_type)}
                     </span>
                     <span className="text-xs text-slate-600">
-                      {(claim.confidence * 100).toFixed(0)}% confidence
+                      {claim.authority || 'Needs authority review'}
                     </span>
                   </div>
                   

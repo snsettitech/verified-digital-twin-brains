@@ -299,7 +299,7 @@ export default function NameOnlyDeepResearchPage() {
                   <div className="text-sm font-medium text-cyan-300">{qa.question}</div>
                   <div className="mt-1 text-sm text-slate-200">{qa.answer}</div>
                   <div className="mt-2 text-xs text-slate-400">
-                    Confidence {Math.round(qa.confidence * 100)}% | Citations {qa.citations.join(', ')}
+                    Citations {qa.citations.join(', ')}
                   </div>
                 </div>
               ))}

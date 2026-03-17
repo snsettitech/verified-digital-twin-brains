@@ -157,7 +157,7 @@ test.describe('Onboarding Full Flow - Sainath Setti', () => {
                 confirmation_id: 'conf-1',
                 url: 'https://linkedin.com/in/sainathsetti',
                 title: 'Sainath Setti | LinkedIn',
-                identity_confidence_score: 0.95,
+                identity_match_tier: 'likely',
                 status: 'pending',
               },
             ],

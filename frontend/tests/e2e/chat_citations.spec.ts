@@ -19,7 +19,7 @@ function json(obj: unknown): string {
 }
 
 test.describe('Chat Citations', () => {
-  test('owner simulator chat renders citation link and confidence', async ({ page }) => {
+  test('owner simulator chat renders citation link and support metadata', async ({ page }) => {
     const trainingState = createTrainingHarnessState();
     await registerTrainingModuleRoutes(page, trainingState);
 
@@ -40,7 +40,9 @@ test.describe('Chat Citations', () => {
               citation_url: 'https://example.com/owner-deck.pdf',
             },
           ],
-          confidence_score: 0.91,
+          answerability_state: 'direct',
+          source_tier: 'retrieved',
+          review_required: false,
           owner_memory_refs: [],
           owner_memory_topics: [],
         })}\n` +
@@ -65,7 +67,7 @@ test.describe('Chat Citations', () => {
 
     await expect(page.getByText('Owner citation response.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'owner-deck.pdf' })).toBeVisible();
-    await expect(page.getByText('Verified: 91%')).toBeVisible();
+    await expect(page.getByText('direct')).toBeVisible();
   });
 
   test('owner simulator chat parses NDJSON tail without trailing newline', async ({ page }) => {
@@ -89,7 +91,9 @@ test.describe('Chat Citations', () => {
               citation_url: 'https://example.com/tail-owner.pdf',
             },
           ],
-          confidence_score: 0.84,
+          answerability_state: 'derivable',
+          source_tier: 'retrieved',
+          review_required: false,
           owner_memory_refs: [],
           owner_memory_topics: [],
         })}\n` +
@@ -149,7 +153,9 @@ test.describe('Chat Citations', () => {
               citation_url: 'https://example.com/public-notes.txt',
             },
           ],
-          confidence_score: 0.88,
+          answerability_state: 'direct',
+          source_tier: 'retrieved',
+          review_required: false,
         }),
       });
     });
@@ -163,6 +169,6 @@ test.describe('Chat Citations', () => {
 
     await expect(page.getByText('Public citation response.')).toBeVisible();
     await expect(page.getByRole('link', { name: 'public-notes.txt' })).toBeVisible();
-    await expect(page.getByText('88%')).toBeVisible();
+    await expect(page.getByText('direct')).toBeVisible();
   });
 });

@@ -47,7 +47,6 @@ export interface ResearchClaim {
   claim_text: string;
   claim_type: ClaimType;
   verification_status: VerificationStatus;
-  confidence: number;
   authority: string;
   source_id?: string;
   source_url?: string;

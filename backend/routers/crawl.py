@@ -1052,8 +1052,7 @@ async def list_pending_confirmations(
                     "title": item.title,
                     "snippet": item.snippet,
                     "content_quality": item.content_quality,
-                    "identity_confidence_score": item.identity_confidence_score,
-                    "identity_confidence_percent": item.identity_confidence_percent,
+                    "identity_match_tier": item.identity_match_tier,
                     "match_details": item.match_details,
                     "submitted_root_url": item.submitted_root_url,
                     "status": item.status,
@@ -2174,6 +2173,11 @@ async def _get_sources_by_status(
         Dict with sources grouped by status
     """
     try:
+        from modules.source_confirmation import (
+            normalize_identity_score_for_thresholds,
+            score_to_identity_match_tier,
+        )
+
         # Query source_confirmations with crawl_page metadata
         response = supabase.table("source_confirmations").select(
             "*, crawl_pages(canonical_url, title, metadata)"
@@ -2198,7 +2202,9 @@ async def _get_sources_by_status(
                 "url": row.get("url"),
                 "title": row.get("title"),
                 "canonical_url": row.get("canonical_url"),
-                "identity_confidence_score": row.get("identity_confidence_score"),
+                "identity_match_tier": score_to_identity_match_tier(
+                    normalize_identity_score_for_thresholds(row.get("identity_confidence_score"))
+                ),
                 "content_quality": row.get("content_quality"),
                 "created_at": row.get("created_at"),
             }

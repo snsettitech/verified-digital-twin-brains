@@ -11,13 +11,7 @@ from modules.observability import (
     supabase, get_conversations, get_messages, 
     log_interaction, create_conversation
 )
-from modules.agent import (
-    run_agent_stream,
-    _build_query_ranked_profile_seed_rows,
-    _extract_inline_citation_ids,
-    _merge_twin_row_settings,
-    _strip_inline_source_refs,
-)
+from modules.agent import run_agent_stream
 from modules.identity_gate import run_identity_gate
 from modules.interaction_context import (
     InteractionContext,
@@ -35,14 +29,17 @@ from modules.clarification_manager import build_clarification
 from modules.response_policy import UNCERTAINTY_RESPONSE, owner_guidance_suffix
 from modules.grounding_policy import get_grounding_policy
 from modules.deepagents_policy import classify_deepagents_intent
-from modules.fastpath_intent_router import classify_fastpath_intent
 import modules.inference_router as inference_router
 from modules.runtime_audit_store import (
     enqueue_owner_review_item,
     persist_response_audit,
     persist_routing_decision,
 )
-from modules.public_profile_pack import build_public_profile_pack
+from modules.public_persona_answerer import (
+    build_smalltalk_response,
+    maybe_answer_public_persona_query,
+    maybe_build_public_persona_fallback,
+)
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
@@ -81,9 +78,26 @@ ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS = max(0, int(os.getenv("ONLINE_EVAL_POLICY_
 ONLINE_EVAL_POLICY_STRICT_ONLY = os.getenv("ONLINE_EVAL_POLICY_STRICT_ONLY", "false").lower() == "true"
 ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FALLBACK_POINTS", "3")))
 ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE = float(os.getenv("ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE", "0.2"))
-# Set to true in staging to enforce fallback on low-confidence retrieval. Benchmark before enabling
-# in production - expect ~15% of queries to return uncertainty responses.
-RUNTIME_CONFIDENCE_GATE_ENABLED = os.getenv("RUNTIME_CONFIDENCE_GATE_ENABLED", "false").lower() == "true"
+RUNTIME_SUPPORT_POLICY_ENABLED = os.getenv("RUNTIME_SUPPORT_POLICY_ENABLED", "false").lower() == "true"
+
+_LIVE_CONFIDENCE_KEYS = {
+    "confidence",
+    "confidence_score",
+    "avg_confidence",
+    "identity_confidence_score",
+    "identity_confidence_percent",
+    "image_confidence",
+}
+
+_CANONICAL_EVIDENCE_BLOCKS = {
+    "canonical_profile_seed",
+    "public_profile_seed",
+    "bio",
+    "work",
+    "contribution",
+    "achievement",
+    "education",
+}
 
 _GROUNDING_STOPWORDS = {
     "a",
@@ -120,844 +134,6 @@ _GROUNDING_STOPWORDS = {
 
 def _uncertainty_message(interaction_context: Optional[str]) -> str:
     return f"{UNCERTAINTY_RESPONSE}{owner_guidance_suffix(interaction_context)}"
-
-
-def _first_sentence(text: Any) -> str:
-    normalized = re.sub(r"\s+", " ", str(text or "").strip())
-    if not normalized:
-        return ""
-    parts = re.split(r"(?<=[.!?])\s+", normalized)
-    if not parts:
-        return ""
-    first = parts[0].strip()
-    if (
-        len(parts) > 1
-        and first.lower().endswith((" mr.", " mrs.", " ms.", " dr.", " prof.", " sr.", " jr."))
-    ):
-        first = f"{first} {parts[1].strip()}".strip()
-    return first
-
-
-def _sanitize_public_profile_sentence(text: Any, display_name: str) -> str:
-    sentence = _first_sentence(text)
-    if not sentence:
-        return ""
-    sentence = re.sub(
-        r"\[(?:[0-9a-f]{8,}(?:-[0-9a-f]{4,})+)(?:[;,](?:[0-9a-f]{8,}(?:-[0-9a-f]{4,})+))*\]",
-        "",
-        sentence,
-        flags=re.IGNORECASE,
-    )
-    sentence = re.sub(r"\s+", " ", sentence).strip(" .")
-    lowered = sentence.lower()
-    if not sentence:
-        return ""
-    if lowered.startswith("digital twin"):
-        return ""
-    if lowered.startswith(("he ", "she ", "they ")):
-        return ""
-    if display_name and lowered == display_name.lower():
-        return ""
-    return f"{sentence}."
-
-
-def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, Any]]:
-    try:
-        result = (
-            supabase.table("twins")
-            .select("id, name, description, settings")
-            .eq("id", twin_id)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:
-        logger.debug("Public identity snapshot load failed for %s: %s", twin_id, exc)
-        return None
-
-    row = (result.data or [None])[0]
-    if not isinstance(row, dict):
-        return None
-
-    settings = row.get("settings") if isinstance(row.get("settings"), dict) else {}
-    public_profile = settings.get("public_profile") if isinstance(settings.get("public_profile"), dict) else {}
-
-    display_name = (
-        str(public_profile.get("display_name") or "").strip()
-        or str(settings.get("name") or "").strip()
-        or str(row.get("name") or "").strip()
-    )
-    headline = str(public_profile.get("headline") or settings.get("tagline") or "").strip()
-    role = str(public_profile.get("role") or "").strip()
-    organization = str(public_profile.get("organization") or "").strip()
-    bio = (
-        str(public_profile.get("bio") or "").strip()
-        or str(settings.get("public_intro") or "").strip()
-        or str(settings.get("description") or "").strip()
-        or str(row.get("description") or "").strip()
-    )
-
-    if not display_name:
-        return None
-
-    areas_of_expertise = public_profile.get("areas_of_expertise")
-    if not isinstance(areas_of_expertise, list):
-        areas_of_expertise = []
-    contributions = public_profile.get("contributions")
-    if not isinstance(contributions, list):
-        contributions = []
-    key_achievements = public_profile.get("key_achievements")
-    if not isinstance(key_achievements, list):
-        key_achievements = []
-    work_experience = public_profile.get("work_experience")
-    if not isinstance(work_experience, list):
-        work_experience = []
-
-    return {
-        "display_name": display_name,
-        "headline": headline,
-        "role": role,
-        "organization": organization,
-        "occupation": str(public_profile.get("occupation") or "").strip(),
-        "short_description": str(public_profile.get("short_description") or "").strip(),
-        "bio": bio,
-        "areas_of_expertise": [str(a).strip() for a in areas_of_expertise if str(a).strip()],
-        "contributions": [str(item).strip() for item in contributions if str(item).strip()],
-        "key_achievements": [str(item).strip() for item in key_achievements if str(item).strip()],
-        "work_experience": [item for item in work_experience if isinstance(item, dict)],
-    }
-
-
-def _load_public_twin_settings(twin_id: str) -> Optional[Dict[str, Any]]:
-    try:
-        result = (
-            supabase.table("twins")
-            .select("id, name, description, settings, created_at")
-            .eq("id", twin_id)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:
-        logger.debug("Public twin settings load failed for %s: %s", twin_id, exc)
-        return None
-
-    row = (result.data or [None])[0]
-    if not isinstance(row, dict):
-        return None
-    return _merge_twin_row_settings(row)
-
-
-def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
-    try:
-        result = (
-            supabase.table("twins")
-            .select("id, name, settings, status, created_at")
-            .eq("id", twin_id)
-            .limit(1)
-            .execute()
-        )
-    except Exception as exc:
-        logger.debug("Public profile pack load failed for %s: %s", twin_id, exc)
-        return None
-
-    row = (result.data or [None])[0]
-    if not isinstance(row, dict):
-        return None
-    try:
-        return build_public_profile_pack(row)
-    except Exception as exc:
-        logger.debug("Public profile pack build failed for %s: %s", twin_id, exc)
-        return None
-
-
-async def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
-    snapshot = _load_public_identity_snapshot(twin_id)
-    profile_pack = _load_public_profile_pack(twin_id) if intent == "identity_background" and not snapshot else None
-    if not snapshot and not profile_pack:
-        return None
-
-    display_name = (
-        _clean_public_profile_text((profile_pack or {}).get("name"))
-        or (snapshot or {}).get("display_name")
-        or "this public profile"
-    )
-    role = (snapshot or {}).get("role", "")
-    organization = (snapshot or {}).get("organization", "")
-    headline = (snapshot or {}).get("headline", "")
-    bio_sentence = _sanitize_public_profile_sentence((snapshot or {}).get("bio") or (profile_pack or {}).get("bio"), display_name)
-
-    descriptor = ""
-    if role and organization:
-        descriptor = f"{role} at {organization}"
-    elif role:
-        descriptor = role
-    elif headline:
-        descriptor = headline
-
-    if intent == "authenticity_disclosure":
-        base = f"I'm a public digital version of {display_name}"
-        if descriptor:
-            base += f", {descriptor}"
-        base += "."
-    elif intent == "identity_role":
-        if role and organization:
-            base = f"{display_name} is the {role} at {organization}."
-        elif role:
-            base = f"{display_name} is the {role}."
-        elif headline:
-            base = f"{display_name} is associated with {headline}."
-        else:
-            base = f"{display_name} is associated with this public profile."
-    elif intent == "identity_background":
-        seed_rows: List[Dict[str, Any]] = []
-        if snapshot:
-            snapshot_settings = {
-                "name": display_name,
-                "public_profile": {
-                    "occupation": snapshot.get("occupation"),
-                    "headline": headline,
-                    "short_description": snapshot.get("short_description"),
-                    "role": role,
-                    "organization": organization,
-                    "bio": snapshot.get("bio"),
-                    "areas_of_expertise": snapshot.get("areas_of_expertise"),
-                    "contributions": snapshot.get("contributions"),
-                    "key_achievements": snapshot.get("key_achievements"),
-                    "work_experience": snapshot.get("work_experience"),
-                },
-            }
-            seed_rows = _merge_context_snippets(
-                seed_rows,
-                _manual_public_profile_seed_rows(snapshot_settings, "background career politics public life", limit=4),
-            )
-        if isinstance(profile_pack, dict) and not seed_rows:
-            seed_rows = _merge_context_snippets(
-                seed_rows,
-                _manual_public_pack_seed_rows(profile_pack, "background career politics public life", limit=4),
-            )
-        biography_rows = [
-            row for row in seed_rows
-            if _clean_public_profile_text(row.get("seed_type")).lower() in {"bio", "work", "contribution", "achievement", "education"}
-        ]
-        base = await _rewrite_public_background_fastpath(
-            display_name=display_name,
-            seed_rows=biography_rows or seed_rows,
-        )
-        if not base:
-            base = _public_profile_direct_answer(biography_rows or seed_rows, display_name=display_name)
-        if not base and bio_sentence:
-            base = bio_sentence
-        if not base:
-            base = f"My public background is summarized in this profile."
-    elif intent == "scope_help":
-        expertise = snapshot.get("areas_of_expertise") or []
-        if expertise:
-            topic_list = ", ".join(expertise[:4])
-            base = f"Well, I can talk about a few things — {topic_list}."
-            if len(expertise) > 4:
-                base += f" Also {', '.join(expertise[4:7])}."
-            if bio_sentence:
-                base = f"{base} {bio_sentence}"
-        else:
-            scope = descriptor or "the areas this profile is known for"
-            base = f"I can help you think through {scope} from {display_name}'s perspective."
-            if bio_sentence:
-                base = f"{base} {bio_sentence}"
-    else:
-        base = f"I'm {display_name}"
-        if descriptor:
-            base += f", {descriptor}"
-        base += "."
-        if bio_sentence:
-            base = f"{base} {bio_sentence}"
-
-    return f"{base.strip()} What are you trying to figure out right now?"
-
-
-def _smalltalk_response_for_query(query: str, settings=None) -> str:
-    q_lower = str(query or "").lower().strip()
-    if any(marker in q_lower for marker in ("thank you", "thanks")):
-        return "You're welcome."
-    if q_lower in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
-        return "Sounds good."
-    if any(marker in q_lower for marker in ("how are you", "how's your day", "hows your day")):
-        return "Doing well. How can I help?"
-    if q_lower in {"hi", "hello", "hey", "hi!", "hello!", "hey!"}:
-        if settings:
-            public_profile = settings.get("public_profile") or {}
-            bio_raw = str(public_profile.get("bio") or "").strip()
-            if bio_raw:
-                sentences = [s.strip() for s in bio_raw.split(".") if s.strip()]
-                bio_excerpt = ". ".join(sentences[:2]) + "." if len(sentences) >= 2 else bio_raw
-                return f"Hey! {bio_excerpt} What's on your mind?"
-        return "Hey! Great to chat with you."
-    return "Hi. How can I help?"
-
-
-def _clean_public_profile_text(value: Any) -> str:
-    return re.sub(r"\s+", " ", str(value or "").strip())
-
-
-def _public_profile_display_name(settings: Dict[str, Any]) -> str:
-    public_profile = settings.get("public_profile")
-    public_profile = public_profile if isinstance(public_profile, dict) else {}
-    identity_pack = settings.get("persona_identity_pack")
-    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
-    return (
-        _clean_public_profile_text(settings.get("name"))
-        or _clean_public_profile_text(public_profile.get("display_name"))
-        or _clean_public_profile_text(identity_pack.get("display_name") or identity_pack.get("preferred_name"))
-    )
-
-
-def _manual_public_profile_seed_rows(
-    settings: Dict[str, Any],
-    query: str,
-    *,
-    limit: int = 6,
-) -> List[Dict[str, Any]]:
-    public_profile = settings.get("public_profile")
-    public_profile = public_profile if isinstance(public_profile, dict) else {}
-    identity_pack = settings.get("persona_identity_pack")
-    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
-    display_name = _public_profile_display_name(settings)
-    if not display_name:
-        return []
-
-    seed_rows: List[Dict[str, Any]] = []
-
-    def _add_row(seed_type: str, raw_text: Any, *, source_name: str) -> None:
-        citation_ids = _extract_inline_citation_ids(raw_text)
-        text = _strip_inline_source_refs(raw_text)
-        text = _clean_public_profile_text(text)
-        if not text:
-            return
-        if not text.endswith((".", "!", "?")):
-            text = f"{text}."
-        seed_rows.append(
-            {
-                "text": text,
-                "source_id": citation_ids[0] if citation_ids else "",
-                "citation_ids": citation_ids,
-                "source_name": source_name,
-                "block_type": "answer_text",
-                "is_answer_text": True,
-                "strategy_name": "canonical_profile_seed",
-                "seed_type": seed_type,
-                "title": f"{display_name} profile",
-            }
-        )
-
-    occupation = _clean_public_profile_text(public_profile.get("occupation"))
-    role = _clean_public_profile_text(public_profile.get("role") or identity_pack.get("role"))
-    organization = _clean_public_profile_text(public_profile.get("organization") or identity_pack.get("organization"))
-    headline = _clean_public_profile_text(public_profile.get("headline") or identity_pack.get("headline"))
-    short_description = _clean_public_profile_text(public_profile.get("short_description"))
-    bio = _clean_public_profile_text(public_profile.get("bio") or identity_pack.get("biography"))
-
-    if occupation:
-        _add_row("summary", f"{display_name} is {occupation}", source_name="Canonical public profile")
-    elif role and organization:
-        _add_row("summary", f"{display_name} is the {role} at {organization}", source_name="Canonical public profile")
-    elif role:
-        _add_row("summary", f"{display_name} is the {role}", source_name="Canonical public profile")
-    if headline:
-        _add_row("headline", headline, source_name="Canonical public profile")
-    if short_description:
-        _add_row("summary", short_description, source_name="Canonical public profile")
-    if bio:
-        _add_row("bio", bio, source_name="Canonical public biography")
-
-    response_seeds = public_profile.get("public_response_seeds")
-    if isinstance(response_seeds, list):
-        for item in response_seeds[:8]:
-            if not isinstance(item, dict):
-                continue
-            question = _clean_public_profile_text(item.get("question"))
-            answer = _clean_public_profile_text(item.get("answer") or item.get("text"))
-            if not answer:
-                continue
-            raw_text = f"Q: {question}\nA: {answer}" if question else answer
-            _add_row("qa", raw_text, source_name=_clean_public_profile_text(item.get("title")) or "Prepared public answer")
-
-    for item in public_profile.get("contributions") or []:
-        _add_row("contribution", item, source_name="Public contributions")
-
-    for item in public_profile.get("key_achievements") or []:
-        _add_row("achievement", item, source_name="Public achievements")
-
-    for job in public_profile.get("work_experience") or []:
-        if not isinstance(job, dict):
-            continue
-        description = _clean_public_profile_text(job.get("description"))
-        role_value = _clean_public_profile_text(job.get("role") or job.get("title"))
-        company = _clean_public_profile_text(job.get("company") or job.get("organization"))
-        start_year = _clean_public_profile_text(job.get("start_year"))
-        end_year = _clean_public_profile_text(job.get("end_year"))
-        years = ""
-        if start_year and end_year:
-            years = f" from {start_year} to {end_year}"
-        elif start_year:
-            years = f" since {start_year}"
-        elif end_year:
-            years = f" until {end_year}"
-        if description:
-            _add_row("work", description, source_name="Public work history")
-        elif role_value and company:
-            _add_row("work", f"{display_name} worked as {role_value} at {company}{years}", source_name="Public work history")
-
-    query_tokens = {
-        token
-        for token in re.findall(r"[a-z0-9]+", _clean_public_profile_text(query).lower())
-        if len(token) > 2
-    }
-
-    def _score_row(row: Dict[str, Any]) -> Tuple[int, int]:
-        text = _clean_public_profile_text(row.get("text")).lower()
-        overlap = sum(1 for token in query_tokens if token in text)
-        seed_type = _clean_public_profile_text(row.get("seed_type")).lower()
-        bonus = 0
-        if any(token in query_tokens for token in {"background", "career", "journey", "politics", "political", "experience"}):
-            if seed_type in {"qa", "work", "contribution", "bio"}:
-                bonus += 2
-        if any(token in query_tokens for token in {"who", "about", "role", "title", "office"}):
-            if seed_type in {"summary", "bio", "headline"}:
-                bonus += 2
-        return (overlap + bonus, len(text))
-
-    deduped = _merge_context_snippets([], seed_rows)
-    ranked = sorted(deduped, key=_score_row, reverse=True)
-    return ranked[: max(1, limit)]
-
-
-def _manual_public_pack_seed_rows(
-    profile_pack: Dict[str, Any],
-    query: str,
-    *,
-    limit: int = 6,
-) -> List[Dict[str, Any]]:
-    display_name = _clean_public_profile_text(profile_pack.get("name"))
-    if not display_name:
-        return []
-
-    seed_rows: List[Dict[str, Any]] = []
-
-    def _add_row(seed_type: str, raw_text: Any, *, source_name: str) -> None:
-        citation_ids = _extract_inline_citation_ids(raw_text)
-        text = _strip_inline_source_refs(raw_text)
-        text = _clean_public_profile_text(text)
-        if not text:
-            return
-        if not text.endswith((".", "!", "?")):
-            text = f"{text}."
-        seed_rows.append(
-            {
-                "text": text,
-                "source_id": citation_ids[0] if citation_ids else "",
-                "citation_ids": citation_ids,
-                "source_name": source_name,
-                "block_type": "answer_text",
-                "is_answer_text": True,
-                "strategy_name": "canonical_profile_pack",
-                "seed_type": seed_type,
-                "title": f"{display_name} public pack",
-            }
-        )
-
-    occupation = _clean_public_profile_text(profile_pack.get("occupation"))
-    headline = _clean_public_profile_text(profile_pack.get("headline"))
-    short_description = _clean_public_profile_text(profile_pack.get("short_description"))
-    bio = _clean_public_profile_text(profile_pack.get("bio"))
-    if occupation:
-        _add_row("summary", f"{display_name} is {occupation}", source_name="Public profile pack")
-    if headline:
-        _add_row("headline", headline, source_name="Public profile pack")
-    if short_description:
-        _add_row("summary", short_description, source_name="Public profile pack")
-    if bio:
-        _add_row("bio", bio, source_name="Public profile pack")
-
-    for item in profile_pack.get("contributions") or []:
-        _add_row("contribution", item, source_name="Public contributions")
-    for item in profile_pack.get("key_achievements") or []:
-        _add_row("achievement", item, source_name="Public achievements")
-    for item in profile_pack.get("areas_of_expertise") or []:
-        _add_row("expertise", item, source_name="Public expertise")
-
-    for job in profile_pack.get("work_experience") or []:
-        if not isinstance(job, dict):
-            continue
-        description = _clean_public_profile_text(job.get("description"))
-        role_value = _clean_public_profile_text(job.get("role") or job.get("title"))
-        company = _clean_public_profile_text(job.get("company") or job.get("organization"))
-        start_year = _clean_public_profile_text(job.get("start_year"))
-        end_year = _clean_public_profile_text(job.get("end_year"))
-        years = ""
-        if start_year and end_year:
-            years = f" from {start_year} to {end_year}"
-        elif start_year:
-            years = f" since {start_year}"
-        elif end_year:
-            years = f" until {end_year}"
-        if description:
-            _add_row("work", description, source_name="Public work history")
-        elif role_value and company:
-            _add_row("work", f"{display_name} worked as {role_value} at {company}{years}", source_name="Public work history")
-
-    for edu in profile_pack.get("education") or []:
-        if not isinstance(edu, dict):
-            continue
-        description = _clean_public_profile_text(edu.get("description"))
-        institution = _clean_public_profile_text(edu.get("institution"))
-        degree = _clean_public_profile_text(edu.get("degree"))
-        field = _clean_public_profile_text(edu.get("field"))
-        if description:
-            _add_row("education", description, source_name="Public education")
-        elif institution or degree or field:
-            parts = [part for part in [degree, field, institution] if part]
-            _add_row("education", f"{display_name} studied {', '.join(parts)}", source_name="Public education")
-
-    query_tokens = {
-        token
-        for token in re.findall(r"[a-z0-9]+", _clean_public_profile_text(query).lower())
-        if len(token) > 2
-    }
-
-    def _score_row(row: Dict[str, Any]) -> Tuple[int, int]:
-        text = _clean_public_profile_text(row.get("text")).lower()
-        overlap = sum(1 for token in query_tokens if token in text)
-        seed_type = _clean_public_profile_text(row.get("seed_type")).lower()
-        bonus = 0
-        if any(token in query_tokens for token in {"background", "career", "journey", "politics", "political", "experience"}):
-            if seed_type in {"work", "contribution", "bio", "achievement"}:
-                bonus += 2
-        if any(token in query_tokens for token in {"who", "about", "role", "title", "office"}):
-            if seed_type in {"summary", "bio", "headline"}:
-                bonus += 2
-        return (overlap + bonus, len(text))
-
-    deduped = _merge_context_snippets([], seed_rows)
-    ranked = sorted(deduped, key=_score_row, reverse=True)
-    return ranked[: max(1, limit)]
-
-
-def _public_profile_seed_rows(
-    settings: Dict[str, Any],
-    query: str,
-    *,
-    limit: int = 6,
-) -> List[Dict[str, Any]]:
-    ranked = _build_query_ranked_profile_seed_rows(settings, query, limit=limit)
-    if ranked:
-        return ranked[:limit]
-    return _manual_public_profile_seed_rows(settings, query, limit=limit)
-
-
-def _public_profile_direct_answer(seed_rows: List[Dict[str, Any]], *, display_name: str) -> str:
-    parts: List[str] = []
-    for row in seed_rows[:2]:
-        text = _clean_public_profile_text(row.get("text"))
-        if not text:
-            continue
-        if display_name:
-            text = re.sub(rf"^{re.escape(display_name)}\s+is\b", "I am", text, flags=re.IGNORECASE)
-            text = re.sub(rf"^{re.escape(display_name)}\s+was\b", "I was", text, flags=re.IGNORECASE)
-            text = re.sub(rf"^{re.escape(display_name)}\s+has been\b", "I have been", text, flags=re.IGNORECASE)
-            text = re.sub(rf"^{re.escape(display_name)}\s+served\b", "I served", text, flags=re.IGNORECASE)
-            text = re.sub(rf"^{re.escape(display_name)}\s+worked\b", "I worked", text, flags=re.IGNORECASE)
-            text = re.sub(rf"^{re.escape(display_name)}\s+joined\b", "I joined", text, flags=re.IGNORECASE)
-            text = re.sub(rf"\b{re.escape(display_name)}\s+is\b", "I am", text, flags=re.IGNORECASE)
-            text = re.sub(rf"\b{re.escape(display_name)}\s+was\b", "I was", text, flags=re.IGNORECASE)
-            text = re.sub(rf"\b{re.escape(display_name)}\s+has been\b", "I have been", text, flags=re.IGNORECASE)
-            text = re.sub(rf"\b{re.escape(display_name)}\s+served\b", "I served", text, flags=re.IGNORECASE)
-            text = re.sub(rf"\b{re.escape(display_name)}\s+worked\b", "I worked", text, flags=re.IGNORECASE)
-            text = re.sub(rf"\b{re.escape(display_name)}\s+joined\b", "I joined", text, flags=re.IGNORECASE)
-        text = re.sub(r"^He\s+", "I ", text, flags=re.IGNORECASE)
-        text = re.sub(r"^She\s+", "I ", text, flags=re.IGNORECASE)
-        if text and not re.match(r"^(I|My)\b", text):
-            text = f"Based on my public profile, {text[0].lower() + text[1:]}" if len(text) > 1 else text
-        parts.append(text)
-    return " ".join(part for part in parts if part).strip()
-
-
-async def _rewrite_public_background_fastpath(
-    *,
-    display_name: str,
-    seed_rows: List[Dict[str, Any]],
-) -> str:
-    evidence_lines: List[str] = []
-    for idx, row in enumerate(seed_rows[:4], 1):
-        text = _clean_public_profile_text(row.get("text"))
-        if not text:
-            continue
-        evidence_lines.append(f"[{idx}] {text}")
-    if not evidence_lines:
-        return ""
-
-    prompt = f"""You are rewriting public profile facts into a cleaner first-person answer for {display_name or 'this profile'}.
-Use only the provided facts. Do not add outside knowledge, motives, or unsupported transitions.
-
-Requirements:
-- Return 1 or 2 concise sentences.
-- Write in first person.
-- Keep the wording natural and conversational.
-- Preserve only facts that are explicitly supported by the evidence.
-- Do not mention citations, evidence blocks, or "public profile" unless needed.
-
-PUBLIC FACTS:
-{chr(10).join(evidence_lines)}
-
-Return STRICT JSON:
-{{
-  "answer": "string"
-}}
-"""
-
-    try:
-        payload, _meta = await inference_router.invoke_json(
-            [{"role": "system", "content": prompt}],
-            task="planner",
-            temperature=0,
-            max_tokens=220,
-        )
-        answer = _clean_public_profile_text(payload.get("answer"))
-        if answer:
-            return answer
-    except Exception as exc:
-        logger.debug("Background fastpath rewrite failed for %s: %s", display_name, exc)
-    return ""
-
-
-async def _maybe_answer_from_public_profile(
-    twin_id: str,
-    query: str,
-    public_query_policy: Optional[Dict[str, Any]] = None,
-) -> Optional[Dict[str, Any]]:
-    query_policy = public_query_policy if isinstance(public_query_policy, dict) else {}
-    if _is_quote_intent(query):
-        return None
-
-    query_class = _clean_public_profile_text(query_policy.get("query_class")).lower()
-    normalized_query = _clean_public_profile_text(query).lower()
-    if query_class and query_class not in {"identity", "factual", "analytical"}:
-        return None
-
-    profile_pack = _load_public_profile_pack(twin_id)
-    settings = _load_public_twin_settings(twin_id)
-    if not isinstance(profile_pack, dict) and not isinstance(settings, dict):
-        logger.info("Public profile QA skipped for %s because neither profile pack nor settings were available", twin_id)
-        return None
-
-    display_name = _clean_public_profile_text((profile_pack or {}).get("name")) or (
-        _public_profile_display_name(settings) if isinstance(settings, dict) else ""
-    )
-    seed_rows: List[Dict[str, Any]] = []
-    if isinstance(profile_pack, dict):
-        seed_rows = _merge_context_snippets(seed_rows, _manual_public_pack_seed_rows(profile_pack, query, limit=6))
-    if isinstance(settings, dict):
-        seed_rows = _merge_context_snippets(seed_rows, _public_profile_seed_rows(settings, query, limit=6))
-    if not seed_rows:
-        logger.info("Public profile QA skipped for %s because no seed rows were built", twin_id)
-        return None
-    logger.info("Public profile QA built %s seed rows for %s", len(seed_rows), twin_id)
-
-    evidence_lines: List[str] = []
-    allowed_source_ids: List[str] = []
-    for idx, row in enumerate(seed_rows, 1):
-        text = _clean_public_profile_text(row.get("text"))
-        if not text:
-            continue
-        evidence_lines.append(f"[{idx}] {text}")
-        citation_ids = row.get("citation_ids")
-        if isinstance(citation_ids, list):
-            for cid in citation_ids:
-                clean_cid = _clean_public_profile_text(cid)
-                if clean_cid and clean_cid not in allowed_source_ids:
-                    allowed_source_ids.append(clean_cid)
-        source_id = _clean_public_profile_text(row.get("source_id"))
-        if source_id and source_id not in allowed_source_ids:
-            allowed_source_ids.append(source_id)
-
-    if not evidence_lines:
-        return None
-
-    prompt = f"""You are answering on behalf of a public digital twin profile for {display_name or 'this profile'}.
-Use only the provided canonical public profile evidence. Do not use outside knowledge.
-
-Decide if the question can be answered from the public profile evidence alone.
-- If yes, answer in first person, directly and naturally.
-- For biography, background, career, politics, or experience questions, synthesize cautiously from the evidence instead of refusing.
-- If the evidence only partially answers the question, answer with what the public profile shows.
-- If the evidence does not support an answer, return answerable false.
-
-USER QUESTION:
-{query}
-
-PROFILE EVIDENCE:
-{chr(10).join(evidence_lines)}
-
-ALLOWED SOURCE IDS:
-{json.dumps(allowed_source_ids)}
-
-Return STRICT JSON:
-{{
-  "answerable": true,
-  "answer": "string",
-  "citations": ["source_id"],
-  "confidence": 0.0
-}}
-"""
-
-    try:
-        payload, _meta = await inference_router.invoke_json(
-            [{"role": "system", "content": prompt}],
-            task="planner",
-            temperature=0,
-            max_tokens=380,
-        )
-        answerable = bool(payload.get("answerable"))
-        answer = _clean_public_profile_text(payload.get("answer"))
-        citations = [
-            cid for cid in (payload.get("citations") or [])
-            if isinstance(cid, str) and _clean_public_profile_text(cid) and cid in allowed_source_ids
-        ][:4]
-        confidence = float(payload.get("confidence") or 0.0)
-        if answerable and answer:
-            return {
-                "response": answer,
-                "citations": citations,
-                "confidence": max(0.62, min(confidence or 0.72, 0.9)),
-                "contexts": seed_rows,
-            }
-    except Exception as exc:
-        logger.debug("Public profile QA model composition failed for %s: %s", twin_id, exc)
-
-    biography_like_query = query_class == "identity" or any(
-        marker in normalized_query
-        for marker in (
-            "about you",
-            "background",
-            "career",
-            "experience",
-            "journey",
-            "politic",
-            "public life",
-            "role",
-            "title",
-            "office",
-            "who are",
-            "who is",
-            "how did you get",
-            "how you got",
-            "how did",
-            "what do you do",
-            "what is your background",
-        )
-    )
-    if not biography_like_query:
-        return None
-
-    fallback_response = _public_profile_direct_answer(seed_rows, display_name=display_name)
-    if not fallback_response:
-        return None
-    return {
-        "response": fallback_response,
-        "citations": allowed_source_ids[:4],
-        "confidence": 0.66,
-        "contexts": seed_rows,
-    }
-
-
-async def _maybe_build_public_profile_seed_fallback(
-    twin_id: str,
-    query: str,
-) -> Optional[Dict[str, Any]]:
-    settings = _load_public_twin_settings(twin_id)
-    if not isinstance(settings, dict):
-        return None
-
-    seed_rows = _public_profile_seed_rows(settings, query, limit=5)
-    if not seed_rows:
-        return None
-
-    evidence_lines: List[str] = []
-    allowed_source_ids: List[str] = []
-    for idx, row in enumerate(seed_rows, 1):
-        text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
-        if not text:
-            continue
-        evidence_lines.append(f"[{idx}] {text}")
-        source_id = str(row.get("source_id") or "").strip()
-        if source_id and source_id not in allowed_source_ids:
-            allowed_source_ids.append(source_id)
-
-    if not evidence_lines:
-        return None
-
-    prompt = f"""You are answering on behalf of a public digital twin profile.
-Use only the provided canonical profile evidence. Do not use outside knowledge.
-Answer in first person as the profile, but stay factual and concise.
-
-USER QUESTION:
-{query}
-
-PROFILE EVIDENCE:
-{chr(10).join(evidence_lines)}
-
-ALLOWED SOURCE IDS:
-{json.dumps(allowed_source_ids)}
-
-Return STRICT JSON:
-{{
-  "answer_points": ["point 1", "point 2"],
-  "citations": ["source_id"],
-  "confidence": 0.0
-}}
-
-Rules:
-- Maximum 2 answer points.
-- If the evidence is thin, answer cautiously from what is available instead of saying you do not know.
-- Cite only IDs from ALLOWED SOURCE IDS.
-"""
-
-    try:
-        payload, _meta = await inference_router.invoke_json(
-            [{"role": "system", "content": prompt}],
-            task="planner",
-            temperature=0,
-            max_tokens=350,
-        )
-        answer_points = [
-            re.sub(r"\s+", " ", str(item or "").strip())
-            for item in (payload.get("answer_points") or [])
-            if re.sub(r"\s+", " ", str(item or "").strip())
-        ][:2]
-        citations = [
-            cid for cid in (payload.get("citations") or [])
-            if isinstance(cid, str) and cid.strip() and cid in allowed_source_ids
-        ][:3]
-        confidence = float(payload.get("confidence") or 0.0)
-        if answer_points:
-            return {
-                "response": " ".join(answer_points),
-                "citations": citations,
-                "confidence": max(0.58, min(confidence or 0.64, 0.84)),
-                "contexts": seed_rows,
-            }
-    except Exception as exc:
-        logger.debug("Public profile fallback composition failed for %s: %s", twin_id, exc)
-
-    fallback_points = [str(seed_rows[0].get("text") or "").strip()]
-    if len(seed_rows) > 1:
-        fallback_points.append(str(seed_rows[1].get("text") or "").strip())
-    fallback_response = " ".join(part for part in fallback_points if part)
-    if not fallback_response:
-        return None
-    return {
-        "response": fallback_response,
-        "citations": allowed_source_ids[:3],
-        "confidence": 0.6,
-        "contexts": seed_rows,
-    }
 
 
 def _build_identity_gate_clarification_hint(gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1026,7 +202,7 @@ def _extract_runtime_gate_topic(planning_output: Optional[Dict[str, Any]]) -> Op
     return None
 
 
-async def _apply_runtime_confidence_gate_if_enabled(
+async def _apply_runtime_support_policy_if_enabled(
     *,
     twin_id: str,
     query: str,
@@ -1037,60 +213,12 @@ async def _apply_runtime_confidence_gate_if_enabled(
     retrieved_context_snippets: Optional[List[Dict[str, Any]]] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     metadata: Dict[str, Any] = {
-        "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+        "enabled": False,
         "applied": False,
         "decision": "skipped",
+        "skip_reason": "support_state_runtime",
     }
-
-    if not RUNTIME_CONFIDENCE_GATE_ENABLED:
-        metadata["skip_reason"] = "disabled"
-        return response, metadata
-    if not isinstance(response, str) or not response.strip():
-        metadata["skip_reason"] = "empty_response"
-        return response, metadata
-    if response.strip() == fallback_message.strip():
-        metadata["skip_reason"] = "already_fallback"
-        return response, metadata
-    if str(dialogue_mode or "").upper() == "SMALLTALK":
-        metadata["skip_reason"] = "smalltalk"
-        return response, metadata
-
-    try:
-        from modules.runtime_confidence_gate import RuntimeConfidenceGate, GateDecision
-
-        gate = RuntimeConfidenceGate(twin_id)
-        gate_result = await gate.check(
-            query=query,
-            query_topic=_extract_runtime_gate_topic(planning_output),
-            retrieved_chunks=retrieved_context_snippets or [],
-        )
-        decision_value = str(getattr(gate_result.decision, "value", gate_result.decision))
-        metadata.update(
-            {
-                "applied": True,
-                "decision": decision_value,
-                "reason": gate_result.reason,
-                "answerability_score": gate_result.answerability_score,
-                "confidence_threshold": gate_result.confidence_threshold,
-                "open_contradictions": gate_result.open_contradictions,
-            }
-        )
-        if gate_result.decision == GateDecision.BLOCK:
-            return (gate_result.fallback_message or fallback_message), metadata
-        if gate_result.decision == GateDecision.PARTIAL:
-            return gate.format_response_with_confidence(response, gate_result), metadata
-        return response, metadata
-    except Exception as exc:
-        logger.warning(f"Runtime confidence gate failed open for twin {twin_id}: {exc}")
-        metadata.update(
-            {
-                "applied": True,
-                "decision": "allow",
-                "reason": "gate_error_fail_open",
-                "error": str(exc),
-            }
-        )
-        return response, metadata
+    return response, metadata
 
 
 def _grounding_tokens(text: str) -> Set[str]:
@@ -1184,6 +312,255 @@ def _extract_answerability_state(planning_output: Optional[Dict[str, Any]]) -> s
         if normalized:
             return normalized
     return "unknown"
+
+
+def _strip_live_confidence_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _strip_live_confidence_fields(inner)
+            for key, inner in value.items()
+            if str(key) not in _LIVE_CONFIDENCE_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_live_confidence_fields(item) for item in value]
+    return value
+
+
+def _derive_source_tier(
+    *,
+    contexts: Optional[List[Dict[str, Any]]],
+    citations: Optional[List[str]],
+    answerability_state: Optional[str],
+    dialogue_mode: Optional[str],
+) -> str:
+    normalized_state = str(answerability_state or "").strip().lower()
+    if str(dialogue_mode or "").strip().upper() == "SMALLTALK":
+        return "canonical"
+    if normalized_state in {"insufficient", "unknown"}:
+        return "mixed"
+
+    block_types = {
+        str(row.get("block_type") or row.get("chunk_type") or row.get("seed_type") or "").strip().lower()
+        for row in (contexts or [])
+        if isinstance(row, dict)
+    }
+    if block_types & _CANONICAL_EVIDENCE_BLOCKS:
+        return "canonical"
+    if citations:
+        return "retrieved"
+    if contexts:
+        return "mixed"
+    return "canonical"
+
+
+def _derive_review_state(
+    *,
+    action: str,
+    answerability_state: Optional[str],
+    final_response: Optional[str],
+    fallback_message: Optional[str],
+    online_eval_result: Optional[Dict[str, Any]] = None,
+) -> Tuple[bool, Optional[str]]:
+    normalized_action = str(action or "answer").strip().lower()
+    normalized_state = str(answerability_state or "").strip().lower()
+    final_text = str(final_response or "").strip()
+    fallback_text = str(fallback_message or "").strip()
+
+    if normalized_action in {"clarify", "escalate", "refuse"}:
+        return True, normalized_action
+    if normalized_state == "insufficient":
+        return True, "insufficient"
+    if fallback_text and final_text == fallback_text:
+        return True, "fallback_uncertainty"
+    if isinstance(online_eval_result, dict) and online_eval_result.get("needs_review"):
+        return True, str(online_eval_result.get("action") or "needs_review")
+    return False, None
+
+
+def _sanitize_routing_decision(decision: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    sanitized = _strip_live_confidence_fields(decision if isinstance(decision, dict) else {})
+    if "action" not in sanitized:
+        sanitized["action"] = "answer"
+    if "intent" not in sanitized:
+        sanitized["intent"] = "answer"
+    if "chosen_workflow" not in sanitized:
+        sanitized["chosen_workflow"] = sanitized.get("intent") or "answer"
+    if "output_schema" not in sanitized:
+        sanitized["output_schema"] = f"workflow.{sanitized.get('chosen_workflow') or 'answer'}.v1"
+    if "required_inputs_missing" not in sanitized:
+        sanitized["required_inputs_missing"] = []
+    if "clarifying_questions" not in sanitized:
+        sanitized["clarifying_questions"] = []
+    return sanitized
+
+
+def _normalize_live_chat_payload(
+    payload: Dict[str, Any],
+    *,
+    contexts: Optional[List[Dict[str, Any]]] = None,
+    citations: Optional[List[str]] = None,
+    dialogue_mode: Optional[str] = None,
+    final_response: Optional[str] = None,
+    fallback_message: Optional[str] = None,
+    online_eval_result: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    normalized = _strip_live_confidence_fields(payload)
+    answerability_state = str(
+        normalized.get("answerability_state")
+        or (normalized.get("debug_snapshot") or {}).get("answerability_state")
+        or "unknown"
+    ).strip().lower() or "unknown"
+    normalized["answerability_state"] = answerability_state
+    normalized["source_tier"] = str(
+        normalized.get("source_tier")
+        or _derive_source_tier(
+            contexts=contexts,
+            citations=citations,
+            answerability_state=answerability_state,
+            dialogue_mode=dialogue_mode or normalized.get("dialogue_mode"),
+        )
+    ).strip().lower() or "canonical"
+    review_required, review_reason = _derive_review_state(
+        action=str((normalized.get("routing_decision") or {}).get("action") or normalized.get("planner_action") or "answer"),
+        answerability_state=answerability_state,
+        final_response=final_response or normalized.get("response") or normalized.get("message"),
+        fallback_message=fallback_message,
+        online_eval_result=online_eval_result if isinstance(online_eval_result, dict) else normalized.get("online_eval"),
+    )
+    normalized["review_required"] = bool(normalized.get("review_required", review_required))
+    normalized["review_reason"] = normalized.get("review_reason") or review_reason
+    normalized["routing_decision"] = _sanitize_routing_decision(normalized.get("routing_decision"))
+    if isinstance(normalized.get("debug_snapshot"), dict):
+        normalized["debug_snapshot"] = _strip_live_confidence_fields(normalized.get("debug_snapshot"))
+    if isinstance(normalized.get("planning_output"), dict):
+        normalized["planning_output"] = _strip_live_confidence_fields(normalized.get("planning_output"))
+    if isinstance(normalized.get("grounding_verifier"), dict):
+        normalized["grounding_verifier"] = _strip_live_confidence_fields(normalized.get("grounding_verifier"))
+    if isinstance(normalized.get("online_eval"), dict):
+        normalized["online_eval"] = _strip_live_confidence_fields(normalized.get("online_eval"))
+    if isinstance(normalized.get("runtime_support_policy"), dict):
+        normalized["runtime_support_policy"] = _strip_live_confidence_fields(normalized.get("runtime_support_policy"))
+    return normalized
+
+
+def _public_persona_answer_payload(
+    *,
+    answer,
+    query: str,
+    context_trace: Dict[str, Any],
+    conversation_id: Optional[str],
+    twin_id: str,
+    identity_gate_mode: str = "public",
+) -> Dict[str, Any]:
+    response_text = str(getattr(answer, "response", "") or "").strip()
+    citations = _normalize_json(getattr(answer, "citations", []) or [])
+    contexts = _normalize_json(getattr(answer, "contexts", []) or [])
+    query_class = str(getattr(answer, "query_class", "") or get_grounding_policy(query).get("query_class") or "factual")
+    answerability_state = str(getattr(answer, "answerability_state", "") or "direct")
+    dialogue_mode = str(getattr(answer, "dialogue_mode", "") or "QA_FACT")
+    payload = {
+        "status": "answer",
+        "message": response_text,
+        "response": response_text,
+        "response_type": "answer",
+        "requires_user_input": False,
+        "citations": citations,
+        "citation_details": _normalize_json(_resolve_citation_details(citations, twin_id)),
+        "owner_memory_refs": [],
+        "owner_memory_topics": [],
+        "clarification_hint": None,
+        "clarification_options": [],
+        "dialogue_mode": dialogue_mode,
+        "intent_label": getattr(answer, "intent_label", None),
+        "workflow_intent": getattr(answer, "workflow_intent", None),
+        "module_ids": getattr(answer, "module_ids", []),
+        "routing_decision": {
+            "intent": getattr(answer, "workflow_intent", None) or "answer",
+            "chosen_workflow": getattr(answer, "workflow_intent", None) or "answer",
+            "output_schema": f"workflow.{getattr(answer, 'workflow_intent', None) or 'answer'}.v1",
+            "action": getattr(answer, "planner_action", None) or "answer",
+            "required_inputs_missing": [],
+            "clarifying_questions": [],
+        },
+        "render_strategy": getattr(answer, "render_strategy", None) or "conversational",
+        "query_class": query_class,
+        "quote_intent": bool(getattr(answer, "quote_intent", False)),
+        "answerability_state": answerability_state,
+        "planner_action": getattr(answer, "planner_action", None) or "answer",
+        "retrieval_stats": {
+            "chunk_count": len(contexts),
+            "dense_top1": 0.0,
+            "dense_top5_avg": 0.0,
+            "sparse_top1": 0.0,
+            "sparse_top5_avg": 0.0,
+            "rerank_top1": 0.0,
+            "rerank_top5_avg": 0.0,
+            "evidence_block_counts": {
+                getattr(answer, "evidence_block_type", None) or "canonical_profile_seed": len(contexts),
+            } if contexts else {},
+        },
+        "selected_evidence_block_types": [getattr(answer, "evidence_block_type", None)] if getattr(answer, "evidence_block_type", None) else [],
+        "debug_snapshot": {
+            "query_class": query_class,
+            "requires_evidence": bool(contexts),
+            "quote_intent": bool(getattr(answer, "quote_intent", False)),
+            "answerability_state": answerability_state,
+            "planner_action": getattr(answer, "planner_action", None) or "answer",
+            "retrieval_stats": {
+                "chunk_count": len(contexts),
+                "dense_top1": 0.0,
+                "dense_top5_avg": 0.0,
+                "sparse_top1": 0.0,
+                "sparse_top5_avg": 0.0,
+                "rerank_top1": 0.0,
+                "rerank_top5_avg": 0.0,
+                "evidence_block_counts": {
+                    getattr(answer, "evidence_block_type", None) or "canonical_profile_seed": len(contexts),
+                } if contexts else {},
+            },
+            "selected_evidence_block_types": [getattr(answer, "evidence_block_type", None)] if getattr(answer, "evidence_block_type", None) else [],
+            **(getattr(answer, "debug_flags", {}) or {}),
+        },
+        "grounding_verifier": {
+            "supported": None,
+            "support_ratio": None,
+            "total_claims": 0,
+            "supported_claims": 0,
+            "unsupported_claims": [],
+        },
+        "online_eval": {
+            "enabled": False,
+            "ran": False,
+            "skipped_reason": getattr(answer, "skipped_reason", None) or "persona_answerer",
+            "context_chars": sum(len(str(row.get("text") or "")) for row in contexts if isinstance(row, dict)),
+            "overall_score": None,
+            "needs_review": None,
+            "flags": [],
+            "action": "none",
+        },
+        "runtime_support_policy": {
+            "enabled": False,
+            "applied": False,
+            "decision": "skipped",
+            "skip_reason": "support_state_runtime",
+        },
+        "conversation_id": conversation_id,
+        "used_owner_memory": False,
+        "model_used": getattr(answer, "model_used", None) or inference_router.get_active_model(),
+        "provider_used": getattr(answer, "provider_used", None) or inference_router.get_active_provider(),
+        "identity_gate_mode": identity_gate_mode,
+        "source_tier": getattr(answer, "source_tier", None) or "canonical",
+        "review_required": bool(getattr(answer, "review_required", False)),
+        "review_reason": getattr(answer, "review_reason", None),
+        **context_trace,
+    }
+    return _normalize_live_chat_payload(
+        payload,
+        contexts=contexts,
+        citations=citations if isinstance(citations, list) else [],
+        dialogue_mode=dialogue_mode,
+        final_response=response_text,
+    )
 
 
 def _extract_deepagents_metadata(planning_output: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -2187,7 +1564,7 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
                 continue
             if (
                 "citations" in node_payload
-                or "confidence_score" in node_payload
+                or "answerability_state" in node_payload
                 or "retrieved_context" in node_payload
             ):
                 tools_payload = {}
@@ -2195,12 +1572,9 @@ def _extract_stream_payload(event: dict) -> tuple[Optional[dict], Optional[dict]
                     citations = _normalize_json(node_payload.get("citations"))
                     if isinstance(citations, list):
                         tools_payload["citations"] = citations
-                confidence = node_payload.get("confidence_score")
-                if confidence is not None:
-                    try:
-                        tools_payload["confidence_score"] = float(confidence)
-                    except Exception:
-                        pass
+                answerability_state = node_payload.get("answerability_state")
+                if isinstance(answerability_state, str) and answerability_state.strip():
+                    tools_payload["answerability_state"] = answerability_state.strip().lower()
                 retrieved_context = node_payload.get("retrieved_context")
                 if isinstance(retrieved_context, dict):
                     raw_results = retrieved_context.get("results")
@@ -2415,16 +1789,19 @@ async def _apply_persona_audit(
 def _derive_review_reason(
     *,
     action: str,
-    confidence_score: float,
+    answerability_state: Optional[str],
+    final_response: Optional[str],
+    fallback_message: Optional[str],
     online_eval_result: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
-    if action in {"clarify", "escalate", "refuse"}:
-        return action
-    if confidence_score < 0.45:
-        return "low_confidence"
-    if isinstance(online_eval_result, dict) and online_eval_result.get("needs_review"):
-        return "needs_review"
-    return None
+    required, reason = _derive_review_state(
+        action=action,
+        answerability_state=answerability_state,
+        final_response=final_response,
+        fallback_message=fallback_message,
+        online_eval_result=online_eval_result,
+    )
+    return reason if required else None
 
 
 def _persist_runtime_audit(
@@ -2441,15 +1818,23 @@ def _persist_runtime_audit(
     routing_decision: Optional[Dict[str, Any]],
     persona_spec_version: Optional[str],
     persona_prompt_variant: Optional[str],
-    confidence_score: float,
+    answerability_state: Optional[str],
+    source_tier: Optional[str],
     citations: List[str],
     retrieved_context_snippets: List[Dict[str, Any]],
     final_response: str,
     fallback_message: str,
     online_eval_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    decision = routing_decision if isinstance(routing_decision, dict) else {}
+    decision = _sanitize_routing_decision(routing_decision)
     action = str(decision.get("action") or "answer")
+    review_required, review_reason = _derive_review_state(
+        action=action,
+        answerability_state=answerability_state,
+        final_response=final_response,
+        fallback_message=fallback_message,
+        online_eval_result=online_eval_result,
+    )
 
     routing_row = persist_routing_decision(
         twin_id=twin_id,
@@ -2460,7 +1845,6 @@ def _persist_runtime_audit(
         router_mode=dialogue_mode,
         decision=decision or {
             "intent": workflow_intent or "answer",
-            "confidence": confidence_score,
             "required_inputs_missing": [],
             "chosen_workflow": workflow_intent or "answer",
             "output_schema": f"workflow.{workflow_intent or 'answer'}.v1",
@@ -2471,6 +1855,8 @@ def _persist_runtime_audit(
             "intent_label": intent_label,
             "persona_spec_version": persona_spec_version,
             "persona_prompt_variant": persona_prompt_variant,
+            "answerability_state": answerability_state,
+            "source_tier": source_tier,
         },
     )
 
@@ -2480,7 +1866,7 @@ def _persist_runtime_audit(
     escalation_reason = None
     if action == "escalate":
         escalation_reason = "router_escalation"
-    elif final_response.strip() == fallback_message.strip() and confidence_score < 0.35:
+    elif final_response.strip() == fallback_message.strip():
         escalation_reason = "uncertainty_fallback"
         if action == "answer":
             action = "escalate"
@@ -2496,7 +1882,10 @@ def _persist_runtime_audit(
         intent_label=intent_label,
         workflow_intent=workflow_intent or str(decision.get("intent") or "answer"),
         response_action=action,
-        confidence_score=confidence_score,
+        answerability_state=answerability_state,
+        source_tier=source_tier,
+        review_required=review_required,
+        review_reason=review_reason,
         citations=citations,
         sources_used=retrieved_context_snippets,
         refusal_reason=refusal_reason,
@@ -2506,6 +1895,8 @@ def _persist_runtime_audit(
             "context_count": len(retrieved_context_snippets or []),
             "online_eval_action": (online_eval_result or {}).get("action") if isinstance(online_eval_result, dict) else None,
             "online_eval_score": (online_eval_result or {}).get("overall_score") if isinstance(online_eval_result, dict) else None,
+            "answerability_state": answerability_state,
+            "source_tier": source_tier,
         },
         artifacts_used={
             "persona_spec_version": persona_spec_version,
@@ -2513,15 +1904,12 @@ def _persist_runtime_audit(
             "intent_label": intent_label,
             "workflow_intent": workflow_intent or str(decision.get("intent") or "answer"),
             "routing_decision": decision,
+            "answerability_state": answerability_state,
+            "source_tier": source_tier,
         },
     )
 
-    review_reason = _derive_review_reason(
-        action=action,
-        confidence_score=confidence_score,
-        online_eval_result=online_eval_result,
-    )
-    if review_reason:
+    if review_required and review_reason:
         enqueue_owner_review_item(
             twin_id=twin_id,
             tenant_id=tenant_id,
@@ -2534,7 +1922,8 @@ def _persist_runtime_audit(
                 "query_action": action,
                 "intent_label": intent_label,
                 "workflow_intent": workflow_intent,
-                "confidence_score": confidence_score,
+                "answerability_state": answerability_state,
+                "source_tier": source_tier,
                 "citations": citations,
             },
         )
@@ -2658,20 +2047,33 @@ async def _consume_streaming_chat_response(
         response_type = "clarification" if metadata.get("requires_user_input") else "answer"
 
     return _normalize_json(
-        {
-            "message": "".join(content_parts).strip(),
-            "response_type": response_type,
-            "requires_user_input": bool(metadata.get("requires_user_input")),
-            "dialogue_mode": metadata.get("dialogue_mode"),
-            "sources": metadata.get("citation_details") or metadata.get("citations") or [],
-            "citations": metadata.get("citations") or [],
-            "confidence_score": metadata.get("confidence_score"),
-            "conversation_id": metadata.get("conversation_id"),
-            "clarification_hint": metadata.get("clarification_hint"),
-            "clarification_options": metadata.get("clarification_options") or [],
-            "model_used": metadata.get("model_used") or metadata.get("inference_model") or inference_router.get_active_model(),
-            "provider_used": metadata.get("provider_used") or metadata.get("inference_provider") or inference_router.get_active_provider(),
-        }
+        _normalize_live_chat_payload(
+            {
+                "message": "".join(content_parts).strip(),
+                "response_type": response_type,
+                "requires_user_input": bool(metadata.get("requires_user_input")),
+                "dialogue_mode": metadata.get("dialogue_mode"),
+                "sources": metadata.get("citation_details") or metadata.get("citations") or [],
+                "citations": metadata.get("citations") or [],
+                "conversation_id": metadata.get("conversation_id"),
+                "clarification_hint": metadata.get("clarification_hint"),
+                "clarification_options": metadata.get("clarification_options") or [],
+                "model_used": metadata.get("model_used") or metadata.get("inference_model") or inference_router.get_active_model(),
+                "provider_used": metadata.get("provider_used") or metadata.get("inference_provider") or inference_router.get_active_provider(),
+                "answerability_state": metadata.get("answerability_state"),
+                "source_tier": metadata.get("source_tier"),
+                "review_required": metadata.get("review_required"),
+                "review_reason": metadata.get("review_reason"),
+                "routing_decision": metadata.get("routing_decision"),
+                "planner_action": metadata.get("planner_action"),
+                "online_eval": metadata.get("online_eval"),
+                "debug_snapshot": metadata.get("debug_snapshot"),
+            },
+            contexts=metadata.get("contexts"),
+            citations=metadata.get("citations"),
+            dialogue_mode=metadata.get("dialogue_mode"),
+            final_response="".join(content_parts).strip(),
+        )
     )
 
 
@@ -2914,7 +2316,6 @@ async def chat(
             # 2. Run Agent Stream - collect final response
             full_response = ""
             citations = []
-            confidence_score = 0.0
             decision_trace = None
             teaching_questions = []
             planning_output = {}
@@ -2978,7 +2379,7 @@ async def chat(
                 )
                 yield json.dumps(debug_event) + "\n"
             
-            # Identity Confidence Gate (deterministic)
+# Identity Gate (deterministic)
             history_for_gate = []
             if raw_history:
                 for msg in raw_history[-6:]:
@@ -3022,7 +2423,6 @@ async def chat(
                             "type": "metadata",
                             "citations": [],
                             "citation_details": [],
-                            "confidence_score": 0.0,
                             "conversation_id": conversation_id,
                             "owner_memory_refs": owner_memory_refs,
                             "owner_memory_topics": owner_memory_topics,
@@ -3039,7 +2439,6 @@ async def chat(
                             "routing_decision": {
                                 "intent": "clarification",
                                 "action": "clarify",
-                                "confidence": 0.0,
                             },
                             "render_strategy": "source_faithful",
                             "identity_gate_mode": gate.get("gate_mode"),
@@ -3075,8 +2474,8 @@ async def chat(
                     trace = await engine.predict_stance(query, context_context=owner_memory_context)
                     
                     full_response = trace.to_readable_trace()
-                    confidence_score = trace.confidence_score
                     decision_trace = trace.model_dump()
+                    decision_trace = _strip_live_confidence_fields(decision_trace)
                     
                     # Log as assistant message
                     langchain_history.append(AIMessage(content=full_response))
@@ -3095,10 +2494,9 @@ async def chat(
             query_policy = get_grounding_policy(query)
             if query_policy.get("is_smalltalk"):
                 print(f"[Chat] Smalltalk detected, short-circuiting agent flow")
-                smalltalk_response = _smalltalk_response_for_query(query)
+                smalltalk_response = build_smalltalk_response(query)
 
                 full_response = smalltalk_response
-                confidence_score = 0.9
                 dialogue_mode = "SMALLTALK"
                 citations = []
                 # Skip to final response - include same metadata shape as agent path for consistency
@@ -3108,7 +2506,6 @@ async def chat(
                     "origin_endpoint": resolved_context.origin_endpoint,
                     "citations": [],
                     "citation_details": [],
-                    "confidence_score": confidence_score,
                     "conversation_id": conversation_id,
                     "owner_memory_refs": [],
                     "owner_memory_topics": [],
@@ -3130,7 +2527,7 @@ async def chat(
                     "target_owner_scope": False,
                     "router_reason": "smalltalk_shortcircuit",
                     "router_knowledge_available": bool(graph_stats.get("node_count", 0) > 0),
-                    "routing_decision": {"intent": "answer", "action": "answer", "confidence": 0.9},
+                    "routing_decision": {"intent": "answer", "action": "answer"},
                     "render_strategy": "source_faithful",
                     "query_class": "smalltalk",
                     "quote_intent": False,
@@ -3147,14 +2544,20 @@ async def chat(
                 # Log interaction
                 try:
                     log_interaction(
-                        twin_id=twin_id,
-                        conversation_id=conversation_id,
-                        query=query,
-                        response=full_response,
+                        conversation_id,
+                        "user",
+                        query,
+                        interaction_context=resolved_context.context.value,
+                    )
+                    log_interaction(
+                        conversation_id,
+                        "assistant",
+                        full_response,
                         citations=[],
-                        confidence_score=confidence_score,
-                        actor_user_id=user.get("user_id") if user else None,
-                        actor_tenant_id=user.get("tenant_id") if user else None,
+                        answerability_state="direct",
+                        source_tier="canonical",
+                        review_required=False,
+                        interaction_context=resolved_context.context.value,
                     )
                 except Exception as e:
                     print(f"[Chat] Failed to log interaction: {e}")
@@ -3201,16 +2604,13 @@ async def chat(
                     if tools_payload:
                         next_citations = tools_payload.get("citations")
                         citations = _merge_citations(citations, next_citations)
-                        next_confidence = tools_payload.get("confidence_score")
-                        if isinstance(next_confidence, (int, float)):
-                            confidence_score = float(next_confidence)
                         next_contexts = tools_payload.get("contexts")
                         if isinstance(next_contexts, list):
                             retrieved_context_snippets = _merge_context_snippets(
                                 retrieved_context_snippets,
                                 next_contexts,
                             )
-                        print(f"[Chat] Tools event: confidence={confidence_score}, citations={len(citations)}")
+                        print(f"[Chat] Tools event: citations={len(citations)}")
     
                     # Capture final response and metadata from agent
                     if agent_payload:
@@ -3400,7 +2800,6 @@ async def chat(
             ):
                 print("[Chat] Safety override: no evidence available; forcing uncertainty response")
                 full_response = fallback_message
-                confidence_score = 0.0
             
             # Determine if graph was likely used (no external citations and has graph)
             graph_used_from_citations = any(str(c).startswith("graph-") for c in (citations or []))
@@ -3487,7 +2886,6 @@ async def chat(
                         f"support_ratio={grounding_result.get('support_ratio')}"
                     )
                     full_response = fallback_message
-                    confidence_score = min(confidence_score, 0.2)
                     context_trace["grounding_downgraded"] = True
 
             full_response, online_eval_result = await _apply_online_eval_policy(
@@ -3504,17 +2902,14 @@ async def chat(
                 ),
                 quote_intent=_is_quote_intent(query),
             )
-            if online_eval_result.get("action") == "fallback_uncertainty":
-                confidence_score = min(confidence_score, 0.2)
-            elif online_eval_result.get("action") == "fallback_source_faithful":
-                confidence_score = min(confidence_score, 0.6)
+            if online_eval_result.get("action") == "fallback_source_faithful":
                 render_strategy = "source_faithful"
                 context_trace["rewrite_applied"] = False
             context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
-            full_response, runtime_gate_meta = await _apply_runtime_confidence_gate_if_enabled(
+            full_response, runtime_gate_meta = await _apply_runtime_support_policy_if_enabled(
                 twin_id=twin_id,
                 query=query,
                 response=full_response,
@@ -3524,7 +2919,6 @@ async def chat(
                 retrieved_context_snippets=retrieved_context_snippets,
             )
             if runtime_gate_meta.get("decision") == "block":
-                confidence_score = min(confidence_score, 0.2)
                 citations = []
             context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
             context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
@@ -3546,7 +2940,6 @@ async def chat(
                 "type": "metadata",
                 "citations": citations,
                 "citation_details": citation_details,
-                "confidence_score": confidence_score,
                 "conversation_id": conversation_id,
                 "owner_memory_refs": owner_memory_refs,
                 "owner_memory_topics": owner_memory_topics,
@@ -3573,7 +2966,7 @@ async def chat(
                 "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
-                "runtime_confidence_gate": runtime_gate_meta,
+                "runtime_support_policy": runtime_gate_meta,
                 "deepagents": deepagents_meta,
                 "turn_counters": _extract_turn_counter_payload(debug_snapshot),
                 "router_policy": {
@@ -3688,8 +3081,28 @@ async def chat(
                     conversation_id,
                     "assistant",
                     full_response or fallback,
-                    citations,
-                    confidence_score,
+                    citations=citations,
+                    answerability_state=debug_snapshot.get("answerability_state"),
+                    source_tier=_derive_source_tier(
+                        contexts=retrieved_context_snippets,
+                        citations=citations,
+                        answerability_state=debug_snapshot.get("answerability_state"),
+                        dialogue_mode=dialogue_mode,
+                    ),
+                    review_required=_derive_review_state(
+                        action=str((routing_decision or {}).get("action") or debug_snapshot.get("planner_action") or "answer"),
+                        answerability_state=debug_snapshot.get("answerability_state"),
+                        final_response=full_response or fallback,
+                        fallback_message=fallback_message,
+                        online_eval_result=online_eval_result,
+                    )[0],
+                    review_reason=_derive_review_state(
+                        action=str((routing_decision or {}).get("action") or debug_snapshot.get("planner_action") or "answer"),
+                        answerability_state=debug_snapshot.get("answerability_state"),
+                        final_response=full_response or fallback,
+                        fallback_message=fallback_message,
+                        online_eval_result=online_eval_result,
+                    )[1],
                     interaction_context=resolved_context.context.value,
                 )
                 try:
@@ -3706,7 +3119,13 @@ async def chat(
                         routing_decision=routing_decision,
                         persona_spec_version=context_trace.get("persona_spec_version"),
                         persona_prompt_variant=context_trace.get("persona_prompt_variant"),
-                        confidence_score=float(confidence_score or 0.0),
+                        answerability_state=debug_snapshot.get("answerability_state"),
+                        source_tier=_derive_source_tier(
+                            contexts=retrieved_context_snippets,
+                            citations=citations,
+                            answerability_state=debug_snapshot.get("answerability_state"),
+                            dialogue_mode=dialogue_mode,
+                        ),
                         citations=citations,
                         retrieved_context_snippets=retrieved_context_snippets,
                         final_response=full_response or fallback,
@@ -3994,23 +3413,31 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             gate.get("clarification_hint") if isinstance(gate.get("clarification_hint"), dict) else None,
             gate.get("options") if isinstance(gate.get("options"), list) else None,
         )
-        return {
-            "status": "clarification",
-            "message": clarification_payload["message"],
-            "response": clarification_payload["message"],
-            "response_type": clarification_payload["response_type"],
-            "requires_user_input": clarification_payload["requires_user_input"],
-            "dialogue_mode": "CLARIFY",
-            "clarification_hint": clarification_payload["clarification_hint"],
-            "clarification_options": clarification_payload["clarification_options"],
-            "conversation_id": conversation_id,
-            "citations": [],
-            "confidence_score": 0.0,
-            "model_used": inference_router.get_active_model(),
-            "provider_used": inference_router.get_active_provider(),
-            "identity_gate_mode": gate.get("gate_mode"),
-            **context_trace,
-        }
+        return _normalize_live_chat_payload(
+            {
+                "status": "clarification",
+                "message": clarification_payload["message"],
+                "response": clarification_payload["message"],
+                "response_type": clarification_payload["response_type"],
+                "requires_user_input": clarification_payload["requires_user_input"],
+                "dialogue_mode": "CLARIFY",
+                "clarification_hint": clarification_payload["clarification_hint"],
+                "clarification_options": clarification_payload["clarification_options"],
+                "conversation_id": conversation_id,
+                "citations": [],
+                "model_used": inference_router.get_active_model(),
+                "provider_used": inference_router.get_active_provider(),
+                "identity_gate_mode": gate.get("gate_mode"),
+                "answerability_state": "insufficient",
+                "planner_action": "clarify",
+                **context_trace,
+            },
+            contexts=[],
+            citations=[],
+            dialogue_mode="CLARIFY",
+            final_response=clarification_payload["message"],
+            fallback_message=_uncertainty_message(resolved_context.context.value),
+        )
 
     # Filter owner memories by publish controls (parity with public-share) (PR6-A)
     owner_memory_candidates = _filter_public_owner_memory_candidates(
@@ -4029,7 +3456,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
     async def widget_stream_generator():
         final_content = ""
         citations = []
-        confidence_score = 0.0
         dialogue_mode = None
         intent_label = None
         workflow_intent = None
@@ -4061,9 +3487,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             if tools_payload:
                 next_citations = tools_payload.get("citations")
                 citations = _merge_citations(citations, next_citations)
-                next_confidence = tools_payload.get("confidence_score")
-                if isinstance(next_confidence, (int, float)):
-                    confidence_score = float(next_confidence)
                 next_contexts = tools_payload.get("contexts")
                 if isinstance(next_contexts, list):
                     retrieved_context_snippets = _merge_context_snippets(
@@ -4172,7 +3595,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             grounding_result = _evaluate_grounding_support(final_content, retrieved_context_snippets)
             if not grounding_result.get("supported"):
                 final_content = fallback_message
-                confidence_score = min(confidence_score, 0.2)
                 context_trace["grounding_downgraded"] = True
             context_trace["grounding_support_ratio"] = grounding_result.get("support_ratio")
             context_trace["grounding_total_claims"] = grounding_result.get("total_claims")
@@ -4194,17 +3616,14 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             ),
             quote_intent=_is_quote_intent(query),
         )
-        if online_eval_result.get("action") == "fallback_uncertainty":
-            confidence_score = min(confidence_score, 0.2)
-        elif online_eval_result.get("action") == "fallback_source_faithful":
-            confidence_score = min(confidence_score, 0.6)
+        if online_eval_result.get("action") == "fallback_source_faithful":
             render_strategy = "source_faithful"
             context_trace["rewrite_applied"] = False
         context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
         context_trace["online_eval_action"] = online_eval_result.get("action")
         context_trace["online_eval_score"] = online_eval_result.get("overall_score")
         context_trace["online_eval_flags"] = online_eval_result.get("flags")
-        final_content, runtime_gate_meta = await _apply_runtime_confidence_gate_if_enabled(
+        final_content, runtime_gate_meta = await _apply_runtime_support_policy_if_enabled(
             twin_id=twin_id,
             query=query,
             response=final_content,
@@ -4214,7 +3633,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             retrieved_context_snippets=retrieved_context_snippets,
         )
         if runtime_gate_meta.get("decision") == "block":
-            confidence_score = min(confidence_score, 0.2)
             citations = []
         context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
         context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
@@ -4233,7 +3651,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         )
         output = {
             "type": "metadata",
-            "confidence_score": confidence_score,
             "citations": citations,
             "citation_details": citation_details,
             "conversation_id": conversation_id,
@@ -4256,7 +3673,7 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "debug_snapshot": debug_snapshot,
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
-            "runtime_confidence_gate": runtime_gate_meta,
+            "runtime_support_policy": runtime_gate_meta,
             "deepagents": deepagents_meta,
             "turn_counters": _extract_turn_counter_payload(debug_snapshot),
             "session_id": session_id,
@@ -4299,8 +3716,28 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             conversation_id,
             "assistant",
             final_content,
-            citations,
-            confidence_score,
+            citations=citations,
+            answerability_state=debug_snapshot.get("answerability_state"),
+            source_tier=_derive_source_tier(
+                contexts=retrieved_context_snippets,
+                citations=citations,
+                answerability_state=debug_snapshot.get("answerability_state"),
+                dialogue_mode=dialogue_mode,
+            ),
+            review_required=_derive_review_state(
+                action=str((routing_decision or {}).get("action") or debug_snapshot.get("planner_action") or "answer"),
+                answerability_state=debug_snapshot.get("answerability_state"),
+                final_response=final_content,
+                fallback_message=fallback_message,
+                online_eval_result=online_eval_result,
+            )[0],
+            review_reason=_derive_review_state(
+                action=str((routing_decision or {}).get("action") or debug_snapshot.get("planner_action") or "answer"),
+                answerability_state=debug_snapshot.get("answerability_state"),
+                final_response=final_content,
+                fallback_message=fallback_message,
+                online_eval_result=online_eval_result,
+            )[1],
             interaction_context=resolved_context.context.value,
         )
         try:
@@ -4317,7 +3754,13 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
                 routing_decision=routing_decision,
                 persona_spec_version=context_trace.get("persona_spec_version"),
                 persona_prompt_variant=context_trace.get("persona_prompt_variant"),
-                confidence_score=float(confidence_score or 0.0),
+                answerability_state=debug_snapshot.get("answerability_state"),
+                source_tier=_derive_source_tier(
+                    contexts=retrieved_context_snippets,
+                    citations=citations,
+                    answerability_state=debug_snapshot.get("answerability_state"),
+                    dialogue_mode=dialogue_mode,
+                ),
                 citations=citations,
                 retrieved_context_snippets=retrieved_context_snippets,
                 final_response=final_content,
@@ -4327,7 +3770,18 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         except Exception as audit_err:
             logger.debug(f"Widget runtime audit persistence failed (non-blocking): {audit_err}")
 
-        yield json.dumps({"type": "done", "escalated": confidence_score < 0.7}) + "\n"
+        yield json.dumps(
+            {
+                "type": "done",
+                "review_required": _derive_review_state(
+                    action=str((routing_decision or {}).get("action") or "answer"),
+                    answerability_state=debug_snapshot.get("answerability_state"),
+                    final_response=final_content,
+                    fallback_message=fallback_message,
+                    online_eval_result=online_eval_result,
+                )[0],
+            }
+        ) + "\n"
 
     with langfuse_prop_widget:
         return StreamingResponse(widget_stream_generator(), media_type="text/event-stream")
@@ -4411,199 +3865,6 @@ async def public_chat_endpoint(
         request.message,
         interaction_context=resolved_context.context.value,
     )
-    if public_query_policy.get("is_smalltalk"):
-        _greeting_settings = _load_public_twin_settings(twin_id)
-        public_smalltalk_text = _smalltalk_response_for_query(request.message, settings=_greeting_settings)
-        decision_payload = {
-            "intent": "answer",
-            "chosen_workflow": "answer",
-            "output_schema": "workflow.answer.v1",
-            "action": "answer",
-            "confidence": 0.9,
-            "required_inputs_missing": [],
-            "clarifying_questions": [],
-        }
-        return {
-            "status": "answer",
-            "message": public_smalltalk_text,
-            "response": public_smalltalk_text,
-            "response_type": "answer",
-            "requires_user_input": False,
-            "citations": [],
-            "citation_details": [],
-            "confidence_score": 0.9,
-            "owner_memory_refs": [],
-            "owner_memory_topics": [],
-            "clarification_hint": None,
-            "clarification_options": [],
-            "dialogue_mode": "SMALLTALK",
-            "intent_label": "meta_or_system",
-            "workflow_intent": "answer",
-            "module_ids": ["procedural.style.smalltalk"],
-            "routing_decision": decision_payload,
-            "render_strategy": "source_faithful",
-            "query_class": str(public_query_policy.get("query_class") or "smalltalk"),
-            "quote_intent": False,
-            "answerability_state": "direct",
-            "planner_action": "answer",
-            "retrieval_stats": {
-                "chunk_count": 0,
-                "dense_top1": 0.0,
-                "dense_top5_avg": 0.0,
-                "sparse_top1": 0.0,
-                "sparse_top5_avg": 0.0,
-                "rerank_top1": 0.0,
-                "rerank_top5_avg": 0.0,
-                "evidence_block_counts": {},
-            },
-            "selected_evidence_block_types": [],
-            "debug_snapshot": {
-                "query_class": str(public_query_policy.get("query_class") or "smalltalk"),
-                "requires_evidence": False,
-                "quote_intent": False,
-                "answerability_state": "direct",
-                "planner_action": "answer",
-                "retrieval_stats": {
-                    "chunk_count": 0,
-                    "dense_top1": 0.0,
-                    "dense_top5_avg": 0.0,
-                    "sparse_top1": 0.0,
-                    "sparse_top5_avg": 0.0,
-                    "rerank_top1": 0.0,
-                    "rerank_top5_avg": 0.0,
-                    "evidence_block_counts": {},
-                },
-                "selected_evidence_block_types": [],
-            },
-            "grounding_verifier": {
-                "supported": None,
-                "support_ratio": None,
-                "total_claims": 0,
-                "supported_claims": 0,
-                "unsupported_claims": [],
-            },
-            "online_eval": {
-                "enabled": False,
-                "ran": False,
-                "skipped_reason": "public_smalltalk",
-                "context_chars": 0,
-                "overall_score": None,
-                "needs_review": None,
-                "flags": [],
-                "action": "none",
-            },
-            "runtime_confidence_gate": {
-                "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
-                "applied": False,
-                "decision": "skipped",
-                "skip_reason": "public_smalltalk",
-            },
-            "used_owner_memory": False,
-            "model_used": inference_router.get_active_model(),
-            "provider_used": inference_router.get_active_provider(),
-            "identity_gate_mode": "public",
-            **context_trace,
-        }
-
-    public_fastpath = classify_fastpath_intent(request.message)
-    public_fastpath_text = None
-    if public_fastpath.get("matched"):
-        public_fastpath_text = await _build_public_fastpath_message(
-            twin_id,
-            str(public_fastpath.get("intent") or "").strip(),
-        )
-    if public_fastpath_text:
-        decision_payload = {
-            "intent": "answer",
-            "chosen_workflow": "answer",
-            "output_schema": "workflow.answer.v1",
-            "action": "answer",
-            "confidence": float(public_fastpath.get("confidence") or 0.0),
-            "required_inputs_missing": [],
-            "clarifying_questions": [],
-        }
-        return {
-            "status": "answer",
-            "message": public_fastpath_text,
-            "response": public_fastpath_text,
-            "response_type": "answer",
-            "requires_user_input": False,
-            "citations": [],
-            "citation_details": [],
-            "confidence_score": float(public_fastpath.get("confidence") or 0.0),
-            "owner_memory_refs": [],
-            "owner_memory_topics": [],
-            "clarification_hint": None,
-            "clarification_options": [],
-            "dialogue_mode": "IDENTITY_FACT",
-            "intent_label": "meta_or_system",
-            "workflow_intent": "answer",
-            "module_ids": [],
-            "routing_decision": decision_payload,
-            "render_strategy": "source_faithful",
-            "query_class": "identity",
-            "quote_intent": False,
-            "answerability_state": "direct",
-            "planner_action": "answer",
-            "retrieval_stats": {
-                "chunk_count": 0,
-                "dense_top1": 0.0,
-                "dense_top5_avg": 0.0,
-                "sparse_top1": 0.0,
-                "sparse_top5_avg": 0.0,
-                "rerank_top1": 0.0,
-                "rerank_top5_avg": 0.0,
-                "evidence_block_counts": {},
-            },
-            "selected_evidence_block_types": [],
-            "debug_snapshot": {
-                "query_class": "identity",
-                "requires_evidence": False,
-                "quote_intent": False,
-                "answerability_state": "direct",
-                "planner_action": "answer",
-                "retrieval_stats": {
-                    "chunk_count": 0,
-                    "dense_top1": 0.0,
-                    "dense_top5_avg": 0.0,
-                    "sparse_top1": 0.0,
-                    "sparse_top5_avg": 0.0,
-                    "rerank_top1": 0.0,
-                    "rerank_top5_avg": 0.0,
-                    "evidence_block_counts": {},
-                },
-                "selected_evidence_block_types": [],
-            },
-            "grounding_verifier": {
-                "supported": None,
-                "support_ratio": None,
-                "total_claims": 0,
-                "supported_claims": 0,
-                "unsupported_claims": [],
-            },
-            "online_eval": {
-                "enabled": False,
-                "ran": False,
-                "skipped_reason": "public_fastpath",
-                "context_chars": 0,
-                "overall_score": None,
-                "needs_review": None,
-                "flags": [],
-                "action": "none",
-            },
-            "runtime_confidence_gate": {
-                "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
-                "applied": False,
-                "decision": "skipped",
-                "skip_reason": "public_fastpath",
-            },
-            "used_owner_memory": False,
-            "model_used": inference_router.get_active_model(),
-            "provider_used": inference_router.get_active_provider(),
-            "identity_gate_mode": "public",
-            **context_trace,
-        }
-
     public_action_like_query = bool(
         classify_deepagents_intent(request.message).get("is_action_or_control")
     )
@@ -4611,106 +3872,20 @@ async def public_chat_endpoint(
         context_trace["public_action_query_guarded"] = True
 
     if not public_action_like_query:
-        profile_first_answer = await _maybe_answer_from_public_profile(
+        early_persona_answer = await maybe_answer_public_persona_query(
             twin_id,
             request.message,
-            public_query_policy,
+            query_policy=public_query_policy,
+            action_like_query=public_action_like_query,
         )
-        if profile_first_answer:
-            profile_contexts = _normalize_json(profile_first_answer.get("contexts") or [])
-            profile_citations = _normalize_json(profile_first_answer.get("citations") or [])
-            confidence_score = float(profile_first_answer.get("confidence") or 0.0)
-            decision_payload = {
-                "intent": "answer",
-                "chosen_workflow": "answer",
-                "output_schema": "workflow.answer.v1",
-                "action": "answer",
-                "confidence": confidence_score,
-                "required_inputs_missing": [],
-                "clarifying_questions": [],
-            }
-            return {
-                "status": "answer",
-                "message": str(profile_first_answer.get("response") or "").strip(),
-                "response": str(profile_first_answer.get("response") or "").strip(),
-                "response_type": "answer",
-                "requires_user_input": False,
-                "citations": profile_citations,
-                "citation_details": _normalize_json(_resolve_citation_details(profile_citations, twin_id)),
-                "confidence_score": confidence_score,
-                "owner_memory_refs": [],
-                "owner_memory_topics": [],
-                "clarification_hint": None,
-                "clarification_options": [],
-                "dialogue_mode": "QA_FACT",
-                "intent_label": "factual_with_evidence",
-                "workflow_intent": "answer",
-                "module_ids": ["procedural.profile_qa.public"],
-                "routing_decision": decision_payload,
-                "render_strategy": "source_faithful",
-                "query_class": str(public_query_policy.get("query_class") or "factual"),
-                "quote_intent": _is_quote_intent(request.message),
-                "answerability_state": "derivable",
-                "planner_action": "answer",
-                "retrieval_stats": {
-                    "chunk_count": len(profile_contexts),
-                    "dense_top1": 0.0,
-                    "dense_top5_avg": 0.0,
-                    "sparse_top1": 0.0,
-                    "sparse_top5_avg": 0.0,
-                    "rerank_top1": 0.0,
-                    "rerank_top5_avg": 0.0,
-                    "evidence_block_counts": {"canonical_profile_seed": len(profile_contexts)},
-                },
-                "selected_evidence_block_types": ["canonical_profile_seed"],
-                "debug_snapshot": {
-                    "query_class": str(public_query_policy.get("query_class") or "factual"),
-                    "requires_evidence": True,
-                    "quote_intent": _is_quote_intent(request.message),
-                    "answerability_state": "derivable",
-                    "planner_action": "answer",
-                    "retrieval_stats": {
-                        "chunk_count": len(profile_contexts),
-                        "dense_top1": 0.0,
-                        "dense_top5_avg": 0.0,
-                        "sparse_top1": 0.0,
-                        "sparse_top5_avg": 0.0,
-                        "rerank_top1": 0.0,
-                        "rerank_top5_avg": 0.0,
-                        "evidence_block_counts": {"canonical_profile_seed": len(profile_contexts)},
-                    },
-                    "selected_evidence_block_types": ["canonical_profile_seed"],
-                    "public_profile_first_answer": True,
-                },
-                "grounding_verifier": {
-                    "supported": None,
-                    "support_ratio": None,
-                    "total_claims": 0,
-                    "supported_claims": 0,
-                    "unsupported_claims": [],
-                },
-                "online_eval": {
-                    "enabled": False,
-                    "ran": False,
-                    "skipped_reason": "public_profile_first_answer",
-                    "context_chars": sum(len(str(row.get("text") or "")) for row in profile_contexts),
-                    "overall_score": None,
-                    "needs_review": None,
-                    "flags": [],
-                    "action": "none",
-                },
-                "runtime_confidence_gate": {
-                    "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
-                    "applied": False,
-                    "decision": "skipped",
-                    "skip_reason": "public_profile_first_answer",
-                },
-                "used_owner_memory": False,
-                "model_used": inference_router.get_active_model(),
-                "provider_used": inference_router.get_active_provider(),
-                "identity_gate_mode": "public",
-                **context_trace,
-            }
+        if early_persona_answer:
+            return _public_persona_answer_payload(
+                answer=early_persona_answer,
+                query=request.message,
+                context_trace=context_trace,
+                conversation_id=None,
+                twin_id=twin_id,
+            )
 
     # Get public group for context (with fallback to default group)
     public_group = get_public_group_for_twin(twin_id)
@@ -4800,7 +3975,10 @@ async def public_chat_endpoint(
             "clarification_options": clarification_payload["clarification_options"],
             "conversation_id": conversation_id,
             "citations": [],
-            "confidence_score": 0.0,
+            "answerability_state": "insufficient",
+            "source_tier": "canonical",
+            "review_required": False,
+            "review_reason": None,
             "model_used": inference_router.get_active_model(),
             "provider_used": inference_router.get_active_provider(),
             "identity_gate_mode": gate.get("gate_mode"),
@@ -4824,7 +4002,6 @@ async def public_chat_endpoint(
         try:
             final_response = ""
             citations = []
-            confidence_score = 0.0
             dialogue_mode = None
             intent_label = None
             workflow_intent = None
@@ -4861,9 +4038,6 @@ async def public_chat_endpoint(
                 if tools_payload:
                     next_citations = tools_payload.get("citations")
                     citations = _merge_citations(citations, next_citations)
-                    next_confidence = tools_payload.get("confidence_score")
-                    if isinstance(next_confidence, (int, float)):
-                        confidence_score = float(next_confidence)
                     next_contexts = tools_payload.get("contexts")
                     if isinstance(next_contexts, list):
                         retrieved_context_snippets = _merge_context_snippets(
@@ -4948,26 +4122,22 @@ async def public_chat_endpoint(
                 not public_action_like_query
                 and (not final_response or final_response.strip() == fallback_message)
             ):
-                profile_seed_fallback = await _maybe_build_public_profile_seed_fallback(
+                profile_seed_fallback = await maybe_build_public_persona_fallback(
                     twin_id,
                     request.message,
                 )
                 if profile_seed_fallback:
-                    final_response = str(profile_seed_fallback.get("response") or "").strip() or fallback_message
+                    final_response = str(profile_seed_fallback.response or "").strip() or fallback_message
                     draft_for_audit = final_response
-                    citations = _merge_citations(citations, profile_seed_fallback.get("citations"))
+                    citations = _merge_citations(citations, profile_seed_fallback.citations)
                     retrieved_context_snippets = _merge_context_snippets(
                         retrieved_context_snippets,
-                        profile_seed_fallback.get("contexts") or [],
+                        profile_seed_fallback.contexts or [],
                     )
-                    confidence_score = max(
-                        float(confidence_score or 0.0),
-                        float(profile_seed_fallback.get("confidence") or 0.0),
-                    )
-                    dialogue_mode = dialogue_mode or "QA_FACT"
-                    intent_label = intent_label or "factual_with_evidence"
-                    workflow_intent = workflow_intent or "answer"
-                    render_strategy = "source_faithful"
+                    dialogue_mode = dialogue_mode or profile_seed_fallback.dialogue_mode or "QA_FACT"
+                    intent_label = intent_label or profile_seed_fallback.intent_label or "factual_with_evidence"
+                    workflow_intent = workflow_intent or profile_seed_fallback.workflow_intent or "answer"
+                    render_strategy = profile_seed_fallback.render_strategy or "conversational"
                     module_ids = list(module_ids or [])
                     if "procedural.fallback.public_profile_seed" not in module_ids:
                         module_ids.append("procedural.fallback.public_profile_seed")
@@ -4977,7 +4147,6 @@ async def public_chat_endpoint(
                             "chosen_workflow": "answer",
                             "output_schema": "workflow.answer.v1",
                             "action": "answer",
-                            "confidence": confidence_score,
                             "required_inputs_missing": [],
                             "clarifying_questions": [],
                         }
@@ -4985,14 +4154,12 @@ async def public_chat_endpoint(
                         "answer_points": [final_response],
                         "citations": citations,
                         "follow_up_question": "",
-                        "confidence": confidence_score,
                         "teaching_questions": [],
-                        "render_strategy": "source_faithful",
+                        "render_strategy": render_strategy,
                         "reasoning_trace": "Public profile fallback answered from canonical persona evidence.",
                         "answerability": {
                             "answerability": "derivable",
                             "answerable": True,
-                            "confidence": confidence_score,
                             "reasoning": "Answered from canonical persona profile evidence after retrieval returned no public chunks.",
                             "missing_information": [],
                             "ambiguity_level": "low",
@@ -5003,7 +4170,6 @@ async def public_chat_endpoint(
             if context_trace.get("public_scope_violation"):
                 draft_for_audit = fallback_message
                 final_response = fallback_message
-                confidence_score = min(confidence_score, 0.2)
                 citations = []
                 retrieved_context_snippets = []
                 owner_memory_refs = []
@@ -5064,7 +4230,6 @@ async def public_chat_endpoint(
             strict_grounding = _query_requires_strict_grounding(request.message)
             if strict_grounding and not retrieved_context_snippets and not owner_memory_candidates:
                 final_response = fallback_message
-                confidence_score = min(confidence_score, 0.2)
                 citations = []
             if (
                 GROUNDING_VERIFIER_ENABLED
@@ -5077,7 +4242,6 @@ async def public_chat_endpoint(
                 grounding_result = _evaluate_grounding_support(final_response, retrieved_context_snippets)
                 if not grounding_result.get("supported"):
                     final_response = fallback_message
-                    confidence_score = min(confidence_score, 0.2)
                     context_trace["grounding_downgraded"] = True
                 context_trace["grounding_support_ratio"] = grounding_result.get("support_ratio")
                 context_trace["grounding_total_claims"] = grounding_result.get("total_claims")
@@ -5099,17 +4263,14 @@ async def public_chat_endpoint(
                 ),
                 quote_intent=_is_quote_intent(request.message),
             )
-            if online_eval_result.get("action") == "fallback_uncertainty":
-                confidence_score = min(confidence_score, 0.2)
-            elif online_eval_result.get("action") == "fallback_source_faithful":
-                confidence_score = min(confidence_score, 0.6)
+            if online_eval_result.get("action") == "fallback_source_faithful":
                 render_strategy = "source_faithful"
                 context_trace["rewrite_applied"] = False
             context_trace["online_eval_ran"] = bool(online_eval_result.get("ran"))
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
-            final_response, runtime_gate_meta = await _apply_runtime_confidence_gate_if_enabled(
+            final_response, runtime_gate_meta = await _apply_runtime_support_policy_if_enabled(
                 twin_id=twin_id,
                 query=request.message,
                 response=final_response,
@@ -5119,7 +4280,6 @@ async def public_chat_endpoint(
                 retrieved_context_snippets=retrieved_context_snippets,
             )
             if runtime_gate_meta.get("decision") == "block":
-                confidence_score = min(confidence_score, 0.2)
                 citations = []
             context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
             context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
@@ -5187,7 +4347,13 @@ async def public_chat_endpoint(
                     routing_decision=routing_decision if isinstance(routing_decision, dict) else None,
                     persona_spec_version=context_trace.get("persona_spec_version"),
                     persona_prompt_variant=context_trace.get("persona_prompt_variant"),
-                    confidence_score=float(confidence_score or 0.0),
+                    answerability_state=debug_snapshot.get("answerability_state"),
+                    source_tier=_derive_source_tier(
+                        contexts=retrieved_context_snippets,
+                        citations=citations if isinstance(citations, list) else [],
+                        answerability_state=debug_snapshot.get("answerability_state"),
+                        dialogue_mode=dialogue_mode,
+                    ),
                     citations=citations if isinstance(citations, list) else [],
                     retrieved_context_snippets=retrieved_context_snippets,
                     final_response=final_response,
@@ -5205,41 +4371,48 @@ async def public_chat_endpoint(
             )
             requires_user_input = response_type == "clarification"
 
-            return {
-                "status": status_value,
-                "message": final_response,
-                "response": final_response,
-                "response_type": response_type,
-                "requires_user_input": requires_user_input,
-                "citations": citations,
-                "citation_details": citation_details,
-                "confidence_score": confidence_score,
-                "owner_memory_refs": owner_memory_refs,
-                "owner_memory_topics": owner_memory_topics,
-                "clarification_hint": clarification_hint,
-                "clarification_options": clarification_options,
-                "dialogue_mode": dialogue_mode,
-                "intent_label": intent_label,
-                "workflow_intent": workflow_intent,
-                "module_ids": module_ids,
-                "routing_decision": routing_decision,
-                "render_strategy": render_strategy,
-                "query_class": debug_snapshot.get("query_class"),
-                "quote_intent": debug_snapshot.get("quote_intent"),
-                "answerability_state": debug_snapshot.get("answerability_state"),
-                "planner_action": debug_snapshot.get("planner_action"),
-                "retrieval_stats": debug_snapshot.get("retrieval_stats"),
-                "selected_evidence_block_types": debug_snapshot.get("selected_evidence_block_types"),
-                "debug_snapshot": debug_snapshot,
-                "grounding_verifier": grounding_result,
-                "online_eval": online_eval_result,
-                "runtime_confidence_gate": runtime_gate_meta,
-                "used_owner_memory": False,
-                "model_used": inference_model,
-                "provider_used": inference_provider,
-                "identity_gate_mode": gate.get("gate_mode"),
-                **context_trace,
-            }
+            return _normalize_live_chat_payload(
+                {
+                    "status": status_value,
+                    "message": final_response,
+                    "response": final_response,
+                    "response_type": response_type,
+                    "requires_user_input": requires_user_input,
+                    "citations": citations,
+                    "citation_details": citation_details,
+                    "owner_memory_refs": owner_memory_refs,
+                    "owner_memory_topics": owner_memory_topics,
+                    "clarification_hint": clarification_hint,
+                    "clarification_options": clarification_options,
+                    "dialogue_mode": dialogue_mode,
+                    "intent_label": intent_label,
+                    "workflow_intent": workflow_intent,
+                    "module_ids": module_ids,
+                    "routing_decision": routing_decision,
+                    "render_strategy": render_strategy,
+                    "query_class": debug_snapshot.get("query_class"),
+                    "quote_intent": debug_snapshot.get("quote_intent"),
+                    "answerability_state": debug_snapshot.get("answerability_state"),
+                    "planner_action": debug_snapshot.get("planner_action"),
+                    "retrieval_stats": debug_snapshot.get("retrieval_stats"),
+                    "selected_evidence_block_types": debug_snapshot.get("selected_evidence_block_types"),
+                    "debug_snapshot": debug_snapshot,
+                    "grounding_verifier": grounding_result,
+                    "online_eval": online_eval_result,
+                    "runtime_support_policy": runtime_gate_meta,
+                    "used_owner_memory": False,
+                    "model_used": inference_model,
+                    "provider_used": inference_provider,
+                    "identity_gate_mode": gate.get("gate_mode"),
+                    **context_trace,
+                },
+                contexts=retrieved_context_snippets,
+                citations=citations if isinstance(citations, list) else [],
+                dialogue_mode=dialogue_mode,
+                final_response=final_response,
+                fallback_message=fallback_message,
+                online_eval_result=online_eval_result,
+            )
         except Exception as e:
             print(f"Error in public chat: {e}")
             import traceback

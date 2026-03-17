@@ -144,21 +144,22 @@ export default function EscalationsPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Low Confidence Answer Given</div>
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Answer Flag</div>
                     <div className="text-sm bg-red-50 p-4 rounded-xl border border-red-100 italic text-slate-600">
-                      This answer had low confidence and was escalated for review.
+                      {esc.messages?.review_reason
+                        ? `This answer was flagged for review: ${esc.messages.review_reason.replace(/_/g, ' ')}.`
+                        : 'This answer was flagged for review and should be tightened before reuse.'}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Confidence Score</div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden max-w-xs">
-                      <div
-                        className="bg-red-500 h-full"
-                        style={{ width: `${(esc.messages?.confidence_score || 0) * 100}%` }}
-                      ></div>
-                    </div>
-                    <div className="text-[10px] font-bold text-red-600 mt-1">
-                      {((esc.messages?.confidence_score || 0) * 100).toFixed(0)}%
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Support State</div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-700">
+                        {esc.messages?.answerability_state || 'insufficient'}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-700">
+                        {esc.messages?.source_tier || 'mixed'}
+                      </span>
                     </div>
                   </div>
 

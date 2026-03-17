@@ -285,17 +285,10 @@ export function ResearchConfirmation({
 
                   <div className="flex items-center gap-4 mt-3">
                     <div className="flex items-center gap-2">
-                      <div
-                        className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-medium"
-                        style={{
-                          background: `conic-gradient(#2563EB ${item.identity_confidence_percent}%, #1e293b 0)`,
-                        }}
-                      >
-                        <span className="w-6 h-6 rounded-full bg-slate-900 flex items-center justify-center text-slate-300">
-                          {item.identity_confidence_percent}%
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-400">Match</span>
+                      <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">
+                        {item.status.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-xs text-slate-400">Identity review</span>
                     </div>
 
                     {needsManualUpload(item.content_quality) && (

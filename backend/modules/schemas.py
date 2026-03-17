@@ -16,9 +16,12 @@ class ChatRequest(BaseModel):
 
 class ChatMetadata(BaseModel):
     type: str = "metadata"
-    confidence_score: float
     citations: List[str]
     conversation_id: str
+    answerability_state: str = "unknown"
+    source_tier: str = "mixed"
+    review_required: bool = False
+    review_reason: Optional[str] = None
 
 class ChatContent(BaseModel):
     type: str = "content"
@@ -46,8 +49,11 @@ class MessageSchema(BaseModel):
     conversation_id: str
     role: str
     content: str
-    confidence_score: Optional[float]
     citations: Optional[List[str]]
+    answerability_state: Optional[str] = None
+    source_tier: Optional[str] = None
+    review_required: Optional[bool] = None
+    review_reason: Optional[str] = None
     created_at: Optional[datetime]
 
 class ConversationSchema(BaseModel):
@@ -322,7 +328,6 @@ class OwnerMemorySchema(BaseModel):
     value: str
     stance: Optional[str] = None
     intensity: Optional[int] = None
-    confidence: Optional[float] = None
     status: str
     created_at: Optional[datetime] = None
 
@@ -401,7 +406,7 @@ class EventSchema(BaseModel):
 class TriggerConditions(BaseModel):
     intent_contains: Optional[List[str]] = None
     keywords: Optional[List[str]] = None
-    confidence_below: Optional[float] = None
+    review_required: Optional[bool] = None
     group_id: Optional[str] = None
 
 class ActionTriggerSchema(BaseModel):

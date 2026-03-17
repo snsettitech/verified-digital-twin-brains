@@ -6,7 +6,6 @@ export interface Citation {
   id: string;
   filename?: string | null;
   citation_url?: string | null;
-  confidence_score?: number;
   chunk_preview?: string;
 }
 
@@ -140,18 +139,6 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
                           <p className="font-medium text-slate-900 break-words">
                             {citation.filename || 'Unknown Source'}
                           </p>
-                          {/* Confidence Score Badge */}
-                          {citation.confidence_score !== undefined && (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              citation.confidence_score >= 0.7 
-                                ? 'bg-green-100 text-green-700' 
-                                : citation.confidence_score >= 0.4
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}>
-                              {(citation.confidence_score * 100).toFixed(0)}% match
-                            </span>
-                          )}
                         </div>
                         
                         {/* Chunk Preview */}

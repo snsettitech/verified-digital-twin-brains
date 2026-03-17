@@ -160,7 +160,9 @@ class QualityTestResult(BaseModel):
     passed: bool
     has_answer: bool
     has_citations: bool
-    confidence_score: float
+    answerability_state: str
+    source_tier: str
+    review_required: bool
     answer_preview: str
     issues: List[str]
 
@@ -187,7 +189,7 @@ async def run_quality_verification_suite(
     Executes 3 deterministic test prompts and validates:
     - Response contains actual content (not empty/fallback)
     - Citations are returned
-    - Confidence score is above threshold (0.7)
+    - Answerability state is direct/derivable without review requirement
     
     Requires all 3 tests to pass for overall PASS status.
     Records result in twin_verifications table.
@@ -222,7 +224,7 @@ async def run_quality_verification_suite(
             "query": "Based on my uploaded documents, what are my main areas of expertise?"
         },
         {
-            "name": "Confidence Check",
+            "name": "Support State Check",
             "query": "Tell me something about my work."
         }
     ]
@@ -304,7 +306,7 @@ async def run_quality_verification_suite(
 
 
 # Quality verification constants
-QUALITY_CONFIDENCE_THRESHOLD = 0.7
+QUALITY_ALLOWED_STATES = {"direct", "derivable"}
 QUALITY_ANSWER_MIN_LENGTH = 20
 AGENT_STREAM_TIMEOUT_SECONDS = 30
 
@@ -331,7 +333,9 @@ async def _run_single_quality_test(
     issues = []
     has_answer = False
     has_citations = False
-    confidence_score = 0.0
+    answerability_state = "unknown"
+    source_tier = "mixed"
+    review_required = False
     answer_preview = ""
     
     try:
@@ -344,7 +348,9 @@ async def _run_single_quality_test(
                 passed=False,
                 has_answer=False,
                 has_citations=False,
-                confidence_score=0.0,
+                answerability_state="insufficient",
+                source_tier="mixed",
+                review_required=True,
                 answer_preview="",
                 issues=issues
             )
@@ -362,17 +368,15 @@ async def _run_single_quality_test(
                 passed=False,
                 has_answer=False,
                 has_citations=False,
-                confidence_score=0.0,
+                answerability_state="insufficient",
+                source_tier="mixed",
+                review_required=True,
                 answer_preview="",
                 issues=issues
             )
         
         # Check if citations are present
         has_citations = len(contexts) > 0
-        
-        # Get confidence from top context
-        if contexts:
-            confidence_score = float(contexts[0].get("score", 0.0))
         
         # Run a simplified agent stream to get answer
         # We'll collect the response
@@ -410,9 +414,14 @@ async def _run_single_quality_test(
                         citations = tools_payload.get("citations", [])
                         if citations:
                             has_citations = True
-                        conf = tools_payload.get("confidence_score")
-                        if conf is not None:
-                            confidence_score = float(conf)
+                        candidate_state = tools_payload.get("answerability_state")
+                        if isinstance(candidate_state, str) and candidate_state.strip():
+                            answerability_state = candidate_state.strip().lower()
+                        candidate_tier = tools_payload.get("source_tier")
+                        if isinstance(candidate_tier, str) and candidate_tier.strip():
+                            source_tier = candidate_tier.strip().lower()
+                        if tools_payload.get("review_required") is not None:
+                            review_required = bool(tools_payload.get("review_required"))
         except asyncio.TimeoutError:
             print(f"[QualityTest] Agent stream timeout for test '{test_name}'")
             issues.append(f"Test '{test_name}': Agent response timeout (>{AGENT_STREAM_TIMEOUT_SECONDS}s)")
@@ -436,24 +445,30 @@ async def _run_single_quality_test(
             has_answer = False
             issues.append(f"Test '{test_name}': Response was a fallback - the twin doesn't have relevant knowledge")
         
-        # Determine pass/fail
-        # Must have: answer, citations, confidence >= threshold
-        passed = has_answer and has_citations and confidence_score >= QUALITY_CONFIDENCE_THRESHOLD
+        # Determine pass/fail from support state rather than numeric scoring.
+        passed = has_answer and has_citations and answerability_state in QUALITY_ALLOWED_STATES and not review_required
         
         if not has_answer:
             issues.append(f"Test '{test_name}': No meaningful answer generated. Try uploading relevant documents.")
         if not has_citations:
             issues.append(f"Test '{test_name}': No source citations found. Content may not be properly indexed.")
-        if confidence_score < QUALITY_CONFIDENCE_THRESHOLD:
-            issues.append(f"Test '{test_name}': Answer confidence too low ({confidence_score:.0%} < {QUALITY_CONFIDENCE_THRESHOLD:.0%}). Content may need review.")
-        
+        if answerability_state not in QUALITY_ALLOWED_STATES:
+            issues.append(
+                f"Test '{test_name}': Answerability state was '{answerability_state}'. "
+                "Expected a direct or derivable answer."
+            )
+        if review_required:
+            issues.append(f"Test '{test_name}': Response was marked review_required.")
+
         return QualityTestResult(
             test_name=test_name,
             query=query,
             passed=passed,
             has_answer=has_answer,
             has_citations=has_citations,
-            confidence_score=confidence_score,
+            answerability_state=answerability_state,
+            source_tier=source_tier,
+            review_required=review_required,
             answer_preview=answer_preview,
             issues=issues
         )
@@ -469,7 +484,9 @@ async def _run_single_quality_test(
             passed=False,
             has_answer=False,
             has_citations=False,
-            confidence_score=0.0,
+            answerability_state="insufficient",
+            source_tier="mixed",
+            review_required=True,
             answer_preview="",
             issues=issues
         )

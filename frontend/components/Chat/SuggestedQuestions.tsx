@@ -8,7 +8,7 @@ import { API_BASE_URL, API_ENDPOINTS } from '@/lib/constants';
 interface Question {
   question: string;
   count: number;
-  avg_confidence: number;
+  citation_rate?: number;
 }
 
 interface SuggestedQuestionsProps {
