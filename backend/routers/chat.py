@@ -11,7 +11,11 @@ from modules.observability import (
     supabase, get_conversations, get_messages, 
     log_interaction, create_conversation
 )
-from modules.agent import run_agent_stream
+from modules.agent import (
+    run_agent_stream,
+    _build_query_ranked_profile_seed_rows,
+    _merge_twin_row_settings,
+)
 from modules.identity_gate import run_identity_gate
 from modules.interaction_context import (
     InteractionContext,
@@ -206,6 +210,25 @@ def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, str]]:
     }
 
 
+def _load_public_twin_settings(twin_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        result = (
+            supabase.table("twins")
+            .select("id, name, description, settings, created_at, updated_at")
+            .eq("id", twin_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.debug("Public twin settings load failed for %s: %s", twin_id, exc)
+        return None
+
+    row = (result.data or [None])[0]
+    if not isinstance(row, dict):
+        return None
+    return _merge_twin_row_settings(row)
+
+
 def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     snapshot = _load_public_identity_snapshot(twin_id)
     if not snapshot:
@@ -275,6 +298,99 @@ def _smalltalk_response_for_query(query: str) -> str:
     if q_lower in {"hi", "hello", "hey", "hi!", "hello!", "hey!"}:
         return "Hey! Great to chat with you."
     return "Hi. How can I help?"
+
+
+async def _maybe_build_public_profile_seed_fallback(
+    twin_id: str,
+    query: str,
+) -> Optional[Dict[str, Any]]:
+    settings = _load_public_twin_settings(twin_id)
+    if not isinstance(settings, dict):
+        return None
+
+    seed_rows = _build_query_ranked_profile_seed_rows(settings, query, limit=5)
+    if not seed_rows:
+        return None
+
+    evidence_lines: List[str] = []
+    allowed_source_ids: List[str] = []
+    for idx, row in enumerate(seed_rows, 1):
+        text = re.sub(r"\s+", " ", str(row.get("text") or "").strip())
+        if not text:
+            continue
+        evidence_lines.append(f"[{idx}] {text}")
+        source_id = str(row.get("source_id") or "").strip()
+        if source_id and source_id not in allowed_source_ids:
+            allowed_source_ids.append(source_id)
+
+    if not evidence_lines:
+        return None
+
+    prompt = f"""You are answering on behalf of a public digital twin profile.
+Use only the provided canonical profile evidence. Do not use outside knowledge.
+Answer in first person as the profile, but stay factual and concise.
+
+USER QUESTION:
+{query}
+
+PROFILE EVIDENCE:
+{chr(10).join(evidence_lines)}
+
+ALLOWED SOURCE IDS:
+{json.dumps(allowed_source_ids)}
+
+Return STRICT JSON:
+{{
+  "answer_points": ["point 1", "point 2"],
+  "citations": ["source_id"],
+  "confidence": 0.0
+}}
+
+Rules:
+- Maximum 2 answer points.
+- If the evidence is thin, answer cautiously from what is available instead of saying you do not know.
+- Cite only IDs from ALLOWED SOURCE IDS.
+"""
+
+    try:
+        payload, _meta = await inference_router.invoke_json(
+            [{"role": "system", "content": prompt}],
+            task="planner",
+            temperature=0,
+            max_tokens=350,
+        )
+        answer_points = [
+            re.sub(r"\s+", " ", str(item or "").strip())
+            for item in (payload.get("answer_points") or [])
+            if re.sub(r"\s+", " ", str(item or "").strip())
+        ][:2]
+        citations = [
+            cid for cid in (payload.get("citations") or [])
+            if isinstance(cid, str) and cid.strip() and cid in allowed_source_ids
+        ][:3]
+        confidence = float(payload.get("confidence") or 0.0)
+        if answer_points:
+            return {
+                "response": " ".join(answer_points),
+                "citations": citations,
+                "confidence": max(0.58, min(confidence or 0.64, 0.84)),
+                "contexts": seed_rows,
+            }
+    except Exception as exc:
+        logger.debug("Public profile fallback composition failed for %s: %s", twin_id, exc)
+
+    fallback_points = [str(seed_rows[0].get("text") or "").strip()]
+    if len(seed_rows) > 1:
+        fallback_points.append(str(seed_rows[1].get("text") or "").strip())
+    fallback_response = " ".join(part for part in fallback_points if part)
+    if not fallback_response:
+        return None
+    return {
+        "response": fallback_response,
+        "citations": allowed_source_ids[:3],
+        "confidence": 0.6,
+        "contexts": seed_rows,
+    }
 
 
 def _build_identity_gate_clarification_hint(gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -4157,6 +4273,63 @@ async def public_chat_endpoint(
                     workflow_intent = raw_intent
             fallback_message = _uncertainty_message(resolved_context.context.value)
             draft_for_audit = final_response if final_response else fallback_message
+
+            if (
+                not public_action_like_query
+                and (not final_response or final_response.strip() == fallback_message)
+                and not retrieved_context_snippets
+            ):
+                profile_seed_fallback = await _maybe_build_public_profile_seed_fallback(
+                    twin_id,
+                    request.message,
+                )
+                if profile_seed_fallback:
+                    final_response = str(profile_seed_fallback.get("response") or "").strip() or fallback_message
+                    draft_for_audit = final_response
+                    citations = _merge_citations(citations, profile_seed_fallback.get("citations"))
+                    retrieved_context_snippets = _merge_context_snippets(
+                        retrieved_context_snippets,
+                        profile_seed_fallback.get("contexts") or [],
+                    )
+                    confidence_score = max(
+                        float(confidence_score or 0.0),
+                        float(profile_seed_fallback.get("confidence") or 0.0),
+                    )
+                    dialogue_mode = dialogue_mode or "QA_FACT"
+                    intent_label = intent_label or "factual_with_evidence"
+                    workflow_intent = workflow_intent or "answer"
+                    render_strategy = "source_faithful"
+                    module_ids = list(module_ids or [])
+                    if "procedural.fallback.public_profile_seed" not in module_ids:
+                        module_ids.append("procedural.fallback.public_profile_seed")
+                    if not isinstance(routing_decision, dict):
+                        routing_decision = {
+                            "intent": "answer",
+                            "chosen_workflow": "answer",
+                            "output_schema": "workflow.answer.v1",
+                            "action": "answer",
+                            "confidence": confidence_score,
+                            "required_inputs_missing": [],
+                            "clarifying_questions": [],
+                        }
+                    planning_output = {
+                        "answer_points": [final_response],
+                        "citations": citations,
+                        "follow_up_question": "",
+                        "confidence": confidence_score,
+                        "teaching_questions": [],
+                        "render_strategy": "source_faithful",
+                        "reasoning_trace": "Public profile fallback answered from canonical persona evidence.",
+                        "answerability": {
+                            "answerability": "derivable",
+                            "answerable": True,
+                            "confidence": confidence_score,
+                            "reasoning": "Answered from canonical persona profile evidence after retrieval returned no public chunks.",
+                            "missing_information": [],
+                            "ambiguity_level": "low",
+                        },
+                    }
+                    context_trace["public_profile_seed_fallback"] = True
 
             if context_trace.get("public_scope_violation"):
                 draft_for_audit = fallback_message
