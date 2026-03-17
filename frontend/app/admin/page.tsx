@@ -2,9 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { API_BASE_URL } from '@/lib/constants';
-import { getSupabaseClient } from '@/lib/supabase/client';
-
 type HealthState = 'healthy' | 'degraded' | 'unhealthy' | 'checking';
 
 interface TwinSummary {
@@ -118,6 +115,12 @@ interface ActionResult {
   run_id?: string;
 }
 
+interface AdminBootstrapResponse {
+  health: SystemHealth | null;
+  version: VersionInfo | null;
+  twins: TwinSummary[];
+}
+
 function statusFromService(text: string): HealthState {
   if (!text) return 'checking';
   const lower = text.toLowerCase();
@@ -154,7 +157,6 @@ function truncate(text?: string, limit = 180): string {
 }
 
 export default function AdminDiagnosticsPage() {
-  const supabase = getSupabaseClient();
   const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [twins, setTwins] = useState<TwinSummary[]>([]);
@@ -166,13 +168,6 @@ export default function AdminDiagnosticsPage() {
   const [actionState, setActionState] = useState<'idle' | 'seeding' | 'replaying'>('idle');
   const [actionResult, setActionResult] = useState<ActionResult | null>(null);
 
-  const getAuthToken = useCallback(async (): Promise<string | null> => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.access_token ?? null;
-  }, [supabase]);
-
   const fetchGraphDiagnostics = useCallback(
     async (twinId: string) => {
       if (!twinId) {
@@ -183,15 +178,8 @@ export default function AdminDiagnosticsPage() {
       setLoadingGraph(true);
       setError(null);
       try {
-        const token = await getAuthToken();
-        if (!token) {
-          throw new Error('You are not authenticated.');
-        }
-
-        const response = await fetch(`${API_BASE_URL}/admin/graph/diagnostics/${twinId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+        const response = await fetch(`/api/admin/graph/${twinId}`, {
+          cache: 'no-store',
         });
         if (!response.ok) {
           throw new Error(`Graph diagnostics failed with HTTP ${response.status}`);
@@ -205,39 +193,23 @@ export default function AdminDiagnosticsPage() {
         setLoadingGraph(false);
       }
     },
-    [getAuthToken]
+    []
   );
 
   const fetchBaseData = useCallback(async () => {
     setLoadingBase(true);
     setError(null);
     try {
-      const token = await getAuthToken();
-      if (!token) {
-        throw new Error('You are not authenticated.');
+      const response = await fetch('/api/admin/bootstrap', {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error(`Admin bootstrap failed with HTTP ${response.status}`);
       }
-
-      const [healthResponse, versionResponse, twinsResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/observability/health`),
-        fetch(`${API_BASE_URL}/version`),
-        fetch(`${API_BASE_URL}/auth/my-twins`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }),
-      ]);
-
-      if (healthResponse.ok) {
-        setSystemHealth(await healthResponse.json());
-      }
-      if (versionResponse.ok) {
-        setVersion(await versionResponse.json());
-      }
-      if (!twinsResponse.ok) {
-        throw new Error(`Twin list failed with HTTP ${twinsResponse.status}`);
-      }
-
-      const twinRows = (await twinsResponse.json()) as TwinSummary[];
+      const bootstrap = (await response.json()) as AdminBootstrapResponse;
+      setSystemHealth(bootstrap.health);
+      setVersion(bootstrap.version);
+      const twinRows = Array.isArray(bootstrap.twins) ? bootstrap.twins : [];
       setTwins(twinRows);
       setSelectedTwinId((current) => current || twinRows[0]?.id || '');
     } catch (fetchError) {
@@ -245,7 +217,7 @@ export default function AdminDiagnosticsPage() {
     } finally {
       setLoadingBase(false);
     }
-  }, [getAuthToken]);
+  }, []);
 
   useEffect(() => {
     void fetchBaseData();
@@ -264,20 +236,14 @@ export default function AdminDiagnosticsPage() {
       setActionResult(null);
       setError(null);
       try {
-        const token = await getAuthToken();
-        if (!token) {
-          throw new Error('You are not authenticated.');
-        }
-
         const endpoint =
           mode === 'seed'
-            ? `${API_BASE_URL}/admin/graph/seed/${selectedTwinId}`
-            : `${API_BASE_URL}/admin/graph/replay-name-research/${selectedTwinId}`;
+            ? `/api/admin/graph/${selectedTwinId}/seed`
+            : `/api/admin/graph/${selectedTwinId}/replay`;
 
         const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body:
@@ -301,7 +267,7 @@ export default function AdminDiagnosticsPage() {
         setActionState('idle');
       }
     },
-    [API_BASE_URL, fetchGraphDiagnostics, getAuthToken, graphDiagnostics?.twin.name, selectedTwinId]
+    [fetchGraphDiagnostics, graphDiagnostics?.twin.name, selectedTwinId]
   );
 
   const neo4jState = useMemo<HealthState>(() => {
