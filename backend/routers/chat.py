@@ -257,14 +257,19 @@ def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
 
 def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     snapshot = _load_public_identity_snapshot(twin_id)
-    if not snapshot:
+    profile_pack = _load_public_profile_pack(twin_id) if intent == "identity_background" else None
+    if not snapshot and not profile_pack:
         return None
 
-    display_name = snapshot["display_name"]
-    role = snapshot["role"]
-    organization = snapshot["organization"]
-    headline = snapshot["headline"]
-    bio_sentence = _sanitize_public_profile_sentence(snapshot["bio"], display_name)
+    display_name = (
+        _clean_public_profile_text((profile_pack or {}).get("name"))
+        or (snapshot or {}).get("display_name")
+        or "this public profile"
+    )
+    role = (snapshot or {}).get("role", "")
+    organization = (snapshot or {}).get("organization", "")
+    headline = (snapshot or {}).get("headline", "")
+    bio_sentence = _sanitize_public_profile_sentence((snapshot or {}).get("bio") or (profile_pack or {}).get("bio"), display_name)
 
     descriptor = ""
     if role and organization:
@@ -288,6 +293,33 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
             base = f"{display_name} is associated with {headline}."
         else:
             base = f"{display_name} is associated with this public profile."
+    elif intent == "identity_background":
+        seed_rows: List[Dict[str, Any]] = []
+        if isinstance(profile_pack, dict):
+            seed_rows = _merge_context_snippets(
+                seed_rows,
+                _manual_public_pack_seed_rows(profile_pack, "background career politics public life", limit=4),
+            )
+        if snapshot:
+            snapshot_settings = {
+                "name": display_name,
+                "public_profile": {
+                    "headline": headline,
+                    "role": role,
+                    "organization": organization,
+                    "bio": snapshot.get("bio"),
+                    "areas_of_expertise": snapshot.get("areas_of_expertise"),
+                },
+            }
+            seed_rows = _merge_context_snippets(
+                seed_rows,
+                _manual_public_profile_seed_rows(snapshot_settings, "background career politics public life", limit=4),
+            )
+        base = _public_profile_direct_answer(seed_rows, display_name=display_name)
+        if not base and bio_sentence:
+            base = bio_sentence
+        if not base:
+            base = f"My public background is summarized in this profile."
     elif intent == "scope_help":
         expertise = snapshot.get("areas_of_expertise") or []
         if expertise:
