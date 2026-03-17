@@ -172,17 +172,35 @@ def _latest_snapshot_row(*, twin_id: str, scope_id: Optional[str]) -> Optional[D
     return rows[0] if rows else None
 
 
-def _latest_name_research_run(twin_id: str) -> Optional[Dict[str, Any]]:
+def _normalize_name_key(value: Optional[str]) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def _latest_name_research_run(*, tenant_id: str, twin_name: Optional[str]) -> Optional[Dict[str, Any]]:
     result = (
         supabase.table("name_deep_research_runs")
-        .select("id,status,input_name,run_completed_at,created_at")
-        .eq("twin_id", twin_id)
+        .select("id,status,input_name,run_completed_at,created_at,tenant_id")
+        .eq("tenant_id", tenant_id)
         .order("created_at", desc=True)
-        .limit(1)
+        .limit(20)
         .execute()
     )
     rows = result.data or []
-    return rows[0] if rows else None
+    if not rows:
+        return None
+
+    normalized_target = _normalize_name_key(twin_name)
+    if normalized_target:
+        matches = [
+            row for row in rows
+            if _normalize_name_key(row.get("input_name")) == normalized_target
+        ]
+        if matches:
+            completed = [row for row in matches if str(row.get("status") or "").lower() == "completed"]
+            return completed[0] if completed else matches[0]
+
+    completed = [row for row in rows if str(row.get("status") or "").lower() == "completed"]
+    return completed[0] if completed else rows[0]
 
 
 def _latest_name_research_result(run_id: str) -> Optional[Dict[str, Any]]:
@@ -284,7 +302,10 @@ async def graph_diagnostics(twin_id: str, user=Depends(get_current_user)):
         recent_episodes = await client.search("*", num_results=5)
 
     snapshot_row = _latest_snapshot_row(twin_id=twin_id, scope_id=twin["scope_id"])
-    latest_run = _latest_name_research_run(twin_id)
+    latest_run = _latest_name_research_run(
+        tenant_id=twin["tenant_id"],
+        twin_name=twin.get("name"),
+    )
 
     return {
         "twin": {
@@ -378,7 +399,10 @@ async def seed_graph_diagnostics(twin_id: str, request: GraphSeedRequest, user=D
 @router.post("/admin/graph/replay-name-research/{twin_id}")
 async def replay_name_research_graph_materialization(twin_id: str, user=Depends(get_current_user)):
     twin = _load_owned_twin(twin_id, user)
-    latest_run = _latest_name_research_run(twin_id)
+    latest_run = _latest_name_research_run(
+        tenant_id=twin["tenant_id"],
+        twin_name=twin.get("name"),
+    )
     if not latest_run:
         raise HTTPException(status_code=404, detail="No name deep research run found for this twin")
 
