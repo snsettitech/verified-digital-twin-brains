@@ -250,6 +250,19 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     return f"{base.strip()} What are you trying to figure out right now?"
 
 
+def _smalltalk_response_for_query(query: str) -> str:
+    q_lower = str(query or "").lower().strip()
+    if any(marker in q_lower for marker in ("thank you", "thanks")):
+        return "You're welcome."
+    if q_lower in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
+        return "Sounds good."
+    if any(marker in q_lower for marker in ("how are you", "how's your day", "hows your day")):
+        return "Doing well. How can I help?"
+    if q_lower in {"hi", "hello", "hey", "hi!", "hello!", "hey!"}:
+        return "Hey! Great to chat with you."
+    return "Hi. How can I help?"
+
+
 def _build_identity_gate_clarification_hint(gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if not isinstance(gate, dict):
         return None
@@ -2385,18 +2398,8 @@ async def chat(
             query_policy = get_grounding_policy(query)
             if query_policy.get("is_smalltalk"):
                 print(f"[Chat] Smalltalk detected, short-circuiting agent flow")
-                smalltalk_response = "Hi. How can I help?"
-                # Determine smalltalk response based on query type
-                q_lower = query.lower().strip()
-                if any(marker in q_lower for marker in ("thank you", "thanks")):
-                    smalltalk_response = "You're welcome."
-                elif q_lower in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
-                    smalltalk_response = "Sounds good."
-                elif any(marker in q_lower for marker in ("how are you", "how's your day", "hows your day")):
-                    smalltalk_response = "Doing well. How can I help?"
-                elif q_lower in {"hi", "hello", "hey", "hi!", "hello!"}:
-                    smalltalk_response = "Hey! Great to chat with you."
-                
+                smalltalk_response = _smalltalk_response_for_query(query)
+
                 full_response = smalltalk_response
                 confidence_score = 0.9
                 dialogue_mode = "SMALLTALK"
@@ -3706,6 +3709,103 @@ async def public_chat_endpoint(
     allowed, status = check_rate_limit(rate_key, "ip", "requests_per_minute", 10)
     if not allowed:
         raise HTTPException(status_code=429, detail="Rate limit exceeded. Please try again later.")
+
+    public_query_policy = get_grounding_policy(
+        request.message,
+        interaction_context=resolved_context.context.value,
+    )
+    if public_query_policy.get("is_smalltalk"):
+        public_smalltalk_text = _smalltalk_response_for_query(request.message)
+        decision_payload = {
+            "intent": "answer",
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+            "action": "answer",
+            "confidence": 0.9,
+            "required_inputs_missing": [],
+            "clarifying_questions": [],
+        }
+        return {
+            "status": "answer",
+            "message": public_smalltalk_text,
+            "response": public_smalltalk_text,
+            "response_type": "answer",
+            "requires_user_input": False,
+            "citations": [],
+            "citation_details": [],
+            "confidence_score": 0.9,
+            "owner_memory_refs": [],
+            "owner_memory_topics": [],
+            "clarification_hint": None,
+            "clarification_options": [],
+            "dialogue_mode": "SMALLTALK",
+            "intent_label": "meta_or_system",
+            "workflow_intent": "answer",
+            "module_ids": ["procedural.style.smalltalk"],
+            "routing_decision": decision_payload,
+            "render_strategy": "source_faithful",
+            "query_class": str(public_query_policy.get("query_class") or "smalltalk"),
+            "quote_intent": False,
+            "answerability_state": "direct",
+            "planner_action": "answer",
+            "retrieval_stats": {
+                "chunk_count": 0,
+                "dense_top1": 0.0,
+                "dense_top5_avg": 0.0,
+                "sparse_top1": 0.0,
+                "sparse_top5_avg": 0.0,
+                "rerank_top1": 0.0,
+                "rerank_top5_avg": 0.0,
+                "evidence_block_counts": {},
+            },
+            "selected_evidence_block_types": [],
+            "debug_snapshot": {
+                "query_class": str(public_query_policy.get("query_class") or "smalltalk"),
+                "requires_evidence": False,
+                "quote_intent": False,
+                "answerability_state": "direct",
+                "planner_action": "answer",
+                "retrieval_stats": {
+                    "chunk_count": 0,
+                    "dense_top1": 0.0,
+                    "dense_top5_avg": 0.0,
+                    "sparse_top1": 0.0,
+                    "sparse_top5_avg": 0.0,
+                    "rerank_top1": 0.0,
+                    "rerank_top5_avg": 0.0,
+                    "evidence_block_counts": {},
+                },
+                "selected_evidence_block_types": [],
+            },
+            "grounding_verifier": {
+                "supported": None,
+                "support_ratio": None,
+                "total_claims": 0,
+                "supported_claims": 0,
+                "unsupported_claims": [],
+            },
+            "online_eval": {
+                "enabled": False,
+                "ran": False,
+                "skipped_reason": "public_smalltalk",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            },
+            "runtime_confidence_gate": {
+                "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+                "applied": False,
+                "decision": "skipped",
+                "skip_reason": "public_smalltalk",
+            },
+            "used_owner_memory": False,
+            "model_used": inference_router.get_active_model(),
+            "provider_used": inference_router.get_active_provider(),
+            "identity_gate_mode": "public",
+            **context_trace,
+        }
 
     public_fastpath = classify_fastpath_intent(request.message)
     public_fastpath_text = None

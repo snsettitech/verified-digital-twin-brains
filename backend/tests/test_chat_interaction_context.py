@@ -431,6 +431,36 @@ def test_public_share_answer_includes_persona_audit_fields():
         assert "rewrite_applied" in body
 
 
+def test_public_share_smalltalk_short_circuits_before_uncertainty():
+    gate_mock = AsyncMock(side_effect=AssertionError("identity gate should not run for public smalltalk"))
+
+    with patch("routers.chat.ensure_twin_active"), patch(
+        "modules.share_links.validate_share_token", return_value=True
+    ), patch(
+        "modules.share_links.get_public_group_for_twin", return_value={"id": "group-public"}
+    ), patch(
+        "modules.rate_limiting.check_rate_limit", return_value=(True, {})
+    ), patch(
+        "modules.actions_engine.EventEmitter.emit", return_value=None
+    ), patch(
+        "routers.chat.run_identity_gate", gate_mock
+    ), patch(
+        "routers.chat.run_agent_stream", side_effect=AssertionError("agent stream should not run for public smalltalk")
+    ):
+        resp = client.post(
+            "/public/chat/twin-1/token-abcdef12",
+            json={"message": "hi"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "answer"
+        assert body["response"] == "Hey! Great to chat with you."
+        assert body["dialogue_mode"] == "SMALLTALK"
+        assert body["query_class"] == "smalltalk"
+        assert body["online_eval"]["skipped_reason"] == "public_smalltalk"
+        assert body["response"] != UNCERTAINTY_RESPONSE
+
+
 def test_context_mismatch_forces_new_conversation():
     app.dependency_overrides[get_current_user] = _owner_user
     gate_mock = AsyncMock(
