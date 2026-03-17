@@ -289,6 +289,7 @@ async def graph_diagnostics(twin_id: str, user=Depends(get_current_user)):
     neo4j_status = _neo4j_probe()
     outbox = get_graph_outbox()
     config = get_graph_memory_config()
+    snapshot_row = _latest_snapshot_row(twin_id=twin_id, scope_id=twin["scope_id"])
 
     recent_episodes: List[Dict[str, Any]] = []
     if neo4j_status.get("status") == "connected" and config.is_read_allowed():
@@ -301,7 +302,20 @@ async def graph_diagnostics(twin_id: str, user=Depends(get_current_user)):
         )
         recent_episodes = await client.search("*", num_results=5)
 
-    snapshot_row = _latest_snapshot_row(twin_id=twin_id, scope_id=twin["scope_id"])
+    if not recent_episodes and isinstance(snapshot_row, dict):
+        snapshot_data = snapshot_row.get("snapshot_data")
+        if isinstance(snapshot_data, dict):
+            candidate_episodes = snapshot_data.get("episodes")
+            if isinstance(candidate_episodes, list):
+                recent_episodes = [
+                    {
+                        "name": str(item.get("name") or "Episode").strip(),
+                        "content": str(item.get("content") or "").strip(),
+                    }
+                    for item in candidate_episodes[:5]
+                    if isinstance(item, dict)
+                ]
+
     latest_run = _latest_name_research_run(
         tenant_id=twin["tenant_id"],
         twin_name=twin.get("name"),
