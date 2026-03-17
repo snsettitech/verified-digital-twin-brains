@@ -10,9 +10,11 @@ Production-ready Graphiti client with:
 """
 
 import asyncio
+import hashlib
 import os
 import time
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 from concurrent.futures import ProcessPoolExecutor
@@ -445,49 +447,68 @@ class GraphMemoryCore:
                 f"scope={self.scope_id} corr={self.correlation_id}"
             )
             return job_id
-        
-        # Synchronous write with timeout
-        async def _do_create():
-            graphiti = self._get_graphiti()
-            if not graphiti:
-                raise GraphMemoryUnavailable("Graphiti not available")
-            
-            from datetime import datetime
-            
-            # Graphiti.add_episode is async - await it directly
-            result = await graphiti.add_episode(
-                name=name,
-                episode_body=body,
-                source_description=f"{source_type}:{source_ref}",
-                reference_time=datetime.now(),
-                group_id=self.group_id  # Uses scope_id for isolation
-            )
-            return result
-        
+
+        # Synchronous write with timeout. Use a direct Episode upsert first so
+        # administrative replay/seed flows and the worker path do not depend on
+        # Graphiti extraction latency just to persist episode memory.
         try:
-            result = await self._execute_with_timeout(
-                "create_episode", 
-                _do_create(),
-                timeout_ms=self.config.extraction_timeout_ms
+            episode_id = await self._execute_with_timeout(
+                "create_episode",
+                self._create_episode_direct(
+                    name=name,
+                    body=body,
+                    source_type=source_type,
+                    source_ref=source_ref,
+                    timestamp=timestamp,
+                ),
+                timeout_ms=self.config.extraction_timeout_ms,
             )
-            
             self.circuit_breaker.record_success()
-            
-            # Extract episode ID from AddEpisodeResults object
-            episode_id = None
-            if result:
-                if hasattr(result, 'episode'):
-                    episode_id = result.episode.uuid if hasattr(result.episode, 'uuid') else str(result.episode)
-                elif hasattr(result, 'uuid'):
-                    episode_id = result.uuid
-                else:
-                    episode_id = str(result)
             logger.info(
                 f"[GraphMemoryCore] Episode created: {episode_id} "
                 f"scope={self.scope_id} corr={self.correlation_id}"
             )
             return episode_id
-            
+
+        except Exception as direct_error:
+            logger.warning(
+                "[GraphMemoryCore] Direct episode write failed, falling back to Graphiti: %s "
+                "scope=%s corr=%s",
+                direct_error,
+                self.scope_id,
+                self.correlation_id,
+            )
+
+        async def _do_create_via_graphiti():
+            graphiti = self._get_graphiti()
+            if not graphiti:
+                raise GraphMemoryUnavailable("Graphiti not available")
+
+            result = await graphiti.add_episode(
+                name=name,
+                episode_body=body,
+                source_description=f"{source_type}:{source_ref}",
+                reference_time=datetime.now(),
+                group_id=self.group_id,
+            )
+            if hasattr(result, "episode"):
+                return result.episode.uuid if hasattr(result.episode, "uuid") else str(result.episode)
+            if hasattr(result, "uuid"):
+                return result.uuid
+            return str(result)
+
+        try:
+            episode_id = await self._execute_with_timeout(
+                "create_episode",
+                _do_create_via_graphiti(),
+                timeout_ms=self.config.extraction_timeout_ms,
+            )
+            self.circuit_breaker.record_success()
+            logger.info(
+                f"[GraphMemoryCore] Episode created via Graphiti: {episode_id} "
+                f"scope={self.scope_id} corr={self.correlation_id}"
+            )
+            return episode_id
         except Exception as e:
             self.circuit_breaker.record_failure()
             logger.error(
@@ -495,6 +516,113 @@ class GraphMemoryCore:
                 f"scope={self.scope_id} corr={self.correlation_id}"
             )
             raise GraphMemoryUnavailable(f"Failed to create episode: {e}")
+
+    def _make_episode_id(
+        self,
+        *,
+        name: str,
+        body: str,
+        source_type: str,
+        source_ref: str,
+    ) -> str:
+        payload = f"{self.group_id}:{source_type}:{source_ref}:{name}:{body}"
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _normalize_episode_timestamp(timestamp: Optional[str]) -> str:
+        raw = str(timestamp or "").strip()
+        if raw:
+            return raw
+        return datetime.now(timezone.utc).isoformat()
+
+    async def _create_episode_direct(
+        self,
+        *,
+        name: str,
+        body: str,
+        source_type: str,
+        source_ref: str,
+        timestamp: Optional[str] = None,
+    ) -> str:
+        if not _NEO4J_AVAILABLE:
+            raise GraphMemoryUnavailable("Neo4j driver not available")
+
+        driver = _get_pooled_driver(
+            self.config.neo4j_uri,
+            self.config.neo4j_user or "neo4j",
+            self.config.neo4j_password,
+        )
+        if not driver:
+            raise GraphMemoryUnavailable("Neo4j driver not available")
+
+        episode_id = self._make_episode_id(
+            name=name,
+            body=body,
+            source_type=source_type,
+            source_ref=source_ref,
+        )
+        created_at = self._normalize_episode_timestamp(timestamp)
+        source_description = f"{source_type}:{source_ref}"
+        params = {
+            "episode_id": episode_id,
+            "group_id": self.group_id,
+            "scope_id": self.scope_id,
+            "tenant_id": self.tenant_id,
+            "twin_id": self.twin_id or "default",
+            "name": name,
+            "body": body,
+            "source_type": source_type,
+            "source_ref": source_ref,
+            "source_description": source_description,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "correlation_id": self.correlation_id,
+        }
+        cypher = """
+        MERGE (e:Episode {episode_id: $episode_id, group_id: $group_id})
+        ON CREATE SET
+            e.scope_id = $scope_id,
+            e.tenant_id = $tenant_id,
+            e.twin_id = $twin_id,
+            e.name = $name,
+            e.content = $body,
+            e.body = $body,
+            e.episode_body = $body,
+            e.text = $body,
+            e.source_type = $source_type,
+            e.source_ref = $source_ref,
+            e.source_description = $source_description,
+            e.created_at = $created_at,
+            e.createdAt = $created_at,
+            e.correlation_id = $correlation_id
+        SET
+            e.scope_id = $scope_id,
+            e.tenant_id = $tenant_id,
+            e.twin_id = $twin_id,
+            e.name = $name,
+            e.content = $body,
+            e.body = $body,
+            e.episode_body = $body,
+            e.text = $body,
+            e.source_type = $source_type,
+            e.source_ref = $source_ref,
+            e.source_description = $source_description,
+            e.updated_at = $updated_at,
+            e.updatedAt = $updated_at,
+            e.correlation_id = $correlation_id
+        RETURN e.episode_id AS episode_id
+        """
+
+        session_kwargs: Dict[str, Any] = {}
+        if self.config.neo4j_database:
+            session_kwargs["database"] = self.config.neo4j_database
+
+        async with driver.session(**session_kwargs) as session:
+            result = await session.run(cypher, **params)
+            record = await result.single()
+            if not record:
+                raise GraphMemoryUnavailable("Neo4j did not return an episode record")
+            return str(record.get("episode_id") or episode_id)
     
     async def _search_episodes_direct(
         self, query: str, num_results: int = 10
