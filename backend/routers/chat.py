@@ -334,7 +334,11 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
                 seed_rows,
                 _manual_public_pack_seed_rows(profile_pack, "background career politics public life", limit=4),
             )
-        base = _public_profile_direct_answer(seed_rows, display_name=display_name)
+        biography_rows = [
+            row for row in seed_rows
+            if _clean_public_profile_text(row.get("seed_type")).lower() in {"bio", "work", "contribution", "achievement", "education"}
+        ]
+        base = _public_profile_direct_answer(biography_rows or seed_rows, display_name=display_name)
         if not base and bio_sentence:
             base = bio_sentence
         if not base:
@@ -649,6 +653,12 @@ def _public_profile_direct_answer(seed_rows: List[Dict[str, Any]], *, display_na
             text = re.sub(rf"^{re.escape(display_name)}\s+served\b", "I served", text, flags=re.IGNORECASE)
             text = re.sub(rf"^{re.escape(display_name)}\s+worked\b", "I worked", text, flags=re.IGNORECASE)
             text = re.sub(rf"^{re.escape(display_name)}\s+joined\b", "I joined", text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{re.escape(display_name)}\s+is\b", "I am", text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{re.escape(display_name)}\s+was\b", "I was", text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{re.escape(display_name)}\s+has been\b", "I have been", text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{re.escape(display_name)}\s+served\b", "I served", text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{re.escape(display_name)}\s+worked\b", "I worked", text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b{re.escape(display_name)}\s+joined\b", "I joined", text, flags=re.IGNORECASE)
         text = re.sub(r"^He\s+", "I ", text, flags=re.IGNORECASE)
         text = re.sub(r"^She\s+", "I ", text, flags=re.IGNORECASE)
         if text and not re.match(r"^(I|My)\b", text):
