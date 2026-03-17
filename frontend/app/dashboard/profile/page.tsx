@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '@/lib/constants';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 import { useToast, TrainingMetrics } from '@/components/ui';
 import type { TrainingMetricsData } from '@/components/ui/TrainingMetrics';
+import { LinkedInImportCard } from '@/components/dashboard/LinkedInImportCard';
 
 type ProfileDraft = {
   displayName: string;
@@ -609,6 +610,12 @@ function ProfilePageContent() {
     );
   }
 
+  const linkedInImportDone = Boolean(
+    isRecord(effectiveTwin?.settings) &&
+    isRecord((effectiveTwin.settings as Record<string, unknown>).public_profile_meta) &&
+    ((effectiveTwin.settings as Record<string, unknown>).public_profile_meta as Record<string, unknown>).linkedin_export_imported
+  );
+
   return (
     <div className="-mx-4 min-h-[calc(100vh-8rem)] bg-[#f3f1ef] px-4 pb-28 pt-4 md:-mx-8 md:px-8 md:pt-8">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -624,6 +631,11 @@ function ProfilePageContent() {
             {draft.mindLabel}
           </div>
         </div>
+
+        {/* LinkedIn import nudge — shown once until user imports or dismisses */}
+        {effectiveTwin && !linkedInImportDone && (
+          <LinkedInImportCard twinId={effectiveTwin.id} onImported={refreshTwins} />
+        )}
 
         <section className="relative overflow-hidden rounded-[32px] border border-white/70 bg-white/80 p-6 shadow-[0_20px_55px_rgba(15,23,42,0.08)] backdrop-blur-sm md:p-10">
           <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-gradient-to-br from-orange-100/80 to-amber-100/40 blur-3xl" />

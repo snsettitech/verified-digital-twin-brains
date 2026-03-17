@@ -4,10 +4,13 @@ persona_link_compile.py
 Phase 1-5 API Router: Link-First Persona Compiler endpoints.
 """
 
+import logging
 import os
 import tempfile
 import uuid
 from typing import List, Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel, Field
 from datetime import datetime
@@ -27,7 +30,8 @@ from modules.persona_claim_inference import (
     handle_clarification_answer,
 )
 from modules.persona_bio_generator import generate_and_store_bios
-from modules.public_profile_pack import build_existing_profile_projection, merge_materialized_profile_settings
+from modules.public_profile_pack import build_existing_profile_projection, merge_materialized_profile_settings, merge_profile_fields_partial
+from modules.profile_field_extractor import extract_profile_fields
 
 
 router = APIRouter(tags=["persona-link-compile"])
@@ -531,6 +535,19 @@ async def _process_job_impl(job_id: str):
     try:
         claim_chunks: List[Dict[str, Any]] = []
         processed_source_count = 0
+        extracted_resume_fields: Optional[Dict[str, Any]] = None
+
+        # Fetch current public profile once — used for extraction skip logic
+        _profile_row = (
+            supabase.table("twins")
+            .select("settings")
+            .eq("id", twin_id)
+            .single()
+            .execute()
+        )
+        current_public_profile: Dict[str, Any] = (
+            (_profile_row.data or {}).get("settings") or {}
+        ).get("public_profile") or {}
 
         if mode == "A":
             source_files = job.get("source_files", []) or []
@@ -562,6 +579,22 @@ async def _process_job_impl(job_id: str):
                 _mark_source_live(source_id, num_chunks)
                 claim_chunks.append({"text": content, "source_id": source_id})
                 processed_source_count += 1
+
+                # Extract structured profile fields from resume uploads
+                filename_lower = filename.lower()
+                if any(kw in filename_lower for kw in ("resume", "cv", "curriculum")):
+                    try:
+                        fields = await extract_profile_fields(
+                            text=content,
+                            source_type="resume",
+                            existing_profile=current_public_profile,
+                        )
+                        if fields and not extracted_resume_fields:
+                            extracted_resume_fields = fields
+                    except Exception as _exc:
+                        logger.warning(
+                            "persona_link_compile: resume extraction failed: %s", _exc
+                        )
         
         elif mode == "B":
             source_files = job.get("source_files", []) or []
@@ -707,6 +740,15 @@ async def _process_job_impl(job_id: str):
         twin_payload = twin_row.data or {}
         current_settings = twin_payload.get("settings") or {}
         current_public_profile = current_settings.get("public_profile") or {}
+
+        # Merge resume-extracted profile fields (fills empty fields, never overwrites higher-confidence data)
+        if extracted_resume_fields:
+            current_public_profile = merge_profile_fields_partial(
+                current_public_profile,
+                extracted_resume_fields,
+                source_confidence=extracted_resume_fields.get("confidence", 0.60),
+            )
+
         staged_public_profile = {
             **current_public_profile,
         }

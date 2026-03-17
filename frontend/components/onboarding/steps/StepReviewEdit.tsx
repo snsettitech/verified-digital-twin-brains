@@ -105,6 +105,7 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [workExperience, setWorkExperience] = useState<WorkEntry[]>([]);
   const [education, setEducation] = useState<EducationEntry[]>([]);
+  const [completenessScore, setCompletenessScore] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -137,6 +138,11 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
         setImageUrl(pp.image_url ?? pp.avatar_url ?? null);
         setWorkExperience(pp.work_experience ?? []);
         setEducation(pp.education ?? []);
+        // Completeness score for sparse-profile nudge
+        const meta = twin?.settings?.public_profile_meta ?? {};
+        if (typeof meta.completeness_score === 'number') {
+          setCompletenessScore(meta.completeness_score);
+        }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'Failed to load profile');
       } finally {
@@ -260,6 +266,29 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
           We researched the web and built your profile. Confirm or edit anything before heading to your dashboard.
         </p>
       </div>
+
+      {/* Sparse profile nudge — shown when completeness < 50% */}
+      {completenessScore !== null && completenessScore < 50 && (
+        <div className="p-4 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="text-sm font-medium text-amber-400 mb-0.5">Your profile is fairly sparse</p>
+            <p className="text-xs text-amber-400/70 leading-5">
+              We didn&apos;t find much about you online. Add your LinkedIn URL, personal website,
+              or upload a resume to fill it in.{' '}
+              <button
+                type="button"
+                onClick={() => setShowAddContent(true)}
+                className="underline hover:no-underline"
+              >
+                Add content now →
+              </button>
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Profile image */}
       <Card className="p-5 bg-slate-900 border-slate-700">

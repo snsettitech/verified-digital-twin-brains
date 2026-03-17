@@ -72,6 +72,9 @@ from routers import (
 
     # Products: keyword-matched product promotion in chat
     products,
+
+    # LinkedIn/data import endpoints
+    import_routes,
 )
 from modules.specializations import get_specialization
 
@@ -257,6 +260,10 @@ print("[INFO] Profile routes enabled (Person Completeness v1)")
 # Products: keyword-matched product promotion in chat
 app.include_router(products.router)
 print("[INFO] Products routes enabled")
+
+# LinkedIn/data import endpoints
+app.include_router(import_routes.router)
+print("[INFO] Import routes enabled (LinkedIn export)")
 
 # Print feature flag summary after all routers loaded
 print_feature_flag_summary()

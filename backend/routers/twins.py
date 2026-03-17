@@ -961,6 +961,76 @@ async def recompute_twin_metrics(twin_id: str, user=Depends(verify_owner)):
         raise HTTPException(status_code=500, detail=f"Failed to recompute metrics: {str(e)}")
 
 
+async def _sync_bio_to_pinecone(twin_id: str, bio_text: str) -> None:
+    """
+    Fire-and-forget: sync the edited bio as a dedicated Pinecone chunk so the
+    chat agent can retrieve the latest profile bio from vector search.
+
+    Replaces any previous bio source so there's exactly one bio chunk at a time.
+    """
+    import asyncio
+    import uuid
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        from modules.ingestion import process_and_index_text
+
+        # Read current bio_source_id from profile_meta
+        meta_row = (
+            supabase.table("twins")
+            .select("settings")
+            .eq("id", twin_id)
+            .single()
+            .execute()
+        )
+        settings = (meta_row.data or {}).get("settings") or {}
+        profile_meta = settings.get("public_profile_meta") or {}
+        old_bio_source_id: Optional[str] = profile_meta.get("bio_source_id")
+
+        # Remove old bio source from Pinecone + DB
+        if old_bio_source_id:
+            try:
+                supabase.table("sources").delete().eq("id", old_bio_source_id).execute()
+            except Exception:
+                pass
+
+        # Create new source row
+        source_id = str(uuid.uuid4())
+        supabase.table("sources").upsert({
+            "id": source_id,
+            "twin_id": twin_id,
+            "filename": "Profile Bio",
+            "file_size": len(bio_text),
+            "content_text": bio_text,
+            "status": "processing",
+        }).execute()
+
+        # Index to Pinecone
+        num_chunks = await process_and_index_text(
+            source_id=source_id,
+            twin_id=twin_id,
+            text=bio_text,
+            metadata_override={
+                "filename": "Profile Bio",
+                "type": "profile_bio",
+                "source_type": "bio",
+            },
+        )
+        supabase.table("sources").update({"status": "live", "chunk_count": num_chunks}).eq("id", source_id).execute()
+
+        # Persist bio_source_id for future replacement — re-use already-fetched settings
+        updated_settings = dict(settings)
+        updated_meta = dict(updated_settings.get("public_profile_meta") or {})
+        updated_meta["bio_source_id"] = source_id
+        updated_settings["public_profile_meta"] = updated_meta
+        supabase.table("twins").update({"settings": updated_settings}).eq("id", twin_id).execute()
+
+        _log.info("bio_pinecone_sync: synced bio for twin %s (source %s, %d chunks)", twin_id, source_id, num_chunks)
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("bio_pinecone_sync: failed for twin %s: %s", twin_id, exc)
+
+
 @router.patch("/twins/{twin_id}")
 async def patch_twin(
     twin_id: str,
@@ -989,6 +1059,7 @@ async def patch_twin(
 
     settings_changed = False
     merged_settings: Dict[str, Any] = {}
+    twin_res: Any = None  # populated inside settings_changed block; initialized here for type safety
 
     if isinstance(update.settings, dict):
         settings_changed = True
@@ -1055,11 +1126,27 @@ async def patch_twin(
             raise HTTPException(status_code=404, detail="Twin not found")
         return twin_res.data
 
-    update_payload["updated_at"] = datetime.utcnow().isoformat()
+    # Capture old bio before overwriting (for change detection)
+    old_bio: Optional[str] = None
+    if settings_changed and twin_res.data:
+        old_bio = (
+            (twin_res.data.get("settings") or {})
+            .get("public_profile") or {}
+        ).get("bio")
+
     response = supabase.table("twins").update(update_payload).eq("id", twin_id).execute()
 
     if not response.data:
         raise HTTPException(status_code=404, detail="Twin not found or update failed")
+
+    # Fire-and-forget bio → Pinecone sync when bio is explicitly edited
+    if settings_changed:
+        new_bio: Optional[str] = (
+            merged_settings.get("public_profile") or {}
+        ).get("bio")
+        if new_bio and new_bio != old_bio:
+            import asyncio
+            asyncio.create_task(_sync_bio_to_pinecone(twin_id, new_bio))
 
     return response.data
 

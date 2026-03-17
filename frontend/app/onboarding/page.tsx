@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, Suspense, useCallback } from 'react';
+import React, { useState, Suspense, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { UnifiedInputStep, type UnifiedInputData } from '@/components/onboarding/steps/UnifiedInputStep';
-import { StepResearch } from '@/components/onboarding/steps/StepResearch';
+import { StepProgress, type ProgressStep, getResearchStepLabel } from '@/components/onboarding/StepProgress';
 import { StepReviewEdit } from '@/components/onboarding/steps/StepReviewEdit';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
@@ -11,14 +11,12 @@ import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 // Types
 // =============================================================================
 
-type OnboardingStep = 'input' | 'deep-research' | 'research' | 'review-edit';
+type OnboardingStep = 'input' | 'progress' | 'review-edit';
 
 interface Twin {
   id: string;
   name: string;
   status: string;
-  specialization?: string;
-  settings?: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -43,57 +41,19 @@ const STOP_WORDS = new Set([
   'as', 'on', 'co', 'inc', 'llc', 'ltd', 'group',
 ]);
 
-function isWikipediaConfidentMatch(
-  wiki: WikiSummary,
-  headline: string | undefined,
-): boolean {
+function isWikipediaConfidentMatch(wiki: WikiSummary, headline: string | undefined): boolean {
   if (wiki.type === 'disambiguation') return false;
-
   const combined = `${wiki.description ?? ''} ${wiki.extract ?? ''}`.toLowerCase();
-
-  const hasPerson = PERSON_SIGNALS.some((s) => combined.includes(s));
+  const hasPerson = PERSON_SIGNALS.some(s => combined.includes(s));
   if (!hasPerson) return false;
-
   if (!headline) return true;
-
   const keywords = headline
     .toLowerCase()
     .split(/[\s,|\/\-]+/)
-    .map((w) => w.replace(/[^a-z0-9]/g, ''))
-    .filter((w) => w.length >= 4 && !STOP_WORDS.has(w));
-
+    .map(w => w.replace(/[^a-z0-9]/g, ''))
+    .filter(w => w.length >= 4 && !STOP_WORDS.has(w));
   if (keywords.length === 0) return true;
-
-  return keywords.some((kw) => combined.includes(kw));
-}
-
-// =============================================================================
-// Deep Research Progress (inline component)
-// =============================================================================
-
-function DeepResearchProgress({ status, name }: { status: string; name: string }) {
-  const statusLabels: Record<string, string> = {
-    created: 'Starting research…',
-    searching: 'Searching the web…',
-    crawling: 'Reading public content…',
-    extracting: 'Extracting information…',
-    synthesizing: 'Synthesising profile…',
-    completed: 'Research complete!',
-    failed: 'Research failed.',
-  };
-  const label = statusLabels[status] ?? status;
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-      <div className="text-center max-w-md">
-        {status !== 'failed' && (
-          <div className="w-14 h-14 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
-        )}
-        <h2 className="text-2xl font-bold mb-2">Researching {name}</h2>
-        <p className="text-slate-400">{label}</p>
-      </div>
-    </div>
-  );
+  return keywords.some(kw => combined.includes(kw));
 }
 
 // =============================================================================
@@ -106,40 +66,37 @@ function OnboardingContent() {
   const returnTo = searchParams.get('returnTo');
 
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('input');
-  const [inputData, setInputData] = useState<UnifiedInputData | null>(null);
   const [twin, setTwin] = useState<Twin | null>(null);
-  const [submittedUrls, setSubmittedUrls] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [deepResearchStatus, setDeepResearchStatus] = useState('created');
+  const [inputData, setInputData] = useState<UnifiedInputData | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const trackEvent = useCallback((event: string, properties?: Record<string, unknown>) => {
-    if (typeof window !== 'undefined' && (window as unknown as { posthog?: { capture: (e: string, p?: Record<string, unknown>) => void } }).posthog) {
-      (window as unknown as { posthog: { capture: (e: string, p?: Record<string, unknown>) => void } }).posthog.capture(event, properties);
+  // Progress steps state
+  const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
+
+  // Ref to allow updating a single step without full re-render churn
+  const stepsRef = useRef<ProgressStep[]>([]);
+
+  const updateStep = useCallback((id: string, patch: Partial<ProgressStep>) => {
+    stepsRef.current = stepsRef.current.map(s => s.id === id ? { ...s, ...patch } : s);
+    setProgressSteps([...stepsRef.current]);
+  }, []);
+
+  const trackEvent = useCallback((event: string, props?: Record<string, unknown>) => {
+    if (typeof window !== 'undefined') {
+      const ph = (window as unknown as { posthog?: { capture: (e: string, p?: Record<string, unknown>) => void } }).posthog;
+      ph?.capture(event, props);
     }
-    console.log(`[Telemetry] ${event}`, properties);
+    console.log(`[Telemetry] ${event}`, props);
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Phase 1 — LinkedIn pre-seed
-  // Writes LinkedIn image + social link into public_profile before research starts.
-  // Sets image_source_type="oauth" so the compiler never overwrites the LinkedIn photo.
+  // Phase A — LinkedIn OAuth pre-seed (image + social link, locked)
   // ---------------------------------------------------------------------------
-  const prePopulateLinkedInFields = useCallback(async (
-    twinId: string,
-    data: UnifiedInputData,
-  ): Promise<void> => {
-    if (!data.linkedInIdentity) return;
-
+  const prePopulateLinkedInFields = useCallback(async (twinId: string, data: UnifiedInputData): Promise<void> => {
     const identity = data.linkedInIdentity;
+    if (!identity) return;
 
-    // Only seed what the deep research pipeline CANNOT derive from web scraping:
-    // - LinkedIn photo (LinkedIn blocks crawlers — pipeline would fall back to Wikipedia)
-    // - LinkedIn profile URL (so it appears in social_links alongside research-found links)
-    //
-    // Do NOT pre-seed display_name, headline, bio, role, etc. — the pipeline's
-    // build_research_profile_projection() will set these correctly from research data
-    // and would overwrite our guesses anyway.
     const publicProfile: Record<string, unknown> = {};
     if (identity.imageUrl) {
       publicProfile.image_url = identity.imageUrl;
@@ -148,14 +105,10 @@ function OnboardingContent() {
     if (identity.profileUrl) {
       publicProfile.social_links = { linkedin: identity.profileUrl };
     }
-
-    // Nothing to seed — skip the PATCH entirely
     if (!identity.imageUrl && !identity.profileUrl) return;
 
     const settingsPatch: Record<string, unknown> = { public_profile: publicProfile };
     if (identity.imageUrl) {
-      // Mark as oauth so _resolve_profile_image() treats it as owner-locked
-      // and never overwrites with a Wikipedia thumbnail
       settingsPatch.public_profile_meta = {
         image_source_type: 'oauth',
         image_source_url: identity.profileUrl ?? identity.imageUrl,
@@ -168,15 +121,33 @@ function OnboardingContent() {
         body: JSON.stringify({ settings: settingsPatch }),
       });
     } catch (err) {
-      // Best-effort — never block the main flow
-      console.warn('[Onboarding] Phase 1 LinkedIn pre-seed failed (non-blocking):', err);
+      console.warn('[Onboarding] LinkedIn pre-seed failed (non-blocking):', err);
     }
   }, []);
 
   // ---------------------------------------------------------------------------
-  // Phase 2 — Wikipedia fast-index
-  // Tries to find a Wikipedia article for the person and fires a Mode C job.
-  // Best-effort: never awaited, never blocks.
+  // Phase B — Resume Mode A (parallel, fire-and-forget)
+  // ---------------------------------------------------------------------------
+  const submitResume = useCallback((twinId: string, file: File): void => {
+    void (async () => {
+      try {
+        const formData = new FormData();
+        formData.append('twin_id', twinId);
+        formData.append('files', file);
+        await authFetchStandalone('/persona/link-compile/jobs/mode-a', {
+          method: 'POST',
+          body: formData,
+        });
+        updateStep('resume', { status: 'done' });
+      } catch (err) {
+        console.warn('[Onboarding] Resume Mode A failed (non-blocking):', err);
+        updateStep('resume', { status: 'skipped' });
+      }
+    })();
+  }, [updateStep]);
+
+  // ---------------------------------------------------------------------------
+  // Phase C — Wikipedia fast-index (fire-and-forget, all users)
   // ---------------------------------------------------------------------------
   const tryWikipediaFastIndex = useCallback((
     twinId: string,
@@ -190,29 +161,30 @@ function OnboardingContent() {
           `https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`,
           { signal: AbortSignal.timeout(8000) },
         );
-        if (!wikiRes.ok) return;
-
+        if (!wikiRes.ok) {
+          updateStep('wikipedia', { status: 'skipped' });
+          return;
+        }
         const wiki: WikiSummary = await wikiRes.json();
-        if (!isWikipediaConfidentMatch(wiki, headline)) return;
-
+        if (!isWikipediaConfidentMatch(wiki, headline)) {
+          updateStep('wikipedia', { status: 'skipped' });
+          return;
+        }
         const pageUrl = wiki.content_urls?.desktop?.page
           ?? `https://en.wikipedia.org/wiki/${slug}`;
-
-        // Fire and forget — do not await or check result
-        authFetchStandalone('/persona/link-compile/jobs/mode-c', {
+        await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
           method: 'POST',
           body: JSON.stringify({ twin_id: twinId, urls: [pageUrl] }),
-        }).catch(() => {});
-
-        console.log(`[Onboarding] Phase 2 Wikipedia fast-index fired for ${fullName}`);
+        });
+        updateStep('wikipedia', { status: 'done' });
       } catch {
-        // Silently swallow — never block onboarding
+        updateStep('wikipedia', { status: 'skipped' });
       }
     })();
-  }, []);
+  }, [updateStep]);
 
   // ---------------------------------------------------------------------------
-  // Deep research polling helper
+  // Phase D — Deep research (all users who give consent)
   // ---------------------------------------------------------------------------
   const pollDeepResearch = useCallback(async (runId: string): Promise<void> => {
     const TERMINAL = new Set(['completed', 'failed']);
@@ -221,49 +193,45 @@ function OnboardingContent() {
       const res = await authFetchStandalone(`/deep-research/runs/${runId}`);
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        throw new Error(payload?.detail?.message ?? `Research status check failed (${res.status})`);
+        throw new Error(payload?.detail?.message ?? `Research check failed (${res.status})`);
       }
       const data = await res.json();
-      setDeepResearchStatus(data.status);
+      // Update the research step sublabel with current status
+      updateStep('research', { sublabel: getResearchStepLabel(data.status) });
       if (TERMINAL.has(data.status)) {
-        if (data.status === 'failed') {
-          throw new Error(data.error_message ?? 'Deep research run failed');
-        }
+        if (data.status === 'failed') throw new Error(data.error_message ?? 'Research failed');
         return;
       }
     }
-  }, []);
+  }, [updateStep]);
 
-  // ---------------------------------------------------------------------------
-  // Phase 3 — LinkedIn deep research path (Approach 2)
-  // ---------------------------------------------------------------------------
-  const runLinkedInDeepResearch = useCallback(async (
-    twinId: string,
-    data: UnifiedInputData,
-  ): Promise<void> => {
-    const identity = data.linkedInIdentity!;
+  const runDeepResearch = useCallback(async (twinId: string, data: UnifiedInputData): Promise<void> => {
+    // Unified: works for LinkedIn, website URL, or name-only
+    const name = data.linkedInIdentity?.displayName ?? data.fullName;
+    const websiteHint = data.profileUrl
+      ?? data.linkedInIdentity?.profileUrl
+      ?? undefined;
+
+    updateStep('research', { status: 'running', sublabel: 'Starting…' });
 
     const runRes = await authFetchStandalone('/deep-research/runs', {
       method: 'POST',
       body: JSON.stringify({
-        name: identity.displayName,
+        name,
         hints: {
-          location: data.location ?? undefined,
-          company: identity.headline ?? undefined,
-          website: identity.profileUrl ?? undefined,
+          website: websiteHint,
+          company: data.headline ?? data.linkedInIdentity?.headline,
         },
       }),
     });
     if (!runRes.ok) {
       const payload = await runRes.json().catch(() => ({}));
-      throw new Error(payload?.detail?.message ?? `Failed to start deep research (${runRes.status})`);
+      throw new Error(payload?.detail?.message ?? `Failed to start research (${runRes.status})`);
     }
     const { run_id: runId } = await runRes.json();
 
-    setCurrentStep('deep-research');
-    setDeepResearchStatus('created');
-
     await pollDeepResearch(runId);
+    updateStep('research', { status: 'done', sublabel: undefined });
 
     const compileRes = await authFetchStandalone(`/deep-research/runs/${runId}/compile-to-twin`, {
       method: 'POST',
@@ -271,312 +239,224 @@ function OnboardingContent() {
     });
     if (!compileRes.ok) {
       const payload = await compileRes.json().catch(() => ({}));
-      throw new Error(payload?.detail?.message ?? `Failed to compile research (${compileRes.status})`);
+      throw new Error(payload?.detail?.message ?? `Compile failed (${compileRes.status})`);
     }
-  }, [pollDeepResearch]);
+  }, [pollDeepResearch, updateStep]);
 
   // ---------------------------------------------------------------------------
-  // Main submit handler
+  // Main submit handler — unified for ALL user types
   // ---------------------------------------------------------------------------
   const handleInputSubmit = async (data: UnifiedInputData) => {
     setInputData(data);
     setSubmitError(null);
     trackEvent('onboarding_started', {
-      has_headline: !!data.headline,
-      has_location: !!data.location,
       has_linkedin: !!data.linkedInIdentity,
-      has_sources: !!(data.sources && data.sources.length > 0),
+      has_url: !!data.profileUrl,
+      has_resume: !!data.resumeFile,
+      url_type: data.profileUrl?.includes('linkedin.com') ? 'linkedin' : data.profileUrl ? 'website' : 'none',
     });
 
-    setIsLoading(true);
-    let createdProfileInAttempt = false;
-    try {
-      const sources = data.sources ?? [];
-      const hasOptionalSources = sources.length > 0;
-      const buildMode: 'with_links' | 'name_only' = (hasOptionalSources || data.linkedInIdentity) ? 'with_links' : 'name_only';
+    // Build initial progress steps
+    const steps: ProgressStep[] = [
+      { id: 'create',    label: 'Profile created',        status: 'pending' },
+      { id: 'linkedin',  label: 'LinkedIn photo saved',   status: data.linkedInIdentity?.imageUrl ? 'pending' : 'skipped' },
+      { id: 'resume',    label: 'Resume indexed',         status: data.resumeFile ? 'pending' : 'skipped' },
+      { id: 'wikipedia', label: 'Wikipedia page found',  status: 'pending' },
+      { id: 'research',  label: 'Searching the web',     status: 'pending' },
+      { id: 'review',    label: 'Review & finalise',     status: 'pending' },
+    ];
+    stepsRef.current = steps;
+    setProgressSteps(steps);
 
-      // Step 1: create profile
-      const profileResponse = await authFetchStandalone('/profile', {
+    setIsLoading(true);
+    let createdInAttempt = false;
+
+    try {
+      // Step 1: Create profile
+      const profileRes = await authFetchStandalone('/profile', {
         method: 'POST',
         body: JSON.stringify({
           full_name: data.fullName,
-          headline: data.headline,
-          build_mode: buildMode,
+          headline: data.headline ?? data.linkedInIdentity?.headline,
+          build_mode: (data.profileUrl || data.linkedInIdentity || data.resumeFile) ? 'with_links' : 'name_only',
         }),
       });
 
-      if (!profileResponse.ok) {
-        if (profileResponse.status === 409) {
-          const payload = await profileResponse.json().catch(() => ({}));
+      if (!profileRes.ok) {
+        if (profileRes.status === 409) {
+          const payload = await profileRes.json().catch(() => ({}));
           const msg = payload?.detail?.message ?? payload?.detail ?? 'You already have a profile.';
           setSubmitError(`${msg} Go to your dashboard or reset your profile first.`);
           return;
         }
-        let detailMessage = `Failed to create profile (${profileResponse.status})`;
+        let msg = `Failed to create profile (${profileRes.status})`;
         try {
-          const payload = await profileResponse.json();
-          const detail = payload?.detail;
-          if (typeof detail === 'string' && detail.trim()) detailMessage = detail.trim();
-          else if (detail && typeof detail?.message === 'string') detailMessage = detail.message.trim();
+          const payload = await profileRes.json();
+          const d = payload?.detail;
+          if (typeof d === 'string' && d.trim()) msg = d.trim();
+          else if (d?.message) msg = d.message.trim();
         } catch { /* ignore */ }
-        throw new Error(detailMessage);
+        throw new Error(msg);
       }
 
-      const profileData = await profileResponse.json();
-      const profileCreatedHeader = profileResponse.headers.get('x-profile-created');
-      createdProfileInAttempt = profileCreatedHeader === 'true';
-      const twinData: Twin = {
-        id: profileData.id,
-        name: profileData.name,
-        status: profileData.status || 'draft',
-        specialization: profileData.specialization || 'vanilla',
-        settings: profileData.settings,
-      };
+      const profileData = await profileRes.json();
+      const createdHeader = profileRes.headers.get('x-profile-created');
+      createdInAttempt = createdHeader === 'true';
+      const twinData: Twin = { id: profileData.id, name: profileData.name, status: profileData.status ?? 'draft' };
       setTwin(twinData);
+      updateStep('create', { status: 'done' });
 
-      // Step 2a: LinkedIn path — run all 4 phases
+      // Switch to progress screen immediately after create
+      setCurrentStep('progress');
+
+      // Step 2A: LinkedIn pre-seed (if OAuth)
       if (data.linkedInIdentity) {
-        // Phase 1: Immediately pre-populate LinkedIn fields (locks in OAuth image)
         await prePopulateLinkedInFields(twinData.id, data);
-
-        // Phase 2: Wikipedia fast-index (fire-and-forget, never awaited)
-        tryWikipediaFastIndex(
-          twinData.id,
-          data.fullName,
-          data.headline || data.linkedInIdentity.headline,
-        );
-
-        // Phase 3: Full deep research
-        await runLinkedInDeepResearch(twinData.id, data);
-        trackEvent('onboarding_deep_research_completed', { twin_id: twinData.id });
-        try { localStorage.setItem('activeTwinId', twinData.id); } catch { /* non-blocking */ }
-
-        // Phase 4: Review & edit step (instead of immediate redirect)
-        setCurrentStep('review-edit');
-        return;
+        updateStep('linkedin', { status: 'done' });
       }
 
-      // Step 2b: Standard path — Mode A/B/C + StepResearch
-      const urls: string[] = [];
-      for (const s of sources) {
-        if (s.type === 'link' && s.value.trim() && s.value.startsWith('http')) {
-          urls.push(s.value.trim());
-        }
-      }
-      const allUrls = [...new Set(urls)].filter(Boolean);
-      setSubmittedUrls(allUrls);
-
-      // Submit files (Mode A)
-      const files = sources.filter((s): s is typeof s & { file: File } => s.type === 'export' && !!s.file).map(s => s.file);
-      if (files.length > 0) {
-        const formData = new FormData();
-        formData.append('twin_id', twinData.id);
-        files.forEach(f => formData.append('files', f));
-        const modeAResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-a', {
-          method: 'POST',
-          body: formData,
-        });
-        if (!modeAResponse.ok) throw new Error('Failed to submit uploaded files');
+      // Step 2B: Resume Mode A — fire-and-forget (runs in parallel with deep research)
+      if (data.resumeFile) {
+        updateStep('resume', { status: 'running' });
+        submitResume(twinData.id, data.resumeFile);
       }
 
-      // Submit paste (Mode B)
-      const pasteSources = sources.filter(s => s.type === 'paste');
-      for (const paste of pasteSources) {
-        const modeBResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-b', {
-          method: 'POST',
-          body: JSON.stringify({
-            twin_id: twinData.id,
-            content: paste.value,
-            title: paste.category || 'Pasted Content',
-          }),
-        });
-        if (!modeBResponse.ok) throw new Error('Failed to submit pasted content');
+      // Step 2C: Wikipedia — fire-and-forget (all users)
+      updateStep('wikipedia', { status: 'running' });
+      tryWikipediaFastIndex(
+        twinData.id,
+        data.fullName,
+        data.headline ?? data.linkedInIdentity?.headline,
+      );
+
+      // Step 3: Deep research — awaited (all users who gave consent)
+      if (data.consent) {
+        await runDeepResearch(twinData.id, data);
       }
 
-      // Submit URLs (Mode C)
-      if (allUrls.length > 0) {
-        const modeCResponse = await authFetchStandalone('/persona/link-compile/jobs/mode-c', {
-          method: 'POST',
-          body: JSON.stringify({
-            twin_id: twinData.id,
-            urls: allUrls,
-          }),
-        });
-        if (!modeCResponse.ok) {
-          let detailMessage = `Failed to submit URLs (${modeCResponse.status})`;
-          try {
-            const payload = await modeCResponse.json();
-            const detail = payload?.detail;
-            if (typeof detail === 'string' && detail.trim()) detailMessage = detail.trim();
-            else if (detail && typeof detail?.message === 'string') detailMessage = detail.message.trim();
-          } catch { /* ignore */ }
-          throw new Error(detailMessage);
-        }
-      }
+      trackEvent('onboarding_research_completed', { twin_id: twinData.id });
+      try { localStorage.setItem('activeTwinId', twinData.id); } catch { /* non-blocking */ }
 
-      setCurrentStep('research');
+      // Step 4: Review & edit
+      updateStep('review', { status: 'done' });
+      setCurrentStep('review-edit');
+
     } catch (error) {
-      console.error('Failed to create twin:', error);
+      console.error('[Onboarding] Failed:', error);
       let rollbackApplied = false;
-      if (createdProfileInAttempt) {
+      if (createdInAttempt) {
         try {
-          const rollbackResponse = await authFetchStandalone('/profile/reset', { method: 'POST' });
-          rollbackApplied = rollbackResponse.ok;
-        } catch (rollbackError) {
-          console.error('Failed to rollback profile:', rollbackError);
-        }
+          const rb = await authFetchStandalone('/profile/reset', { method: 'POST' });
+          rollbackApplied = rb.ok;
+        } catch { /* ignore */ }
       }
-      let message = error instanceof Error && error.message ? error.message : 'Failed to create twin. Please try again.';
-      if (createdProfileInAttempt && rollbackApplied) {
-        message = `${message}\n\nProfile reset automatically — you can retry.`;
-      } else if (createdProfileInAttempt && !rollbackApplied) {
-        message = `${message}\n\nA partial profile may exist. Use Settings → Reset Profile before retrying.`;
+      let message = error instanceof Error && error.message
+        ? error.message
+        : 'Failed to create persona. Please try again.';
+      if (createdInAttempt && rollbackApplied) {
+        message += '\n\nProfile reset automatically — you can retry.';
+      } else if (createdInAttempt && !rollbackApplied) {
+        message += '\n\nA partial profile may exist. Use Settings → Reset Profile before retrying.';
       }
       setSubmitError(message);
+      setCurrentStep('input');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleResearchComplete = (researchRunId?: string) => {
-    trackEvent('onboarding_research_completed', { twin_id: twin?.id, research_run_id: researchRunId });
-    if (twin?.id) {
-      try { localStorage.setItem('activeTwinId', twin.id); } catch { /* non-blocking */ }
-      const params = new URLSearchParams();
-      params.set('from', 'onboarding');
-      if (researchRunId) params.set('researchRunId', researchRunId);
-      router.push(returnTo ?? `/dashboard/profile?${params.toString()}`);
-    }
-  };
-
-  const handleResearchBack = () => {
-    setCurrentStep('input');
-  };
-
   const handleReviewEditComplete = useCallback(() => {
-    router.push(returnTo ?? `/dashboard/profile?from=onboarding`);
+    router.push(returnTo ?? '/dashboard/profile?from=onboarding');
   }, [router, returnTo]);
 
-  // Loading spinner while initial profile call is in flight
-  if (isLoading && currentStep === 'input') {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p>Creating your persona…</p>
-        </div>
-      </div>
-    );
-  }
-
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <div className="min-h-screen bg-slate-950">
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-white">Create Your Persona</h1>
-            <p className="text-sm text-slate-400">
-              {currentStep === 'input'
-                ? 'Get started in 2 minutes'
-                : currentStep === 'review-edit'
-                ? 'Review your profile'
-                : 'Research in progress'}
-            </p>
-          </div>
-          {twin && currentStep !== 'review-edit' && (
-            <div className="text-sm text-slate-400 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              Profile Building
+
+      {/* Header — only show on input step */}
+      {currentStep === 'input' && (
+        <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-white">Create Your Persona</h1>
+              <p className="text-sm text-slate-400">Get started in 2 minutes</p>
             </div>
-          )}
-          {twin && currentStep === 'review-edit' && (
+          </div>
+        </header>
+      )}
+
+      {/* Review-edit header */}
+      {currentStep === 'review-edit' && (
+        <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-50">
+          <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-white">Review Your Profile</h1>
+              <p className="text-sm text-slate-400">Confirm or edit before heading to your dashboard</p>
+            </div>
             <div className="text-sm text-slate-400 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-green-400" />
               Live
             </div>
-          )}
-        </div>
-      </header>
-
-      {currentStep === 'research' && (
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            {[
-              { key: 'input', label: 'Input' },
-              { key: 'research', label: 'Research' },
-              { key: 'complete', label: 'Complete' },
-            ].map((step, idx) => {
-              const isActive = currentStep === step.key || (step.key === 'complete' && currentStep === 'research');
-              const isPast = step.key === 'input' && currentStep === 'research';
-              return (
-                <React.Fragment key={step.key}>
-                  <div className={`flex flex-col items-center ${isActive ? 'text-blue-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      isActive ? 'bg-blue-500/20 border-2 border-blue-500' :
-                      isPast ? 'bg-green-500/20 border-2 border-green-500' :
-                      'bg-slate-800 border-2 border-slate-700'
-                    }`}>
-                      {isPast ? '✓' : idx + 1}
-                    </div>
-                    <span className="text-xs mt-1">{step.label}</span>
-                  </div>
-                  {idx < 2 && (
-                    <div className={`flex-1 h-0.5 mx-2 ${isPast ? 'bg-green-500/50' : 'bg-slate-800'}`} />
-                  )}
-                </React.Fragment>
-              );
-            })}
           </div>
-        </div>
+        </header>
       )}
 
-      <main className="max-w-3xl mx-auto px-4 pb-32 pt-8">
-        {currentStep === 'input' && (
-          <>
-            {submitError && (
-              <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                <p className="text-red-400 text-sm whitespace-pre-line">{submitError}</p>
-                {submitError.includes('already have a profile') && (
-                  <a href="/dashboard" className="mt-2 inline-block text-sm text-blue-400 hover:text-blue-300 underline">
-                    Go to dashboard →
-                  </a>
-                )}
+      {/* Input step */}
+      {currentStep === 'input' && (
+        <main className="max-w-2xl mx-auto px-4 pb-32 pt-8">
+          {submitError && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400 text-sm whitespace-pre-line">{submitError}</p>
+              {submitError.includes('already have a profile') && (
+                <a href="/dashboard" className="mt-2 inline-block text-sm text-blue-400 hover:text-blue-300 underline">
+                  Go to dashboard →
+                </a>
+              )}
+            </div>
+          )}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-slate-400">Creating your persona…</p>
               </div>
-            )}
+            </div>
+          ) : (
             <UnifiedInputStep onSubmit={handleInputSubmit} />
-          </>
-        )}
-        {currentStep === 'deep-research' && inputData && (
-          <DeepResearchProgress status={deepResearchStatus} name={inputData.fullName} />
-        )}
-        {currentStep === 'research' && inputData && twin && (
-          <StepResearch
-            twinId={twin.id}
-            claimedIdentity={{
-              fullName: inputData.fullName,
-              location: inputData.location,
-              headline: inputData.headline,
-              role: inputData.headline,
-            }}
-            seedUrls={submittedUrls}
-            onComplete={handleResearchComplete}
-            onBack={handleResearchBack}
-          />
-        )}
-        {currentStep === 'review-edit' && twin && (
+          )}
+        </main>
+      )}
+
+      {/* Progress step — full screen, no max-width constraint */}
+      {currentStep === 'progress' && inputData && (
+        <StepProgress
+          name={inputData.linkedInIdentity?.displayName ?? inputData.fullName}
+          steps={progressSteps}
+        />
+      )}
+
+      {/* Review & edit step */}
+      {currentStep === 'review-edit' && twin && (
+        <main className="max-w-2xl mx-auto px-4 pb-32 pt-8">
           <StepReviewEdit
             twinId={twin.id}
             onComplete={handleReviewEditComplete}
           />
-        )}
-      </main>
+        </main>
+      )}
     </div>
   );
 }
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Loading...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
+        Loading…
+      </div>
+    }>
       <OnboardingContent />
     </Suspense>
   );

@@ -1399,6 +1399,85 @@ def merge_materialized_profile_settings(
     return merged_settings
 
 
+def merge_profile_fields_partial(
+    existing_profile: Dict[str, Any],
+    new_fields: Dict[str, Any],
+    source_confidence: float,
+) -> Dict[str, Any]:
+    """
+    Merge extracted profile fields into an existing public_profile dict.
+
+    Rules:
+    - Simple text fields: only fill if EMPTY in existing, or if new confidence is higher.
+    - Array fields (areas_of_expertise, key_achievements): extend and deduplicate.
+    - Structured arrays (work_experience, education): append and deduplicate by key fields.
+    - Tracks per-field confidence in _field_confidences (internal metadata key).
+
+    Args:
+        existing_profile:  Current twins.settings.public_profile dict.
+        new_fields:        Output from extract_profile_fields() or linkedin_export_parser.
+        source_confidence: Float 0.0–1.0 representing source reliability.
+
+    Returns:
+        Updated profile dict (new object, never mutates existing).
+    """
+    field_confidences: Dict[str, float] = dict(
+        _safe_dict(existing_profile.get("_field_confidences"))
+    )
+    merged: Dict[str, Any] = {**existing_profile}
+
+    # --- Simple scalar fields ---
+    SCALAR_FIELDS = [
+        "display_name", "headline", "bio", "short_description",
+        "role", "organization", "nationality",
+    ]
+    for field in SCALAR_FIELDS:
+        new_val = _clean_text(new_fields.get(field))
+        if not new_val:
+            continue
+        existing_val = _clean_text(merged.get(field))
+        existing_conf = field_confidences.get(field, 0.0)
+        if not existing_val or source_confidence > existing_conf:
+            merged[field] = new_val
+            field_confidences[field] = source_confidence
+
+    # birth_year
+    new_year = new_fields.get("birth_year")
+    if new_year and isinstance(new_year, int):
+        existing_year = merged.get("birth_year")
+        existing_conf = field_confidences.get("birth_year", 0.0)
+        if not existing_year or source_confidence > existing_conf:
+            merged["birth_year"] = new_year
+            field_confidences["birth_year"] = source_confidence
+
+    # --- Append-only array fields ---
+    for field in ("areas_of_expertise", "key_achievements"):
+        new_items = _safe_list(new_fields.get(field))
+        if new_items:
+            existing_items = _safe_list(merged.get(field))
+            merged[field] = _clean_unique_strings(existing_items + new_items, limit=6)
+
+    # --- Structured arrays: append + deduplicate ---
+    if new_fields.get("work_experience"):
+        existing_work = _safe_list(merged.get("work_experience"))
+        merged["work_experience"] = _dedupe_object_rows(
+            existing_work + _safe_list(new_fields["work_experience"]),
+            ("company", "role"),
+        )
+
+    if new_fields.get("education"):
+        existing_edu = _safe_list(merged.get("education"))
+        merged["education"] = _dedupe_object_rows(
+            existing_edu + _safe_list(new_fields["education"]),
+            ("institution", "degree", "field"),
+        )
+
+    # Persist confidence metadata (internal, stripped before display)
+    merged["_field_confidences"] = field_confidences
+
+    return merged
+
+
 def build_existing_profile_projection(
     twin: Dict[str, Any],
     *,
