@@ -4412,7 +4412,8 @@ async def public_chat_endpoint(
         interaction_context=resolved_context.context.value,
     )
     if public_query_policy.get("is_smalltalk"):
-        public_smalltalk_text = _smalltalk_response_for_query(request.message)
+        _greeting_settings = _load_public_twin_settings(twin_id)
+        public_smalltalk_text = _smalltalk_response_for_query(request.message, settings=_greeting_settings)
         decision_payload = {
             "intent": "answer",
             "chosen_workflow": "answer",
