@@ -132,26 +132,30 @@ function OnboardingContent() {
     if (!data.linkedInIdentity) return;
 
     const identity = data.linkedInIdentity;
-    const publicProfile: Record<string, unknown> = {
-      display_name: data.fullName,
-    };
-    if (data.headline || identity.headline) {
-      publicProfile.headline = data.headline || identity.headline;
-    }
+
+    // Only seed what the deep research pipeline CANNOT derive from web scraping:
+    // - LinkedIn photo (LinkedIn blocks crawlers — pipeline would fall back to Wikipedia)
+    // - LinkedIn profile URL (so it appears in social_links alongside research-found links)
+    //
+    // Do NOT pre-seed display_name, headline, bio, role, etc. — the pipeline's
+    // build_research_profile_projection() will set these correctly from research data
+    // and would overwrite our guesses anyway.
+    const publicProfile: Record<string, unknown> = {};
     if (identity.imageUrl) {
       publicProfile.image_url = identity.imageUrl;
       publicProfile.avatar_url = identity.imageUrl;
     }
-    const socialLinks: Record<string, string> = {};
     if (identity.profileUrl) {
-      socialLinks.linkedin = identity.profileUrl;
+      publicProfile.social_links = { linkedin: identity.profileUrl };
     }
-    if (Object.keys(socialLinks).length > 0) {
-      publicProfile.social_links = socialLinks;
-    }
+
+    // Nothing to seed — skip the PATCH entirely
+    if (!identity.imageUrl && !identity.profileUrl) return;
 
     const settingsPatch: Record<string, unknown> = { public_profile: publicProfile };
     if (identity.imageUrl) {
+      // Mark as oauth so _resolve_profile_image() treats it as owner-locked
+      // and never overwrites with a Wikipedia thumbnail
       settingsPatch.public_profile_meta = {
         image_source_type: 'oauth',
         image_source_url: identity.profileUrl ?? identity.imageUrl,

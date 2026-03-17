@@ -97,6 +97,10 @@ function LabeledTextarea({
 }
 
 export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
+  // Full public_profile dict from the compile pipeline — we merge edits on top
+  // of this so we never wipe fields like role, organization, social_links,
+  // image_url, key_achievements, education, work_experience, etc.
+  const [fullPublicProfile, setFullPublicProfile] = useState<Record<string, unknown>>({});
   const [fields, setFields] = useState<EditableFields | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [workExperience, setWorkExperience] = useState<WorkEntry[]>([]);
@@ -117,7 +121,9 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
         const res = await authFetchStandalone(`/twins/${twinId}`);
         if (!res.ok) throw new Error(`Failed to load profile (${res.status})`);
         const twin = await res.json();
-        const pp = twin?.settings?.public_profile ?? {};
+        const pp: Record<string, unknown> = twin?.settings?.public_profile ?? {};
+        // Store the full compiled profile — edited fields will be merged on top
+        setFullPublicProfile(pp);
         setFields({
           display_name: pp.display_name ?? twin?.name ?? '',
           headline: pp.headline ?? '',
@@ -149,11 +155,16 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
         ? parseInt(fields.birth_year.trim(), 10) || undefined
         : undefined;
 
+      // Start from the full compiled profile pack so every field the pipeline
+      // produced (role, organization, social_links, image_url, key_achievements,
+      // contributions, education, work_experience, etc.) is preserved.
+      // Then overlay only the fields the user can edit.
       const publicProfile: Record<string, unknown> = {
-        display_name: fields.display_name.trim() || undefined,
-        headline: fields.headline.trim() || undefined,
-        bio: fields.bio.trim() || undefined,
-        short_description: fields.short_description.trim() || undefined,
+        ...fullPublicProfile,
+        display_name: fields.display_name.trim() || fullPublicProfile.display_name,
+        headline: fields.headline.trim() || fullPublicProfile.headline,
+        bio: fields.bio.trim() || fullPublicProfile.bio,
+        short_description: fields.short_description.trim() || fullPublicProfile.short_description,
         areas_of_expertise: fields.areas_of_expertise
           .split('\n')
           .map((s) => s.trim())
@@ -162,8 +173,8 @@ export function StepReviewEdit({ twinId, onComplete }: StepReviewEditProps) {
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
-        nationality: fields.nationality.trim() || undefined,
-        birth_year: birthYearNum,
+        nationality: fields.nationality.trim() || fullPublicProfile.nationality,
+        birth_year: birthYearNum ?? fullPublicProfile.birth_year,
       };
 
       const res = await authFetchStandalone(`/twins/${twinId}`, {
