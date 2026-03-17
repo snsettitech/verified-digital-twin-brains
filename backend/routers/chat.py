@@ -192,12 +192,17 @@ def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, str]]:
     if not display_name:
         return None
 
+    areas_of_expertise = public_profile.get("areas_of_expertise")
+    if not isinstance(areas_of_expertise, list):
+        areas_of_expertise = []
+
     return {
         "display_name": display_name,
         "headline": headline,
         "role": role,
         "organization": organization,
         "bio": bio,
+        "areas_of_expertise": [str(a).strip() for a in areas_of_expertise if str(a).strip()],
     }
 
 
@@ -235,10 +240,19 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
         else:
             base = f"{display_name} is associated with this public profile."
     elif intent == "scope_help":
-        scope = descriptor or "the areas this profile is known for"
-        base = f"I can help you think through {scope} from {display_name}'s perspective."
-        if bio_sentence:
-            base = f"{base} {bio_sentence}"
+        expertise = snapshot.get("areas_of_expertise") or []
+        if expertise:
+            topic_list = ", ".join(expertise[:4])
+            base = f"Well, I can talk about a few things — {topic_list}."
+            if len(expertise) > 4:
+                base += f" Also {', '.join(expertise[4:7])}."
+            if bio_sentence:
+                base = f"{base} {bio_sentence}"
+        else:
+            scope = descriptor or "the areas this profile is known for"
+            base = f"I can help you think through {scope} from {display_name}'s perspective."
+            if bio_sentence:
+                base = f"{base} {bio_sentence}"
     else:
         base = f"I'm {display_name}"
         if descriptor:

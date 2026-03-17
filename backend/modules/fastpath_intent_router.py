@@ -64,9 +64,12 @@ def classify_fastpath_intent(query: str) -> Dict[str, Any]:
         (
             "scope_help",
             (
-                r"\bwhat can you help with\b",
+                r"\bwhat can you help\b",   # catches "help with" and "help me with"
                 r"\bwhat can you do\b",
                 r"\bhow can you help\b",
+                r"\bwhat topics\b",
+                r"\bwhat subjects\b",
+                r"\bwhat are your areas\b",
             ),
             0.93,
         ),
