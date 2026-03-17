@@ -1709,17 +1709,21 @@ def _resolve_twin_pronoun_query(query: str) -> str:
     return original
 
 
-def _smalltalk_response(query: str) -> str:
+def _smalltalk_response(query: str, *, twin_name: str = "") -> str:
     q = re.sub(r"\s+", " ", str(query or "").strip()).lower()
+    name_intro = f"I'm {twin_name}. " if twin_name else ""
     if not q:
-        return "Hi. How can I help?"
+        return f"{name_intro}What's on your mind?"
     if any(marker in q for marker in ("thank you", "thanks")):
         return "You're welcome."
     if q in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
         return "Sounds good."
     if any(marker in q for marker in ("how are you", "how's your day", "hows your day")):
-        return "Doing well. How can I help?"
-    return "Hi. How can I help?"
+        return f"Doing well. {name_intro}What do you want to figure out?"
+    # Greeting — include persona name so response feels personal
+    if twin_name:
+        return f"Hey. I'm {twin_name}. What do you want to know?"
+    return "Hey. What do you want to know?"
 
 
 def _is_owner_specific_query(query: str) -> bool:
@@ -3355,7 +3359,8 @@ async def planner_node(state: TwinState):
     is_smalltalk_check = dialogue_mode == "SMALLTALK" or _is_smalltalk_query(user_query)
     print(f"[Planner DEBUG] dialogue_mode={dialogue_mode}, user_query='{user_query}', is_smalltalk_check={is_smalltalk_check}")
     if is_smalltalk_check:
-        answer_text = _smalltalk_response(user_query)
+        twin_name = str((state.get("full_settings") or {}).get("name") or "").strip()
+        answer_text = _smalltalk_response(user_query, twin_name=twin_name)
         smalltalk_confidence = 0.9
         smalltalk_answerability = {
             "answerability": "direct",
