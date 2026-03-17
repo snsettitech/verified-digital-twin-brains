@@ -42,6 +42,7 @@ from modules.runtime_audit_store import (
     persist_response_audit,
     persist_routing_decision,
 )
+from modules.public_profile_pack import build_public_profile_pack
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
@@ -229,6 +230,29 @@ def _load_public_twin_settings(twin_id: str) -> Optional[Dict[str, Any]]:
     if not isinstance(row, dict):
         return None
     return _merge_twin_row_settings(row)
+
+
+def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        result = (
+            supabase.table("twins")
+            .select("id, name, settings, status, created_at, updated_at")
+            .eq("id", twin_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        logger.debug("Public profile pack load failed for %s: %s", twin_id, exc)
+        return None
+
+    row = (result.data or [None])[0]
+    if not isinstance(row, dict):
+        return None
+    try:
+        return build_public_profile_pack(row)
+    except Exception as exc:
+        logger.debug("Public profile pack build failed for %s: %s", twin_id, exc)
+        return None
 
 
 def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
@@ -438,6 +462,117 @@ def _manual_public_profile_seed_rows(
     return ranked[: max(1, limit)]
 
 
+def _manual_public_pack_seed_rows(
+    profile_pack: Dict[str, Any],
+    query: str,
+    *,
+    limit: int = 6,
+) -> List[Dict[str, Any]]:
+    display_name = _clean_public_profile_text(profile_pack.get("name"))
+    if not display_name:
+        return []
+
+    seed_rows: List[Dict[str, Any]] = []
+
+    def _add_row(seed_type: str, raw_text: Any, *, source_name: str) -> None:
+        citation_ids = _extract_inline_citation_ids(raw_text)
+        text = _strip_inline_source_refs(raw_text)
+        text = _clean_public_profile_text(text)
+        if not text:
+            return
+        if not text.endswith((".", "!", "?")):
+            text = f"{text}."
+        seed_rows.append(
+            {
+                "text": text,
+                "source_id": citation_ids[0] if citation_ids else "",
+                "citation_ids": citation_ids,
+                "source_name": source_name,
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "strategy_name": "canonical_profile_pack",
+                "seed_type": seed_type,
+                "title": f"{display_name} public pack",
+            }
+        )
+
+    occupation = _clean_public_profile_text(profile_pack.get("occupation"))
+    headline = _clean_public_profile_text(profile_pack.get("headline"))
+    short_description = _clean_public_profile_text(profile_pack.get("short_description"))
+    bio = _clean_public_profile_text(profile_pack.get("bio"))
+    if occupation:
+        _add_row("summary", f"{display_name} is {occupation}", source_name="Public profile pack")
+    if headline:
+        _add_row("headline", headline, source_name="Public profile pack")
+    if short_description:
+        _add_row("summary", short_description, source_name="Public profile pack")
+    if bio:
+        _add_row("bio", bio, source_name="Public profile pack")
+
+    for item in profile_pack.get("contributions") or []:
+        _add_row("contribution", item, source_name="Public contributions")
+    for item in profile_pack.get("key_achievements") or []:
+        _add_row("achievement", item, source_name="Public achievements")
+    for item in profile_pack.get("areas_of_expertise") or []:
+        _add_row("expertise", item, source_name="Public expertise")
+
+    for job in profile_pack.get("work_experience") or []:
+        if not isinstance(job, dict):
+            continue
+        description = _clean_public_profile_text(job.get("description"))
+        role_value = _clean_public_profile_text(job.get("role") or job.get("title"))
+        company = _clean_public_profile_text(job.get("company") or job.get("organization"))
+        start_year = _clean_public_profile_text(job.get("start_year"))
+        end_year = _clean_public_profile_text(job.get("end_year"))
+        years = ""
+        if start_year and end_year:
+            years = f" from {start_year} to {end_year}"
+        elif start_year:
+            years = f" since {start_year}"
+        elif end_year:
+            years = f" until {end_year}"
+        if description:
+            _add_row("work", description, source_name="Public work history")
+        elif role_value and company:
+            _add_row("work", f"{display_name} worked as {role_value} at {company}{years}", source_name="Public work history")
+
+    for edu in profile_pack.get("education") or []:
+        if not isinstance(edu, dict):
+            continue
+        description = _clean_public_profile_text(edu.get("description"))
+        institution = _clean_public_profile_text(edu.get("institution"))
+        degree = _clean_public_profile_text(edu.get("degree"))
+        field = _clean_public_profile_text(edu.get("field"))
+        if description:
+            _add_row("education", description, source_name="Public education")
+        elif institution or degree or field:
+            parts = [part for part in [degree, field, institution] if part]
+            _add_row("education", f"{display_name} studied {', '.join(parts)}", source_name="Public education")
+
+    query_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", _clean_public_profile_text(query).lower())
+        if len(token) > 2
+    }
+
+    def _score_row(row: Dict[str, Any]) -> Tuple[int, int]:
+        text = _clean_public_profile_text(row.get("text")).lower()
+        overlap = sum(1 for token in query_tokens if token in text)
+        seed_type = _clean_public_profile_text(row.get("seed_type")).lower()
+        bonus = 0
+        if any(token in query_tokens for token in {"background", "career", "journey", "politics", "political", "experience"}):
+            if seed_type in {"work", "contribution", "bio", "achievement"}:
+                bonus += 2
+        if any(token in query_tokens for token in {"who", "about", "role", "title", "office"}):
+            if seed_type in {"summary", "bio", "headline"}:
+                bonus += 2
+        return (overlap + bonus, len(text))
+
+    deduped = _merge_context_snippets([], seed_rows)
+    ranked = sorted(deduped, key=_score_row, reverse=True)
+    return ranked[: max(1, limit)]
+
+
 def _public_profile_seed_rows(
     settings: Dict[str, Any],
     query: str,
@@ -485,15 +620,24 @@ async def _maybe_answer_from_public_profile(
     if query_class and query_class not in {"identity", "factual", "analytical"}:
         return None
 
+    profile_pack = _load_public_profile_pack(twin_id)
     settings = _load_public_twin_settings(twin_id)
-    if not isinstance(settings, dict):
+    if not isinstance(profile_pack, dict) and not isinstance(settings, dict):
+        logger.info("Public profile QA skipped for %s because neither profile pack nor settings were available", twin_id)
         return None
 
-    display_name = _public_profile_display_name(settings)
-    seed_rows = _public_profile_seed_rows(settings, query, limit=6)
+    display_name = _clean_public_profile_text((profile_pack or {}).get("name")) or (
+        _public_profile_display_name(settings) if isinstance(settings, dict) else ""
+    )
+    seed_rows: List[Dict[str, Any]] = []
+    if isinstance(profile_pack, dict):
+        seed_rows = _merge_context_snippets(seed_rows, _manual_public_pack_seed_rows(profile_pack, query, limit=6))
+    if isinstance(settings, dict):
+        seed_rows = _merge_context_snippets(seed_rows, _public_profile_seed_rows(settings, query, limit=6))
     if not seed_rows:
         logger.info("Public profile QA skipped for %s because no seed rows were built", twin_id)
         return None
+    logger.info("Public profile QA built %s seed rows for %s", len(seed_rows), twin_id)
 
     evidence_lines: List[str] = []
     allowed_source_ids: List[str] = []
