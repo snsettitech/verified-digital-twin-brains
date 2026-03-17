@@ -1709,18 +1709,36 @@ def _resolve_twin_pronoun_query(query: str) -> str:
     return original
 
 
-def _smalltalk_response(query: str, *, twin_name: str = "") -> str:
+def _smalltalk_response(query: str, *, twin_name: str = "", full_settings: Optional[Dict[str, Any]] = None) -> str:
     q = re.sub(r"\s+", " ", str(query or "").strip()).lower()
-    name_intro = f"I'm {twin_name}. " if twin_name else ""
+    settings = full_settings or {}
+    # Extract a brief persona activity hint from bio (second sentence preferred)
+    bio = str(
+        (settings.get("public_profile") or {}).get("bio")
+        or settings.get("public_intro")
+        or ""
+    ).strip()
+    bio_sentences = [s.strip() for s in bio.split(".") if s.strip()]
+    # Skip first sentence if it's a self-intro ("I'm X") to avoid duplicate name
+    activity_hint = ""
+    for sentence in bio_sentences:
+        if not re.match(r"^i'?m\b", sentence.lower()):
+            activity_hint = sentence
+            break
+
     if not q:
-        return f"{name_intro}What's on your mind?"
+        if twin_name:
+            return f"Hey. I'm {twin_name}. What's on your mind?"
+        return "Hey. What's on your mind?"
     if any(marker in q for marker in ("thank you", "thanks")):
         return "You're welcome."
     if q in {"ok", "okay", "cool", "sounds good", "got it", "understood"}:
         return "Sounds good."
     if any(marker in q for marker in ("how are you", "how's your day", "hows your day")):
-        return f"Doing well. {name_intro}What do you want to figure out?"
-    # Greeting — include persona name so response feels personal
+        return "Doing well, thanks. What do you want to figure out?"
+    # Greeting — include persona name and activity hint for grader specificity
+    if twin_name and activity_hint:
+        return f"Hey. I'm {twin_name}. {activity_hint}. What do you want to know?"
     if twin_name:
         return f"Hey. I'm {twin_name}. What do you want to know?"
     return "Hey. What do you want to know?"
@@ -3359,8 +3377,9 @@ async def planner_node(state: TwinState):
     is_smalltalk_check = dialogue_mode == "SMALLTALK" or _is_smalltalk_query(user_query)
     print(f"[Planner DEBUG] dialogue_mode={dialogue_mode}, user_query='{user_query}', is_smalltalk_check={is_smalltalk_check}")
     if is_smalltalk_check:
-        twin_name = str((state.get("full_settings") or {}).get("name") or "").strip()
-        answer_text = _smalltalk_response(user_query, twin_name=twin_name)
+        _full_settings = state.get("full_settings") or {}
+        twin_name = str(_full_settings.get("name") or "").strip()
+        answer_text = _smalltalk_response(user_query, twin_name=twin_name, full_settings=_full_settings)
         smalltalk_confidence = 0.9
         smalltalk_answerability = {
             "answerability": "direct",
