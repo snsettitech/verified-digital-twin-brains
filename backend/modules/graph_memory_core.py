@@ -83,7 +83,16 @@ def _get_process_pool() -> ProcessPoolExecutor:
 
 
 # Module-level function for process pool execution (must be picklable)
-def _search_in_process(query: str, num_results: int, group_id: str, neo4j_uri: str, neo4j_user: str, neo4j_password: str, openai_key: str):
+def _search_in_process(
+    query: str,
+    num_results: int,
+    group_id: str,
+    neo4j_uri: str,
+    neo4j_user: str,
+    neo4j_password: str,
+    neo4j_database: Optional[str],
+    openai_key: str,
+):
     """
     Execute Graphiti search in separate process.
     This allows true timeout enforcement via process termination.
@@ -92,6 +101,7 @@ def _search_in_process(query: str, num_results: int, group_id: str, neo4j_uri: s
     os.environ["OPENAI_API_KEY"] = openai_key
     
     from graphiti_core import Graphiti
+    from graphiti_core.driver.neo4j_driver import Neo4jDriver
     from graphiti_core.llm_client.openai_client import OpenAIClient
     from graphiti_core.llm_client.client import LLMConfig
     import asyncio as aio
@@ -111,9 +121,12 @@ def _search_in_process(query: str, num_results: int, group_id: str, neo4j_uri: s
     loop = aio.new_event_loop()
     try:
         graphiti = Graphiti(
-            uri=neo4j_uri,
-            user=neo4j_user or "neo4j",
-            password=neo4j_password,
+            graph_driver=Neo4jDriver(
+                neo4j_uri,
+                neo4j_user or "neo4j",
+                neo4j_password,
+                database=neo4j_database or "neo4j",
+            ),
             llm_client=llm_client
         )
         
@@ -298,6 +311,7 @@ class GraphMemoryCore:
         
         try:
             from graphiti_core import Graphiti
+            from graphiti_core.driver.neo4j_driver import Neo4jDriver
             from graphiti_core.llm_client.openai_client import OpenAIClient
             from graphiti_core.llm_client.client import LLMConfig
             
@@ -311,9 +325,12 @@ class GraphMemoryCore:
             llm_client = OpenAIClient(config=llm_config)
             
             self._graphiti = Graphiti(
-                uri=self.config.neo4j_uri,
-                user=self.config.neo4j_user or "neo4j",
-                password=self.config.neo4j_password,
+                graph_driver=Neo4jDriver(
+                    self.config.neo4j_uri,
+                    self.config.neo4j_user or "neo4j",
+                    self.config.neo4j_password,
+                    database=self.config.neo4j_database or "neo4j",
+                ),
                 llm_client=llm_client  # Required for entity extraction
             )
             
@@ -510,7 +527,10 @@ class GraphMemoryCore:
             LIMIT $lim
             """
             
-            async with driver.session() as session:
+            session_kwargs = {}
+            if self.config.neo4j_database:
+                session_kwargs["database"] = self.config.neo4j_database
+            async with driver.session(**session_kwargs) as session:
                 result = await session.run(cypher, gid=self.group_id, q=query, lim=num_results)
                 records = []
                 async for record in result:

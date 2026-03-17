@@ -60,6 +60,7 @@ class GraphMemoryConfig:
     neo4j_uri: Optional[str] = None
     neo4j_user: Optional[str] = None
     neo4j_password: Optional[str] = None
+    neo4j_database: Optional[str] = None
     
     @classmethod
     def from_env(cls) -> "GraphMemoryConfig":
@@ -81,8 +82,9 @@ class GraphMemoryConfig:
             schema_version=os.getenv("GRAPH_MEMORY_SCHEMA_VERSION", "1"),
             extractor_version=os.getenv("GRAPH_MEMORY_EXTRACTOR_VERSION", "1"),
             neo4j_uri=os.getenv("NEO4J_URI"),
-            neo4j_user=os.getenv("NEO4J_USER"),
+            neo4j_user=os.getenv("NEO4J_USER") or os.getenv("NEO4J_USERNAME"),
             neo4j_password=os.getenv("NEO4J_PASSWORD"),
+            neo4j_database=os.getenv("NEO4J_DATABASE"),
         )
     
     def is_read_allowed(self) -> bool:

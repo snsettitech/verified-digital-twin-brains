@@ -154,7 +154,11 @@ services:
         sync: false
       - key: NEO4J_USER
         sync: false
+      - key: NEO4J_USERNAME
+        sync: false
       - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
         sync: false
       # Redis (caching) — value set in Render dashboard
       - key: REDIS_URL
@@ -284,7 +288,11 @@ services:
         sync: false
       - key: NEO4J_USER
         sync: false
+      - key: NEO4J_USERNAME
+        sync: false
       - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
         sync: false
       # Production mode
       - key: DEV_MODE
