@@ -231,7 +231,7 @@ def _load_public_twin_settings(twin_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = (
             supabase.table("twins")
-            .select("id, name, description, settings, created_at, updated_at")
+            .select("id, name, description, settings, created_at")
             .eq("id", twin_id)
             .limit(1)
             .execute()
@@ -250,7 +250,7 @@ def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = (
             supabase.table("twins")
-            .select("id, name, settings, status, created_at, updated_at")
+            .select("id, name, settings, status, created_at")
             .eq("id", twin_id)
             .limit(1)
             .execute()
