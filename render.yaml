@@ -98,7 +98,7 @@ services:
       - key: GEMINI_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: CONVERSATIONAL_REALIZER_ENABLED
-        value: "false"
+        value: "true"
       - key: INFERENCE_PROVIDER_TIMEOUT_SECONDS
         value: "30"
       # Query Rewriting for Conversational Context
@@ -247,7 +247,7 @@ services:
       - key: GEMINI_BASE_URL
         value: "https://generativelanguage.googleapis.com/v1beta/openai/"
       - key: CONVERSATIONAL_REALIZER_ENABLED
-        value: "false"
+        value: "true"
       - key: INFERENCE_PROVIDER_TIMEOUT_SECONDS
         value: "30"
       # Query Rewriting for Conversational Context
