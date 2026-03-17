@@ -61,9 +61,9 @@ export function ResearchProgress({
       ready_for_ingestion: 'bg-green-500/20 text-green-400',
       ingesting: 'bg-blue-500/20 text-blue-400',
       ingestion_completed: 'bg-green-500/20 text-green-400',
-      generating_bio: 'bg-purple-500/20 text-purple-400',
+      generating_bio: 'bg-blue-500/20 text-blue-400',
       bio_generated: 'bg-green-500/20 text-green-400',
-      finalizing: 'bg-indigo-500/20 text-indigo-400',
+      finalizing: 'bg-blue-500/20 text-blue-400',
       completed: 'bg-green-500/20 text-green-400',
       failed: 'bg-red-500/20 text-red-400',
       timed_out: 'bg-orange-500/20 text-orange-400',
@@ -172,7 +172,7 @@ export function ResearchProgress({
                     isCompleted
                       ? 'bg-green-500 text-white'
                       : isActive
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-slate-800 text-slate-500'
                   }`}
                 >
@@ -311,7 +311,7 @@ export function ResearchProgress({
             <button
               onClick={onContinueIngestion}
               disabled={isContinuing}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
             >
               {isContinuing ? (
                 <span className="flex items-center gap-2">
@@ -387,7 +387,7 @@ export function ResearchProgress({
             <button
               onClick={onContinueBio}
               disabled={isContinuing}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
             >
               {isContinuing ? (
                 <span className="flex items-center gap-2">
@@ -405,8 +405,8 @@ export function ResearchProgress({
       {currentStatus === 'generating_bio' && (
         <Card className="p-6 bg-slate-900 border-slate-700">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
             <div>
               <h3 className="font-medium text-white">Generating Your Bio</h3>
@@ -435,7 +435,7 @@ export function ResearchProgress({
             <button
               onClick={onContinueFinalize}
               disabled={isContinuing}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+              className="px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
             >
               {isContinuing ? (
                 <span className="flex items-center gap-2">
@@ -453,8 +453,8 @@ export function ResearchProgress({
       {currentStatus === 'finalizing' && (
         <Card className="p-6 bg-slate-900 border-slate-700">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center">
-              <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             </div>
             <div>
               <h3 className="font-medium text-white">Finalizing</h3>
@@ -481,7 +481,7 @@ export function ResearchProgress({
 
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="bg-slate-800 p-4 rounded-lg">
-                <div className="text-3xl font-bold text-indigo-400">
+                <div className="text-3xl font-bold text-blue-400">
                   {summary.mind_score?.score ?? 0}
                 </div>
                 <div className="text-xs text-slate-400">Mind Score</div>
@@ -543,7 +543,7 @@ export function ResearchProgress({
       {/* Polling Indicator */}
       {isPolling && !isTerminalStatus(currentStatus || 'planning') && (
         <div className="flex items-center justify-center gap-2 text-xs text-slate-500">
-          <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+          <span className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
           Updating...
         </div>
       )}

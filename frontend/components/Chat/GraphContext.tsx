@@ -62,8 +62,8 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
 
     if (loading) {
         return (
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 mb-4 animate-pulse">
-                <div className="h-5 bg-indigo-200 rounded w-1/3"></div>
+            <div className="bg-gradient-to-r from-blue-50 to-blue-50 rounded-xl p-4 mb-4 animate-pulse">
+                <div className="h-5 bg-blue-200 rounded w-1/3"></div>
             </div>
         );
     }
@@ -81,9 +81,9 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
 
     if (compact) {
         return (
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg px-3 py-2 flex items-center gap-2">
+            <div className="bg-gradient-to-r from-blue-50 to-blue-50 rounded-lg px-3 py-2 flex items-center gap-2">
                 <span className="text-lg">🧠</span>
-                <span className="text-sm font-medium text-indigo-700">
+                <span className="text-sm font-medium text-blue-700">
                     {stats.node_count} memories
                 </span>
             </div>
@@ -91,7 +91,7 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
     }
 
     return (
-        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 mb-4 border border-indigo-100">
+        <div className="bg-gradient-to-r from-blue-50 to-blue-50 rounded-xl p-4 mb-4 border border-blue-100">
             <button
                 onClick={() => setExpanded(!expanded)}
                 className="w-full flex items-center justify-between text-left"
@@ -99,15 +99,15 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
                 <div className="flex items-center gap-3">
                     <span className="text-2xl">🧠</span>
                     <div>
-                        <h3 className="font-semibold text-indigo-900">
+                        <h3 className="font-semibold text-blue-900">
                             Twin&apos;s Memory
                         </h3>
-                        <p className="text-sm text-indigo-600">
+                        <p className="text-sm text-blue-600">
                             {stats.node_count} items from interview
                         </p>
                     </div>
                 </div>
-                <span className={`text-indigo-500 transition-transform ${expanded ? 'rotate-180' : ''}`}>
+                <span className={`text-blue-500 transition-transform ${expanded ? 'rotate-180' : ''}`}>
                     ▼
                 </span>
             </button>
@@ -117,10 +117,10 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
                     {stats.top_nodes.map((node, index) => (
                         <div
                             key={index}
-                            className="bg-white/70 rounded-lg px-3 py-2 border border-indigo-100"
+                            className="bg-white/70 rounded-lg px-3 py-2 border border-blue-100"
                         >
                             <div className="flex items-start gap-2">
-                                <span className="text-indigo-500 mt-0.5">✦</span>
+                                <span className="text-blue-500 mt-0.5">✦</span>
                                 <div>
                                     <span className="font-medium text-slate-800">{node.name}</span>
                                     <span className="text-xs text-slate-500 ml-2">({node.type})</span>
@@ -131,7 +131,7 @@ export default function GraphContext({ twinId, compact = false }: GraphContextPr
                     ))}
 
                     {stats.node_count > stats.top_nodes.length && (
-                        <p className="text-xs text-indigo-500 text-center pt-2">
+                        <p className="text-xs text-blue-500 text-center pt-2">
                             + {stats.node_count - stats.top_nodes.length} more items
                         </p>
                     )}
@@ -146,7 +146,7 @@ export function GraphUsedBadge({ graphUsed }: { graphUsed: boolean }) {
     if (!graphUsed) return null;
 
     return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs rounded-full">
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
             <span>💡</span>
             <span>From your interview</span>
         </span>

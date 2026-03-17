@@ -92,7 +92,7 @@ export default function HistoryPage() {
             case 'failed':
                 return <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 text-[10px] font-black rounded-lg">Failed</span>;
             case 'responded':
-                return <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 text-[10px] font-black rounded-lg">Responded</span>;
+                return <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] font-black rounded-lg">Responded</span>;
             default:
                 return <span className="px-2 py-0.5 bg-slate-500/10 text-slate-400 text-[10px] font-black rounded-lg">{status}</span>;
         }
@@ -101,7 +101,7 @@ export default function HistoryPage() {
     if (twinLoading) {
         return (
             <div className="flex justify-center p-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
             </div>
         );
     }
@@ -110,14 +110,14 @@ export default function HistoryPage() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center max-w-md p-8">
-                    <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 bg-blue-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
                     <p className="text-slate-400 mb-6">Create your persona first to view activity history.</p>
-                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
                         Create Your Persona
                     </a>
                 </div>
@@ -148,7 +148,7 @@ export default function HistoryPage() {
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key as any)}
                                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${activeTab === tab.key
-                                    ? 'bg-indigo-600 text-white'
+                                    ? 'bg-blue-600 text-white'
                                     : 'bg-white/5 text-slate-400 hover:bg-white/10'
                                     }`}
                             >
@@ -166,8 +166,8 @@ export default function HistoryPage() {
                     {(activeTab === 'all' || activeTab === 'responses') && responses.length > 0 && (
                         <>
                             {activeTab === 'all' && (
-                                <div className="p-4 bg-indigo-500/5 border-b border-white/5">
-                                    <span className="text-xs font-black text-indigo-400 uppercase tracking-widest">Your Responses</span>
+                                <div className="p-4 bg-blue-500/5 border-b border-white/5">
+                                    <span className="text-xs font-black text-blue-400 uppercase tracking-widest">Your Responses</span>
                                 </div>
                             )}
                             <div className="divide-y divide-white/5">
@@ -179,7 +179,7 @@ export default function HistoryPage() {
                                     >
                                         <div className="flex items-start justify-between">
                                             <div className="flex items-start gap-4">
-                                                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-xl">
+                                                <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-xl">
                                                     💬
                                                 </div>
                                                 <div>
@@ -194,7 +194,7 @@ export default function HistoryPage() {
                                                             Q: "{resp.context.user_message}"
                                                         </div>
                                                     )}
-                                                    <div className="mt-1 p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-sm text-indigo-200 max-w-lg">
+                                                    <div className="mt-1 p-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 max-w-lg">
                                                         A: "{resp.approval_note?.substring(0, 100)}{resp.approval_note?.length > 100 ? '...' : ''}"
                                                     </div>
                                                     <div className="text-xs text-slate-500 mt-2">
@@ -218,8 +218,8 @@ export default function HistoryPage() {
                     {(activeTab === 'all' || activeTab === 'executions') && executions.length > 0 && (
                         <>
                             {activeTab === 'all' && (
-                                <div className="p-4 bg-purple-500/5 border-b border-white/5">
-                                    <span className="text-xs font-black text-purple-400 uppercase tracking-widest">Executed Actions</span>
+                                <div className="p-4 bg-blue-500/5 border-b border-white/5">
+                                    <span className="text-xs font-black text-blue-400 uppercase tracking-widest">Executed Actions</span>
                                 </div>
                             )}
                             <div className="divide-y divide-white/5">
@@ -328,8 +328,8 @@ export default function HistoryPage() {
             <Modal isOpen={!!selectedResponse} onClose={() => setSelectedResponse(null)} title="Response Details">
                 {selectedResponse && (
                     <div className="space-y-5 pt-4">
-                        <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
-                            <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">User Asked</div>
+                        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                            <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">User Asked</div>
                             <div className="text-white">"{selectedResponse.context.user_message || 'N/A'}"</div>
                         </div>
 

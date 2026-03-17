@@ -32,12 +32,12 @@ const Illustrations: Record<EmptyStateIllustration, React.ReactNode> = {
   'robot-building': (
     <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Robot head */}
-      <rect x="35" y="20" width="50" height="45" rx="8" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+      <rect x="35" y="20" width="50" height="45" rx="8" fill="#dbeafe" stroke="#2563EB" strokeWidth="2"/>
       {/* Eyes */}
-      <circle cx="50" cy="42" r="6" fill="#6366f1" className="animate-pulse"/>
-      <circle cx="70" cy="42" r="6" fill="#6366f1" className="animate-pulse" style={{ animationDelay: '0.2s' }}/>
+      <circle cx="50" cy="42" r="6" fill="#2563EB" className="animate-pulse"/>
+      <circle cx="70" cy="42" r="6" fill="#2563EB" className="animate-pulse" style={{ animationDelay: '0.2s' }}/>
       {/* Antenna */}
-      <line x1="60" y1="20" x2="60" y2="8" stroke="#6366f1" strokeWidth="2"/>
+      <line x1="60" y1="20" x2="60" y2="8" stroke="#2563EB" strokeWidth="2"/>
       <circle cx="60" cy="6" r="3" fill="#f59e0b" className="animate-pulse"/>
       {/* Body being built */}
       <rect x="40" y="70" width="40" height="30" rx="4" fill="#f3f4f6" stroke="#9ca3af" strokeWidth="2" strokeDasharray="4 4"/>
@@ -52,16 +52,16 @@ const Illustrations: Record<EmptyStateIllustration, React.ReactNode> = {
   'robot-sleeping': (
     <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Robot head */}
-      <rect x="35" y="30" width="50" height="40" rx="8" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+      <rect x="35" y="30" width="50" height="40" rx="8" fill="#dbeafe" stroke="#2563EB" strokeWidth="2"/>
       {/* Sleeping eyes (lines) */}
-      <line x1="44" y1="48" x2="56" y2="48" stroke="#6366f1" strokeWidth="2" strokeLinecap="round"/>
-      <line x1="64" y1="48" x2="76" y2="48" stroke="#6366f1" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="44" y1="48" x2="56" y2="48" stroke="#2563EB" strokeWidth="2" strokeLinecap="round"/>
+      <line x1="64" y1="48" x2="76" y2="48" stroke="#2563EB" strokeWidth="2" strokeLinecap="round"/>
       {/* Sleep zzz */}
       <text x="90" y="30" fontSize="12" fill="#9ca3af" className="animate-pulse">Z</text>
       <text x="98" y="22" fontSize="10" fill="#9ca3af" className="animate-pulse" style={{ animationDelay: '0.5s' }}>z</text>
       <text x="104" y="16" fontSize="8" fill="#9ca3af" className="animate-pulse" style={{ animationDelay: '1s' }}>z</text>
       {/* Body */}
-      <rect x="40" y="75" width="40" height="25" rx="4" fill="#e0e7ff" stroke="#6366f1" strokeWidth="2"/>
+      <rect x="40" y="75" width="40" height="25" rx="4" fill="#dbeafe" stroke="#2563EB" strokeWidth="2"/>
     </svg>
   ),
   'checkmark': (
@@ -104,9 +104,9 @@ const Illustrations: Record<EmptyStateIllustration, React.ReactNode> = {
   'knowledge-empty': (
     <svg viewBox="0 0 120 120" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
       {/* Book/document stack */}
-      <rect x="30" y="65" width="60" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" strokeWidth="1.5"/>
-      <rect x="32" y="55" width="56" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" strokeWidth="1.5"/>
-      <rect x="34" y="45" width="52" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" strokeWidth="1.5"/>
+      <rect x="30" y="65" width="60" height="8" rx="1" fill="#dbeafe" stroke="#2563EB" strokeWidth="1.5"/>
+      <rect x="32" y="55" width="56" height="8" rx="1" fill="#dbeafe" stroke="#2563EB" strokeWidth="1.5"/>
+      <rect x="34" y="45" width="52" height="8" rx="1" fill="#dbeafe" stroke="#2563EB" strokeWidth="1.5"/>
       {/* Plus icon */}
       <circle cx="85" cy="35" r="15" fill="#10b981" className="animate-pulse"/>
       <line x1="85" y1="28" x2="85" y2="42" stroke="white" strokeWidth="3" strokeLinecap="round"/>
@@ -118,13 +118,13 @@ const Illustrations: Record<EmptyStateIllustration, React.ReactNode> = {
       {/* Chat bubble 1 */}
       <path 
         d="M20 30 Q20 20 30 20 L70 20 Q80 20 80 30 L80 55 Q80 65 70 65 L50 65 L35 75 L38 65 L30 65 Q20 65 20 55 Z" 
-        fill="#e0e7ff" 
-        stroke="#6366f1" 
+        fill="#dbeafe" 
+        stroke="#2563EB" 
         strokeWidth="2"
       />
       {/* Lines in bubble */}
-      <line x1="32" y1="35" x2="68" y2="35" stroke="#6366f1" strokeWidth="2" opacity="0.5"/>
-      <line x1="32" y1="45" x2="55" y2="45" stroke="#6366f1" strokeWidth="2" opacity="0.5"/>
+      <line x1="32" y1="35" x2="68" y2="35" stroke="#2563EB" strokeWidth="2" opacity="0.5"/>
+      <line x1="32" y1="45" x2="55" y2="45" stroke="#2563EB" strokeWidth="2" opacity="0.5"/>
       {/* Chat bubble 2 */}
       <path 
         d="M40 75 Q40 65 50 65 L90 65 Q100 65 100 75 L100 100 Q100 110 90 110 L70 110 L55 120 L58 110 L50 110 Q40 110 40 100 Z" 
@@ -143,7 +143,7 @@ interface ActionButtonProps {
 
 function ActionButton({ action, variant }: ActionButtonProps) {
   const baseClasses = variant === 'primary'
-    ? 'px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2'
+    ? 'px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
     : 'px-6 py-2.5 bg-white text-slate-700 font-semibold rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2';
 
   if (action.href) {

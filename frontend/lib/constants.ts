@@ -144,4 +144,15 @@ export const API_ENDPOINTS = {
   // Feedback
   FEEDBACK: '/feedback',
   FEEDBACK_PUBLIC: '/feedback/public',
+
+  // Account / Profile (hardcoded in components — centralized here)
+  ACCOUNT_DELETE: '/account/delete',
+  PROFILE_RESET: '/profile/reset',
+  METRICS_QUOTA: (tenantId: string) => `/metrics/quota/${tenantId}`,
+
+  // Audio streaming TTS
+  AUDIO_TTS_STREAM: (twinId: string) => `/audio/tts/${twinId}/stream`,
+
+  // Interview context
+  INTERVIEW_CONTEXT: '/api/interview/context',
 } as const;

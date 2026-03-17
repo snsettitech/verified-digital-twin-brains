@@ -66,7 +66,7 @@ export default function ContextPanel({ snapshot }: ContextPanelProps) {
             <div className="mt-1 flex flex-wrap gap-1">
               {(snapshot?.selectedEvidenceBlockTypes || []).length > 0 ? (
                 (snapshot?.selectedEvidenceBlockTypes || []).map((block) => (
-                  <span key={block} className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                  <span key={block} className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
                     {block}
                   </span>
                 ))
@@ -105,7 +105,7 @@ export default function ContextPanel({ snapshot }: ContextPanelProps) {
                       href={item.citation_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-indigo-700 hover:underline"
+                      className="text-blue-700 hover:underline"
                     >
                       {item.filename || item.id}
                     </a>

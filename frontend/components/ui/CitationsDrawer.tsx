@@ -100,7 +100,7 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
             <button
               ref={closeButtonRef}
               onClick={onClose}
-              className="p-2 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="p-2 rounded-xl hover:bg-slate-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Close drawer"
             >
               <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -128,11 +128,11 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
                 {citations.map((citation, index) => (
                   <div 
                     key={citation.id}
-                    className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors focus-within:ring-2 focus-within:ring-indigo-500"
+                    className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors focus-within:ring-2 focus-within:ring-blue-500"
                     tabIndex={0}
                   >
                     <div className="flex items-start gap-3">
-                      <span className="flex-shrink-0 w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-sm font-bold">
+                      <span className="flex-shrink-0 w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center text-sm font-bold">
                         {index + 1}
                       </span>
                       <div className="flex-1 min-w-0">
@@ -166,7 +166,7 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
                             href={citation.citation_url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
+                            className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,7 +190,7 @@ export function CitationsDrawer({ isOpen, onClose, citations }: CitationsDrawerP
           <div className="p-6 border-t border-slate-100 bg-slate-50/50">
             <button
               onClick={onClose}
-              className="w-full py-3 bg-slate-900 text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full py-3 bg-slate-900 text-white font-semibold rounded-xl hover:bg-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               Close
             </button>
@@ -211,7 +211,7 @@ export function InlineCitation({ number, onClick }: InlineCitationProps) {
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center w-5 h-5 ml-0.5 text-[10px] font-bold bg-indigo-100 text-indigo-600 rounded-full hover:bg-indigo-200 hover:text-indigo-700 transition-colors align-super focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+      className="inline-flex items-center justify-center w-5 h-5 ml-0.5 text-[10px] font-bold bg-blue-100 text-blue-600 rounded-full hover:bg-blue-200 hover:text-blue-700 transition-colors align-super focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
       title={`View source ${number}`}
       aria-label={`Citation ${number}`}
       type="button"

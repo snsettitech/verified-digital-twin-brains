@@ -118,7 +118,7 @@ export default function SourceDetailsPage() {
   if (twinLoading || loading) {
     return (
       <div className="max-w-6xl mx-auto p-20 flex justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -129,7 +129,7 @@ export default function SourceDetailsPage() {
         <div className="text-center max-w-md p-8">
           <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
           <p className="text-slate-500 mb-6">Create your persona first to view knowledge sources.</p>
-          <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+          <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
             Create Your Persona
           </a>
         </div>
@@ -166,7 +166,7 @@ export default function SourceDetailsPage() {
             key={tab}
             onClick={() => setActiveTab(tab as 'overview' | 'health' | 'logs')}
             className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${activeTab === tab
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
           >

@@ -116,7 +116,7 @@ export default function ConnectorsPage() {
     if (twinLoading) {
         return (
             <div className="flex justify-center p-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
             </div>
         );
     }
@@ -125,14 +125,14 @@ export default function ConnectorsPage() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center max-w-md p-8">
-                    <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 bg-blue-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
                     <p className="text-slate-400 mb-6">Create your persona first to configure connectors.</p>
-                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
                         Create Your Persona
                     </a>
                 </div>
@@ -155,7 +155,7 @@ export default function ConnectorsPage() {
                     </div>
                     <button
                         onClick={() => setShowModal(true)}
-                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-indigo-500/20"
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-blue-500/20"
                     >
                         + Add Connector
                     </button>
@@ -239,7 +239,7 @@ export default function ConnectorsPage() {
                             >
                                 <Card
                                     glass
-                                    className={`p-5 ${!hasConnector && 'hover:border-indigo-500/30'}`}
+                                    className={`p-5 ${!hasConnector && 'hover:border-blue-500/30'}`}
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="w-12 h-12 rounded-2xl bg-slate-800 flex items-center justify-center text-2xl">
@@ -254,7 +254,7 @@ export default function ConnectorsPage() {
                                                 Connected
                                             </span>
                                         ) : (
-                                            <span className="text-indigo-400 text-sm">+</span>
+                                            <span className="text-blue-400 text-sm">+</span>
                                         )}
                                     </div>
                                 </Card>
@@ -302,7 +302,7 @@ export default function ConnectorsPage() {
                                     value={connectorName}
                                     onChange={(e) => setConnectorName(e.target.value)}
                                     placeholder="e.g., Work Gmail"
-                                    className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                                    className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div className="p-4 bg-amber-950/30 border border-amber-500/20 rounded-xl">
@@ -314,7 +314,7 @@ export default function ConnectorsPage() {
                             <button
                                 onClick={handleCreate}
                                 disabled={!connectorName}
-                                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition-all"
+                                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition-all"
                             >
                                 Add Connector
                             </button>

@@ -144,26 +144,26 @@ export default function DeleteTwinModal({
                 </p>
               </div>
 
-              <div className="mb-6 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
-                <p className="font-semibold text-indigo-900 mb-3">Data Snapshot</p>
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="font-semibold text-blue-900 mb-3">Data Snapshot</p>
                 {dataVolume.isLoading ? (
-                  <p className="text-sm text-indigo-600">Calculating...</p>
+                  <p className="text-sm text-blue-600">Calculating...</p>
                 ) : dataVolume.error ? (
                   <p className="text-sm text-amber-600">{dataVolume.error}</p>
                 ) : (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center p-3 bg-white rounded-lg">
-                      <p className="text-2xl font-bold text-indigo-600">{dataVolume.knowledgeCount}</p>
+                      <p className="text-2xl font-bold text-blue-600">{dataVolume.knowledgeCount}</p>
                       <p className="text-xs text-slate-500">Knowledge Sources</p>
                     </div>
                     <div className="text-center p-3 bg-white rounded-lg">
-                      <p className="text-2xl font-bold text-indigo-600">{dataVolume.conversationCount}</p>
+                      <p className="text-2xl font-bold text-blue-600">{dataVolume.conversationCount}</p>
                       <p className="text-xs text-slate-500">Conversations</p>
                     </div>
                   </div>
                 )}
                 {!dataVolume.isLoading && (
-                  <p className="mt-3 text-xs text-indigo-700 text-center">
+                  <p className="mt-3 text-xs text-blue-700 text-center">
                     Estimated items to clear: <strong>{totalItems}</strong>
                   </p>
                 )}

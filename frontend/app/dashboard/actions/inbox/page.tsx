@@ -134,7 +134,7 @@ export default function InboxPage() {
     if (twinLoading) {
         return (
             <div className="flex justify-center p-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
             </div>
         );
     }
@@ -143,14 +143,14 @@ export default function InboxPage() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center max-w-md p-8">
-                    <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 bg-blue-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
                     <p className="text-slate-400 mb-6">Create your persona first to access the approval inbox.</p>
-                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
                         Create Your Persona
                     </a>
                 </div>
@@ -206,7 +206,7 @@ export default function InboxPage() {
                                                     {draft.proposed_action.action_type.replace(/_/g, ' ')}
                                                 </div>
                                                 {draft.context.user_message && (
-                                                    <div className="mt-2 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-sm text-indigo-200 max-w-lg">
+                                                    <div className="mt-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-sm text-blue-200 max-w-lg">
                                                         💬 "{draft.context.user_message}"
                                                     </div>
                                                 )}
@@ -227,7 +227,7 @@ export default function InboxPage() {
                                                 setResponseMessage('');
                                                 setApprovalNote('');
                                             }}
-                                            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all"
+                                            className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all"
                                         >
                                             Respond
                                         </button>
@@ -244,8 +244,8 @@ export default function InboxPage() {
                     <div className="space-y-5 pt-4">
                         {/* User's message */}
                         {selectedDraft.context.user_message && (
-                            <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl">
-                                <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2">User Said</div>
+                            <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                                <div className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-2">User Said</div>
                                 <div className="text-white">"{selectedDraft.context.user_message}"</div>
                             </div>
                         )}
@@ -255,7 +255,7 @@ export default function InboxPage() {
                             <button
                                 onClick={() => setActiveTab('respond')}
                                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all ${activeTab === 'respond'
-                                    ? 'bg-indigo-600 text-white'
+                                    ? 'bg-blue-600 text-white'
                                     : 'text-slate-400 hover:text-white'
                                     }`}
                             >
@@ -293,14 +293,14 @@ export default function InboxPage() {
                                         onChange={(e) => setResponseMessage(e.target.value)}
                                         placeholder="Type your response to the user..."
                                         rows={4}
-                                        className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                                        className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                                     />
                                 </div>
 
-                                <div className="flex items-center justify-between p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                                <div className="flex items-center justify-between p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                                     <div>
-                                        <span className="text-sm font-bold text-purple-300">Save to Knowledge Base</span>
-                                        <p className="text-[10px] text-purple-400/70">Your response will be remembered for future similar questions</p>
+                                        <span className="text-sm font-bold text-blue-300">Save to Knowledge Base</span>
+                                        <p className="text-[10px] text-blue-400/70">Your response will be remembered for future similar questions</p>
                                     </div>
                                     <Toggle
                                         checked={saveAsVerified}
@@ -312,7 +312,7 @@ export default function InboxPage() {
                                 <button
                                     onClick={() => handleRespond(selectedDraft.id)}
                                     disabled={!responseMessage.trim()}
-                                    className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition-all"
+                                    className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition-all"
                                 >
                                     Send Response
                                 </button>

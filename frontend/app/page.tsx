@@ -6,37 +6,31 @@ import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
 
-// PersonaOn AI Landing Page
 export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-
-  // Scroll animation observer
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
-    
-    // Check current session
-    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-      setUser(session?.user || null);
-      setLoading(false);
-    });
 
-    // Listen for auth changes
+    supabase.auth.getSession()
+      .then(({ data: { session } }: { data: { session: Session | null } }) => {
+        setUser(session?.user ?? null);
+      })
+      .catch(() => { /* treat network failure as logged-out */ })
+      .finally(() => { setLoading(false); });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
       setUser(session?.user || null);
     });
 
-    // Scroll animations
     observerRef.current = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('animate-in');
-        }
+        if (entry.isIntersecting) entry.target.classList.add('animate-in');
       });
     }, { threshold: 0.1 });
 
@@ -57,98 +51,59 @@ export default function Home() {
     router.refresh();
   };
 
-  const toggleFaq = (index: number) => {
-    setActiveFaq(activeFaq === index ? null : index);
-  };
-
   const scrollToSection = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
     setMobileMenuOpen(false);
   };
 
   return (
-    <div className="min-h-screen bg-[#0F0F1A] text-white font-sans overflow-x-hidden">
-      {/* Animated Grid Background */}
-      <div 
-        className="fixed inset-0 pointer-events-none"
-        style={{
-          backgroundImage: `
-            linear-gradient(rgba(79, 70, 229, 0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(79, 70, 229, 0.03) 1px, transparent 1px)
-          `,
-          backgroundSize: '60px 60px',
-        }}
-      />
+    <div className="min-h-screen bg-[#080E1A] text-white overflow-x-hidden" style={{ fontFamily: "var(--font-sans, 'Plus Jakarta Sans', sans-serif)" }}>
 
-      {/* Floating Gradient Orbs */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-[#4F46E5]/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-20 -left-40 w-[400px] h-[400px] bg-[#7C3AED]/15 rounded-full blur-[100px]" />
+      {/* Warm ambient radial — amber top-right, teal bottom-left */}
+      <div className="pointer-events-none fixed inset-0">
+        <div className="absolute -top-32 right-0 w-[520px] h-[520px] rounded-full bg-amber-500/[0.06] blur-[130px]" />
+        <div className="absolute bottom-0 -left-24 w-[380px] h-[380px] rounded-full bg-teal-600/[0.05] blur-[100px]" />
       </div>
 
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0F0F1A]/80 backdrop-blur-xl border-b border-white/5">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12">
-          <div className="flex items-center justify-between h-16">
+      {/* ─── Navigation ─── */}
+      <nav className="fixed top-4 left-4 right-4 z-50 rounded-2xl bg-[#0a1120]/85 backdrop-blur-xl border border-white/8 shadow-xl">
+        <div className="mx-auto max-w-7xl px-5 lg:px-8">
+          <div className="flex items-center justify-between h-14">
+
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="w-10 h-10 relative">
-                <svg viewBox="0 0 44 44" fill="none" className="w-full h-full">
-                  <path d="M22 2L40 12V32L22 42L4 32V12L22 2Z" fill="url(#logoGradient)" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
-                  <circle cx="22" cy="16" r="4" fill="white" fillOpacity="0.9"/>
-                  <circle cx="14" cy="26" r="3" fill="white" fillOpacity="0.7"/>
-                  <circle cx="30" cy="26" r="3" fill="white" fillOpacity="0.7"/>
-                  <circle cx="22" cy="32" r="2.5" fill="white" fillOpacity="0.8"/>
-                  <path d="M22 20L14 23M22 20L30 23M14 29L22 30M30 29L22 30" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6"/>
-                  <defs>
-                    <linearGradient id="logoGradient" x1="4" y1="2" x2="40" y2="42">
-                      <stop stopColor="#4F46E5"/>
-                      <stop offset="0.5" stopColor="#7C3AED"/>
-                      <stop offset="1" stopColor="#EC4899"/>
-                    </linearGradient>
-                  </defs>
+            <Link href="/" className="flex items-center gap-2.5 group" aria-label="PersonaOn AI home">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 shadow-sm">
+                <svg viewBox="0 0 24 24" fill="none" className="w-[18px] h-[18px]" aria-hidden="true">
+                  <circle cx="12" cy="8" r="3" fill="white" fillOpacity="0.95" />
+                  <circle cx="7" cy="16" r="2" fill="white" fillOpacity="0.7" />
+                  <circle cx="17" cy="16" r="2" fill="white" fillOpacity="0.7" />
+                  <path d="M12 11L7 13.5M12 11L17 13.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.5" />
                 </svg>
               </div>
-              <span className="text-lg font-bold">PersonaOn AI</span>
+              <span className="text-base font-bold tracking-tight">PersonaOn AI</span>
             </Link>
 
             {/* Desktop Nav */}
-            <div className="hidden md:flex items-center gap-8">
-              <button onClick={() => scrollToSection('features')} className="text-sm text-slate-400 hover:text-white transition-colors relative group">
-                Features
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
-              </button>
-              <button onClick={() => scrollToSection('how-it-works')} className="text-sm text-slate-400 hover:text-white transition-colors relative group">
-                How It Works
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
-              </button>
-              <button onClick={() => scrollToSection('pricing')} className="text-sm text-slate-400 hover:text-white transition-colors relative group">
-                Pricing
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
-              </button>
-              <Link href="/marketplace" className="text-sm text-slate-400 hover:text-white transition-colors relative group">
+            <div className="hidden md:flex items-center gap-7">
+              {[
+                { label: 'Features', id: 'features' },
+                { label: 'How It Works', id: 'how-it-works' },
+                { label: 'FAQ', id: 'faq' },
+              ].map(({ label, id }) => (
+                <button key={id} onClick={() => scrollToSection(id)} className="cursor-pointer text-sm text-slate-400 hover:text-white transition-colors duration-150">
+                  {label}
+                </button>
+              ))}
+              <Link href="/marketplace" className="text-sm text-slate-400 hover:text-white transition-colors duration-150">
                 Marketplace
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
               </Link>
-              <button onClick={() => scrollToSection('faq')} className="text-sm text-slate-400 hover:text-white transition-colors relative group">
-                FAQ
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] group-hover:w-full transition-all duration-200" />
-              </button>
-              
+
               {loading ? (
-                <div className="w-8 h-8 rounded-full bg-slate-700 animate-pulse" />
+                <div className="h-8 w-24 rounded-lg bg-white/5 animate-pulse" />
               ) : user ? (
                 <div className="flex items-center gap-4">
-                  <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white transition-colors">
-                    Dashboard
-                  </Link>
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-sm font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition-all"
-                  >
+                  <Link href="/dashboard" className="text-sm text-slate-400 hover:text-white transition-colors">Dashboard</Link>
+                  <button onClick={handleLogout} className="cursor-pointer rounded-full border border-white/10 px-4 py-1.5 text-sm font-medium text-white hover:bg-white/5 transition-colors">
                     Sign Out
                   </button>
                 </div>
@@ -157,20 +112,22 @@ export default function Home() {
                   <Link href="/auth/login" className="text-sm text-slate-400 hover:text-white transition-colors">Sign In</Link>
                   <Link
                     href="/auth/login?redirect=/onboarding"
-                    className="px-4 py-2 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-sm font-semibold rounded-lg hover:shadow-lg hover:shadow-indigo-500/30 transition-all hover:-translate-y-0.5"
+                    className="rounded-full bg-[#F97316] px-5 py-2 text-sm font-semibold text-white shadow-[0_0_14px_rgba(249,115,22,0.35)] transition-shadow duration-200 hover:shadow-[0_0_22px_rgba(249,115,22,0.55)]"
                   >
-                    Get Started
+                    Build yours free →
                   </Link>
                 </>
               )}
             </div>
 
-            {/* Mobile Menu Button */}
-            <button 
-              className="md:hidden p-2 text-slate-400"
+            {/* Mobile menu button */}
+            <button
+              className="md:hidden cursor-pointer p-2 text-slate-400 hover:text-white"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+              aria-expanded={mobileMenuOpen}
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                 {mobileMenuOpen ? (
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                 ) : (
@@ -181,149 +138,142 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-[#0F0F1A]/95 backdrop-blur-xl border-t border-white/5">
-            <div className="px-6 py-4 space-y-4">
-              <button onClick={() => scrollToSection('features')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">Features</button>
-              <button onClick={() => scrollToSection('how-it-works')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">How It Works</button>
-              <button onClick={() => scrollToSection('pricing')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">Pricing</button>
-              <Link href="/marketplace" className="block text-sm text-slate-400 hover:text-white transition-colors">Marketplace</Link>
-              <button onClick={() => scrollToSection('faq')} className="block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">FAQ</button>
-              {user ? (
-                <>
-                  <Link href="/dashboard" className="block text-sm text-slate-400 hover:text-white transition-colors">Dashboard</Link>
-                  <button onClick={handleLogout} className="w-full px-4 py-2 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-sm font-semibold rounded-lg">Sign Out</button>
-                </>
-              ) : (
-                <>
-                  <Link href="/auth/login" className="block text-sm text-slate-400 hover:text-white transition-colors">Sign In</Link>
-                  <Link href="/auth/login?redirect=/onboarding" className="block w-full px-4 py-2 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-sm font-semibold rounded-lg text-center">Get Started</Link>
-                </>
-              )}
-            </div>
+          <div className="md:hidden border-t border-white/8 px-5 py-4 space-y-3">
+            {[
+              { label: 'Features', id: 'features' },
+              { label: 'How It Works', id: 'how-it-works' },
+              { label: 'FAQ', id: 'faq' },
+            ].map(({ label, id }) => (
+              <button key={id} onClick={() => scrollToSection(id)} className="cursor-pointer block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">
+                {label}
+              </button>
+            ))}
+            <Link href="/marketplace" className="block text-sm text-slate-400 hover:text-white transition-colors">Marketplace</Link>
+            {user ? (
+              <>
+                <Link href="/dashboard" className="block text-sm text-slate-400 hover:text-white transition-colors">Dashboard</Link>
+                <button onClick={handleLogout} className="cursor-pointer block w-full text-left text-sm text-slate-400 hover:text-white transition-colors">Sign Out</button>
+              </>
+            ) : (
+              <>
+                <Link href="/auth/login" className="block text-sm text-slate-400 hover:text-white transition-colors">Sign In</Link>
+                <Link href="/auth/login?redirect=/onboarding" className="mt-2 block w-full rounded-full bg-[#F97316] py-2.5 text-center text-sm font-semibold text-white shadow-[0_0_14px_rgba(249,115,22,0.35)]">
+                  Build yours free →
+                </Link>
+              </>
+            )}
           </div>
         )}
       </nav>
 
-      {/* Hero Section */}
-      <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-32">
-        <div className="max-w-7xl mx-auto px-6 lg:px-12">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-            {/* Hero Text */}
-            <div className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5]/10 border border-[#4F46E5]/30 rounded-full mb-6">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-sm text-[#A5B4FC]">Trusted by 1,000+ creators</span>
-              </div>
-              
-              <h1 className="text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
-                Create Your{' '}
-                <span className="bg-gradient-to-r from-white via-[#A5B4FC] to-[#C4B5FD] bg-clip-text text-transparent">
-                  AI Persona
+      {/* ─── Hero ─── */}
+      <section className="relative pt-36 pb-24 lg:pt-48 lg:pb-36">
+        <div className="mx-auto max-w-7xl px-6 lg:px-12">
+          <div className="grid gap-16 lg:grid-cols-2 lg:gap-20 items-center">
+
+            {/* Left: copy */}
+            <div className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700">
+              {/* Badge */}
+              <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-4 py-1.5">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-60" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
                 </span>
+                <span className="text-sm font-medium text-amber-300">Your digital persona · always on</span>
+              </div>
+
+              {/* Headline — DM Serif Display */}
+              <h1 style={{ fontFamily: "'DM Serif Display', Georgia, serif" }} className="text-5xl leading-[1.08] text-white lg:text-6xl xl:text-7xl mb-6">
+                Be present,<br />
+                <span className="text-amber-100/90">even when<br />you can't be.</span>
               </h1>
-              
-              <p className="text-lg lg:text-xl text-slate-400 mb-8 leading-relaxed">
-                An AI that answers exactly like you—with verified sources and zero hallucinations. Train once, scale infinitely.
+
+              <p className="text-lg leading-8 text-slate-400 max-w-md mb-9">
+                Turn your knowledge into an AI that answers exactly like you — with verified sources, your voice, and zero hallucinations.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 mb-10">
-                {user ? (
-                  <Link
-                    href="/dashboard"
-                    className="group px-8 py-4 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2"
-                  >
-                    Go to Dashboard
-                    <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                    </svg>
-                  </Link>
-                ) : (
-                  <Link
-                    href="/auth/login?redirect=/onboarding"
-                    className="group px-8 py-4 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2"
-                  >
-                    Build Your Persona Free
-                    <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                    </svg>
-                  </Link>
-                )}
-                <button className="px-8 py-4 bg-white/5 text-white font-semibold rounded-xl border border-white/10 hover:bg-white/10 transition-all">
-                  View Demo
-                </button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  href={user ? "/dashboard" : "/auth/login?redirect=/onboarding"}
+                  className="rounded-full bg-[#F97316] px-7 py-3.5 text-base font-semibold text-white shadow-[0_0_20px_rgba(249,115,22,0.40)] transition-shadow duration-200 hover:shadow-[0_0_32px_rgba(249,115,22,0.60)] text-center"
+                >
+                  {user ? "Go to Dashboard →" : "Build yours free →"}
+                </Link>
+                <Link
+                  href="/marketplace"
+                  className="rounded-full border border-white/10 bg-white/5 px-7 py-3.5 text-base font-semibold text-white hover:bg-white/10 transition-colors text-center"
+                >
+                  Browse Personas
+                </Link>
               </div>
 
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-widest mb-3">Backed by teams at</p>
-                <div className="flex flex-wrap gap-6">
-                  {['Stripe', 'Notion', 'Figma', 'Linear'].map((company) => (
-                    <span key={company} className="text-lg font-bold text-slate-500 hover:text-slate-400 transition-colors cursor-default">
-                      {company}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <p className="mt-4 text-xs text-slate-500">Free forever · No credit card · 2-minute setup</p>
             </div>
 
-            {/* Hero Demo Card */}
-            <div className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 delay-200 lg:perspective-1000">
-              <div className="relative bg-[#1A1A2E]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl hover:shadow-indigo-500/10 transition-all duration-300 lg:rotate-y-[-5deg] lg:hover:rotate-y-0">
-                {/* Demo Header */}
-                <div className="flex items-center gap-3 mb-5 pb-5 border-b border-white/5">
-                  <div className="w-11 h-11 bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] rounded-xl flex items-center justify-center font-bold">
-                    LR
+            {/* Right: demo card */}
+            <div className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 delay-200">
+              <div className="relative rounded-[28px] border border-white/10 bg-[#0F1C2E] p-6 shadow-2xl">
+                {/* Card header */}
+                <div className="flex items-center gap-3 border-b border-white/8 pb-5 mb-5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[linear-gradient(135deg,#f59e0b,#f97316)] text-sm font-bold text-white">
+                    AR
                   </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-sm">Lenny Rachitsky</h4>
-                    <p className="text-xs text-slate-500">Product & Growth Advisor</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white">Alex Rivera</p>
+                    <p className="text-xs text-slate-500">Product Strategy · Always On</p>
                   </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 text-emerald-400 rounded-full text-xs font-semibold">
-                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                    LIVE
+                  <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+                    Live
                   </div>
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  <div className="bg-white/5 border border-white/5 rounded-xl p-4 text-center hover:bg-white/[0.07] hover:border-[#4F46E5]/30 transition-all">
-                    <div className="text-2xl font-bold bg-gradient-to-r from-white to-[#A5B4FC] bg-clip-text text-transparent">2,847</div>
-                    <div className="text-xs text-slate-500 uppercase tracking-wide mt-1">Conversations</div>
-                  </div>
-                  <div className="bg-white/5 border border-white/5 rounded-xl p-4 text-center hover:bg-white/[0.07] hover:border-[#4F46E5]/30 transition-all">
-                    <div className="text-2xl font-bold bg-gradient-to-r from-white to-[#A5B4FC] bg-clip-text text-transparent">98.5%</div>
-                    <div className="text-xs text-slate-500 uppercase tracking-wide mt-1">Accuracy</div>
-                  </div>
+                <div className="mb-5 grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Conversations', value: '1.4k' },
+                    { label: 'Answerability', value: '94%' },
+                    { label: 'Verified Claims', value: '312' },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="rounded-[14px] bg-[#162236] p-3 text-center">
+                      <p className="text-lg font-semibold text-white">{value}</p>
+                      <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-400">{label}</p>
+                    </div>
+                  ))}
                 </div>
 
-                {/* Chat Preview */}
-                <div className="bg-black/30 rounded-2xl p-4 mb-4 space-y-3">
+                {/* Chat preview */}
+                <div className="space-y-3 rounded-[18px] bg-[#060C18] p-4">
                   <div className="flex gap-2.5">
-                    <div className="w-7 h-7 bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] rounded-lg flex items-center justify-center text-xs font-bold shrink-0">LR</div>
-                    <div className="bg-[#4F46E5]/20 rounded-xl rounded-tl-sm px-3 py-2 text-sm text-slate-200 max-w-[80%]">
-                      Hi! I'm Lenny's AI persona. Ask me anything about product management, growth, or startup advice.
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-[linear-gradient(135deg,#f59e0b,#f97316)] flex items-center justify-center text-[10px] font-bold text-white">AR</div>
+                    <div className="max-w-[82%] rounded-[16px] rounded-tl-sm bg-[#0F1C2E] px-3 py-2.5 text-sm leading-6 text-slate-200">
+                      Hi! Ask me anything about product strategy or growth — I'll answer from my actual work.
                     </div>
                   </div>
-                  <div className="flex gap-2.5 justify-end">
-                    <div className="bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] rounded-xl rounded-tr-sm px-3 py-2 text-sm text-white max-w-[80%]">
-                      What's your framework for prioritizing features?
+                  <div className="flex justify-end gap-2.5">
+                    <div className="max-w-[82%] rounded-[16px] rounded-tr-sm bg-blue-600/20 border border-blue-500/20 px-3 py-2.5 text-sm leading-6 text-blue-100">
+                      How do you prioritize features with limited eng bandwidth?
                     </div>
                   </div>
                   <div className="flex gap-2.5">
-                    <div className="w-7 h-7 bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] rounded-lg flex items-center justify-center text-xs font-bold shrink-0">LR</div>
-                    <div className="bg-[#4F46E5]/20 rounded-xl rounded-tl-sm px-3 py-2 text-sm text-slate-200 max-w-[80%]">
-                      I use RICE (Reach, Impact, Confidence, Effort) combined with strategic bets...
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-[linear-gradient(135deg,#f59e0b,#f97316)] flex items-center justify-center text-[10px] font-bold text-white">AR</div>
+                    <div className="max-w-[82%] rounded-[16px] rounded-tl-sm bg-[#0F1C2E] px-3 py-2.5 text-sm leading-6 text-slate-200">
+                      I start with impact-to-effort ratio, then layer in strategic bets…
+                      <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded bg-blue-600/30 text-[10px] font-semibold text-blue-300">1</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Input */}
-                <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-3">
-                  <span className="text-sm text-slate-500 flex-1">Type your message...</span>
-                  <button className="w-8 h-8 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] rounded-lg flex items-center justify-center text-white hover:scale-110 transition-transform">
-                    →
-                  </button>
+                <div className="mt-4 flex gap-2.5 rounded-[14px] border border-white/8 bg-[#060C18] px-4 py-3">
+                  <span className="flex-1 text-sm text-slate-400">Ask Alex anything…</span>
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
+                    <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             </div>
@@ -331,185 +281,221 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Divider */}
-      <div className="h-px bg-gradient-to-r from-transparent via-[#4F46E5]/30 to-transparent mx-12" />
-
-      {/* How It Works */}
-      <section id="how-it-works" className="py-24">
-        <div className="max-w-6xl mx-auto px-6 lg:px-12">
-          <div className="text-center mb-16 animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
-            <div className="text-xs text-[#A5B4FC] uppercase tracking-[0.2em] mb-4">How It Works</div>
-            <h2 className="text-4xl lg:text-5xl font-extrabold mb-4">Three steps to your AI persona</h2>
-            <p className="text-lg text-slate-400">From content to conversation in minutes, not months</p>
+      {/* ─── How It Works ─── */}
+      <section id="how-it-works" className="py-28">
+        <div className="mx-auto max-w-6xl px-6 lg:px-12">
+          <div className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 mb-16 text-center">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">How It Works</p>
+            <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif" }} className="text-4xl text-white lg:text-5xl">
+              From knowledge to persona in minutes
+            </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* ISSUE-001: Updated step 2 terminology from "Train" to "Capture" */}
+          <div className="grid gap-5 md:grid-cols-3">
             {[
-              { num: '01', icon: '📤', title: 'Connect Your Content', desc: 'Upload documents, connect URLs, or paste text. We support PDFs, Notion, YouTube transcripts, and more.' },
-              { num: '02', icon: '🧠', title: 'Capture Your Voice', desc: 'Answer a few questions to capture your voice, decision style, and expertise boundaries. Takes 5 minutes.' },
-              { num: '03', icon: '🚀', title: 'Share Everywhere', desc: 'Get a shareable link, embed on your website, or integrate with Slack, Discord, or your API.' },
+              {
+                num: '01',
+                title: 'Connect your content',
+                desc: 'Upload PDFs, paste URLs, connect Notion or YouTube. Your knowledge becomes the source of truth.',
+                icon: (
+                  <svg className="h-6 w-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                ),
+              },
+              {
+                num: '02',
+                title: 'Capture your voice',
+                desc: 'Answer a few questions about your style, values, and expertise boundaries. Takes 5 minutes.',
+                icon: (
+                  <svg className="h-6 w-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                ),
+              },
+              {
+                num: '03',
+                title: 'Share everywhere',
+                desc: 'Get a shareable link, embed on your site, or list in the public marketplace.',
+                icon: (
+                  <svg className="h-6 w-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                  </svg>
+                ),
+              },
             ].map((step, i) => (
-              <div 
-                key={i} 
-                className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 relative bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 backdrop-blur-sm hover:-translate-y-1 hover:border-[#4F46E5]/30 hover:shadow-xl hover:shadow-indigo-500/10 transition-all"
-                style={{ transitionDelay: `${i * 100}ms` }}
+              <div
+                key={step.num}
+                className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 relative rounded-[22px] border border-white/8 bg-[#0F1C2E] p-8"
+                style={{ transitionDelay: `${i * 80}ms` }}
               >
-                <div className="absolute top-4 right-4 text-7xl font-extrabold text-[#4F46E5]/10 leading-none">{step.num}</div>
-                <div className="w-14 h-14 bg-gradient-to-br from-[#4F46E5]/20 to-[#7C3AED]/20 rounded-2xl flex items-center justify-center text-2xl mb-5 border border-[#4F46E5]/30">
+                <p className="absolute top-6 right-7 text-5xl font-black text-white/[0.04] select-none">{step.num}</p>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-[14px] bg-white/5 border border-white/8">
                   {step.icon}
                 </div>
-                <h3 className="text-xl font-bold mb-2">{step.title}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">{step.desc}</p>
+                <h3 className="mb-2 text-lg font-semibold text-white">{step.title}</h3>
+                <p className="text-sm leading-7 text-slate-400">{step.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section id="features" className="py-24">
-        <div className="max-w-6xl mx-auto px-6 lg:px-12">
-          <div className="text-center mb-16 animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
-            <div className="text-xs text-[#A5B4FC] uppercase tracking-[0.2em] mb-4">Features</div>
-            <h2 className="text-4xl lg:text-5xl font-extrabold mb-4">Built for trust, designed for scale</h2>
-            <p className="text-lg text-slate-400">Everything you need to create your AI persona</p>
+      {/* ─── Features ─── */}
+      <section id="features" className="py-28">
+        <div className="mx-auto max-w-6xl px-6 lg:px-12">
+          <div className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 mb-16 text-center">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Features</p>
+            <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif" }} className="text-4xl text-white lg:text-5xl">
+              Built for trust
+            </h2>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Large Feature Card - Citations */}
-            <div className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 md:col-span-2 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 hover:-translate-y-1 hover:border-[#4F46E5]/30 hover:shadow-xl hover:shadow-indigo-500/10 transition-all">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#4F46E5]/20 to-[#7C3AED]/20 rounded-xl flex items-center justify-center text-xl mb-4 border border-[#4F46E5]/30">📚</div>
-              <h3 className="text-xl font-bold mb-2">Source Citations</h3>
-              <p className="text-slate-400 mb-6">Every answer includes inline citations linking back to your original sources. Build trust with verified, traceable information.</p>
-              <div className="bg-black/20 rounded-xl p-5 border border-white/5">
-                <p className="text-sm text-slate-300">
-                  I recommend focusing on customer retention first
-                  <span className="inline-flex items-center justify-center w-5 h-5 bg-[#4F46E5]/30 text-[#A5B4FC] rounded text-xs mx-1 cursor-pointer hover:bg-[#4F46E5]/50 transition-colors">1</span>
-                  then expansion revenue.
-                  <span className="inline-flex items-center justify-center w-5 h-5 bg-[#4F46E5]/30 text-[#A5B4FC] rounded text-xs mx-1 cursor-pointer hover:bg-[#4F46E5]/50 transition-colors">2</span>
-                </p>
-              </div>
-            </div>
-
-            {/* Feature Cards */}
+          {/* 4-col feature grid — Delphi style */}
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { icon: '✓', title: 'Confidence Scoring', desc: 'See exactly how confident your persona is in each response. Low confidence triggers automatic clarification.' },
-              { icon: '🎭', title: 'Voice Consistency', desc: 'Your persona learns your unique writing style, tone, and decision-making patterns from training.' },
-              { icon: '🚨', title: 'Human Escalation', desc: 'Questions outside your expertise are automatically escalated to you with suggested responses.' },
-              { icon: '🔒', title: 'Access Control', desc: 'Control who can chat with your persona. Public links, password protection, or invite-only access.' },
+              {
+                title: 'Source Citations',
+                desc: 'Every answer links to the source document. No hallucinations, fully traceable.',
+                icon: (
+                  <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Voice Consistent',
+                desc: 'Trained on your writing style, tone, and decision patterns — sounds like you.',
+                icon: (
+                  <svg className="h-5 w-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Confidence Scoring',
+                desc: 'Each response shows how confident your persona is. Low scores trigger escalation.',
+                icon: (
+                  <svg className="h-5 w-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Access Control',
+                desc: 'Public link, password-protected, or private. You choose who can talk to your persona.',
+                icon: (
+                  <svg className="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Human Escalation',
+                desc: 'Questions outside your expertise are flagged and queued for your review.',
+                icon: (
+                  <svg className="h-5 w-5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Knowledge Graph',
+                desc: 'Structured memory of your beliefs, stances, and expertise — updated as you learn.',
+                badge: 'Beta',
+                icon: (
+                  <svg className="h-5 w-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Marketplace',
+                desc: 'List your persona publicly so anyone can discover and chat with your AI.',
+                icon: (
+                  <svg className="h-5 w-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ),
+              },
+              {
+                title: 'Always Free',
+                desc: 'No paywalls, no credits. Build and share your persona at no cost.',
+                icon: (
+                  <svg className="h-5 w-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ),
+              },
             ].map((feature, i) => (
-              <div 
-                key={i}
-                className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 hover:-translate-y-1 hover:border-[#4F46E5]/30 hover:shadow-xl hover:shadow-indigo-500/10 transition-all"
-                style={{ transitionDelay: `${(i + 1) * 100}ms` }}
+              <div
+                key={feature.title}
+                className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 rounded-[20px] border border-white/8 bg-[#0F1C2E] p-6 hover:border-white/12 transition-colors"
+                style={{ transitionDelay: `${i * 50}ms` }}
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-[#4F46E5]/20 to-[#7C3AED]/20 rounded-xl flex items-center justify-center text-lg mb-4 border border-[#4F46E5]/30">
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-[12px] bg-white/5 border border-white/8">
                   {feature.icon}
                 </div>
-                <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="py-24">
-        <div className="max-w-6xl mx-auto px-6 lg:px-12">
-          <div className="text-center mb-16 animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
-            <div className="text-xs text-[#A5B4FC] uppercase tracking-[0.2em] mb-4">Pricing</div>
-            <h2 className="text-4xl lg:text-5xl font-extrabold mb-4">Simple, transparent pricing</h2>
-            <p className="text-lg text-slate-400">Start free, scale as you grow</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {[
-              { name: 'Starter', price: 'Free', period: '', desc: 'Perfect for creating your first persona', features: ['1 persona', '100 messages/month', '3 knowledge sources', 'Basic embed widget', 'Community support'], cta: 'Get Started', featured: false },
-              { name: 'Pro', price: '$29', period: '/month', desc: 'For creators ready to scale', features: ['3 personas', 'Unlimited messages', 'Unlimited sources', 'Custom branding', 'API access', 'Priority support'], cta: 'Start 14-Day Trial', featured: true },
-              { name: 'Enterprise', price: 'Custom', period: '', desc: 'For teams with advanced needs', features: ['Unlimited personas', 'SSO / SAML', 'Custom integrations', 'SLA guarantee', 'Dedicated support', 'Audit logs'], cta: 'Contact Sales', featured: false },
-            ].map((plan, i) => (
-              <div 
-                key={i}
-                className={`animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 relative rounded-3xl p-8 transition-all hover:-translate-y-1 ${
-                  plan.featured 
-                    ? 'bg-gradient-to-b from-[#4F46E5]/10 to-[#7C3AED]/10 border border-[#4F46E5]/30 shadow-xl shadow-indigo-500/20' 
-                    : 'bg-white/[0.03] border border-white/[0.08] hover:border-white/[0.15]'
-                }`}
-                style={{ transitionDelay: `${i * 100}ms` }}
-              >
-                {plan.featured && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white text-xs font-bold rounded-full">
-                    Most Popular
-                  </div>
-                )}
-                <h3 className="text-lg font-bold mb-2">{plan.name}</h3>
-                <div className="mb-2">
-                  <span className="text-4xl font-extrabold">{plan.price}</span>
-                  {plan.period && <span className="text-slate-400">{plan.period}</span>}
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-sm font-semibold text-white">{feature.title}</h3>
+                  {feature.badge && (
+                    <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+                      {feature.badge}
+                    </span>
+                  )}
                 </div>
-                <p className="text-sm text-slate-400 mb-6">{plan.desc}</p>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, j) => (
-                    <li key={j} className="flex items-center gap-3 text-sm">
-                      <span className="w-5 h-5 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center text-xs">✓</span>
-                      <span className="text-slate-300">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href={user ? "/dashboard" : "/auth/login?redirect=/onboarding"}
-                  className={`block w-full py-3 text-center font-semibold rounded-xl transition-all hover:-translate-y-0.5 ${
-                    plan.featured 
-                      ? 'bg-white text-black hover:bg-slate-200' 
-                      : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'
-                  }`}
-                >
-                  {user ? "Go to Dashboard" : plan.cta}
-                </Link>
+                <p className="text-sm leading-6 text-slate-500">{feature.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* FAQ */}
-      <section id="faq" className="py-24">
-        <div className="max-w-3xl mx-auto px-6 lg:px-12">
-          <div className="text-center mb-16 animate-on-scroll opacity-0 translate-y-10 transition-all duration-700">
-            <div className="text-xs text-[#A5B4FC] uppercase tracking-[0.2em] mb-4">FAQ</div>
-            <h2 className="text-4xl lg:text-5xl font-extrabold">Frequently asked questions</h2>
+      {/* ─── FAQ ─── */}
+      <section id="faq" className="py-28">
+        <div className="mx-auto max-w-3xl px-6 lg:px-12">
+          <div className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 mb-16 text-center">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">FAQ</p>
+            <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif" }} className="text-4xl text-white lg:text-5xl">
+              Common questions
+            </h2>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-2">
             {[
-              { q: 'How is this different from ChatGPT?', a: 'Your persona only answers from your verified knowledge sources—no hallucinations, no generic answers. It learns your specific voice, decision style, and expertise boundaries through structured training, not just prompt engineering.' },
-              { q: 'Can I update my persona\'s knowledge?', a: 'Yes! Add new documents, URLs, or text anytime. Your persona automatically incorporates new knowledge while maintaining version control—you can roll back to previous versions if needed.' },
-              { q: 'Is my data private?', a: 'Absolutely. Your training data and knowledge sources are isolated per tenant with Row Level Security in PostgreSQL. We never use your data to train models for other users. Full export and deletion supported.' },
-              { q: 'What platforms can I share to?', a: 'Share via public link, embed as a widget on your website, or integrate via API into Slack, Discord, WhatsApp, or your own application. Full white-label options available on Pro and Enterprise plans.' },
+              { q: 'How is this different from ChatGPT?', a: 'Your persona only answers from your verified knowledge sources — no hallucinations, no generic answers. It learns your specific voice, decision style, and expertise boundaries through structured training, not just prompt engineering.' },
+              { q: 'Can I update my persona\'s knowledge?', a: 'Yes. Add new documents, URLs, or text anytime. Your persona automatically incorporates new knowledge while maintaining the same consistent voice.' },
+              { q: 'Is my data private?', a: 'Your training data and knowledge sources are isolated per user with Row Level Security. We never use your data to train models for other users. Full export and deletion supported.' },
+              { q: 'Is it really free?', a: 'Yes — build your persona and share it at no cost. We believe everyone should have access to this technology.' },
+              { q: 'What happens if someone asks something I haven\'t covered?', a: 'Low-confidence questions are automatically escalated and queued in your dashboard for review. You can respond directly or add the topic to your knowledge base.' },
             ].map((faq, i) => (
-              <div 
-                key={i} 
-                className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 border-b border-white/[0.08]"
-                style={{ transitionDelay: `${i * 100}ms` }}
+              <div
+                key={i}
+                className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 rounded-[18px] border border-white/8 overflow-hidden"
+                style={{ transitionDelay: `${i * 60}ms` }}
               >
-                <button 
-                  className="w-full py-5 flex items-center justify-between text-left"
-                  onClick={() => toggleFaq(i)}
+                <button
+                  id={`faq-btn-${i}`}
+                  className="cursor-pointer flex w-full items-center justify-between gap-4 px-6 py-5 text-left hover:bg-white/[0.02] transition-colors"
+                  onClick={() => setActiveFaq(activeFaq === i ? null : i)}
+                  aria-expanded={activeFaq === i}
+                  aria-controls={`faq-panel-${i}`}
                 >
-                  <span className="font-semibold pr-4">{faq.q}</span>
-                  <svg 
-                    className={`w-5 h-5 text-slate-400 shrink-0 transition-transform duration-300 ${activeFaq === i ? 'rotate-180' : ''}`} 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
+                  <span className="text-sm font-semibold text-white">{faq.q}</span>
+                  <svg
+                    className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${activeFaq === i ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
-                <div className={`overflow-hidden transition-all duration-300 ${activeFaq === i ? 'max-h-40 pb-5' : 'max-h-0'}`}>
-                  <p className="text-slate-400 text-sm leading-relaxed">{faq.a}</p>
+                <div
+                  id={`faq-panel-${i}`}
+                  role="region"
+                  aria-labelledby={`faq-btn-${i}`}
+                  className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${activeFaq === i ? 'max-h-40' : 'max-h-0'}`}
+                >
+                  <p className="px-6 pb-5 text-sm leading-7 text-slate-400">{faq.a}</p>
                 </div>
               </div>
             ))}
@@ -517,105 +503,87 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,70,229,0.15)_0%,transparent_70%)] pointer-events-none" />
-        <div className="max-w-4xl mx-auto px-6 lg:px-12 text-center relative">
-          <h2 className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 text-4xl lg:text-5xl font-extrabold mb-4">
-            Ready to clone yourself?
-          </h2>
-          <p className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 delay-100 text-lg text-slate-400 mb-8">
-            Join 1,000+ creators who've already built their twins.
-          </p>
-          <Link 
-            href={user ? "/dashboard" : "/auth/login?redirect=/onboarding"}
-            className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 delay-200 inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#4F46E5] to-[#7C3AED] text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-indigo-500/50 transition-all hover:-translate-y-0.5"
-          >
-            Build Your Persona Free →
-          </Link>
-          <p className="animate-on-scroll opacity-0 translate-y-10 transition-all duration-700 delay-300 text-xs text-slate-500 mt-4">
-            No credit card • 2-minute setup • Cancel anytime
-          </p>
+      {/* ─── Final CTA ─── */}
+      <section className="relative py-28 overflow-hidden">
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-amber-500/[0.07] blur-[100px]" />
+        <div className="relative mx-auto max-w-3xl px-6 lg:px-12 text-center">
+          <div className="animate-on-scroll opacity-0 translate-y-8 transition-all duration-700 rounded-[32px] border border-white/8 bg-[#0F1C2E] px-8 py-16 sm:px-16">
+            <h2 style={{ fontFamily: "'DM Serif Display', Georgia, serif" }} className="text-4xl text-white mb-4 lg:text-5xl">
+              Your persona, always on.
+            </h2>
+            <p className="mb-8 text-lg leading-8 text-slate-400 max-w-sm mx-auto">
+              Build once. Answer every question — even while you sleep.
+            </p>
+            <Link
+              href={user ? "/dashboard" : "/auth/login?redirect=/onboarding"}
+              className="inline-block rounded-full bg-[#F97316] px-8 py-4 text-base font-semibold text-white shadow-[0_0_24px_rgba(249,115,22,0.45)] transition-shadow duration-200 hover:shadow-[0_0_40px_rgba(249,115,22,0.65)]"
+            >
+              {user ? "Go to Dashboard →" : "Build yours free →"}
+            </Link>
+            <p className="mt-4 text-xs text-slate-500">Free forever · No credit card</p>
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-white/[0.05] py-12">
-        <div className="max-w-6xl mx-auto px-6 lg:px-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+      {/* ─── Footer ─── */}
+      <footer className="border-t border-white/[0.05] py-14">
+        <div className="mx-auto max-w-6xl px-6 lg:px-12">
+          <div className="grid gap-10 md:grid-cols-4 mb-12">
             {/* Brand */}
-            <div className="col-span-2 md:col-span-1">
-              <div className="flex items-center gap-2 mb-3">
-                <svg viewBox="0 0 44 44" fill="none" className="w-8 h-8">
-                  <path d="M22 2L40 12V32L22 42L4 32V12L22 2Z" fill="url(#footerLogoGradient)" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
-                  <circle cx="22" cy="16" r="4" fill="white" fillOpacity="0.9"/>
-                  <circle cx="14" cy="26" r="3" fill="white" fillOpacity="0.7"/>
-                  <circle cx="30" cy="26" r="3" fill="white" fillOpacity="0.7"/>
-                  <circle cx="22" cy="32" r="2.5" fill="white" fillOpacity="0.8"/>
-                  <path d="M22 20L14 23M22 20L30 23M14 29L22 30M30 29L22 30" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.6"/>
-                  <defs>
-                    <linearGradient id="footerLogoGradient" x1="4" y1="2" x2="40" y2="42">
-                      <stop stopColor="#4F46E5"/>
-                      <stop offset="0.5" stopColor="#7C3AED"/>
-                      <stop offset="1" stopColor="#EC4899"/>
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <span className="font-bold">PersonaOn AI</span>
+            <div className="md:col-span-1">
+              <div className="mb-3 flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
+                  <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+                    <circle cx="12" cy="8" r="3" fill="white" fillOpacity="0.95" />
+                    <circle cx="7" cy="16" r="2" fill="white" fillOpacity="0.7" />
+                    <circle cx="17" cy="16" r="2" fill="white" fillOpacity="0.7" />
+                  </svg>
+                </div>
+                <span className="text-sm font-bold">PersonaOn AI</span>
               </div>
-              <p className="text-sm text-slate-400 leading-relaxed">
-                Your digital persona — always on, always you. Trained on your expertise, speaking with your voice.
-              </p>
+              <p className="text-sm leading-6 text-slate-500">Your digital persona, always on.</p>
             </div>
 
             {/* Product */}
             <div>
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Product</h4>
-              <ul className="space-y-2">
-                {['Features', 'Pricing', 'API', 'Integrations'].map((item) => (
-                  <li key={item}>
-                    <Link href="#" className="text-sm text-slate-400 hover:text-white transition-colors">{item}</Link>
-                  </li>
-                ))}
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">Product</h4>
+              <ul className="space-y-2.5">
+                <li><Link href="#features" className="text-sm text-slate-500 hover:text-white transition-colors">Features</Link></li>
+                <li><Link href="/marketplace" className="text-sm text-slate-500 hover:text-white transition-colors">Marketplace</Link></li>
+                <li><span className="text-sm text-slate-600 cursor-default" aria-disabled="true">API</span></li>
               </ul>
             </div>
 
             {/* Resources */}
             <div>
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Resources</h4>
-              <ul className="space-y-2">
-                {['Documentation', 'Blog', 'Community', 'Help Center'].map((item) => (
-                  <li key={item}>
-                    <Link href="#" className="text-sm text-slate-400 hover:text-white transition-colors">{item}</Link>
-                  </li>
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">Resources</h4>
+              <ul className="space-y-2.5">
+                {['Documentation', 'Blog', 'Help Center'].map((item) => (
+                  <li key={item}><span className="text-sm text-slate-600 cursor-default" aria-disabled="true">{item}</span></li>
                 ))}
               </ul>
             </div>
 
             {/* Company */}
             <div>
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Company</h4>
-              <ul className="space-y-2">
-                {['About', 'Careers', 'Contact', 'Privacy'].map((item) => (
-                  <li key={item}>
-                    <Link href="#" className="text-sm text-slate-400 hover:text-white transition-colors">{item}</Link>
-                  </li>
+              <h4 className="mb-4 text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">Company</h4>
+              <ul className="space-y-2.5">
+                {['About', 'Privacy', 'Contact'].map((item) => (
+                  <li key={item}><span className="text-sm text-slate-600 cursor-default" aria-disabled="true">{item}</span></li>
                 ))}
               </ul>
             </div>
           </div>
 
-          {/* Bottom */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t border-white/[0.05]">
+          <div className="flex flex-col gap-4 border-t border-white/[0.05] pt-8 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-500">© 2026 PersonaOn AI. All rights reserved.</p>
-            <div className="flex gap-3">
-              {['Twitter', 'GitHub', 'Discord'].map((social) => (
-                <a 
-                  key={social} 
-                  href="#" 
-                  className="w-9 h-9 bg-white/5 rounded-lg flex items-center justify-center text-slate-400 hover:bg-[#4F46E5]/20 hover:text-white transition-all"
-                >
-                  <span className="text-xs font-bold">{social[0]}</span>
+            <div className="flex gap-2">
+              {[
+                { label: 'X', ariaLabel: 'X (Twitter)', href: '#' },
+                { label: 'GH', ariaLabel: 'GitHub', href: '#' },
+              ].map(({ label, ariaLabel, href }) => (
+                <a key={label} href={href} className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-[11px] font-bold text-slate-500 hover:bg-white/8 hover:text-white transition-colors" aria-label={ariaLabel}>
+                  {label}
                 </a>
               ))}
             </div>
@@ -623,19 +591,11 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Animation styles */}
+      {/* Scroll-in animation */}
       <style jsx>{`
         .animate-in {
           opacity: 1 !important;
           transform: translateY(0) !important;
-        }
-        @media (min-width: 1024px) {
-          .lg\\:rotate-y-\\[-5deg\\] {
-            transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
-          }
-          .lg\\:hover\\:rotate-y-0:hover {
-            transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
-          }
         }
       `}</style>
     </div>

@@ -87,7 +87,7 @@ export function InterviewControls({
           focus:outline-none focus:ring-4 focus:ring-opacity-50
           ${isRecording
                         ? 'bg-red-500 hover:bg-red-600 focus:ring-red-500'
-                        : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 focus:ring-purple-500'
+                        : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 focus:ring-blue-500'
                     }
           ${(disabled || isLoading) ? 'opacity-50 cursor-not-allowed scale-100' : 'shadow-lg'}
         `}

@@ -223,7 +223,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
         <select
           value={settings.voice_id}
           onChange={(e) => setSettings(s => ({ ...s, voice_id: e.target.value }))}
-          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           {voices.length === 0 ? (
             <option value={DEFAULT_SETTINGS.voice_id}>Default Voice</option>
@@ -254,7 +254,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
           step={0.01}
           value={settings.stability}
           onChange={(e) => setSettings(s => ({ ...s, stability: parseFloat(e.target.value) }))}
-          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
         />
         <p className="text-xs text-slate-500">
           Higher values make the voice more consistent, lower values make it more varied.
@@ -273,7 +273,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
           step={0.01}
           value={settings.similarity_boost}
           onChange={(e) => setSettings(s => ({ ...s, similarity_boost: parseFloat(e.target.value) }))}
-          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
         />
         <p className="text-xs text-slate-500">
           Higher values make the voice more similar to the original, but may increase latency.
@@ -292,7 +292,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
           step={0.01}
           value={settings.style}
           onChange={(e) => setSettings(s => ({ ...s, style: parseFloat(e.target.value) }))}
-          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+          className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
         />
         <p className="text-xs text-slate-500">
           Adjust the speaking style. Higher values are more expressive.
@@ -309,7 +309,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
         <button
           onClick={() => setSettings(s => ({ ...s, use_speaker_boost: !s.use_speaker_boost }))}
           className={`relative w-12 h-6 rounded-full transition-colors ${
-            settings.use_speaker_boost ? 'bg-indigo-600' : 'bg-slate-300'
+            settings.use_speaker_boost ? 'bg-blue-600' : 'bg-slate-300'
           }`}
         >
           <div
@@ -324,7 +324,7 @@ export default function VoiceSettings({ twinId }: VoiceSettingsProps) {
         <button
           onClick={handleSave}
           disabled={saving || !hasChanges}
-          className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-6 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {saving ? 'Saving...' : 'Save Changes'}
         </button>

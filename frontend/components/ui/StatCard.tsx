@@ -12,18 +12,17 @@ interface StatCardProps {
         value: number;
         direction: 'up' | 'down' | 'neutral';
     };
-    color?: 'indigo' | 'emerald' | 'amber' | 'rose' | 'blue' | 'purple' | 'slate';
+    color?: 'blue' | 'emerald' | 'amber' | 'rose' | 'blue-pink' | 'slate';
     onClick?: () => void;
     className?: string;
 }
 
 const colorMap = {
-    indigo: 'from-indigo-500 to-purple-500',
+    blue: 'from-blue-500 to-blue-600',
     emerald: 'from-emerald-500 to-teal-500',
     amber: 'from-amber-500 to-orange-500',
     rose: 'from-rose-500 to-red-500',
-    blue: 'from-blue-500 to-indigo-500',
-    purple: 'from-purple-500 to-pink-500',
+    'blue-pink': 'from-blue-500 to-pink-500',
     slate: 'from-slate-500 to-slate-600'
 };
 
@@ -34,7 +33,7 @@ export function StatCard({
     icon,
     emoji,
     trend,
-    color = 'indigo',
+    color = 'blue',
     onClick,
     className = ''
 }: StatCardProps) {
@@ -93,11 +92,11 @@ export function StatCardCompact({
     label,
     value,
     icon,
-    color = 'indigo'
+    color = 'blue'
 }: Pick<StatCardProps, 'label' | 'value' | 'icon' | 'color'>) {
     return (
         <div className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-xl">
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${colorMap[color || 'indigo']} flex items-center justify-center`}>
+            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${colorMap[color || 'blue']} flex items-center justify-center`}>
                 {icon}
             </div>
             <div>

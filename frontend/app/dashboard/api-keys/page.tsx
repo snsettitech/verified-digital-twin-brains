@@ -120,7 +120,7 @@ export default function ApiKeysPage() {
   if (twinLoading) {
     return (
       <div className="flex justify-center p-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -130,7 +130,7 @@ export default function ApiKeysPage() {
   return (
     <div className="space-y-8">
       {/* Hero Section */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-8 text-white">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-500 via-blue-500 to-pink-500 p-8 text-white">
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-4">
@@ -150,7 +150,7 @@ export default function ApiKeysPage() {
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="absolute top-8 right-8 px-6 py-2.5 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-white/90 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+          className="absolute top-8 right-8 px-6 py-2.5 bg-white text-blue-600 rounded-xl font-semibold hover:bg-white/90 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
         >
           + Create API Key
         </button>
@@ -202,7 +202,7 @@ export default function ApiKeysPage() {
       {/* API Keys List */}
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+          <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
         </div>
       ) : apiKeys.length === 0 ? (
         <Card className="text-center py-16">
@@ -218,7 +218,7 @@ export default function ApiKeysPage() {
             </p>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all"
+              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg hover:-translate-y-0.5 transition-all"
             >
               Create Your First API Key
             </button>
@@ -232,10 +232,10 @@ export default function ApiKeysPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${key.is_active
-                      ? 'bg-gradient-to-br from-indigo-100 to-purple-100'
+                      ? 'bg-gradient-to-br from-blue-100 to-blue-100'
                       : 'bg-slate-100'
                       }`}>
-                      <svg className={`w-6 h-6 ${key.is_active ? 'text-indigo-600' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className={`w-6 h-6 ${key.is_active ? 'text-blue-600' : 'text-slate-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
                       </svg>
                     </div>
@@ -293,7 +293,7 @@ export default function ApiKeysPage() {
               value={newKeyName}
               onChange={(e) => setNewKeyName(e.target.value)}
               placeholder="My Widget Key"
-              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-0 transition-colors"
+              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-0 transition-colors"
             />
           </div>
           <div>
@@ -305,7 +305,7 @@ export default function ApiKeysPage() {
               value={newKeyDomains}
               onChange={(e) => setNewKeyDomains(e.target.value)}
               placeholder="example.com, *.example.com"
-              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-indigo-500 focus:ring-0 transition-colors"
+              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-0 transition-colors"
             />
             <p className="text-xs text-slate-500 mt-2">
               Leave empty to allow all domains. Use wildcards for subdomains.
@@ -321,7 +321,7 @@ export default function ApiKeysPage() {
             </button>
             <button
               onClick={handleCreateKey}
-              className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-500 text-white rounded-xl font-semibold hover:shadow-lg transition-all disabled:opacity-50"
               disabled={creating || !newKeyName.trim()}
             >
               {creating ? (

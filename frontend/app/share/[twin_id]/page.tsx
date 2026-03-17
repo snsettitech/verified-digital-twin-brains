@@ -53,7 +53,7 @@ export default function ShareSlugPage() {
             <div className="max-w-md w-full text-center">
                 {status === 'resolving' ? (
                     <div className="space-y-4">
-                        <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin mx-auto"></div>
+                        <div className="w-12 h-12 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
                         <p className="text-slate-400 font-medium">Connecting to persona...</p>
                     </div>
                 ) : (

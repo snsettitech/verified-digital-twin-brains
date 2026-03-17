@@ -105,7 +105,7 @@ export default function SignupPage() {
                 </p>
                 <Link
                     href="/auth/login"
-                    className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+                    className="text-blue-400 hover:text-blue-300 text-sm font-medium"
                 >
                     ← Back to login
                 </Link>
@@ -117,7 +117,7 @@ export default function SignupPage() {
         <div>
             {/* Logo/Brand */}
             <div className="text-center mb-8">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
@@ -181,7 +181,7 @@ export default function SignupPage() {
                                 onChange={(e) => setName(e.target.value)}
                                 placeholder="John Doe"
                                 required
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                             />
                         </div>
 
@@ -195,7 +195,7 @@ export default function SignupPage() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="you@example.com"
                                 required
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                             />
                         </div>
 
@@ -210,7 +210,7 @@ export default function SignupPage() {
                                 placeholder="••••••••"
                                 required
                                 minLength={8}
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                             />
                             <p className="mt-1 text-xs text-slate-500">Minimum 8 characters</p>
                         </div>
@@ -225,14 +225,14 @@ export default function SignupPage() {
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 placeholder="••••••••"
                                 required
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                             />
                         </div>
 
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -251,16 +251,16 @@ export default function SignupPage() {
 
                 <p className="mt-4 text-center text-xs text-slate-500">
                     By signing up, you agree to our{' '}
-                    <a href="#" className="text-indigo-400 hover:text-indigo-300">Terms of Service</a>
+                    <a href="#" className="text-blue-400 hover:text-blue-300">Terms of Service</a>
                     {' '}and{' '}
-                    <a href="#" className="text-indigo-400 hover:text-indigo-300">Privacy Policy</a>
+                    <a href="#" className="text-blue-400 hover:text-blue-300">Privacy Policy</a>
                 </p>
             </div>
 
             {/* Login link */}
             <p className="text-center mt-6 text-slate-400">
                 Already have an account?{' '}
-                <Link href="/auth/login" className="text-indigo-400 hover:text-indigo-300 font-medium">
+                <Link href="/auth/login" className="text-blue-400 hover:text-blue-300 font-medium">
                     Sign in
                 </Link>
             </p>

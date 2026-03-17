@@ -913,7 +913,7 @@ function ProfilePageContent() {
                     <button
                       key={`${question}-${idx}`}
                       onClick={() => handleOpenChat(question)}
-                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
                     >
                       {question}
                     </button>

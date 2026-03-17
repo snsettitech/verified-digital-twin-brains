@@ -146,7 +146,7 @@ export function ClaimsReview({
           <p className="text-slate-400">Checking claim enrichment status...</p>
         </div>
         <Card className="p-12 bg-slate-900 border-slate-700 text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-slate-400">Loading...</p>
         </Card>
       </div>
@@ -166,7 +166,7 @@ export function ClaimsReview({
           <div className="flex gap-3 mt-4">
             <button
               onClick={() => { setError(null); loadStatus(); }}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
             >
               Retry
             </button>
@@ -191,7 +191,7 @@ export function ClaimsReview({
           <p className="text-slate-400">Analyzing your sources for factual claims...</p>
         </div>
         <Card className="p-12 bg-slate-900 border-slate-700 text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-slate-400">Extracting and verifying claims...</p>
           <p className="text-sm text-slate-500 mt-2">This may take a minute</p>
         </Card>
@@ -212,7 +212,7 @@ export function ClaimsReview({
           <div className="flex gap-3 mt-4">
             <button
               onClick={() => { setError(null); loadStatus(); }}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
             >
               Retry
             </button>
@@ -275,7 +275,7 @@ export function ClaimsReview({
             onClick={() => setActiveFilter(filter)}
             className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
               activeFilter === filter
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-blue-600 text-white'
                 : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
             }`}
           >
@@ -321,7 +321,7 @@ export function ClaimsReview({
                           href={claim.source_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-indigo-400 hover:text-indigo-300 mt-1 block"
+                          className="text-xs text-blue-400 hover:text-blue-300 mt-1 block"
                         >
                           Source →
                         </a>
@@ -365,7 +365,7 @@ export function ClaimsReview({
         </button>
         <button
           onClick={onComplete}
-          className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors"
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium transition-colors"
         >
           Continue →
         </button>

@@ -21,7 +21,7 @@ export default function VerificationBadge({ status, showText = true }: Verificat
             )
         },
         verified: {
-            color: 'from-blue-500 to-indigo-600',
+            color: 'from-blue-500 to-blue-600',
             text: 'Verified Twin',
             icon: (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -44,7 +44,7 @@ export default function VerificationBadge({ status, showText = true }: Verificat
     if (!current) return null;
 
     return (
-        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r ${current.color} text-white shadow-lg shadow-indigo-500/20`}>
+        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r ${current.color} text-white shadow-lg shadow-blue-500/20`}>
             <div className="flex-shrink-0">
                 {current.icon}
             </div>

@@ -226,7 +226,7 @@ export default function PublishControlsPage() {
         <button
           onClick={save}
           disabled={saving || !twinId}
-          className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save Publish Controls'}
         </button>

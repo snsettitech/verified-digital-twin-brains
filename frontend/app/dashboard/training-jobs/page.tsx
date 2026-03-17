@@ -166,7 +166,7 @@ export default function IngestionJobsPage() {
   if (twinLoading) {
     return (
       <div className="flex justify-center p-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
       </div>
     );
   }
@@ -175,14 +175,14 @@ export default function IngestionJobsPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center max-w-md p-8">
-          <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-slate-900 mb-3">No Twin Found</h2>
           <p className="text-slate-500 mb-6">Create your persona first to manage ingestion jobs.</p>
-          <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+          <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
             Create Your Persona
           </a>
         </div>
@@ -200,7 +200,7 @@ export default function IngestionJobsPage() {
         <button
           onClick={handleProcessQueue}
           disabled={processingQueue}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-black hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+          className="px-6 py-3 bg-blue-600 text-white rounded-2xl text-sm font-black hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
         >
           {processingQueue ? (
             <>
@@ -254,7 +254,7 @@ export default function IngestionJobsPage() {
             key={status}
             onClick={() => setStatusFilter(status)}
             className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${statusFilter === status
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-blue-600 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
           >
@@ -271,7 +271,7 @@ export default function IngestionJobsPage() {
 
         {loading ? (
           <div className="p-20 flex justify-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
           </div>
         ) : filteredJobs.length === 0 ? (
           <div className="p-32 text-center">
@@ -325,7 +325,7 @@ export default function IngestionJobsPage() {
                             e.stopPropagation();
                             handleRetry(job.id);
                           }}
-                          className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all"
+                          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all"
                         >
                           Retry
                         </button>
@@ -389,7 +389,7 @@ export default function IngestionJobsPage() {
                     handleRetry(selectedJob.id);
                     setSelectedJob(null);
                   }}
-                  className="w-full px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-black hover:bg-indigo-700 transition-all"
+                  className="w-full px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-black hover:bg-blue-700 transition-all"
                 >
                   Retry Job
                 </button>

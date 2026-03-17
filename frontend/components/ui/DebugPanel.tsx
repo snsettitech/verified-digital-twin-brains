@@ -164,7 +164,7 @@ export function DebugPanel() {
                           <button
                             onClick={() => replayRequest(log)}
                             disabled={replayingId === log.id}
-                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded text-[10px] font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded text-[10px] font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             title="Replay this request"
                           >
                             {replayingId === log.id ? 'Replaying...' : '↻ Replay'}

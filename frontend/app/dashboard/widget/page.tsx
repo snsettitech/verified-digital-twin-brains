@@ -7,7 +7,7 @@ export default function WidgetPage() {
   const { activeTwin, isLoading: twinLoading } = useTwin();
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [position, setPosition] = useState<'bottom-right' | 'bottom-left'>('bottom-right');
-  const [primaryColor, setPrimaryColor] = useState('#6366f1');
+  const [primaryColor, setPrimaryColor] = useState('#2563EB');
   const [copied, setCopied] = useState(false);
 
   // TWIN-SCOPED: Auto-populate activeTwinId in embed code
@@ -51,7 +51,7 @@ export default function WidgetPage() {
                     key={t}
                     onClick={() => setTheme(t)}
                     className={`flex-1 p-4 rounded-xl border-2 transition-all capitalize ${theme === t
-                      ? 'border-indigo-500 bg-indigo-50'
+                      ? 'border-blue-500 bg-blue-50'
                       : 'border-slate-200 hover:border-slate-300'
                       }`}
                   >
@@ -72,12 +72,12 @@ export default function WidgetPage() {
                     key={p}
                     onClick={() => setPosition(p)}
                     className={`flex-1 p-4 rounded-xl border-2 transition-all ${position === p
-                      ? 'border-indigo-500 bg-indigo-50'
+                      ? 'border-blue-500 bg-blue-50'
                       : 'border-slate-200 hover:border-slate-300'
                       }`}
                   >
                     <div className="w-full h-8 relative border rounded-lg bg-slate-50">
-                      <div className={`absolute bottom-1 w-3 h-3 rounded bg-indigo-500 ${p === 'bottom-right' ? 'right-1' : 'left-1'
+                      <div className={`absolute bottom-1 w-3 h-3 rounded bg-blue-500 ${p === 'bottom-right' ? 'right-1' : 'left-1'
                         }`} />
                     </div>
                     <span className="text-sm font-medium text-slate-700 mt-2 block capitalize">
@@ -102,7 +102,7 @@ export default function WidgetPage() {
                   type="text"
                   value={primaryColor}
                   onChange={(e) => setPrimaryColor(e.target.value)}
-                  className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  className="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                 />
               </div>
             </div>

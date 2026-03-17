@@ -121,7 +121,7 @@ export default function TriggersPage() {
     if (twinLoading) {
         return (
             <div className="flex justify-center p-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
             </div>
         );
     }
@@ -130,14 +130,14 @@ export default function TriggersPage() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center max-w-md p-8">
-                    <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 bg-blue-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
                     <p className="text-slate-400 mb-6">Create your persona first to configure triggers.</p>
-                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
                         Create Your Persona
                     </a>
                 </div>
@@ -159,7 +159,7 @@ export default function TriggersPage() {
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-indigo-500/20"
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-blue-500/20"
                 >
                     + New Trigger
                 </button>
@@ -176,7 +176,7 @@ export default function TriggersPage() {
                             </p>
                             <button
                                 onClick={() => setShowModal(true)}
-                                className="mt-6 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-all"
+                                className="mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-black transition-all"
                             >
                                 Create First Trigger
                             </button>
@@ -199,7 +199,7 @@ export default function TriggersPage() {
                                                     {/* Flow visualization */}
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <span className="text-slate-500 text-xs">When</span>
-                                                        <span className="px-2.5 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                                                        <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-bold flex items-center gap-1">
                                                             <span>{eventInfo?.icon}</span>
                                                             {eventInfo?.label || trigger.event_type}
                                                         </span>
@@ -219,7 +219,7 @@ export default function TriggersPage() {
 
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-slate-500 text-xs">Then</span>
-                                                        <span className="px-2.5 py-1 bg-purple-500/20 text-purple-300 rounded-lg text-xs font-bold flex items-center gap-1">
+                                                        <span className="px-2.5 py-1 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-bold flex items-center gap-1">
                                                             <span>{actionInfo?.icon}</span>
                                                             {actionInfo?.label || trigger.action_type}
                                                         </span>
@@ -272,7 +272,7 @@ export default function TriggersPage() {
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             placeholder="e.g., Schedule Meeting Request"
-                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
                     <div>
@@ -280,7 +280,7 @@ export default function TriggersPage() {
                         <select
                             value={formData.event_type}
                             onChange={(e) => setFormData({ ...formData, event_type: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             {EVENT_TYPES.map((e) => (
                                 <option key={e.value} value={e.value}>{e.icon} {e.label}</option>
@@ -294,7 +294,7 @@ export default function TriggersPage() {
                             value={formData.keywords}
                             onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
                             placeholder="e.g., schedule, meeting, calendar"
-                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
                     <div>
@@ -302,7 +302,7 @@ export default function TriggersPage() {
                         <select
                             value={formData.action_type}
                             onChange={(e) => setFormData({ ...formData, action_type: e.target.value })}
-                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             {ACTION_TYPES.map((a) => (
                                 <option key={a.value} value={a.value}>{a.icon} {a.label}</option>
@@ -319,7 +319,7 @@ export default function TriggersPage() {
                     <button
                         onClick={handleCreate}
                         disabled={!formData.name}
-                        className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition-all"
+                        className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-black transition-all"
                     >
                         Create Trigger
                     </button>

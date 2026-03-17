@@ -148,10 +148,10 @@ export default function SuggestedQuestions({ twinId, onSelect, disabled, presetQ
             onClick={() => !disabled && onSelect(question)}
             disabled={disabled}
             className={`flex-shrink-0 px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-700 
-              whitespace-nowrap transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1
+              whitespace-nowrap transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
               ${disabled 
                 ? 'opacity-50 cursor-not-allowed' 
-                : 'hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 hover:shadow-sm cursor-pointer'
+                : 'hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 hover:shadow-sm cursor-pointer'
               }`}
             title={question}
           >

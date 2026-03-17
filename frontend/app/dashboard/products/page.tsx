@@ -182,7 +182,7 @@ export default function ProductsPage() {
   if (twinLoading) {
     return (
       <div className="flex justify-center p-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600" />
       </div>
     );
   }
@@ -191,14 +191,14 @@ export default function ProductsPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center max-w-md p-8">
-          <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-blue-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
           <p className="text-slate-400 mb-6">Create your persona first to manage products.</p>
-          <a href="/dashboard" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+          <a href="/dashboard" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
             Go to Dashboard
           </a>
         </div>
@@ -218,7 +218,7 @@ export default function ProductsPage() {
             resetForm();
             setShowForm(true);
           }}
-          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-all"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all"
         >
           + Add Product
         </button>
@@ -242,7 +242,7 @@ export default function ProductsPage() {
                     value={form.product_name}
                     onChange={(e) => setForm({ ...form, product_name: e.target.value })}
                     required
-                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="e.g. My Book"
                   />
                 </div>
@@ -253,7 +253,7 @@ export default function ProductsPage() {
                     value={form.product_link}
                     onChange={(e) => setForm({ ...form, product_link: e.target.value })}
                     required
-                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="https://..."
                   />
                 </div>
@@ -264,7 +264,7 @@ export default function ProductsPage() {
                   type="url"
                   value={form.image_url}
                   onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="https://..."
                 />
               </div>
@@ -274,7 +274,7 @@ export default function ProductsPage() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={2}
-                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Brief description"
                 />
               </div>
@@ -284,7 +284,7 @@ export default function ProductsPage() {
                   type="text"
                   value={form.keywords}
                   onChange={(e) => setForm({ ...form, keywords: e.target.value })}
-                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="book, guide, course"
                 />
               </div>
@@ -294,7 +294,7 @@ export default function ProductsPage() {
                   <select
                     value={form.promotion_frequency}
                     onChange={(e) => setForm({ ...form, promotion_frequency: e.target.value as any })}
-                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="once_per_conversation">Once per conversation</option>
                     <option value="once_per_user">Once per user</option>
@@ -308,7 +308,7 @@ export default function ProductsPage() {
                     min={0}
                     value={form.priority}
                     onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value) || 0 })}
-                    className="w-24 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-24 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div className="flex items-center gap-2 pt-6">
@@ -325,7 +325,7 @@ export default function ProductsPage() {
               <div className="pt-4">
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all"
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition-all"
                 >
                   {editingId ? 'Update' : 'Create'} Product
                 </button>
@@ -349,7 +349,7 @@ export default function ProductsPage() {
               <p className="text-slate-600 text-sm mt-1">Add products to promote your offerings in chat.</p>
               <button
                 onClick={() => setShowForm(true)}
-                className="mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
+                className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
               >
                 Add Product
               </button>
@@ -371,7 +371,7 @@ export default function ProductsPage() {
                         href={p.product_link}
                         target="_blank"
                         rel="noreferrer"
-                        className="font-semibold text-white hover:text-indigo-300 truncate block"
+                        className="font-semibold text-white hover:text-blue-300 truncate block"
                       >
                         {p.product_name}
                       </a>
@@ -382,7 +382,7 @@ export default function ProductsPage() {
                             {k}
                           </span>
                         ))}
-                        <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-300 text-xs rounded">
+                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 text-xs rounded">
                           {freqLabel(p.promotion_frequency)}
                         </span>
                         {!p.active && (

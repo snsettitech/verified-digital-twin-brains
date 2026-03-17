@@ -152,7 +152,7 @@ export default function MemoryCenterPage() {
     if (twinLoading) {
       return (
         <div className="flex min-h-[420px] items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
         </div>
       );
     }
@@ -177,12 +177,12 @@ export default function MemoryCenterPage() {
               value={form.topic}
               onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
               placeholder="Topic (e.g., remote work, pricing)"
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
             />
             <select
               value={form.memoryType}
               onChange={(e) => setForm((prev) => ({ ...prev, memoryType: e.target.value }))}
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
             >
               {MEMORY_TYPES.map((type) => (
                 <option key={type} value={type}>{type}</option>
@@ -193,7 +193,7 @@ export default function MemoryCenterPage() {
               value={form.value}
               onChange={(e) => setForm((prev) => ({ ...prev, value: e.target.value }))}
               placeholder="Memory value"
-              className="md:col-span-2 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+              className="md:col-span-2 rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
               rows={3}
             />
             <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-600">
@@ -210,7 +210,7 @@ export default function MemoryCenterPage() {
               data-testid="memory-save-button"
               onClick={handleCreate}
               disabled={creating}
-              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {creating ? 'Saving...' : 'Save Memory'}
             </button>
@@ -244,7 +244,7 @@ export default function MemoryCenterPage() {
                         value={editDraft}
                         onChange={(e) => setEditDraft(e.target.value)}
                         rows={3}
-                        className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                        className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
                       />
                     ) : (
                       <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{row.value}</p>
@@ -254,7 +254,7 @@ export default function MemoryCenterPage() {
                         <>
                           <button
                             onClick={() => handleSaveEdit(row)}
-                            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                            className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
                           >
                             Save
                           </button>
@@ -311,7 +311,7 @@ export default function MemoryCenterPage() {
       title="Memory Center"
       description="Enable NEXT_PUBLIC_FF_MEMORY_CENTER to manage explicit owner memory."
     >
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Memory Center</h1>
           <p className="mt-1 text-sm text-slate-600">
@@ -322,6 +322,46 @@ export default function MemoryCenterPage() {
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
         ) : null}
         {content}
+
+        {/* ─── Graph Memory — Early Access ─── */}
+        <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 border border-amber-200/60">
+                <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-slate-900">Knowledge Graph</h2>
+                  <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600">
+                    Early Access
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-slate-500">Structured memory of your beliefs, decisions, and knowledge connections.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {[
+              { label: 'Belief Nodes', desc: 'Core positions and values your persona holds with evidence.' },
+              { label: 'Decision Graph', desc: 'How you approach tradeoffs — surfaced in every answer.' },
+              { label: 'Concept Links', desc: 'Relationships between your areas of expertise.' },
+            ].map(({ label, desc }) => (
+              <div key={label} className="rounded-[14px] border border-amber-200/50 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-800">{label}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{desc}</p>
+                <p className="mt-3 text-xs font-semibold text-amber-500">Coming soon</p>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-4 text-xs leading-5 text-slate-400">
+            Knowledge Graph is being built on Neo4j + Graphiti. It will become the long-term memory layer that makes your persona richer over time. Early access notifications will be sent to your registered email.
+          </p>
+        </div>
       </div>
     </FeatureGate>
   );

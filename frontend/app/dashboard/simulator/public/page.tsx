@@ -109,7 +109,7 @@ export default function SimulatorPublicPage() {
                                 href={shareUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="px-3 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
+                                className="px-3 py-2 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white"
                             >
                                 Open Real Public Chat
                             </a>

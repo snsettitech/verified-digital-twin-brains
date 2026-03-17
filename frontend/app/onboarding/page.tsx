@@ -40,7 +40,7 @@ function DeepResearchProgress({ status, name }: { status: string; name: string }
     <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
       <div className="text-center max-w-md">
         {status !== 'failed' && (
-          <div className="w-14 h-14 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
+          <div className="w-14 h-14 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
         )}
         <h2 className="text-2xl font-bold mb-2">Researching {name}</h2>
         <p className="text-slate-400">{label}</p>
@@ -309,7 +309,7 @@ function OnboardingContent() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p>Creating your persona…</p>
         </div>
       </div>
@@ -347,9 +347,9 @@ function OnboardingContent() {
               const isPast = step.key === 'input' && currentStep === 'research';
               return (
                 <React.Fragment key={step.key}>
-                  <div className={`flex flex-col items-center ${isActive ? 'text-indigo-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>
+                  <div className={`flex flex-col items-center ${isActive ? 'text-blue-400' : isPast ? 'text-green-400' : 'text-slate-600'}`}>
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      isActive ? 'bg-indigo-500/20 border-2 border-indigo-500' :
+                      isActive ? 'bg-blue-500/20 border-2 border-blue-500' :
                       isPast ? 'bg-green-500/20 border-2 border-green-500' :
                       'bg-slate-800 border-2 border-slate-700'
                     }`}>
@@ -374,7 +374,7 @@ function OnboardingContent() {
               <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <p className="text-red-400 text-sm whitespace-pre-line">{submitError}</p>
                 {submitError.includes('already have a profile') && (
-                  <a href="/dashboard" className="mt-2 inline-block text-sm text-indigo-400 hover:text-indigo-300 underline">
+                  <a href="/dashboard" className="mt-2 inline-block text-sm text-blue-400 hover:text-blue-300 underline">
                     Go to dashboard →
                   </a>
                 )}

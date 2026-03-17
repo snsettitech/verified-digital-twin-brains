@@ -117,7 +117,7 @@ export default function ActionsPage() {
     if (twinLoading) {
         return (
             <div className="flex justify-center p-20">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
             </div>
         );
     }
@@ -126,14 +126,14 @@ export default function ActionsPage() {
         return (
             <div className="flex items-center justify-center h-96">
                 <div className="text-center max-w-md p-8">
-                    <div className="w-16 h-16 bg-indigo-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="w-16 h-16 bg-blue-900/50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
                         </svg>
                     </div>
                     <h2 className="text-2xl font-bold text-white mb-3">No Twin Found</h2>
                     <p className="text-slate-400 mb-6">Create your persona first to access the Actions Hub.</p>
-                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors">
+                    <a href="/dashboard/studio" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors">
                         Create Your Persona
                     </a>
                 </div>
@@ -158,7 +158,7 @@ export default function ActionsPage() {
                     </Link>
                     <Link
                         href="/dashboard/actions/triggers"
-                        className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-indigo-500/20"
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-black transition-all shadow-lg shadow-blue-500/20"
                     >
                         + New Trigger
                     </Link>
@@ -208,7 +208,7 @@ export default function ActionsPage() {
                                 </span>
                             )}
                         </div>
-                        <Link href="/dashboard/actions/inbox" className="text-sm font-bold text-indigo-400 hover:text-indigo-300 transition-colors">
+                        <Link href="/dashboard/actions/inbox" className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors">
                             View All →
                         </Link>
                     </CardHeader>
@@ -235,7 +235,7 @@ export default function ActionsPage() {
                                             </div>
                                             <Link
                                                 href={`/dashboard/actions/inbox`}
-                                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black transition-all"
+                                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black transition-all"
                                             >
                                                 Review
                                             </Link>
@@ -251,7 +251,7 @@ export default function ActionsPage() {
                 <Card glass>
                     <CardHeader className="flex flex-row items-center justify-between border-b border-white/5">
                         <h3 className="text-lg font-black text-white">Recent Executions</h3>
-                        <Link href="/dashboard/actions/history" className="text-sm font-bold text-indigo-400 hover:text-indigo-300 transition-colors">
+                        <Link href="/dashboard/actions/history" className="text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors">
                             View All →
                         </Link>
                     </CardHeader>
@@ -291,9 +291,9 @@ export default function ActionsPage() {
             {/* Quick Actions */}
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                 <Link href="/dashboard/actions/triggers" className="group">
-                    <Card glass className="p-5 hover:border-indigo-500/30 transition-all cursor-pointer">
+                    <Card glass className="p-5 hover:border-blue-500/30 transition-all cursor-pointer">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
                                 ⚡
                             </div>
                             <div>
@@ -330,9 +330,9 @@ export default function ActionsPage() {
                     </Card>
                 </Link>
                 <Link href="/dashboard/actions/connectors" className="group">
-                    <Card glass className="p-5 hover:border-purple-500/30 transition-all cursor-pointer">
+                    <Card glass className="p-5 hover:border-blue-500/30 transition-all cursor-pointer">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                            <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
                                 🔌
                             </div>
                             <div>

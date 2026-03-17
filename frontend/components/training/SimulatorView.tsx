@@ -86,7 +86,7 @@ export function SimulatorView({ twinId, onBack, mode = 'owner', trainingSessionI
                     )}
                     <button
                         onClick={startNewSession}
-                        className="bg-indigo-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                        className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
                     >
                         New Session
                     </button>

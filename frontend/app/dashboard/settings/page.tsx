@@ -472,7 +472,7 @@ export default function SettingsPage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-500">Loading settings...</p>
         </div>
       </div>
@@ -494,7 +494,7 @@ export default function SettingsPage() {
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-blue-600 text-blue-600'
               : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
           >
@@ -515,7 +515,7 @@ export default function SettingsPage() {
               {profile.avatarUrl ? (
                 <img src={profile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                <div className="w-full h-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
                   {profile.name.split(' ').map(n => n[0]).join('')}
                 </div>
               )}
@@ -547,7 +547,7 @@ export default function SettingsPage() {
                 type="text"
                 value={profile.name}
                 onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <div>
@@ -556,7 +556,7 @@ export default function SettingsPage() {
                 type="email"
                 value={profile.email}
                 onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -572,7 +572,7 @@ export default function SettingsPage() {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
@@ -582,14 +582,14 @@ export default function SettingsPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
             <button
               onClick={handlePasswordChange}
               disabled={changingPassword || !newPassword.trim()}
-              className="mt-4 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              className="mt-4 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               {changingPassword ? 'Updating...' : 'Update Password'}
             </button>
@@ -610,7 +610,7 @@ export default function SettingsPage() {
                 type="text"
                 value={twinSettings.name}
                 onChange={(e) => setTwinSettings({ ...twinSettings, name: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <div>
@@ -621,7 +621,7 @@ export default function SettingsPage() {
                   type="text"
                   value={twinSettings.handle}
                   onChange={(e) => setTwinSettings({ ...twinSettings, handle: e.target.value })}
-                  className="flex-1 px-4 py-3 border border-slate-200 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="flex-1 px-4 py-3 border border-slate-200 rounded-r-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -631,7 +631,7 @@ export default function SettingsPage() {
                 type="text"
                 value={twinSettings.tagline}
                 onChange={(e) => setTwinSettings({ ...twinSettings, tagline: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -645,7 +645,7 @@ export default function SettingsPage() {
                 <select
                   value={twinSettings.tone}
                   onChange={(e) => setTwinSettings({ ...twinSettings, tone: e.target.value })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="professional">Professional</option>
                   <option value="friendly">Friendly</option>
@@ -658,7 +658,7 @@ export default function SettingsPage() {
                 <select
                   value={twinSettings.responseLength}
                   onChange={(e) => setTwinSettings({ ...twinSettings, responseLength: e.target.value })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="concise">Concise</option>
                   <option value="balanced">Balanced</option>
@@ -675,7 +675,7 @@ export default function SettingsPage() {
               </div>
               <button
                 onClick={() => setTwinSettings({ ...twinSettings, firstPerson: !twinSettings.firstPerson })}
-                className={`w-12 h-6 rounded-full transition-colors ${twinSettings.firstPerson ? 'bg-indigo-600' : 'bg-slate-300'
+                className={`w-12 h-6 rounded-full transition-colors ${twinSettings.firstPerson ? 'bg-blue-600' : 'bg-slate-300'
                   }`}
               >
                 <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${twinSettings.firstPerson ? 'translate-x-6' : 'translate-x-0.5'
@@ -691,7 +691,7 @@ export default function SettingsPage() {
               value={twinSettings.systemPrompt}
               onChange={(e) => setTwinSettings({ ...twinSettings, systemPrompt: e.target.value })}
               rows={4}
-              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+              className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
             />
             <p className="text-xs text-slate-400 mt-2">This prompt guides how your persona responds</p>
           </div>
@@ -709,15 +709,15 @@ export default function SettingsPage() {
           <h2 className="text-lg font-bold text-slate-900">Billing & Subscription</h2>
 
           {/* Current Plan */}
-          <div className="p-6 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl text-white">
+          <div className="p-6 bg-gradient-to-r from-blue-600 to-blue-600 rounded-2xl text-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-indigo-200 text-sm font-medium">Current Plan</p>
+                <p className="text-blue-200 text-sm font-medium">Current Plan</p>
                 <p className="text-2xl font-black mt-1">
                   {(quotaData?.quotas?.[0]?.limit ?? 0) > 1000 ? 'Pro Plan' : 'Free Plan'}
                 </p>
               </div>
-              <button className="px-4 py-2 bg-white text-indigo-600 font-semibold text-sm rounded-xl hover:bg-indigo-50 transition-colors">
+              <button className="px-4 py-2 bg-white text-blue-600 font-semibold text-sm rounded-xl hover:bg-blue-50 transition-colors">
                 Upgrade to Pro
               </button>
             </div>
@@ -725,7 +725,7 @@ export default function SettingsPage() {
             {quotaLoading ? (
               <div className="mt-4 pt-4 border-t border-white/20">
                 <div className="animate-pulse flex justify-between text-sm">
-                  <span className="text-indigo-200">Loading usage...</span>
+                  <span className="text-blue-200">Loading usage...</span>
                 </div>
                 <div className="mt-2 w-full h-2 bg-white/20 rounded-full overflow-hidden">
                   <div className="h-full bg-white/50 rounded-full animate-pulse" style={{ width: '50%' }} />
@@ -749,7 +749,7 @@ export default function SettingsPage() {
             ) : quotaData?.quotas?.[0] ? (
               <div className="mt-4 pt-4 border-t border-white/20">
                 <div className="flex justify-between text-sm">
-                  <span className="text-indigo-200">
+                  <span className="text-blue-200">
                     {quotaData.quotas[0].quota_type === 'daily_tokens' ? 'Tokens used' : 'Messages used'}
                   </span>
                   <span className="font-medium">
@@ -762,7 +762,7 @@ export default function SettingsPage() {
                     style={{ width: `${Math.min(quotaData.quotas[0].percent_used, 100)}%` }} 
                   />
                 </div>
-                <p className="mt-2 text-xs text-indigo-200">
+                <p className="mt-2 text-xs text-blue-200">
                   {quotaData.quotas[0].percent_used > 80 ? '⚠️ Approaching limit' : 
                    quotaData.quotas[0].percent_used < 20 ? '✓ Plenty of room' : 
                    `${(100 - quotaData.quotas[0].percent_used).toFixed(0)}% remaining`}
@@ -771,7 +771,7 @@ export default function SettingsPage() {
             ) : (
               <div className="mt-4 pt-4 border-t border-white/20">
                 <div className="flex justify-between text-sm">
-                  <span className="text-indigo-200">Messages used</span>
+                  <span className="text-blue-200">Messages used</span>
                   <span className="font-medium">0 / 100</span>
                 </div>
                 <div className="mt-2 w-full h-2 bg-white/20 rounded-full overflow-hidden">

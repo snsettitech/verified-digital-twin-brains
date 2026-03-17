@@ -218,7 +218,7 @@ export default function AdminDashboard() {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={checkAllServices}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700"
+            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
           >
             Refresh Health Check
           </button>

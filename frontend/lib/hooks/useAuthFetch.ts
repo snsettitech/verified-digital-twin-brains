@@ -52,14 +52,18 @@ export function useAuthFetch() {
         const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
         const method = options.method || 'GET';
 
-        // Log to console for immediate debugging
-        console.log(`[useAuthFetch] [${correlationId}] ${method} ${url} START (Auth: ${token ? 'Bearer' : 'None'})`);
-        
+        const isDev = process.env.NODE_ENV !== 'production';
+
+        // Log to console for debugging (dev only)
+        if (isDev) {
+            console.log(`[useAuthFetch] [${correlationId}] ${method} ${url} START (Auth: ${token ? 'Bearer' : 'None'})`);
+        }
+
         // Log to request logger for DebugPanel (if enabled)
         if (isEnabled) {
             logRequest(correlationId, method, url, options.body?.toString(), headers);
         }
-        
+
         const startTime = Date.now();
 
         try {
@@ -68,8 +72,10 @@ export function useAuthFetch() {
                 headers,
             });
             const duration = Date.now() - startTime;
-            
-            console.log(`[useAuthFetch] [${correlationId}] ${method} ${url} END [${response.status}] (${duration}ms)`);
+
+            if (isDev) {
+                console.log(`[useAuthFetch] [${correlationId}] ${method} ${url} END [${response.status}] (${duration}ms)`);
+            }
 
             if (response.status === 401 || response.status === 403) {
                 console.warn(`[useAuthFetch] [${correlationId}] AUTH ERROR ${response.status} on ${url}`);

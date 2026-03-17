@@ -54,10 +54,10 @@ function detectSourceType(input: string): SourceType {
 // Source type config
 const sourceConfig: Record<SourceType, { icon: string; color: string; label: string; endpoint: string }> = {
     youtube: { icon: '📹', color: 'red', label: 'YouTube Video', endpoint: '/ingest/youtube' },
-    podcast: { icon: '🎙️', color: 'purple', label: 'Podcast RSS', endpoint: '/ingest/podcast' },
+    podcast: { icon: '🎙️', color: 'blue-pink', label: 'Podcast RSS', endpoint: '/ingest/podcast' },
     twitter: { icon: '𝕏', color: 'slate', label: 'X Thread', endpoint: '/ingest/x' },
     url: { icon: '🌐', color: 'blue', label: 'Web Page', endpoint: '/ingest/url' },
-    file: { icon: '📄', color: 'indigo', label: 'File Upload', endpoint: '/ingest/file' },
+    file: { icon: '📄', color: 'blue', label: 'File Upload', endpoint: '/ingest/file' },
     unknown: { icon: '❓', color: 'gray', label: 'Unknown', endpoint: '' },
 };
 
@@ -494,7 +494,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
             {/* Input Zone */}
             <div
-                className={`p-6 transition-colors ${dragActive ? 'bg-indigo-50' : 'bg-slate-50/50'}`}
+                className={`p-6 transition-colors ${dragActive ? 'bg-blue-50' : 'bg-slate-50/50'}`}
                 onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
                 onDragLeave={() => setDragActive(false)}
                 onDrop={handleDrop}
@@ -516,7 +516,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                                 }}
                                 className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-all ${
                                     sourceLabel === opt.value
-                                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                                        ? 'border-blue-500 bg-blue-50 text-blue-700'
                                         : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                                 }`}
                             >
@@ -565,7 +565,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                             onChange={(e) => handleInputChange(e.target.value)}
                             placeholder="Paste YouTube, podcast, X thread, or any URL..."
                             disabled={isProcessing}
-                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 transition-all"
+                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-all"
                         />
                         {detectedType !== 'unknown' && (
                             <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold px-2 py-1 rounded-lg bg-${config.color}-100 text-${config.color}-700`}>
@@ -589,7 +589,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                     <button
                         onClick={handleIngest}
                         disabled={isProcessing || detectedType === 'unknown'}
-                        className="px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200"
+                        className="px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-200"
                     >
                         {isProcessing ? (
                             <span className="flex items-center gap-2">
@@ -604,7 +604,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
 
                 {/* Drop zone hint */}
                 {dragActive && (
-                    <div className="mt-4 p-4 border-2 border-dashed border-indigo-300 rounded-xl text-center text-indigo-600 font-bold">
+                    <div className="mt-4 p-4 border-2 border-dashed border-blue-300 rounded-xl text-center text-blue-600 font-bold">
                         Drop file here to upload
                     </div>
                 )}
@@ -628,7 +628,7 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                     {/* Progress bar */}
                     <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
-                            className={`h-full transition-all duration-500 ${stage === 'complete' ? 'bg-green-500' : stage === 'error' ? 'bg-red-500' : 'bg-indigo-500'}`}
+                            className={`h-full transition-all duration-500 ${stage === 'complete' ? 'bg-green-500' : stage === 'error' ? 'bg-red-500' : 'bg-blue-500'}`}
                             style={{ width: `${progress}%` }}
                         />
                     </div>
@@ -664,11 +664,11 @@ export default function UnifiedIngestion({ twinId, onComplete, onError }: Unifie
                         {extractedNodes.slice(0, 8).map((node, i) => (
                             <div
                                 key={node.id || i}
-                                className="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold flex items-center gap-1"
+                                className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold flex items-center gap-1"
                             >
-                                <span className="w-2 h-2 bg-indigo-400 rounded-full"></span>
+                                <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
                                 {node.name}
-                                <span className="text-indigo-400 font-normal">({node.type})</span>
+                                <span className="text-blue-400 font-normal">({node.type})</span>
                             </div>
                         ))}
                         {extractedNodes.length > 8 && (

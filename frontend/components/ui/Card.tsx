@@ -6,7 +6,9 @@ type CardProps = React.HTMLAttributes<HTMLDivElement> & {
     children: React.ReactNode;
     className?: string;
     hover?: boolean;
+    /** @deprecated gradient prop removed — use solid surfaces per TOKENS.md */
     gradient?: boolean;
+    /** @deprecated glass prop removed — use overlay-panel for blur over visuals */
     glass?: boolean;
 };
 
@@ -14,24 +16,16 @@ export function Card({
     children,
     className = '',
     hover = false,
-    gradient = false,
-    glass = false,
+    // gradient and glass accepted but ignored — solid surfaces only
+    gradient: _gradient,
+    glass: _glass,
     ...props
 }: CardProps) {
-    const baseStyles = 'rounded-2xl transition-all duration-200';
-    const hoverStyles = hover ? 'hover:shadow-xl hover:-translate-y-1' : '';
-    const gradientStyles = gradient
-        ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white'
-        : 'bg-white border border-slate-200';
-    const glassStyles = glass
-        ? 'bg-white/70 backdrop-blur-xl border border-white/20 shadow-lg'
-        : '';
+    const base = 'rounded-[14px] border border-white/10 bg-[#0F1C2E] transition-shadow duration-200';
+    const hoverStyles = hover ? 'hover:shadow-[0_4px_12px_rgba(0,0,0,0.50),0_2px_4px_rgba(0,0,0,0.30)]' : '';
 
     return (
-        <div
-            className={`${baseStyles} ${glass ? glassStyles : gradientStyles} ${hoverStyles} ${className}`}
-            {...props}
-        >
+        <div className={`${base} ${hoverStyles} ${className}`} {...props}>
             {children}
         </div>
     );
@@ -44,7 +38,7 @@ interface CardHeaderProps {
 
 export function CardHeader({ children, className = '' }: CardHeaderProps) {
     return (
-        <div className={`px-6 py-4 border-b border-slate-100 ${className}`}>
+        <div className={`px-6 py-4 border-b border-white/10 ${className}`}>
             {children}
         </div>
     );
@@ -70,7 +64,7 @@ interface CardFooterProps {
 
 export function CardFooter({ children, className = '' }: CardFooterProps) {
     return (
-        <div className={`px-6 py-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl ${className}`}>
+        <div className={`px-6 py-4 border-t border-white/10 rounded-b-[14px] ${className}`}>
             {children}
         </div>
     );

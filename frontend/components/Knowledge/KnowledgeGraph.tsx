@@ -40,8 +40,8 @@ interface KnowledgeGraphProps {
 
 // Color mapping for node types
 const NODE_COLORS: Record<string, string> = {
-  source: '#6366f1',    // indigo-500
-  chunk: '#8b5cf6',     // violet-500
+  source: '#2563EB',    // blue-500
+  chunk: '#0EA5E9',     // violet-500
   concept: '#10b981',   // emerald-500
   person: '#f472b6',    // pink-400
   company: '#3b82f6',   // blue-500
@@ -301,7 +301,7 @@ export default function KnowledgeGraph({ twinId, onNodeSelect }: KnowledgeGraphP
     return (
       <div className="w-full h-[400px] flex items-center justify-center bg-slate-50 rounded-2xl border border-slate-200">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
           <p className="text-sm text-slate-500 font-medium">Mapping knowledge...</p>
         </div>
       </div>
@@ -315,7 +315,7 @@ export default function KnowledgeGraph({ twinId, onNodeSelect }: KnowledgeGraphP
           <p className="text-slate-500 font-medium">{error}</p>
           <button 
             onClick={() => window.location.reload()}
-            className="mt-3 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            className="mt-3 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
             Retry
           </button>
@@ -346,7 +346,7 @@ export default function KnowledgeGraph({ twinId, onNodeSelect }: KnowledgeGraphP
       <div 
         className="absolute inset-0 opacity-20"
         style={{ 
-          backgroundImage: 'radial-gradient(#6366f1 1px, transparent 1px)', 
+          backgroundImage: 'radial-gradient(#2563EB 1px, transparent 1px)', 
           backgroundSize: '24px 24px' 
         }}
       />

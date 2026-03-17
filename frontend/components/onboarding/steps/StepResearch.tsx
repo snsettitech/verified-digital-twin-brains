@@ -252,7 +252,7 @@ export function StepResearch({
           <p className="text-slate-400">Initializing your persona build...</p>
         </div>
         <Card className="p-12 bg-slate-900 border-slate-700 text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-slate-400">Creating research run...</p>
         </Card>
       </div>
@@ -278,7 +278,7 @@ export function StepResearch({
             </button>
             <button
               onClick={handleRetry}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
             >
               Try Again
             </button>
@@ -306,7 +306,7 @@ export function StepResearch({
           <button
             onClick={handleContinueIngestion}
             disabled={isContinuing}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
           >
             {isContinuing ? 'Continuing...' : 'Continue to Ingestion'}
           </button>

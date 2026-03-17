@@ -203,7 +203,7 @@ export function ResearchConfirmation({
               type="checkbox"
               checked={selectedIds.size === pendingConfirmations.length && pendingConfirmations.length > 0}
               onChange={toggleSelectAll}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500"
+              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
             />
             <span className="text-sm text-slate-300">
               {selectedIds.size} selected
@@ -248,7 +248,7 @@ export function ResearchConfirmation({
             <Card
               key={item.confirmation_id}
               className={`p-4 bg-slate-900 border-slate-700 transition-all ${
-                selectedIds.has(item.confirmation_id) ? 'border-indigo-500/50 ring-1 ring-indigo-500/20' : ''
+                selectedIds.has(item.confirmation_id) ? 'border-blue-500/50 ring-1 ring-blue-500/20' : ''
               }`}
             >
               <div className="flex items-start gap-3">
@@ -256,7 +256,7 @@ export function ResearchConfirmation({
                   type="checkbox"
                   checked={selectedIds.has(item.confirmation_id)}
                   onChange={() => toggleSelection(item.confirmation_id)}
-                  className="w-4 h-4 mt-1 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500"
+                  className="w-4 h-4 mt-1 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500"
                 />
                 
                 <div className="flex-1 min-w-0">
@@ -269,7 +269,7 @@ export function ResearchConfirmation({
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-indigo-400 hover:text-indigo-300 truncate block"
+                        className="text-xs text-blue-400 hover:text-blue-300 truncate block"
                       >
                         {item.canonical_url || item.url}
                       </a>
@@ -288,7 +288,7 @@ export function ResearchConfirmation({
                       <div
                         className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-medium"
                         style={{
-                          background: `conic-gradient(#6366f1 ${item.identity_confidence_percent}%, #1e293b 0)`,
+                          background: `conic-gradient(#2563EB ${item.identity_confidence_percent}%, #1e293b 0)`,
                         }}
                       >
                         <span className="w-6 h-6 rounded-full bg-slate-900 flex items-center justify-center text-slate-300">
@@ -318,7 +318,7 @@ export function ResearchConfirmation({
                       <button
                         onClick={() => handleResolve(item.confirmation_id, 'confirm')}
                         disabled={processingIds.has(item.confirmation_id)}
-                        className="px-3 py-1.5 text-sm bg-indigo-600 hover:bg-indigo-500 text-white rounded transition-colors disabled:opacity-50"
+                        className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors disabled:opacity-50"
                       >
                         {processingIds.has(item.confirmation_id) ? '...' : 'This is Me'}
                       </button>
@@ -345,7 +345,7 @@ export function ResearchConfirmation({
       {pendingConfirmations.length === 0 && (
         <button
           onClick={onContinue}
-          className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-colors"
+          className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-medium transition-colors"
         >
           Continue →
         </button>

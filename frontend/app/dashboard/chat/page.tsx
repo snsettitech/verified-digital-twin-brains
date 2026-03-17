@@ -189,7 +189,7 @@ function DashboardChatPageContent() {
     if (isLoading) {
       return (
         <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-slate-200 bg-white">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
         </div>
       );
     }
@@ -273,7 +273,7 @@ function DashboardChatPageContent() {
 function DashboardChatFallback() {
   return (
     <div className="flex min-h-[420px] items-center justify-center rounded-2xl border border-slate-200 bg-white">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
     </div>
   );
 }

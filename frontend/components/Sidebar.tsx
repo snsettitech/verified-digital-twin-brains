@@ -84,11 +84,11 @@ export default function Sidebar() {
   };
 
   return (
-    <div className={`${collapsed ? 'w-20' : 'w-72'} h-full bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 flex flex-col shrink-0 transition-all duration-300 ease-in-out`}>
+    <div className={`${collapsed ? 'w-20' : 'w-72'} h-full bg-[#060C18] flex flex-col shrink-0 transition-all duration-300 ease-in-out`}>
       {/* Logo Section */}
       <div className="p-6 border-b border-slate-800/50">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 group-hover:shadow-indigo-500/50 group-hover:scale-105 transition-all duration-200">
+          <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20 transition-shadow duration-200 group-hover:shadow-blue-500/35">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
           </div>
           {!collapsed && (
@@ -100,14 +100,6 @@ export default function Sidebar() {
         </Link>
       </div>
 
-      {/* Profile Name Display */}
-      {!collapsed && (
-        <div className="px-4 py-3 border-b border-slate-800/50">
-          <div className="text-sm font-medium text-white truncate">
-            {/* Profile name will be shown here via ProfileContext */}
-          </div>
-        </div>
-      )}
 
       {/* Navigation - STATIC CONFIG, NO LOADING STATE */}
       <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
@@ -125,19 +117,19 @@ export default function Sidebar() {
                   <Link
                     key={item.name}
                     href={item.href}
-                    className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${isActive
-                      ? 'bg-gradient-to-r from-indigo-600/20 to-purple-600/20 text-white shadow-lg shadow-indigo-500/10 border border-indigo-500/20'
-                      : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                    className={`group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors duration-150 ${isActive
+                      ? 'bg-blue-600/15 text-white border border-blue-500/25'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
                       }`}
                   >
-                    <span className={`transition-colors duration-200 ${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-indigo-400'}`}>
+                    <span className={`transition-colors duration-150 ${isActive ? 'text-blue-400' : 'text-slate-500 group-hover:text-blue-400'}`}>
                       {getIcon(item.icon)}
                     </span>
                     {!collapsed && (
                       <>
                         <span className="flex-1">{item.name}</span>
                         {item.badge && (
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full shadow-sm">
+                          <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500 text-white rounded-full">
                             {item.badge}
                           </span>
                         )}
@@ -154,10 +146,10 @@ export default function Sidebar() {
       {/* System Status & Logout */}
       {!collapsed && (
         <div className="p-4 border-t border-slate-800/50">
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50">
+          <div className="bg-slate-800/40 rounded-2xl p-4 border border-white/8">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System</span>
-              <span className="text-xs font-bold text-indigo-400">Online</span>
+              <span className="text-xs font-bold text-blue-400">Online</span>
             </div>
             <div className="mt-1 flex items-center justify-between">
               <div className="flex items-center gap-2">

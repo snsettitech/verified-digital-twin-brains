@@ -159,7 +159,7 @@ function JobCard({
           {job.status === 'failed' && (
             <button
               onClick={onRetry}
-              className="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
             >
               Retry
             </button>
@@ -175,7 +175,7 @@ function JobCard({
             </div>
             <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                className="h-full bg-blue-600 rounded-full transition-all duration-500"
                 style={{ width: `${progress}%` }}
               />
             </div>
@@ -316,7 +316,7 @@ export default function JobProgress({ twinId, jobId, compact = false }: JobProgr
         </div>
         <div className="flex items-center gap-2">
           {loading && (
-            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
           )}
           <button
             onClick={refetch}

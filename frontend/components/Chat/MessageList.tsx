@@ -121,7 +121,7 @@ function AudioButton({ content, twinId }: { content: string; twinId?: string }) 
       disabled={isLoading || !twinId}
       className={`opacity-0 group-hover:opacity-100 p-1.5 rounded-lg transition-all ${
         isPlaying 
-          ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30' 
+          ? 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' 
           : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 dark:hover:text-slate-300'
       } ${isLoading ? 'animate-pulse' : ''}`}
       aria-label={isPlaying ? 'Stop audio' : 'Read aloud'}
@@ -289,18 +289,18 @@ const MessageList = React.memo(({
       {messages.map((msg, idx) => (
         <div key={idx} className={`group flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}>
           <div className={`flex gap-4 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-            <div className={`w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center text-xs font-black shadow-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-blue-600 border border-slate-100'
+            <div className={`w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center text-xs font-black shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-blue-600 border border-slate-100'
               }`}>
               {msg.role === 'user' ? 'YOU' : 'AI'}
             </div>
 
             <div className="space-y-3">
               <div className={`relative p-5 rounded-3xl text-sm leading-relaxed transition-all duration-300 ${msg.role === 'user'
-                ? 'bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-600 text-white shadow-xl shadow-indigo-200/50 rounded-tr-none'
+                ? 'bg-gradient-to-br from-blue-600 via-blue-600 to-blue-600 text-white shadow-xl shadow-blue-200/50 rounded-tr-none'
                 : 'bg-white text-slate-800 border border-slate-100 shadow-lg shadow-slate-100/50 rounded-tl-none hover:shadow-xl'
                 }`}>
                 {msg.role === 'assistant' ? (
-                  <div className="prose prose-sm prose-slate max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-code:text-indigo-600 prose-code:bg-indigo-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
+                  <div className="prose prose-sm prose-slate max-w-none prose-p:my-1 prose-headings:my-2 prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-code:text-blue-600 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     {/* Inline Citations */}
                     {msg.citation_details && msg.citation_details.length > 0 && (
@@ -379,7 +379,7 @@ const MessageList = React.memo(({
                         });
                         setRememberError(null);
                       }}
-                      className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-indigo-600 hover:text-indigo-800"
+                      className="opacity-0 group-hover:opacity-100 text-[10px] font-bold uppercase tracking-wider text-blue-600 hover:text-blue-800"
                       title="Remember this response"
                     >
                       Remember
@@ -418,19 +418,19 @@ const MessageList = React.memo(({
               </div>
 
               {msg.role === 'assistant' && rememberingId === idx && (
-                <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-3 space-y-2">
-                  <div className="text-[10px] uppercase tracking-wider text-indigo-600 font-bold">Save to Memory</div>
+                <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-blue-600 font-bold">Save to Memory</div>
                   <input
                     type="text"
                     value={rememberDraft.topic}
                     onChange={(e) => setRememberDraft((prev) => ({ ...prev, topic: e.target.value }))}
                     placeholder="Topic (e.g., pricing, hiring, AI safety)"
-                    className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
+                    className="w-full bg-white border border-blue-100 rounded-lg px-3 py-2 text-xs text-slate-800 placeholder-slate-400"
                   />
                   <select
                     value={rememberDraft.memory_type}
                     onChange={(e) => setRememberDraft((prev) => ({ ...prev, memory_type: e.target.value }))}
-                    className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800"
+                    className="w-full bg-white border border-blue-100 rounded-lg px-3 py-2 text-xs text-slate-800"
                   >
                     {MEMORY_TYPES.map((t) => (
                       <option key={t} value={t}>{t}</option>
@@ -440,7 +440,7 @@ const MessageList = React.memo(({
                     <select
                       value={rememberDraft.stance}
                       onChange={(e) => setRememberDraft((prev) => ({ ...prev, stance: e.target.value }))}
-                      className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800"
+                      className="w-full bg-white border border-blue-100 rounded-lg px-3 py-2 text-xs text-slate-800"
                     >
                       {STANCE_OPTIONS.map((s) => (
                         <option key={s || 'none'} value={s}>{s || 'stance (optional)'}</option>
@@ -452,7 +452,7 @@ const MessageList = React.memo(({
                       max={10}
                       value={rememberDraft.intensity}
                       onChange={(e) => setRememberDraft((prev) => ({ ...prev, intensity: Number(e.target.value) }))}
-                      className="w-full bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-800"
+                      className="w-full bg-white border border-blue-100 rounded-lg px-3 py-2 text-xs text-slate-800"
                       placeholder="Intensity (0-10)"
                     />
                   </div>
@@ -490,7 +490,7 @@ const MessageList = React.memo(({
                         }
                       }}
                       disabled={rememberSaving}
-                      className="px-3 py-1.5 text-[10px] font-bold text-white bg-indigo-600 rounded-lg disabled:opacity-50"
+                      className="px-3 py-1.5 text-[10px] font-bold text-white bg-blue-600 rounded-lg disabled:opacity-50"
                     >
                       {rememberSaving ? 'Saving...' : 'Save'}
                     </button>
@@ -579,7 +579,7 @@ const MessageList = React.memo(({
                     </div>
                   )}
                   {msg.graph_used && (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-indigo-50 text-indigo-700 border-indigo-100">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-blue-50 text-blue-700 border-blue-100">
                       From your interview
                     </div>
                   )}
@@ -617,15 +617,15 @@ const MessageList = React.memo(({
       {loading && (
         <div className="flex justify-start animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="flex gap-4 max-w-[80%]">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 border border-indigo-200/50 flex items-center justify-center shadow-lg shadow-indigo-100/50">
-              <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-100 border border-blue-200/50 flex items-center justify-center shadow-lg shadow-blue-100/50">
+              <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
             </div>
             <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-lg shadow-slate-100/50 rounded-tl-none">
               <div className="flex items-center gap-3">
                 <div className="flex gap-1">
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                 </div>
                 <span className="text-slate-500 text-sm font-medium">
                   {isSearching ? 'Searching knowledge base...' : 'Generating response...'}

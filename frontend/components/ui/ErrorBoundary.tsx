@@ -46,7 +46,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                         </p>
                         <button
                             onClick={() => window.location.reload()}
-                            className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 rounded-lg shadow-lg shadow-indigo-500/20 transition-all"
+                            className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-500 hover:to-blue-500 rounded-lg shadow-lg shadow-blue-500/20 transition-all"
                         >
                             Refresh Page
                         </button>

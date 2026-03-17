@@ -680,7 +680,7 @@ export default function ChatInterface({
       {/* Input */}
       <div className="p-6 bg-white/80 backdrop-blur-sm border-t border-slate-100">
         {clarification && mode !== 'public' && (
-          <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+          <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
             <div className="font-bold text-[10px] uppercase tracking-wider mb-2">Clarification Needed</div>
             <div className="mb-2">{clarification.question}</div>
             {Array.isArray(clarification.options) && clarification.options.length > 0 && (
@@ -704,7 +704,7 @@ export default function ChatInterface({
               value={clarifyAnswer}
               onChange={(e) => setClarifyAnswer(e.target.value)}
               placeholder="Answer in one sentence..."
-              className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-xs mb-2"
+              className="w-full bg-white border border-blue-200 rounded-xl px-3 py-2 text-xs mb-2"
             />
             <button
               onClick={async () => {
@@ -738,7 +738,7 @@ export default function ChatInterface({
                   setMessages((prev) => [...prev, { role: 'assistant', content: 'Failed to save clarification. Please retry.', timestamp: Date.now() }]);
                 }
               }}
-              className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white bg-indigo-600 rounded-xl"
+              className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-white bg-blue-600 rounded-xl"
             >
               Save Memory
             </button>
@@ -761,7 +761,7 @@ export default function ChatInterface({
               <div className="font-bold uppercase tracking-wider text-[10px] text-slate-500">Debug</div>
               <button
                 onClick={() => setDebugOpen((prev) => !prev)}
-                className="text-[10px] font-bold uppercase tracking-wider text-indigo-600"
+                className="text-[10px] font-bold uppercase tracking-wider text-blue-600"
               >
                 {debugOpen ? 'Hide' : 'Show'}
               </button>
@@ -862,13 +862,13 @@ export default function ChatInterface({
             placeholder="Ask anything about your knowledge base... (Enter to send, Shift+Enter for new line)"
             rows={1}
             aria-label="Chat message input"
-            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-300 transition-all pr-28 font-medium placeholder:text-slate-400 resize-none overflow-hidden min-h-[52px] max-h-[150px]"
+            className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-sm focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-300 transition-all pr-28 font-medium placeholder:text-slate-400 resize-none overflow-hidden min-h-[52px] max-h-[150px]"
           />
           <button
             onClick={() => sendMessage()}
             disabled={loading || !input.trim()}
             aria-label="Send message"
-            className="absolute right-2 top-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:from-indigo-700 hover:to-purple-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-200/50 active:scale-95 flex items-center gap-2"
+            className="absolute right-2 top-2 bg-gradient-to-r from-blue-600 to-blue-600 text-white px-6 py-3.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:from-blue-700 hover:to-blue-700 disabled:from-slate-300 disabled:to-slate-400 disabled:cursor-not-allowed transition-all shadow-lg shadow-blue-200/50 active:scale-95 flex items-center gap-2"
           >
             <span>Send</span>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>

@@ -225,7 +225,7 @@ export default function DashboardPage() {
         {/* Conversations Card */}
         <button
           onClick={handleConversationsClick}
-          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all text-left"
+          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left"
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-2xl">💬</span>
@@ -235,23 +235,23 @@ export default function DashboardPage() {
           </div>
           <p className="text-2xl font-black text-slate-900">{stats.conversations.toLocaleString()}</p>
           <p className="text-sm text-slate-500 mt-1">Conversations</p>
-          <p className="text-xs text-indigo-500 mt-2">Click to view →</p>
+          <p className="text-xs text-blue-500 mt-2">Click to view →</p>
         </button>
 
         {/* Messages Card */}
         <button
           onClick={() => setShowMessagesModal(true)}
-          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-purple-300 transition-all text-left"
+          className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left"
         >
           <div className="flex items-center justify-between mb-3">
             <span className="text-2xl">📨</span>
-            <span className="px-2 py-1 text-[10px] font-bold text-white rounded-full bg-gradient-to-r from-purple-500 to-pink-500">
+            <span className="px-2 py-1 text-[10px] font-bold text-white rounded-full bg-blue-500">
               TOTAL
             </span>
           </div>
           <p className="text-2xl font-black text-slate-900">{stats.messages.toLocaleString()}</p>
           <p className="text-sm text-slate-500 mt-1">Messages</p>
-          <p className="text-xs text-purple-500 mt-2">Click for breakdown →</p>
+          <p className="text-xs text-blue-500 mt-2">Click for breakdown →</p>
         </button>
 
         {/* Response Rate Card */}
@@ -297,7 +297,7 @@ export default function DashboardPage() {
       <div className="grid md:grid-cols-3 gap-6">
         {/* Interview Twin - ISSUE-001: Changed from "Train" to "Interview" for clarity */}
         <Link href="/dashboard/simulator" className="group">
-          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-2xl text-white shadow-xl shadow-indigo-200 hover:shadow-2xl transition-all duration-300 h-full relative overflow-hidden">
+          <div className="bg-blue-700 p-6 rounded-2xl text-white shadow-xl shadow-blue-200 hover:shadow-2xl transition-all duration-300 h-full relative overflow-hidden">
             <div className="absolute top-0 right-0 p-6 opacity-10">
               <svg className="w-24 h-24" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
@@ -309,7 +309,7 @@ export default function DashboardPage() {
               </svg>
             </div>
             <h3 className="text-xl font-bold mb-1">Interview Your Persona</h3>
-            <p className="text-indigo-100 text-sm opacity-90">Capture your voice and decisions</p>
+            <p className="text-blue-100 text-sm opacity-90">Capture your voice and decisions</p>
             <div className="mt-4 inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-bold uppercase tracking-wider">
               Recommended
             </div>
@@ -349,7 +349,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-lg font-bold text-slate-900">Recent Activity</h2>
-            <Link href="/dashboard/insights" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">
+            <Link href="/dashboard/insights" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
               View All →
             </Link>
           </div>
@@ -495,9 +495,9 @@ export default function DashboardPage() {
                 <p className="text-2xl font-black text-blue-600">{stats.userMessages}</p>
                 <p className="text-sm text-blue-600">User Messages (Questions)</p>
               </div>
-              <div className="p-4 bg-purple-50 rounded-xl">
-                <p className="text-2xl font-black text-purple-600">{stats.assistantMessages}</p>
-                <p className="text-sm text-purple-600">Twin Responses</p>
+              <div className="p-4 bg-blue-50 rounded-xl">
+                <p className="text-2xl font-black text-blue-600">{stats.assistantMessages}</p>
+                <p className="text-sm text-blue-600">Twin Responses</p>
               </div>
               <div className="p-4 bg-slate-50 rounded-xl">
                 <p className="text-2xl font-black text-slate-900">{stats.messages}</p>

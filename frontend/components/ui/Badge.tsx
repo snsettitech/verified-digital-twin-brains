@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'trust' | 'neutral' | 'beta';
 
 interface BadgeProps {
     children: React.ReactNode;
@@ -12,28 +12,32 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-    success: 'bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-700 border-emerald-200',
-    warning: 'bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-700 border-amber-200',
-    danger: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border-red-200',
-    info: 'bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-700 border-indigo-200',
-    neutral: 'bg-gradient-to-r from-slate-100 to-gray-100 text-slate-700 border-slate-200',
+    success: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+    warning: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+    danger:  'bg-red-500/15 text-red-400 border-red-500/20',
+    info:    'bg-blue-600/15 text-blue-300 border-blue-500/20',
+    trust:   'bg-amber-500/20 text-amber-400 border-amber-500/35',
+    neutral: 'bg-white/8 text-slate-400 border-white/10',
+    beta:    'bg-amber-500/15 text-amber-400 border-amber-500/35 uppercase tracking-wider text-[0.6875rem]',
 };
 
 const dotStyles: Record<BadgeVariant, string> = {
-    success: 'bg-emerald-500',
-    warning: 'bg-amber-500',
-    danger: 'bg-red-500',
-    info: 'bg-indigo-500',
+    success: 'bg-emerald-400',
+    warning: 'bg-amber-400',
+    danger:  'bg-red-400',
+    info:    'bg-blue-400',
+    trust:   'bg-amber-400',
     neutral: 'bg-slate-500',
+    beta:    'bg-amber-400',
 };
 
 export function Badge({ children, variant = 'neutral', dot = false, className = '' }: BadgeProps) {
     return (
         <span className={`
-      inline-flex items-center gap-1.5 px-2.5 py-1 
-      rounded-full text-xs font-semibold border
-      ${variantStyles[variant]} ${className}
-    `}>
+            inline-flex items-center gap-1.5 px-2.5 py-1
+            rounded-full text-xs font-semibold border
+            ${variantStyles[variant]} ${className}
+        `}>
             {dot && (
                 <span className={`w-1.5 h-1.5 rounded-full ${dotStyles[variant]} animate-pulse`} />
             )}

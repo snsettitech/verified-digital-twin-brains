@@ -23,9 +23,9 @@ export function Toggle({ checked, onChange, label, description, disabled = false
           relative inline-flex h-6 w-11 shrink-0 
           rounded-full border-2 border-transparent 
           transition-all duration-300 ease-in-out
-          focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
           ${checked
-                        ? 'bg-gradient-to-r from-indigo-500 to-purple-500 shadow-lg shadow-indigo-500/30'
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-500 shadow-lg shadow-blue-500/30'
                         : 'bg-slate-200'
                     }
         `}

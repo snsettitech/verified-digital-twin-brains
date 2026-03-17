@@ -5,11 +5,9 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // In production, you would check for admin role here
-  // For now, allow access in development
+  // Block admin access in production until role-based auth is implemented
   if (process.env.NODE_ENV === 'production') {
-    // TODO: Add admin authentication check
-    // redirect('/dashboard');
+    redirect('/dashboard');
   }
 
   return (

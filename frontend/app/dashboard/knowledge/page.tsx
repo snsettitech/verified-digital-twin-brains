@@ -35,7 +35,7 @@ const KnowledgeInsights = ({ profile }: { profile: KnowledgeProfile | null }) =>
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
       {/* Cognitive Balance Card */}
-      <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 rounded-3xl text-white shadow-lg shadow-indigo-200">
+      <div className="bg-gradient-to-br from-blue-600 to-blue-700 p-8 rounded-3xl text-white shadow-lg shadow-blue-200">
         <h4 className="text-xs font-black opacity-70 uppercase tracking-widest">Cognitive Balance</h4>
         <div className="mt-6 flex items-end justify-between">
           <div>
@@ -174,7 +174,7 @@ export default function KnowledgePage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-500">Loading your persona...</p>
         </div>
       </div>
@@ -186,8 +186,8 @@ export default function KnowledgePage() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center max-w-md p-8">
-          <div className="w-16 h-16 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <svg className="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
           </div>
@@ -197,7 +197,7 @@ export default function KnowledgePage() {
           </p>
           <a
             href="/dashboard/studio"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
           >
             Create Your Persona
           </a>
@@ -276,7 +276,7 @@ export default function KnowledgePage() {
         {/* List View */}
         {viewMode === 'list' && (loading ? (
           <div className="p-20 flex justify-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
           </div>
         ) : sources.length === 0 ? (
           <div className="p-32 text-center">
@@ -320,11 +320,11 @@ export default function KnowledgePage() {
                       {s.filename.startsWith('YouTube:') ? (
                         <span className="bg-red-50 text-red-600 text-[10px] font-black px-3 py-1.5 rounded-xl">YOUTUBE</span>
                       ) : s.filename.startsWith('Podcast:') ? (
-                        <span className="bg-purple-50 text-purple-600 text-[10px] font-black px-3 py-1.5 rounded-xl">PODCAST</span>
+                        <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-3 py-1.5 rounded-xl">PODCAST</span>
                       ) : s.filename.startsWith('X Thread:') ? (
                         <span className="bg-slate-900 text-white text-[10px] font-black px-3 py-1.5 rounded-xl">X THREAD</span>
                       ) : s.filename.endsWith('.pdf') ? (
-                        <span className="bg-indigo-50 text-indigo-600 text-[10px] font-black px-3 py-1.5 rounded-xl">PDF</span>
+                        <span className="bg-blue-50 text-blue-600 text-[10px] font-black px-3 py-1.5 rounded-xl">PDF</span>
                       ) : (
                         <span className="bg-slate-50 text-slate-600 text-[10px] font-black px-3 py-1.5 rounded-xl">FILE</span>
                       )}

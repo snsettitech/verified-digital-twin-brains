@@ -129,7 +129,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g., Sarah Chen"
-              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
@@ -142,7 +142,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
               value={headline}
               onChange={(e) => setHeadline(e.target.value)}
               placeholder="e.g., Founder at Acme"
-              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
@@ -155,7 +155,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               placeholder="e.g., San Francisco, CA"
-              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
@@ -171,7 +171,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
               <button
                 type="button"
                 onClick={handleConnectLinkedIn}
-                className="px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium"
+                className="px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium"
               >
                 Connect LinkedIn
               </button>
@@ -187,7 +187,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
               <span className="text-lg">{showOptionalSources ? '−' : '+'}</span>
               I have files or links to add
               {hasOptionalContent && (
-                <span className="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded">
+                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded">
                   {files.length + links.filter(l => l.url.trim()).length + (pasteContent.trim() ? 1 : 0)} added
                 </span>
               )}
@@ -201,7 +201,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
                     multiple
                     accept=".zip,.pdf,.html,.csv,.json"
                     onChange={handleFileChange}
-                    className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-indigo-500/20 file:text-indigo-400"
+                    className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-blue-500/20 file:text-blue-400"
                   />
                   {files.length > 0 && (
                     <ul className="mt-2 space-y-1">
@@ -228,7 +228,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
                       <button type="button" onClick={() => handleRemoveLink(i)} className="text-slate-500 hover:text-red-400">×</button>
                     </div>
                   ))}
-                  <button type="button" onClick={handleAddLink} className="text-sm text-indigo-400 hover:text-indigo-300">+ Add URL</button>
+                  <button type="button" onClick={handleAddLink} className="text-sm text-blue-400 hover:text-blue-300">+ Add URL</button>
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-2">Paste content</label>
@@ -257,7 +257,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
                 type="checkbox"
                 checked={consent}
                 onChange={(e) => setConsent(e.target.checked)}
-                className="mt-1 w-5 h-5 rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/20"
+                className="mt-1 w-5 h-5 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500/20"
               />
               <span className="text-sm text-slate-300">
                 Search the public web for content that looks like me. I control what gets added and can change it anytime.
@@ -270,7 +270,7 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
       <button
         onClick={handleSubmit}
         disabled={!isValid || isSubmitting}
-        className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2"
+        className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-lg transition-colors flex items-center justify-center gap-2"
       >
         {isSubmitting ? (
           <>

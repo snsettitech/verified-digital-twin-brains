@@ -162,7 +162,7 @@ function LoginForm() {
                 </p>
                 <button
                     onClick={() => setMagicLinkSent(false)}
-                    className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+                    className="text-blue-400 hover:text-blue-300 text-sm font-medium"
                 >
                     ← Back to login
                 </button>
@@ -174,7 +174,7 @@ function LoginForm() {
         <div>
             {/* Logo/Brand */}
             <div className="text-center mb-8">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
                     <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
@@ -260,7 +260,7 @@ function LoginForm() {
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="you@example.com"
                                 required
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                             />
                         </div>
 
@@ -275,7 +275,7 @@ function LoginForm() {
                                     onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
                                     required
-                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                                 />
                             </div>
                         )}
@@ -283,7 +283,7 @@ function LoginForm() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-500 hover:to-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -302,7 +302,7 @@ function LoginForm() {
 
                 {mode === 'password' && (
                     <div className="mt-4 text-center">
-                        <Link href="/auth/forgot-password" className="text-sm text-indigo-400 hover:text-indigo-300">
+                        <Link href="/auth/forgot-password" className="text-sm text-blue-400 hover:text-blue-300">
                             Forgot your password?
                         </Link>
                     </div>
@@ -312,7 +312,7 @@ function LoginForm() {
             {/* Sign up link */}
             <p className="text-center mt-6 text-slate-400">
                 Don&apos;t have an account?{' '}
-                <Link href="/auth/signup" className="text-indigo-400 hover:text-indigo-300 font-medium">
+                <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300 font-medium">
                     Sign up
                 </Link>
             </p>
@@ -324,7 +324,7 @@ function LoginForm() {
 function LoginFormFallback() {
     return (
         <div className="text-center py-12">
-            <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-slate-400">Loading...</p>
         </div>
     );

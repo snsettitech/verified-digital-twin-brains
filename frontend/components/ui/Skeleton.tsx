@@ -146,7 +146,7 @@ export function SkeletonChat({ messages = 4 }: { messages?: number }) {
                             <SkeletonAvatar size="sm" />
                             <Skeleton
                                 variant="rounded"
-                                className={`${isUser ? 'bg-indigo-500/20' : 'bg-white/5'}`}
+                                className={`${isUser ? 'bg-blue-500/20' : 'bg-white/5'}`}
                                 height={isUser ? 40 : 60}
                                 width={isUser ? 120 : 200}
                             />
