@@ -811,7 +811,8 @@ async def _run_identity_gate_passthrough(
     )
     gate_decision = str(gate.get("decision") or "").upper()
     gate_reason = str(gate.get("reason") or "").lower()
-    normalized_query = f" {re.sub(r'\\s+', ' ', str(query or '').lower()).strip()} "
+    normalized_query_core = re.sub(r"\s+", " ", str(query or "").lower()).strip()
+    normalized_query = f" {normalized_query_core} "
     ambiguous_markers = (
         " the decision ",
         " the project ",
