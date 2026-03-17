@@ -14,7 +14,9 @@ from modules.observability import (
 from modules.agent import (
     run_agent_stream,
     _build_query_ranked_profile_seed_rows,
+    _extract_inline_citation_ids,
     _merge_twin_row_settings,
+    _strip_inline_source_refs,
 )
 from modules.identity_gate import run_identity_gate
 from modules.interaction_context import (
@@ -300,6 +302,306 @@ def _smalltalk_response_for_query(query: str) -> str:
     return "Hi. How can I help?"
 
 
+def _clean_public_profile_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip())
+
+
+def _public_profile_display_name(settings: Dict[str, Any]) -> str:
+    public_profile = settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+    identity_pack = settings.get("persona_identity_pack")
+    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
+    return (
+        _clean_public_profile_text(settings.get("name"))
+        or _clean_public_profile_text(public_profile.get("display_name"))
+        or _clean_public_profile_text(identity_pack.get("display_name") or identity_pack.get("preferred_name"))
+    )
+
+
+def _manual_public_profile_seed_rows(
+    settings: Dict[str, Any],
+    query: str,
+    *,
+    limit: int = 6,
+) -> List[Dict[str, Any]]:
+    public_profile = settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+    identity_pack = settings.get("persona_identity_pack")
+    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
+    display_name = _public_profile_display_name(settings)
+    if not display_name:
+        return []
+
+    seed_rows: List[Dict[str, Any]] = []
+
+    def _add_row(seed_type: str, raw_text: Any, *, source_name: str) -> None:
+        citation_ids = _extract_inline_citation_ids(raw_text)
+        text = _strip_inline_source_refs(raw_text)
+        text = _clean_public_profile_text(text)
+        if not text:
+            return
+        if not text.endswith((".", "!", "?")):
+            text = f"{text}."
+        seed_rows.append(
+            {
+                "text": text,
+                "source_id": citation_ids[0] if citation_ids else "",
+                "citation_ids": citation_ids,
+                "source_name": source_name,
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "strategy_name": "canonical_profile_seed",
+                "seed_type": seed_type,
+                "title": f"{display_name} profile",
+            }
+        )
+
+    occupation = _clean_public_profile_text(public_profile.get("occupation"))
+    role = _clean_public_profile_text(public_profile.get("role") or identity_pack.get("role"))
+    organization = _clean_public_profile_text(public_profile.get("organization") or identity_pack.get("organization"))
+    headline = _clean_public_profile_text(public_profile.get("headline") or identity_pack.get("headline"))
+    short_description = _clean_public_profile_text(public_profile.get("short_description"))
+    bio = _clean_public_profile_text(public_profile.get("bio") or identity_pack.get("biography"))
+
+    if occupation:
+        _add_row("summary", f"{display_name} is {occupation}", source_name="Canonical public profile")
+    elif role and organization:
+        _add_row("summary", f"{display_name} is the {role} at {organization}", source_name="Canonical public profile")
+    elif role:
+        _add_row("summary", f"{display_name} is the {role}", source_name="Canonical public profile")
+    if headline:
+        _add_row("headline", headline, source_name="Canonical public profile")
+    if short_description:
+        _add_row("summary", short_description, source_name="Canonical public profile")
+    if bio:
+        _add_row("bio", bio, source_name="Canonical public biography")
+
+    response_seeds = public_profile.get("public_response_seeds")
+    if isinstance(response_seeds, list):
+        for item in response_seeds[:8]:
+            if not isinstance(item, dict):
+                continue
+            question = _clean_public_profile_text(item.get("question"))
+            answer = _clean_public_profile_text(item.get("answer") or item.get("text"))
+            if not answer:
+                continue
+            raw_text = f"Q: {question}\nA: {answer}" if question else answer
+            _add_row("qa", raw_text, source_name=_clean_public_profile_text(item.get("title")) or "Prepared public answer")
+
+    for item in public_profile.get("contributions") or []:
+        _add_row("contribution", item, source_name="Public contributions")
+
+    for item in public_profile.get("key_achievements") or []:
+        _add_row("achievement", item, source_name="Public achievements")
+
+    for job in public_profile.get("work_experience") or []:
+        if not isinstance(job, dict):
+            continue
+        description = _clean_public_profile_text(job.get("description"))
+        role_value = _clean_public_profile_text(job.get("role") or job.get("title"))
+        company = _clean_public_profile_text(job.get("company") or job.get("organization"))
+        start_year = _clean_public_profile_text(job.get("start_year"))
+        end_year = _clean_public_profile_text(job.get("end_year"))
+        years = ""
+        if start_year and end_year:
+            years = f" from {start_year} to {end_year}"
+        elif start_year:
+            years = f" since {start_year}"
+        elif end_year:
+            years = f" until {end_year}"
+        if description:
+            _add_row("work", description, source_name="Public work history")
+        elif role_value and company:
+            _add_row("work", f"{display_name} worked as {role_value} at {company}{years}", source_name="Public work history")
+
+    query_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", _clean_public_profile_text(query).lower())
+        if len(token) > 2
+    }
+
+    def _score_row(row: Dict[str, Any]) -> Tuple[int, int]:
+        text = _clean_public_profile_text(row.get("text")).lower()
+        overlap = sum(1 for token in query_tokens if token in text)
+        seed_type = _clean_public_profile_text(row.get("seed_type")).lower()
+        bonus = 0
+        if any(token in query_tokens for token in {"background", "career", "journey", "politics", "political", "experience"}):
+            if seed_type in {"qa", "work", "contribution", "bio"}:
+                bonus += 2
+        if any(token in query_tokens for token in {"who", "about", "role", "title", "office"}):
+            if seed_type in {"summary", "bio", "headline"}:
+                bonus += 2
+        return (overlap + bonus, len(text))
+
+    deduped = _merge_context_snippets([], seed_rows)
+    ranked = sorted(deduped, key=_score_row, reverse=True)
+    return ranked[: max(1, limit)]
+
+
+def _public_profile_seed_rows(
+    settings: Dict[str, Any],
+    query: str,
+    *,
+    limit: int = 6,
+) -> List[Dict[str, Any]]:
+    ranked = _build_query_ranked_profile_seed_rows(settings, query, limit=limit)
+    if ranked:
+        return ranked[:limit]
+    return _manual_public_profile_seed_rows(settings, query, limit=limit)
+
+
+def _public_profile_direct_answer(seed_rows: List[Dict[str, Any]], *, display_name: str) -> str:
+    parts: List[str] = []
+    for row in seed_rows[:2]:
+        text = _clean_public_profile_text(row.get("text"))
+        if not text:
+            continue
+        if display_name:
+            text = re.sub(rf"^{re.escape(display_name)}\s+is\b", "I am", text, flags=re.IGNORECASE)
+            text = re.sub(rf"^{re.escape(display_name)}\s+was\b", "I was", text, flags=re.IGNORECASE)
+            text = re.sub(rf"^{re.escape(display_name)}\s+has been\b", "I have been", text, flags=re.IGNORECASE)
+            text = re.sub(rf"^{re.escape(display_name)}\s+served\b", "I served", text, flags=re.IGNORECASE)
+            text = re.sub(rf"^{re.escape(display_name)}\s+worked\b", "I worked", text, flags=re.IGNORECASE)
+            text = re.sub(rf"^{re.escape(display_name)}\s+joined\b", "I joined", text, flags=re.IGNORECASE)
+        text = re.sub(r"^He\s+", "I ", text, flags=re.IGNORECASE)
+        text = re.sub(r"^She\s+", "I ", text, flags=re.IGNORECASE)
+        if text and not re.match(r"^(I|My)\b", text):
+            text = f"Based on my public profile, {text[0].lower() + text[1:]}" if len(text) > 1 else text
+        parts.append(text)
+    return " ".join(part for part in parts if part).strip()
+
+
+async def _maybe_answer_from_public_profile(
+    twin_id: str,
+    query: str,
+    public_query_policy: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    query_policy = public_query_policy if isinstance(public_query_policy, dict) else {}
+    if _is_quote_intent(query):
+        return None
+
+    query_class = _clean_public_profile_text(query_policy.get("query_class")).lower()
+    normalized_query = _clean_public_profile_text(query).lower()
+    if query_class and query_class not in {"identity", "factual", "analytical"}:
+        return None
+
+    settings = _load_public_twin_settings(twin_id)
+    if not isinstance(settings, dict):
+        return None
+
+    display_name = _public_profile_display_name(settings)
+    seed_rows = _public_profile_seed_rows(settings, query, limit=6)
+    if not seed_rows:
+        logger.info("Public profile QA skipped for %s because no seed rows were built", twin_id)
+        return None
+
+    evidence_lines: List[str] = []
+    allowed_source_ids: List[str] = []
+    for idx, row in enumerate(seed_rows, 1):
+        text = _clean_public_profile_text(row.get("text"))
+        if not text:
+            continue
+        evidence_lines.append(f"[{idx}] {text}")
+        citation_ids = row.get("citation_ids")
+        if isinstance(citation_ids, list):
+            for cid in citation_ids:
+                clean_cid = _clean_public_profile_text(cid)
+                if clean_cid and clean_cid not in allowed_source_ids:
+                    allowed_source_ids.append(clean_cid)
+        source_id = _clean_public_profile_text(row.get("source_id"))
+        if source_id and source_id not in allowed_source_ids:
+            allowed_source_ids.append(source_id)
+
+    if not evidence_lines:
+        return None
+
+    prompt = f"""You are answering on behalf of a public digital twin profile for {display_name or 'this profile'}.
+Use only the provided canonical public profile evidence. Do not use outside knowledge.
+
+Decide if the question can be answered from the public profile evidence alone.
+- If yes, answer in first person, directly and naturally.
+- For biography, background, career, politics, or experience questions, synthesize cautiously from the evidence instead of refusing.
+- If the evidence only partially answers the question, answer with what the public profile shows.
+- If the evidence does not support an answer, return answerable false.
+
+USER QUESTION:
+{query}
+
+PROFILE EVIDENCE:
+{chr(10).join(evidence_lines)}
+
+ALLOWED SOURCE IDS:
+{json.dumps(allowed_source_ids)}
+
+Return STRICT JSON:
+{{
+  "answerable": true,
+  "answer": "string",
+  "citations": ["source_id"],
+  "confidence": 0.0
+}}
+"""
+
+    try:
+        payload, _meta = await inference_router.invoke_json(
+            [{"role": "system", "content": prompt}],
+            task="planner",
+            temperature=0,
+            max_tokens=380,
+        )
+        answerable = bool(payload.get("answerable"))
+        answer = _clean_public_profile_text(payload.get("answer"))
+        citations = [
+            cid for cid in (payload.get("citations") or [])
+            if isinstance(cid, str) and _clean_public_profile_text(cid) and cid in allowed_source_ids
+        ][:4]
+        confidence = float(payload.get("confidence") or 0.0)
+        if answerable and answer:
+            return {
+                "response": answer,
+                "citations": citations,
+                "confidence": max(0.62, min(confidence or 0.72, 0.9)),
+                "contexts": seed_rows,
+            }
+    except Exception as exc:
+        logger.debug("Public profile QA model composition failed for %s: %s", twin_id, exc)
+
+    biography_like_query = query_class == "identity" or any(
+        marker in normalized_query
+        for marker in (
+            "about you",
+            "background",
+            "career",
+            "experience",
+            "journey",
+            "politic",
+            "public life",
+            "role",
+            "title",
+            "office",
+            "who are",
+            "who is",
+            "how did you get",
+            "how you got",
+            "how did",
+            "what do you do",
+            "what is your background",
+        )
+    )
+    if not biography_like_query:
+        return None
+
+    fallback_response = _public_profile_direct_answer(seed_rows, display_name=display_name)
+    if not fallback_response:
+        return None
+    return {
+        "response": fallback_response,
+        "citations": allowed_source_ids[:4],
+        "confidence": 0.66,
+        "contexts": seed_rows,
+    }
+
+
 async def _maybe_build_public_profile_seed_fallback(
     twin_id: str,
     query: str,
@@ -308,7 +610,7 @@ async def _maybe_build_public_profile_seed_fallback(
     if not isinstance(settings, dict):
         return None
 
-    seed_rows = _build_query_ranked_profile_seed_rows(settings, query, limit=5)
+    seed_rows = _public_profile_seed_rows(settings, query, limit=5)
     if not seed_rows:
         return None
 
@@ -4036,6 +4338,114 @@ async def public_chat_endpoint(
             **context_trace,
         }
 
+    public_action_like_query = bool(
+        classify_deepagents_intent(request.message).get("is_action_or_control")
+    )
+    if public_action_like_query:
+        context_trace["public_action_query_guarded"] = True
+
+    if not public_action_like_query:
+        profile_first_answer = await _maybe_answer_from_public_profile(
+            twin_id,
+            request.message,
+            public_query_policy,
+        )
+        if profile_first_answer:
+            profile_contexts = _normalize_json(profile_first_answer.get("contexts") or [])
+            profile_citations = _normalize_json(profile_first_answer.get("citations") or [])
+            confidence_score = float(profile_first_answer.get("confidence") or 0.0)
+            decision_payload = {
+                "intent": "answer",
+                "chosen_workflow": "answer",
+                "output_schema": "workflow.answer.v1",
+                "action": "answer",
+                "confidence": confidence_score,
+                "required_inputs_missing": [],
+                "clarifying_questions": [],
+            }
+            return {
+                "status": "answer",
+                "message": str(profile_first_answer.get("response") or "").strip(),
+                "response": str(profile_first_answer.get("response") or "").strip(),
+                "response_type": "answer",
+                "requires_user_input": False,
+                "citations": profile_citations,
+                "citation_details": _normalize_json(_resolve_citation_details(profile_citations, twin_id)),
+                "confidence_score": confidence_score,
+                "owner_memory_refs": [],
+                "owner_memory_topics": [],
+                "clarification_hint": None,
+                "clarification_options": [],
+                "dialogue_mode": "QA_FACT",
+                "intent_label": "factual_with_evidence",
+                "workflow_intent": "answer",
+                "module_ids": ["procedural.profile_qa.public"],
+                "routing_decision": decision_payload,
+                "render_strategy": "source_faithful",
+                "query_class": str(public_query_policy.get("query_class") or "factual"),
+                "quote_intent": _is_quote_intent(request.message),
+                "answerability_state": "derivable",
+                "planner_action": "answer",
+                "retrieval_stats": {
+                    "chunk_count": len(profile_contexts),
+                    "dense_top1": 0.0,
+                    "dense_top5_avg": 0.0,
+                    "sparse_top1": 0.0,
+                    "sparse_top5_avg": 0.0,
+                    "rerank_top1": 0.0,
+                    "rerank_top5_avg": 0.0,
+                    "evidence_block_counts": {"canonical_profile_seed": len(profile_contexts)},
+                },
+                "selected_evidence_block_types": ["canonical_profile_seed"],
+                "debug_snapshot": {
+                    "query_class": str(public_query_policy.get("query_class") or "factual"),
+                    "requires_evidence": True,
+                    "quote_intent": _is_quote_intent(request.message),
+                    "answerability_state": "derivable",
+                    "planner_action": "answer",
+                    "retrieval_stats": {
+                        "chunk_count": len(profile_contexts),
+                        "dense_top1": 0.0,
+                        "dense_top5_avg": 0.0,
+                        "sparse_top1": 0.0,
+                        "sparse_top5_avg": 0.0,
+                        "rerank_top1": 0.0,
+                        "rerank_top5_avg": 0.0,
+                        "evidence_block_counts": {"canonical_profile_seed": len(profile_contexts)},
+                    },
+                    "selected_evidence_block_types": ["canonical_profile_seed"],
+                    "public_profile_first_answer": True,
+                },
+                "grounding_verifier": {
+                    "supported": None,
+                    "support_ratio": None,
+                    "total_claims": 0,
+                    "supported_claims": 0,
+                    "unsupported_claims": [],
+                },
+                "online_eval": {
+                    "enabled": False,
+                    "ran": False,
+                    "skipped_reason": "public_profile_first_answer",
+                    "context_chars": sum(len(str(row.get("text") or "")) for row in profile_contexts),
+                    "overall_score": None,
+                    "needs_review": None,
+                    "flags": [],
+                    "action": "none",
+                },
+                "runtime_confidence_gate": {
+                    "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+                    "applied": False,
+                    "decision": "skipped",
+                    "skip_reason": "public_profile_first_answer",
+                },
+                "used_owner_memory": False,
+                "model_used": inference_router.get_active_model(),
+                "provider_used": inference_router.get_active_provider(),
+                "identity_gate_mode": "public",
+                **context_trace,
+            }
+
     # Get public group for context (with fallback to default group)
     public_group = get_public_group_for_twin(twin_id)
     if public_group:
@@ -4059,12 +4469,6 @@ async def public_chat_endpoint(
             print(f"[PublicChat] Warning: Could not get default group: {e}")
             group_id = None
 
-    public_action_like_query = bool(
-        classify_deepagents_intent(request.message).get("is_action_or_control")
-    )
-    if public_action_like_query:
-        context_trace["public_action_query_guarded"] = True
-    
     # Emit message_received event for trigger matching
     triggered_actions = []
     if not public_action_like_query:

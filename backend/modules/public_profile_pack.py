@@ -224,6 +224,13 @@ def _build_public_response_seeds(
             "Career milestones",
             0.68,
         )
+        _add(
+            f"How did {display_name} get into public life or politics?",
+            " ".join(contributions[:4]),
+            [],
+            "Career milestones",
+            0.68,
+        )
 
     work_experience = _safe_list(public_profile.get("work_experience"))
     if work_experience:
@@ -249,6 +256,20 @@ def _build_public_response_seeds(
             _add(
                 f"What career path is documented for {display_name}?",
                 " ".join(work_lines),
+                [],
+                "Work history",
+                0.7,
+            )
+            _add(
+                f"What is {display_name}'s background?",
+                " ".join(work_lines[:2]),
+                [],
+                "Work history",
+                0.69,
+            )
+            _add(
+                f"What experience led {display_name} to this role?",
+                " ".join(work_lines[:3]),
                 [],
                 "Work history",
                 0.7,

@@ -416,9 +416,12 @@ def _build_query_ranked_profile_seed_rows(
             )
 
     descriptor_bits = []
+    occupation = str(public_profile.get("occupation") or "").strip()
     role = str(public_profile.get("role") or "").strip()
     organization = str(public_profile.get("organization") or "").strip()
     headline = str(public_profile.get("headline") or "").strip()
+    if occupation:
+        descriptor_bits.append(f"{display_name} is {occupation}")
     if role and organization:
         descriptor_bits.append(f"{display_name} is the {role} at {organization}")
     elif role:
