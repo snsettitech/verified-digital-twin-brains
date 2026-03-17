@@ -20,6 +20,19 @@ from modules.public_profile_pack import build_research_profile_projection, merge
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Fallback bio detection — skip conservative placeholder text from Pinecone
+# ---------------------------------------------------------------------------
+_FALLBACK_BIO_PREFIXES = (
+    "Unknown. Needs",
+    "Insufficient verified",
+)
+
+
+def _is_fallback_text(text: str) -> bool:
+    return any(text.startswith(prefix) for prefix in _FALLBACK_BIO_PREFIXES)
+
+
+# ---------------------------------------------------------------------------
 # Claim type mapping: deep research claim_type → persona claim_type
 # ---------------------------------------------------------------------------
 _DR_CLAIM_TYPE_MAP: Dict[str, str] = {
@@ -53,7 +66,7 @@ def _build_deep_research_chunks(result: Dict[str, Any]) -> Tuple[str, List[Dict[
         chunk_entries.append({"text": text, "block_type": "answer_text", "is_answer_text": True})
 
     bio = result.get("bio") or {}
-    if bio.get("medium"):
+    if bio.get("medium") and not _is_fallback_text(bio["medium"]):
         _add(bio["medium"])
 
     profile_summary = result.get("profile_summary") or {}

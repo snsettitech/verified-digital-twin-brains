@@ -9,6 +9,8 @@ export interface LinkedInIdentity {
   displayName: string;
   location?: string;
   headline?: string;
+  profileUrl?: string;
+  imageUrl?: string;
 }
 
 export interface UnifiedInputData {
@@ -53,6 +55,8 @@ export function UnifiedInputStep({ onSubmit }: UnifiedInputStepProps) {
         const identity: LinkedInIdentity = {
           displayName: linkedIn.profile_snapshot.display_name,
           headline: linkedIn.profile_snapshot.headline ?? undefined,
+          profileUrl: linkedIn.profile_snapshot.profile_url ?? undefined,
+          imageUrl: linkedIn.profile_snapshot.image_url ?? undefined,
         };
         setLinkedInConnected(true);
         setLinkedInIdentity(identity);

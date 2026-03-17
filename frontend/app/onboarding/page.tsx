@@ -113,6 +113,7 @@ function OnboardingContent() {
         hints: {
           location: data.location ?? undefined,
           company: identity.headline ?? undefined,
+          website: identity.profileUrl ?? undefined,
         },
       }),
     });
