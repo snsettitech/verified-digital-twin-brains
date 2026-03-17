@@ -412,17 +412,38 @@ async def replay_name_research_graph_materialization(twin_id: str, user=Depends(
         raise HTTPException(status_code=404, detail="No name deep research artifact found for this twin")
 
     service = get_name_deep_research_service()
-    await service._enqueue_graph_memory_jobs(
-        run_id=run_id,
+    graph_text = service._build_graph_memory_text(result_doc)
+    if not graph_text.strip():
+        raise HTTPException(status_code=422, detail="Latest research artifact does not contain graphable text")
+
+    replay_token = f"{run_id}:replay:{int(time.time())}"
+    client = GraphMemoryCore(
         tenant_id=twin["tenant_id"],
         twin_id=twin_id,
-        result_doc=result_doc,
+        correlation_id=f"graph-replay:{twin_id}:{run_id}",
+        creator_id=twin["creator_id"],
+        scope_id=twin["scope_id"],
+    )
+    episode_id = await client.create_episode(
+        name=f"Deep Research Replay: {twin.get('name') or twin_id}",
+        body=graph_text,
+        source_type="name_deep_research_replay",
+        source_ref=replay_token,
+        async_write=False,
+    )
+    snapshot_refreshed = await refresh_twin_snapshot(
+        tenant_id=twin["tenant_id"],
+        twin_id=twin_id,
+        correlation_id=f"graph-replay:{twin_id}:{run_id}",
+        creator_id=twin["creator_id"],
     )
 
     return {
-        "status": "queued",
+        "status": "ok",
         "twin_id": twin_id,
         "run_id": run_id,
         "scope_id": twin["scope_id"],
-        "message": "Graph materialization jobs were re-enqueued from the latest research artifact.",
+        "episode_id": episode_id,
+        "snapshot_refreshed": snapshot_refreshed,
+        "message": "Latest research artifact was written into Neo4j and the snapshot was refreshed.",
     }
