@@ -185,6 +185,35 @@ _RUBRIC_THESIS_EVIDENCE_MARKERS = (
     "pass",
 )
 
+_OPINION_QUERY_PATTERNS = (
+    "what do you think",
+    "what's your view",
+    "what is your view",
+    "how do you approach",
+    "how do you handle",
+    "how do you deal",
+    "what's your take",
+    "what is your take",
+    "your biggest bet",
+    "biggest bet",
+    "your perspective",
+    "your opinion",
+    "what are your thoughts",
+    "do you believe",
+    "how do you feel",
+    "what excites you",
+    "what worries you",
+    "what concerns you",
+    "what matters to you",
+)
+
+
+def _is_opinion_query(query: str) -> bool:
+    q = re.sub(r"\s+", " ", str(query or "").strip().lower())
+    if not q:
+        return False
+    return any(pattern in q for pattern in _OPINION_QUERY_PATTERNS)
+
 
 def _tokens(text: str) -> Set[str]:
     values = re.findall(r"[a-z0-9][a-z0-9._-]*", (text or "").lower())
@@ -624,6 +653,14 @@ def _apply_contract_overrides(
             missing_information = []
             ambiguity_level = "medium"
             reasoning = f"{reasoning} Persona inference is derivable by combining profile sections."
+
+    if _is_opinion_query(query) and chunk_count >= 1:
+        if original_answerability == "insufficient":
+            proposed_answerability = "derivable"
+            confidence = max(confidence, 0.55)
+            missing_information = []
+            ambiguity_level = "medium"
+            reasoning = f"{reasoning} Opinion/perspective query is derivable by synthesizing relevant evidence."
 
     answerability = _max_reasoning_state(
         original_answerability,

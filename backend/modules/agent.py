@@ -2990,8 +2990,8 @@ def _should_use_conversational_realizer(
 
     if not CONVERSATIONAL_REALIZER_ENABLED:
         return False
-    # Only run LLM realizer for owner chat (not public/visitor sessions)
-    if str(state.get("interaction_context") or "").strip().lower() != "owner_chat":
+    # Run LLM realizer for owner chat and public persona sharing sessions
+    if str(state.get("interaction_context") or "").strip().lower() not in {"owner_chat", "public_share"}:
         return False
     # Never paraphrase verbatim-quote or strict-grounding requests
     if quote_intent or strict_grounding:
@@ -3561,7 +3561,7 @@ async def planner_node(state: TwinState):
                 "render_strategy": (
                     "conversational_realizer"
                     if CONVERSATIONAL_REALIZER_ENABLED
-                    and str(state.get("interaction_context") or "").strip().lower() == "owner_chat"
+                    and str(state.get("interaction_context") or "").strip().lower() in {"owner_chat", "public_share"}
                     else "source_faithful"
                 ),
                 "reasoning_trace": str(answerability.get("reasoning") or ""),
