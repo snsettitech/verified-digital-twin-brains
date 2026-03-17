@@ -161,7 +161,7 @@ def _sanitize_public_profile_sentence(text: Any, display_name: str) -> str:
     return f"{sentence}."
 
 
-def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, str]]:
+def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = (
             supabase.table("twins")
@@ -202,14 +202,28 @@ def _load_public_identity_snapshot(twin_id: str) -> Optional[Dict[str, str]]:
     areas_of_expertise = public_profile.get("areas_of_expertise")
     if not isinstance(areas_of_expertise, list):
         areas_of_expertise = []
+    contributions = public_profile.get("contributions")
+    if not isinstance(contributions, list):
+        contributions = []
+    key_achievements = public_profile.get("key_achievements")
+    if not isinstance(key_achievements, list):
+        key_achievements = []
+    work_experience = public_profile.get("work_experience")
+    if not isinstance(work_experience, list):
+        work_experience = []
 
     return {
         "display_name": display_name,
         "headline": headline,
         "role": role,
         "organization": organization,
+        "occupation": str(public_profile.get("occupation") or "").strip(),
+        "short_description": str(public_profile.get("short_description") or "").strip(),
         "bio": bio,
         "areas_of_expertise": [str(a).strip() for a in areas_of_expertise if str(a).strip()],
+        "contributions": [str(item).strip() for item in contributions if str(item).strip()],
+        "key_achievements": [str(item).strip() for item in key_achievements if str(item).strip()],
+        "work_experience": [item for item in work_experience if isinstance(item, dict)],
     }
 
 
@@ -257,7 +271,7 @@ def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
 
 def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     snapshot = _load_public_identity_snapshot(twin_id)
-    profile_pack = _load_public_profile_pack(twin_id) if intent == "identity_background" else None
+    profile_pack = _load_public_profile_pack(twin_id) if intent == "identity_background" and not snapshot else None
     if not snapshot and not profile_pack:
         return None
 
@@ -295,25 +309,30 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
             base = f"{display_name} is associated with this public profile."
     elif intent == "identity_background":
         seed_rows: List[Dict[str, Any]] = []
-        if isinstance(profile_pack, dict):
-            seed_rows = _merge_context_snippets(
-                seed_rows,
-                _manual_public_pack_seed_rows(profile_pack, "background career politics public life", limit=4),
-            )
         if snapshot:
             snapshot_settings = {
                 "name": display_name,
                 "public_profile": {
+                    "occupation": snapshot.get("occupation"),
                     "headline": headline,
+                    "short_description": snapshot.get("short_description"),
                     "role": role,
                     "organization": organization,
                     "bio": snapshot.get("bio"),
                     "areas_of_expertise": snapshot.get("areas_of_expertise"),
+                    "contributions": snapshot.get("contributions"),
+                    "key_achievements": snapshot.get("key_achievements"),
+                    "work_experience": snapshot.get("work_experience"),
                 },
             }
             seed_rows = _merge_context_snippets(
                 seed_rows,
                 _manual_public_profile_seed_rows(snapshot_settings, "background career politics public life", limit=4),
+            )
+        if isinstance(profile_pack, dict) and not seed_rows:
+            seed_rows = _merge_context_snippets(
+                seed_rows,
+                _manual_public_pack_seed_rows(profile_pack, "background career politics public life", limit=4),
             )
         base = _public_profile_direct_answer(seed_rows, display_name=display_name)
         if not base and bio_sentence:
