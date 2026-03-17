@@ -1134,27 +1134,41 @@ class NameDeepResearchService:
             await self._update_run(run_id, **update_fields)
 
             # Auto-compile: index vectors, build persona, unlock chat — no separate API call needed.
-            try:
-                from modules.deep_research_compiler import compile_run_to_twin
-                compile_result = await compile_run_to_twin(
-                    run_id=run_id,
-                    twin_id=twin_id,
-                    tenant_id=tenant_id,
-                    result=result_doc,
-                    db=self.db,
-                )
-                logger.info(
-                    "auto-compile complete: run_id=%s chunks=%s claims=%s",
-                    run_id,
-                    compile_result.get("chunks_indexed"),
-                    compile_result.get("claims_ingested"),
-                )
-            except Exception as compile_exc:
-                # Non-fatal: research result is preserved; user can retry compile manually
+            # Guard: skip if research produced only conservative fallback bios (Stage A failed).
+            _conservative = self._conservative_bios()
+            _result_bio = result_doc.get("bio") or {}
+            _is_fallback = all(
+                (_result_bio.get(k) or "").strip() == _conservative.get(k, "").strip()
+                for k in ("short", "medium", "long")
+            )
+            if _is_fallback:
                 logger.warning(
-                    "auto-compile failed (non-fatal): run_id=%s twin_id=%s error=%s",
-                    run_id, twin_id, compile_exc,
+                    "auto-compile skipped — research produced only fallback bios (Stage A likely failed): "
+                    "run_id=%s twin_id=%s",
+                    run_id, twin_id,
                 )
+            else:
+                try:
+                    from modules.deep_research_compiler import compile_run_to_twin
+                    compile_result = await compile_run_to_twin(
+                        run_id=run_id,
+                        twin_id=twin_id,
+                        tenant_id=tenant_id,
+                        result=result_doc,
+                        db=self.db,
+                    )
+                    logger.info(
+                        "auto-compile complete: run_id=%s chunks=%s claims=%s",
+                        run_id,
+                        compile_result.get("chunks_indexed"),
+                        compile_result.get("claims_ingested"),
+                    )
+                except Exception as compile_exc:
+                    # Non-fatal: research result is preserved; user can retry compile manually
+                    logger.warning(
+                        "auto-compile failed (non-fatal): run_id=%s twin_id=%s error=%s",
+                        run_id, twin_id, compile_exc,
+                    )
 
             try:
                 await self._enqueue_graph_memory_jobs(

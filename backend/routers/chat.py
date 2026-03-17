@@ -3930,6 +3930,11 @@ async def public_chat_endpoint(
             retrieved_context_snippets: List[Dict[str, Any]] = []
             inference_provider = inference_router.get_active_provider()
             inference_model = inference_router.get_active_model()
+            # When no source restrictions are configured, disable group filtering so
+            # Mode-B content (indexed without group_id) is reachable from public chat.
+            has_source_restrictions = bool(
+                published_source_ids or published_identity_topics or published_policy_topics
+            )
             async for event in run_agent_stream(
                 twin_id,
                 request.message,
@@ -3941,6 +3946,7 @@ async def public_chat_endpoint(
                 actor_user_id=None,
                 tenant_id=None,
                 identity_gate_clarification_hint=clarification_hint,
+                enforce_group_filtering=has_source_restrictions,
             ):
                 tools_payload, agent_payload = _extract_stream_payload(event)
                 if tools_payload:
