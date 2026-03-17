@@ -117,7 +117,14 @@ async def _claim_job(job_id: str, worker_id: str) -> Optional[Dict[str, Any]]:
             return None
     except Exception as exc:
         # Backward-compatible fallback if RPC is unavailable.
-        logger.warning("[GraphOutboxWorker] claim RPC failed for %s: %s", job_id, exc)
+        error_text = str(exc or "")
+        if "42702" in error_text or 'column reference "id" is ambiguous' in error_text:
+            logger.info(
+                "[GraphOutboxWorker] claim RPC unavailable for %s, using fallback update path",
+                job_id,
+            )
+        else:
+            logger.warning("[GraphOutboxWorker] claim RPC failed for %s: %s", job_id, exc)
 
         def _fallback_claim():
             return (
