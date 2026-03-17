@@ -139,6 +139,8 @@ def test_build_research_profile_projection_materializes_demo_style_fields(monkey
     assert public_profile["social_links"]["wikipedia"] == "https://en.wikipedia.org/wiki/Narendra_Modi"
     assert public_profile["image_url"] == "https://upload.wikimedia.org/wikipedia/commons/modi.jpg"
     assert public_profile["pinned_questions"][0].startswith("What are the signature policies")
+    assert public_profile["public_response_seeds"][0]["question"] == "What public role is Narendra Modi associated with?"
+    assert public_profile["public_response_seeds"][0]["answer"] == "Prime Minister of India."
     assert identity_pack["display_name"] == public_profile["display_name"]
     assert identity_pack["expertise_areas"] == public_profile["areas_of_expertise"]
     assert public_profile_meta["source_flow"] == "name_first"
@@ -300,4 +302,5 @@ def test_build_existing_profile_projection_uses_legacy_headline_and_source_candi
     assert public_profile["social_links"]["website"] == "https://www.narendramodi.in/"
     assert public_profile["social_links"]["wikipedia"] == "https://en.wikipedia.org/wiki/Narendra_Modi"
     assert public_profile["image_url"] == "https://upload.wikimedia.org/wikipedia/commons/modi-backfill.jpg"
+    assert public_profile["public_response_seeds"][0]["question"].startswith("What public role is Narendra Modi associated with")
     assert projection["public_profile_meta"]["image_source_type"] == "wikipedia"

@@ -239,6 +239,260 @@ def _normalize_social_links(value: Any) -> Dict[str, str]:
     return links
 
 
+_PROFILE_SEED_STOPWORDS = {
+    "a",
+    "about",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "can",
+    "did",
+    "do",
+    "for",
+    "from",
+    "got",
+    "he",
+    "her",
+    "him",
+    "how",
+    "i",
+    "in",
+    "into",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "on",
+    "or",
+    "she",
+    "the",
+    "they",
+    "to",
+    "was",
+    "what",
+    "when",
+    "where",
+    "who",
+    "why",
+    "with",
+    "you",
+    "your",
+}
+
+
+def _strip_inline_source_refs(text: Any) -> str:
+    cleaned = re.sub(r"\[[0-9a-fA-F\-\s;,]+\]", "", str(text or ""))
+    return re.sub(r"\s+", " ", cleaned).strip(" .")
+
+
+def _extract_inline_citation_ids(text: Any) -> List[str]:
+    raw_text = str(text or "")
+    out: List[str] = []
+    seen = set()
+    for block in re.findall(r"\[([^\]]+)\]", raw_text):
+        for token in re.split(r"[;,\s]+", block):
+            candidate = token.strip()
+            if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", candidate):
+                lowered = candidate.lower()
+                if lowered not in seen:
+                    seen.add(lowered)
+                    out.append(candidate)
+    return out
+
+
+def _tokenize_profile_seed_query(query: str) -> List[str]:
+    tokens: List[str] = []
+    seen = set()
+    for token in re.findall(r"[a-z0-9][a-z0-9_-]*", str(query or "").lower()):
+        if len(token) < 3 or token in _PROFILE_SEED_STOPWORDS:
+            continue
+        if token not in seen:
+            seen.add(token)
+            tokens.append(token)
+    return tokens
+
+
+def _score_profile_seed_row(*, row: Dict[str, Any], query: str, query_tokens: List[str]) -> float:
+    text = str(row.get("text") or "").lower()
+    seed_type = str(row.get("seed_type") or "").lower()
+    if not text:
+        return 0.0
+
+    overlap = 0.0
+    for token in query_tokens:
+        if token in text:
+            overlap += 1.0
+            continue
+        if token.endswith("ics") and token[:-1] in text:
+            overlap += 0.8
+        elif token.endswith("ing") and token[:-3] in text:
+            overlap += 0.7
+
+    lowered_query = str(query or "").lower()
+    thematic_bonus = 0.0
+    if any(marker in lowered_query for marker in ("politic", "government", "public role", "office", "title")):
+        if any(marker in text for marker in ("politic", "party", "government", "minister", "chief minister", "bjp")):
+            thematic_bonus += 2.2
+    if any(marker in lowered_query for marker in ("background", "career", "started", "got into", "journey")):
+        if seed_type in {"bio", "work", "contribution", "qa"}:
+            thematic_bonus += 1.4
+
+    priority_bonus = {
+        "qa": 3.6,
+        "bio": 3.2,
+        "summary": 3.0,
+        "work": 2.8,
+        "achievement": 2.4,
+        "contribution": 2.3,
+        "education": 1.8,
+    }.get(seed_type, 1.5)
+
+    citations = row.get("citation_ids") or []
+    citation_bonus = 0.35 if citations else 0.0
+    return priority_bonus + thematic_bonus + overlap + citation_bonus
+
+
+def _build_query_ranked_profile_seed_rows(
+    full_settings: Optional[Dict[str, Any]],
+    query: str,
+    *,
+    limit: int = 6,
+) -> List[Dict[str, Any]]:
+    if not isinstance(full_settings, dict):
+        return []
+
+    public_profile = full_settings.get("public_profile")
+    public_profile = public_profile if isinstance(public_profile, dict) else {}
+    identity_pack = full_settings.get("persona_identity_pack")
+    identity_pack = identity_pack if isinstance(identity_pack, dict) else {}
+
+    display_name = (
+        str(full_settings.get("name") or "").strip()
+        or str(public_profile.get("display_name") or "").strip()
+        or str(identity_pack.get("display_name") or identity_pack.get("preferred_name") or "").strip()
+    )
+    if not display_name:
+        return []
+
+    seed_rows: List[Dict[str, Any]] = []
+
+    def _add_seed(seed_type: str, raw_text: Any, *, source_label: str, source_url: Any = None) -> None:
+        citation_ids = _extract_inline_citation_ids(raw_text)
+        cleaned_text = _strip_inline_source_refs(raw_text)
+        if not cleaned_text:
+            return
+        text = cleaned_text if cleaned_text.endswith((".", "!", "?")) else f"{cleaned_text}."
+        seed_rows.append(
+            {
+                "text": text,
+                "source_id": citation_ids[0] if citation_ids else "",
+                "citation_ids": citation_ids,
+                "source_name": source_label,
+                "url": str(source_url or "").strip(),
+                "block_type": "answer_text",
+                "is_answer_text": True,
+                "strategy_name": "canonical_profile_seed",
+                "seed_type": seed_type,
+                "title": f"{display_name} profile",
+            }
+        )
+
+    response_seeds = public_profile.get("public_response_seeds")
+    if isinstance(response_seeds, list):
+        for item in response_seeds:
+            if not isinstance(item, dict):
+                continue
+            answer = str(item.get("answer") or item.get("text") or "").strip()
+            question = str(item.get("question") or "").strip()
+            raw_text = f"Q: {question}\nA: {answer}" if question and answer else answer
+            _add_seed(
+                "qa",
+                raw_text,
+                source_label=str(item.get("title") or "Prepared public answer").strip() or "Prepared public answer",
+                source_url=item.get("url"),
+            )
+
+    descriptor_bits = []
+    role = str(public_profile.get("role") or "").strip()
+    organization = str(public_profile.get("organization") or "").strip()
+    headline = str(public_profile.get("headline") or "").strip()
+    if role and organization:
+        descriptor_bits.append(f"{display_name} is the {role} at {organization}")
+    elif role:
+        descriptor_bits.append(f"{display_name} is the {role}")
+    if headline:
+        descriptor_bits.append(headline)
+    if descriptor_bits:
+        _add_seed("summary", ". ".join(descriptor_bits), source_label="Canonical public profile")
+
+    _add_seed("summary", public_profile.get("short_description"), source_label="Canonical public profile")
+    _add_seed("bio", public_profile.get("bio"), source_label="Canonical public biography")
+
+    for item in _clean_profile_strings(public_profile.get("key_achievements"), limit=5):
+        _add_seed("achievement", item, source_label="Public achievements")
+
+    for item in _clean_profile_strings(public_profile.get("contributions"), limit=6):
+        _add_seed("contribution", item, source_label="Public contributions")
+
+    for job in public_profile.get("work_experience") or []:
+        if not isinstance(job, dict):
+            continue
+        role_value = str(job.get("role") or job.get("title") or "").strip()
+        company = str(job.get("company") or job.get("organization") or "").strip()
+        description = str(job.get("description") or "").strip()
+        start_year = str(job.get("start_year") or "").strip()
+        end_year = str(job.get("end_year") or "").strip()
+        years = ""
+        if start_year and end_year:
+            years = f" from {start_year} to {end_year}"
+        elif start_year:
+            years = f" since {start_year}"
+        elif end_year:
+            years = f" until {end_year}"
+        job_text = description
+        if not job_text and role_value and company:
+            job_text = f"{display_name} worked as {role_value} at {company}{years}"
+        elif not job_text and role_value:
+            job_text = f"{display_name} worked as {role_value}{years}"
+        _add_seed("work", job_text, source_label="Public work history")
+
+    for edu in public_profile.get("education") or []:
+        if not isinstance(edu, dict):
+            continue
+        degree = str(edu.get("degree") or "").strip()
+        field = str(edu.get("field") or "").strip()
+        institution = str(edu.get("institution") or "").strip()
+        year = str(edu.get("year") or edu.get("end_year") or "").strip()
+        parts = []
+        if degree and field:
+            parts.append(f"{degree} in {field}")
+        elif degree:
+            parts.append(degree)
+        elif field:
+            parts.append(field)
+        if institution:
+            parts.append(institution)
+        if year:
+            parts.append(year)
+        if parts:
+            _add_seed("education", f"{display_name} studied {', '.join(parts)}", source_label="Public education")
+
+    deduped = _merge_context_rows([], seed_rows, limit=max(10, limit * 2))
+    query_tokens = _tokenize_profile_seed_query(query)
+    ranked = sorted(
+        deduped,
+        key=lambda row: (
+            _score_profile_seed_row(row=row, query=query, query_tokens=query_tokens),
+            len(str(row.get("text") or "")),
+        ),
+        reverse=True,
+    )
+    return ranked[: max(1, limit)]
+
+
 def _build_profile_fact_block(full_settings: Optional[Dict[str, Any]]) -> str:
     if not isinstance(full_settings, dict):
         return ""
@@ -3684,6 +3938,10 @@ def create_twin_agent(
         sub_queries = state.get("sub_queries", [])
         all_results = []
         citations = []
+        user_query = next(
+            (m.content for m in reversed(state.get("messages") or []) if isinstance(m, HumanMessage)),
+            "",
+        )
         
         async def safe_retrieve(query):
             try:
@@ -3714,6 +3972,22 @@ def create_twin_agent(
                     if "source_id" in item:
                         citations.append(item["source_id"])
 
+        interaction_context = str(state.get("interaction_context") or "").strip().lower()
+        use_profile_seed_rows = interaction_context in {"public_share", "public_widget"} or not all_results
+        profile_seed_rows: List[Dict[str, Any]] = []
+        if use_profile_seed_rows:
+            profile_seed_rows = _build_query_ranked_profile_seed_rows(
+                state.get("full_settings"),
+                user_query,
+                limit=6 if not all_results else 4,
+            )
+            if profile_seed_rows:
+                all_results = _merge_context_rows(
+                    all_results,
+                    profile_seed_rows,
+                    limit=max(PLANNER_SECOND_PASS_RETRIEVAL_TOP_K, 10),
+                )
+
         if all_results:
             citations = []
             for item in all_results:
@@ -3724,7 +3998,15 @@ def create_twin_agent(
         return {
             "retrieved_context": {"results": all_results},
             "citations": citations,
-            "reasoning_history": (state.get("reasoning_history") or []) + [f"Retrieval: Executed {len(sub_queries)} queries."]
+            "reasoning_history": (state.get("reasoning_history") or [])
+            + [
+                f"Retrieval: Executed {len(sub_queries)} queries."
+                + (
+                    f" Added {len(profile_seed_rows)} canonical profile seed rows."
+                    if profile_seed_rows
+                    else ""
+                )
+            ]
         }
 
     # Define the graph

@@ -120,6 +120,143 @@ def normalize_social_links(value: Any) -> Dict[str, str]:
     return links
 
 
+def _strip_inline_source_refs(text: Any) -> str:
+    cleaned = re.sub(r"\[[0-9a-fA-F\-\s;,]+\]", "", str(text or ""))
+    return re.sub(r"\s+", " ", cleaned).strip(" .")
+
+
+def _extract_inline_citation_ids(text: Any) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for block in re.findall(r"\[([^\]]+)\]", str(text or "")):
+        for token in re.split(r"[;,\s]+", block):
+            candidate = token.strip()
+            if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", candidate):
+                lowered = candidate.lower()
+                if lowered not in seen:
+                    seen.add(lowered)
+                    out.append(candidate)
+    return out
+
+
+def _build_public_response_seeds(
+    result: Dict[str, Any],
+    *,
+    display_name: str,
+    public_profile: Dict[str, Any],
+    existing_seeds: Any = None,
+) -> List[Dict[str, Any]]:
+    seeds: List[Dict[str, Any]] = []
+    seen = set()
+
+    def _add(question: str, answer: str, citations: List[str], title: str, confidence: Any = None) -> None:
+        clean_question = _clean_text(question)
+        clean_answer = _strip_inline_source_refs(answer)
+        if not clean_answer:
+            return
+        key = (clean_question.lower(), clean_answer.lower())
+        if key in seen:
+            return
+        seen.add(key)
+        payload: Dict[str, Any] = {
+            "question": clean_question,
+            "answer": clean_answer if clean_answer.endswith((".", "!", "?")) else f"{clean_answer}.",
+            "citations": [c for c in citations if _clean_text(c)],
+            "title": title,
+        }
+        if isinstance(confidence, (int, float)):
+            payload["confidence"] = round(float(confidence), 3)
+        seeds.append(payload)
+
+    for item in _safe_list(existing_seeds):
+        if not isinstance(item, dict):
+            continue
+        _add(
+            str(item.get("question") or "").strip(),
+            str(item.get("answer") or item.get("text") or "").strip(),
+            [str(c) for c in _safe_list(item.get("citations")) if str(c)],
+            str(item.get("title") or "Prepared public answer").strip() or "Prepared public answer",
+            item.get("confidence"),
+        )
+
+    for item in _safe_list(result.get("prepared_question_answers")):
+        if not isinstance(item, dict):
+            continue
+        _add(
+            str(item.get("question") or "").strip(),
+            str(item.get("answer") or "").strip(),
+            [str(c) for c in _safe_list(item.get("citations")) if str(c)],
+            "Prepared public answer",
+            item.get("confidence"),
+        )
+
+    bio = _safe_dict(result.get("bio"))
+    bio_medium = _clean_text(bio.get("medium"))
+    bio_short = _clean_text(bio.get("short"))
+    bio_citations = _extract_inline_citation_ids(bio_medium or bio_short or public_profile.get("bio"))
+    if bio_medium or bio_short:
+        _add(
+            f"Who is {display_name}?",
+            bio_short or bio_medium,
+            bio_citations,
+            "Canonical biography",
+            0.82,
+        )
+
+    role = _clean_text(public_profile.get("role"))
+    organization = _clean_text(public_profile.get("organization"))
+    if role or organization:
+        answer = f"{display_name} is the {role} at {organization}." if role and organization else f"{display_name} is associated with {role or organization}."
+        _add(
+            f"What public role is {display_name} associated with?",
+            answer,
+            bio_citations,
+            "Canonical role",
+            0.9,
+        )
+
+    contributions = _clean_unique_strings(public_profile.get("contributions") or [], limit=6)
+    if contributions:
+        _add(
+            f"How did {display_name} build their public career?",
+            " ".join(contributions[:4]),
+            [],
+            "Career milestones",
+            0.68,
+        )
+
+    work_experience = _safe_list(public_profile.get("work_experience"))
+    if work_experience:
+        work_lines: List[str] = []
+        for job in work_experience[:4]:
+            if not isinstance(job, dict):
+                continue
+            role_value = _clean_text(job.get("role") or job.get("title"))
+            company = _clean_text(job.get("company") or job.get("organization"))
+            description = _clean_text(job.get("description"))
+            start_year = _clean_text(job.get("start_year"))
+            end_year = _clean_text(job.get("end_year"))
+            years = ""
+            if start_year and end_year:
+                years = f" ({start_year}-{end_year})"
+            elif start_year:
+                years = f" (since {start_year})"
+            if description:
+                work_lines.append(description)
+            elif role_value and company:
+                work_lines.append(f"{role_value} at {company}{years}")
+        if work_lines:
+            _add(
+                f"What career path is documented for {display_name}?",
+                " ".join(work_lines),
+                [],
+                "Work history",
+                0.7,
+            )
+
+    return seeds[:10]
+
+
 def _is_populated(value: Any) -> bool:
     if isinstance(value, dict):
         return any(_is_populated(v) for v in value.values())
@@ -1310,6 +1447,19 @@ def build_research_profile_projection(
         or _iso_now()
     )
     image_resolution = _resolve_profile_image(result, existing_public_profile, existing_meta)
+    public_response_seeds = _build_public_response_seeds(
+        result,
+        display_name=display_name,
+        public_profile={
+            **existing_public_profile,
+            "role": role,
+            "organization": organization,
+            "bio": bio_text,
+            "contributions": contributions,
+            "work_experience": work_experience,
+        },
+        existing_seeds=existing_public_profile.get("public_response_seeds"),
+    )
 
     public_profile = {
         **existing_public_profile,
@@ -1336,6 +1486,7 @@ def build_research_profile_projection(
         "contributions": contributions,
         "personality_traits": _clean_unique_strings(existing_public_profile.get("personality_traits") or [], limit=6),
         "speaking_style": _clean_text(existing_public_profile.get("speaking_style")),
+        "public_response_seeds": public_response_seeds,
         "education": education,
         "work_experience": work_experience,
         "birth_year": birth_year,
@@ -1540,6 +1691,19 @@ def build_existing_profile_projection(
         or normalized.get("image_url")
         or normalized.get("avatar_url")
     )
+    public_response_seeds = _build_public_response_seeds(
+        {},
+        display_name=display_name,
+        public_profile={
+            **existing_public_profile,
+            "role": role,
+            "organization": organization,
+            "bio": normalized["bio"],
+            "contributions": normalized["contributions"],
+            "work_experience": normalized["work_experience"],
+        },
+        existing_seeds=existing_public_profile.get("public_response_seeds"),
+    )
 
     public_profile = {
         **existing_public_profile,
@@ -1567,6 +1731,7 @@ def build_existing_profile_projection(
         "contributions": normalized["contributions"],
         "personality_traits": normalized["personality_traits"],
         "speaking_style": normalized["speaking_style"],
+        "public_response_seeds": public_response_seeds,
         "education": normalized["education"],
         "work_experience": normalized["work_experience"],
         "birth_year": normalized["birth_year"],
