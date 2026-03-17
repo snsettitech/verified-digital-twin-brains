@@ -269,7 +269,7 @@ def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
+async def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     snapshot = _load_public_identity_snapshot(twin_id)
     profile_pack = _load_public_profile_pack(twin_id) if intent == "identity_background" and not snapshot else None
     if not snapshot and not profile_pack:
@@ -338,7 +338,12 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
             row for row in seed_rows
             if _clean_public_profile_text(row.get("seed_type")).lower() in {"bio", "work", "contribution", "achievement", "education"}
         ]
-        base = _public_profile_direct_answer(biography_rows or seed_rows, display_name=display_name)
+        base = await _rewrite_public_background_fastpath(
+            display_name=display_name,
+            seed_rows=biography_rows or seed_rows,
+        )
+        if not base:
+            base = _public_profile_direct_answer(biography_rows or seed_rows, display_name=display_name)
         if not base and bio_sentence:
             base = bio_sentence
         if not base:
@@ -368,7 +373,7 @@ def _build_public_fastpath_message(twin_id: str, intent: str) -> Optional[str]:
     return f"{base.strip()} What are you trying to figure out right now?"
 
 
-def _smalltalk_response_for_query(query: str) -> str:
+def _smalltalk_response_for_query(query: str, settings=None) -> str:
     q_lower = str(query or "").lower().strip()
     if any(marker in q_lower for marker in ("thank you", "thanks")):
         return "You're welcome."
@@ -377,6 +382,13 @@ def _smalltalk_response_for_query(query: str) -> str:
     if any(marker in q_lower for marker in ("how are you", "how's your day", "hows your day")):
         return "Doing well. How can I help?"
     if q_lower in {"hi", "hello", "hey", "hi!", "hello!", "hey!"}:
+        if settings:
+            public_profile = settings.get("public_profile") or {}
+            bio_raw = str(public_profile.get("bio") or "").strip()
+            if bio_raw:
+                sentences = [s.strip() for s in bio_raw.split(".") if s.strip()]
+                bio_excerpt = ". ".join(sentences[:2]) + "." if len(sentences) >= 2 else bio_raw
+                return f"Hey! {bio_excerpt} What's on your mind?"
         return "Hey! Great to chat with you."
     return "Hi. How can I help?"
 
@@ -665,6 +677,54 @@ def _public_profile_direct_answer(seed_rows: List[Dict[str, Any]], *, display_na
             text = f"Based on my public profile, {text[0].lower() + text[1:]}" if len(text) > 1 else text
         parts.append(text)
     return " ".join(part for part in parts if part).strip()
+
+
+async def _rewrite_public_background_fastpath(
+    *,
+    display_name: str,
+    seed_rows: List[Dict[str, Any]],
+) -> str:
+    evidence_lines: List[str] = []
+    for idx, row in enumerate(seed_rows[:4], 1):
+        text = _clean_public_profile_text(row.get("text"))
+        if not text:
+            continue
+        evidence_lines.append(f"[{idx}] {text}")
+    if not evidence_lines:
+        return ""
+
+    prompt = f"""You are rewriting public profile facts into a cleaner first-person answer for {display_name or 'this profile'}.
+Use only the provided facts. Do not add outside knowledge, motives, or unsupported transitions.
+
+Requirements:
+- Return 1 or 2 concise sentences.
+- Write in first person.
+- Keep the wording natural and conversational.
+- Preserve only facts that are explicitly supported by the evidence.
+- Do not mention citations, evidence blocks, or "public profile" unless needed.
+
+PUBLIC FACTS:
+{chr(10).join(evidence_lines)}
+
+Return STRICT JSON:
+{{
+  "answer": "string"
+}}
+"""
+
+    try:
+        payload, _meta = await inference_router.invoke_json(
+            [{"role": "system", "content": prompt}],
+            task="planner",
+            temperature=0,
+            max_tokens=220,
+        )
+        answer = _clean_public_profile_text(payload.get("answer"))
+        if answer:
+            return answer
+    except Exception as exc:
+        logger.debug("Background fastpath rewrite failed for %s: %s", display_name, exc)
+    return ""
 
 
 async def _maybe_answer_from_public_profile(
@@ -4447,7 +4507,7 @@ async def public_chat_endpoint(
     public_fastpath = classify_fastpath_intent(request.message)
     public_fastpath_text = None
     if public_fastpath.get("matched"):
-        public_fastpath_text = _build_public_fastpath_message(
+        public_fastpath_text = await _build_public_fastpath_message(
             twin_id,
             str(public_fastpath.get("intent") or "").strip(),
         )
@@ -4886,7 +4946,6 @@ async def public_chat_endpoint(
             if (
                 not public_action_like_query
                 and (not final_response or final_response.strip() == fallback_message)
-                and not retrieved_context_snippets
             ):
                 profile_seed_fallback = await _maybe_build_public_profile_seed_fallback(
                     twin_id,
