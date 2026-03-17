@@ -369,6 +369,58 @@ def _build_canonical_profile_block(full_settings: Optional[Dict[str, Any]]) -> s
     if expertise:
         lines.append(f"- Expertise focus: {', '.join(expertise)}")
 
+    # Work experience — inject up to 5 roles so LLM can answer career questions
+    work_exp = public_profile.get("work_experience")
+    if isinstance(work_exp, list) and work_exp:
+        exp_parts = []
+        for job in work_exp[:5]:
+            if not isinstance(job, dict):
+                continue
+            title = str(job.get("title") or job.get("role") or "").strip()
+            company = str(job.get("company") or job.get("organization") or "").strip()
+            years = str(job.get("years") or job.get("duration") or "").strip()
+            if title and company:
+                entry = f"{title} at {company}"
+                if years:
+                    entry += f" ({years})"
+                exp_parts.append(entry)
+        if exp_parts:
+            lines.append("- Work experience: " + "; ".join(exp_parts))
+
+    # Education — inject all degrees
+    education = public_profile.get("education")
+    if isinstance(education, list) and education:
+        edu_parts = []
+        for edu in education[:4]:
+            if not isinstance(edu, dict):
+                continue
+            degree = str(edu.get("degree") or "").strip()
+            field = str(edu.get("field") or edu.get("subject") or "").strip()
+            institution = str(edu.get("institution") or edu.get("school") or "").strip()
+            year = str(edu.get("year") or edu.get("graduation_year") or "").strip()
+            parts = []
+            if degree and field:
+                parts.append(f"{degree} in {field}")
+            elif degree:
+                parts.append(degree)
+            elif field:
+                parts.append(field)
+            if institution:
+                parts.append(institution)
+            if year:
+                parts.append(year)
+            if parts:
+                edu_parts.append(", ".join(parts))
+        if edu_parts:
+            lines.append("- Education: " + "; ".join(edu_parts))
+
+    # Key achievements
+    achievements = public_profile.get("key_achievements")
+    if isinstance(achievements, list) and achievements:
+        ach_strs = [str(a).strip() for a in achievements[:3] if str(a).strip()]
+        if ach_strs:
+            lines.append("- Key achievements: " + "; ".join(ach_strs))
+
     disclosure_line = str(profile.get("disclosure_line") or "").strip()
     if disclosure_line:
         lines.append(f"- Disclosure: {disclosure_line}")
