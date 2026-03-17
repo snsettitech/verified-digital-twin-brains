@@ -4,13 +4,14 @@ import React, { useState, Suspense, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { UnifiedInputStep, type UnifiedInputData } from '@/components/onboarding/steps/UnifiedInputStep';
 import { StepResearch } from '@/components/onboarding/steps/StepResearch';
+import { StepReviewEdit } from '@/components/onboarding/steps/StepReviewEdit';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type OnboardingStep = 'input' | 'deep-research' | 'research';
+type OnboardingStep = 'input' | 'deep-research' | 'research' | 'review-edit';
 
 interface Twin {
   id: string;
@@ -18,6 +19,52 @@ interface Twin {
   status: string;
   specialization?: string;
   settings?: Record<string, unknown>;
+}
+
+// =============================================================================
+// Wikipedia identity confidence check
+// =============================================================================
+
+interface WikiSummary {
+  type?: string;
+  description?: string;
+  extract?: string;
+  content_urls?: { desktop?: { page?: string } };
+}
+
+const PERSON_SIGNALS = [
+  'born', 'american', 'british', 'canadian', 'australian', 'indian', 'is a', 'was a',
+  'politician', 'author', 'actor', 'director', 'ceo', 'founder', 'professor', 'scientist',
+  'engineer', 'entrepreneur', 'executive', 'journalist', 'businessman', 'businesswoman',
+];
+
+const STOP_WORDS = new Set([
+  'at', 'of', 'the', 'a', 'an', 'and', 'or', 'in', 'for', 'with', 'by', 'to', 'is',
+  'as', 'on', 'co', 'inc', 'llc', 'ltd', 'group',
+]);
+
+function isWikipediaConfidentMatch(
+  wiki: WikiSummary,
+  headline: string | undefined,
+): boolean {
+  if (wiki.type === 'disambiguation') return false;
+
+  const combined = `${wiki.description ?? ''} ${wiki.extract ?? ''}`.toLowerCase();
+
+  const hasPerson = PERSON_SIGNALS.some((s) => combined.includes(s));
+  if (!hasPerson) return false;
+
+  if (!headline) return true;
+
+  const keywords = headline
+    .toLowerCase()
+    .split(/[\s,|\/\-]+/)
+    .map((w) => w.replace(/[^a-z0-9]/g, ''))
+    .filter((w) => w.length >= 4 && !STOP_WORDS.has(w));
+
+  if (keywords.length === 0) return true;
+
+  return keywords.some((kw) => combined.includes(kw));
 }
 
 // =============================================================================
@@ -30,7 +77,7 @@ function DeepResearchProgress({ status, name }: { status: string; name: string }
     searching: 'Searching the web…',
     crawling: 'Reading public content…',
     extracting: 'Extracting information…',
-    synthesizing: 'Synthesizing profile…',
+    synthesizing: 'Synthesising profile…',
     completed: 'Research complete!',
     failed: 'Research failed.',
   };
@@ -74,6 +121,93 @@ function OnboardingContent() {
   }, []);
 
   // ---------------------------------------------------------------------------
+  // Phase 1 — LinkedIn pre-seed
+  // Writes LinkedIn image + social link into public_profile before research starts.
+  // Sets image_source_type="oauth" so the compiler never overwrites the LinkedIn photo.
+  // ---------------------------------------------------------------------------
+  const prePopulateLinkedInFields = useCallback(async (
+    twinId: string,
+    data: UnifiedInputData,
+  ): Promise<void> => {
+    if (!data.linkedInIdentity) return;
+
+    const identity = data.linkedInIdentity;
+    const publicProfile: Record<string, unknown> = {
+      display_name: data.fullName,
+    };
+    if (data.headline || identity.headline) {
+      publicProfile.headline = data.headline || identity.headline;
+    }
+    if (identity.imageUrl) {
+      publicProfile.image_url = identity.imageUrl;
+      publicProfile.avatar_url = identity.imageUrl;
+    }
+    const socialLinks: Record<string, string> = {};
+    if (identity.profileUrl) {
+      socialLinks.linkedin = identity.profileUrl;
+    }
+    if (Object.keys(socialLinks).length > 0) {
+      publicProfile.social_links = socialLinks;
+    }
+
+    const settingsPatch: Record<string, unknown> = { public_profile: publicProfile };
+    if (identity.imageUrl) {
+      settingsPatch.public_profile_meta = {
+        image_source_type: 'oauth',
+        image_source_url: identity.profileUrl ?? identity.imageUrl,
+      };
+    }
+
+    try {
+      await authFetchStandalone(`/twins/${twinId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ settings: settingsPatch }),
+      });
+    } catch (err) {
+      // Best-effort — never block the main flow
+      console.warn('[Onboarding] Phase 1 LinkedIn pre-seed failed (non-blocking):', err);
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Phase 2 — Wikipedia fast-index
+  // Tries to find a Wikipedia article for the person and fires a Mode C job.
+  // Best-effort: never awaited, never blocks.
+  // ---------------------------------------------------------------------------
+  const tryWikipediaFastIndex = useCallback((
+    twinId: string,
+    fullName: string,
+    headline: string | undefined,
+  ): void => {
+    const slug = encodeURIComponent(fullName.trim());
+    void (async () => {
+      try {
+        const wikiRes = await fetch(
+          `https://en.wikipedia.org/api/rest_v1/page/summary/${slug}`,
+          { signal: AbortSignal.timeout(8000) },
+        );
+        if (!wikiRes.ok) return;
+
+        const wiki: WikiSummary = await wikiRes.json();
+        if (!isWikipediaConfidentMatch(wiki, headline)) return;
+
+        const pageUrl = wiki.content_urls?.desktop?.page
+          ?? `https://en.wikipedia.org/wiki/${slug}`;
+
+        // Fire and forget — do not await or check result
+        authFetchStandalone('/persona/link-compile/jobs/mode-c', {
+          method: 'POST',
+          body: JSON.stringify({ twin_id: twinId, urls: [pageUrl] }),
+        }).catch(() => {});
+
+        console.log(`[Onboarding] Phase 2 Wikipedia fast-index fired for ${fullName}`);
+      } catch {
+        // Silently swallow — never block onboarding
+      }
+    })();
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Deep research polling helper
   // ---------------------------------------------------------------------------
   const pollDeepResearch = useCallback(async (runId: string): Promise<void> => {
@@ -97,7 +231,7 @@ function OnboardingContent() {
   }, []);
 
   // ---------------------------------------------------------------------------
-  // LinkedIn deep research path
+  // Phase 3 — LinkedIn deep research path (Approach 2)
   // ---------------------------------------------------------------------------
   const runLinkedInDeepResearch = useCallback(async (
     twinId: string,
@@ -105,7 +239,6 @@ function OnboardingContent() {
   ): Promise<void> => {
     const identity = data.linkedInIdentity!;
 
-    // 1. Start deep research run
     const runRes = await authFetchStandalone('/deep-research/runs', {
       method: 'POST',
       body: JSON.stringify({
@@ -126,10 +259,8 @@ function OnboardingContent() {
     setCurrentStep('deep-research');
     setDeepResearchStatus('created');
 
-    // 2. Poll to completion
     await pollDeepResearch(runId);
 
-    // 3. Compile deep research result into twin (index to Pinecone, store claims, build persona, write bio)
     const compileRes = await authFetchStandalone(`/deep-research/runs/${runId}/compile-to-twin`, {
       method: 'POST',
       body: JSON.stringify({ twin_id: twinId }),
@@ -199,12 +330,25 @@ function OnboardingContent() {
       };
       setTwin(twinData);
 
-      // Step 2a: LinkedIn path — deep research
+      // Step 2a: LinkedIn path — run all 4 phases
       if (data.linkedInIdentity) {
+        // Phase 1: Immediately pre-populate LinkedIn fields (locks in OAuth image)
+        await prePopulateLinkedInFields(twinData.id, data);
+
+        // Phase 2: Wikipedia fast-index (fire-and-forget, never awaited)
+        tryWikipediaFastIndex(
+          twinData.id,
+          data.fullName,
+          data.headline || data.linkedInIdentity.headline,
+        );
+
+        // Phase 3: Full deep research
         await runLinkedInDeepResearch(twinData.id, data);
         trackEvent('onboarding_deep_research_completed', { twin_id: twinData.id });
         try { localStorage.setItem('activeTwinId', twinData.id); } catch { /* non-blocking */ }
-        router.push(returnTo ?? `/dashboard/profile?from=onboarding`);
+
+        // Phase 4: Review & edit step (instead of immediate redirect)
+        setCurrentStep('review-edit');
         return;
       }
 
@@ -305,6 +449,10 @@ function OnboardingContent() {
     setCurrentStep('input');
   };
 
+  const handleReviewEditComplete = useCallback(() => {
+    router.push(returnTo ?? `/dashboard/profile?from=onboarding`);
+  }, [router, returnTo]);
+
   // Loading spinner while initial profile call is in flight
   if (isLoading && currentStep === 'input') {
     return (
@@ -324,13 +472,23 @@ function OnboardingContent() {
           <div>
             <h1 className="text-xl font-bold text-white">Create Your Persona</h1>
             <p className="text-sm text-slate-400">
-              {currentStep === 'input' ? 'Get started in 2 minutes' : 'Research in progress'}
+              {currentStep === 'input'
+                ? 'Get started in 2 minutes'
+                : currentStep === 'review-edit'
+                ? 'Review your profile'
+                : 'Research in progress'}
             </p>
           </div>
-          {twin && (
+          {twin && currentStep !== 'review-edit' && (
             <div className="text-sm text-slate-400 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               Profile Building
+            </div>
+          )}
+          {twin && currentStep === 'review-edit' && (
+            <div className="text-sm text-slate-400 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400" />
+              Live
             </div>
           )}
         </div>
@@ -399,6 +557,12 @@ function OnboardingContent() {
             seedUrls={submittedUrls}
             onComplete={handleResearchComplete}
             onBack={handleResearchBack}
+          />
+        )}
+        {currentStep === 'review-edit' && twin && (
+          <StepReviewEdit
+            twinId={twin.id}
+            onComplete={handleReviewEditComplete}
           />
         )}
       </main>
