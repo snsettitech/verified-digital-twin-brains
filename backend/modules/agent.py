@@ -3379,7 +3379,13 @@ async def planner_node(state: TwinState):
                 "follow_up_question": "",
                 "confidence": smalltalk_confidence,
                 "teaching_questions": [],
-                "render_strategy": "source_faithful",
+                "render_strategy": (
+                    "conversational_realizer"
+                    if CONVERSATIONAL_REALIZER_ENABLED
+                    and str(state.get("interaction_context") or "").strip().lower()
+                    in {"owner_chat", "public_share"}
+                    else "source_faithful"
+                ),
                 "reasoning_trace": "Smalltalk planner bypass.",
                 "answerability": smalltalk_answerability,
                 "telemetry": _build_planner_telemetry(),
