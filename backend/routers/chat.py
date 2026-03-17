@@ -43,12 +43,6 @@ from modules.runtime_audit_store import (
     persist_routing_decision,
 )
 from modules.public_profile_pack import build_public_profile_pack
-from modules.public_persona_answerer import (
-    PublicPersonaAnswer,
-    build_smalltalk_response,
-    maybe_answer_public_persona_query,
-    maybe_build_public_persona_fallback,
-)
 from langchain_core.messages import HumanMessage, AIMessage
 from datetime import datetime
 import re
@@ -237,7 +231,7 @@ def _load_public_twin_settings(twin_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = (
             supabase.table("twins")
-            .select("id, name, description, settings, created_at")
+            .select("id, name, description, settings, created_at, updated_at")
             .eq("id", twin_id)
             .limit(1)
             .execute()
@@ -256,7 +250,7 @@ def _load_public_profile_pack(twin_id: str) -> Optional[Dict[str, Any]]:
     try:
         result = (
             supabase.table("twins")
-            .select("id, name, settings, status, created_at")
+            .select("id, name, settings, status, created_at, updated_at")
             .eq("id", twin_id)
             .limit(1)
             .execute()
@@ -3101,7 +3095,7 @@ async def chat(
             query_policy = get_grounding_policy(query)
             if query_policy.get("is_smalltalk"):
                 print(f"[Chat] Smalltalk detected, short-circuiting agent flow")
-                smalltalk_response = build_smalltalk_response(query)
+                smalltalk_response = _smalltalk_response_for_query(query)
 
                 full_response = smalltalk_response
                 confidence_score = 0.9
@@ -4338,117 +4332,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
     with langfuse_prop_widget:
         return StreamingResponse(widget_stream_generator(), media_type="text/event-stream")
 
-
-def _build_public_persona_direct_response(
-    answer: PublicPersonaAnswer,
-    *,
-    twin_id: str,
-    context_trace: Dict[str, Any],
-) -> Dict[str, Any]:
-    contexts = _normalize_json(answer.contexts or [])
-    citations = _normalize_json(answer.citations or [])
-    evidence_counts = {}
-    evidence_block_types: List[str] = []
-    if answer.evidence_block_type and contexts:
-        evidence_counts = {answer.evidence_block_type: len(contexts)}
-        evidence_block_types = [answer.evidence_block_type]
-
-    decision_payload = {
-        "intent": "answer",
-        "chosen_workflow": "answer",
-        "output_schema": "workflow.answer.v1",
-        "action": answer.planner_action,
-        "confidence": float(answer.confidence or 0.0),
-        "required_inputs_missing": [],
-        "clarifying_questions": [],
-    }
-    debug_snapshot = {
-        "query_class": answer.query_class,
-        "requires_evidence": bool(contexts),
-        "quote_intent": bool(answer.quote_intent),
-        "answerability_state": answer.answerability_state,
-        "planner_action": answer.planner_action,
-        "retrieval_stats": {
-            "chunk_count": len(contexts),
-            "dense_top1": 0.0,
-            "dense_top5_avg": 0.0,
-            "sparse_top1": 0.0,
-            "sparse_top5_avg": 0.0,
-            "rerank_top1": 0.0,
-            "rerank_top5_avg": 0.0,
-            "evidence_block_counts": evidence_counts,
-        },
-        "selected_evidence_block_types": evidence_block_types,
-    }
-    if isinstance(answer.debug_flags, dict):
-        debug_snapshot.update(answer.debug_flags)
-
-    return {
-        "status": "answer",
-        "message": answer.response,
-        "response": answer.response,
-        "response_type": "answer",
-        "requires_user_input": False,
-        "citations": citations,
-        "citation_details": _normalize_json(_resolve_citation_details(citations, twin_id)),
-        "confidence_score": float(answer.confidence or 0.0),
-        "owner_memory_refs": [],
-        "owner_memory_topics": [],
-        "clarification_hint": None,
-        "clarification_options": [],
-        "dialogue_mode": answer.dialogue_mode,
-        "intent_label": answer.intent_label,
-        "workflow_intent": answer.workflow_intent,
-        "module_ids": list(answer.module_ids or []),
-        "routing_decision": decision_payload,
-        "render_strategy": answer.render_strategy,
-        "query_class": answer.query_class,
-        "quote_intent": bool(answer.quote_intent),
-        "answerability_state": answer.answerability_state,
-        "planner_action": answer.planner_action,
-        "retrieval_stats": {
-            "chunk_count": len(contexts),
-            "dense_top1": 0.0,
-            "dense_top5_avg": 0.0,
-            "sparse_top1": 0.0,
-            "sparse_top5_avg": 0.0,
-            "rerank_top1": 0.0,
-            "rerank_top5_avg": 0.0,
-            "evidence_block_counts": evidence_counts,
-        },
-        "selected_evidence_block_types": evidence_block_types,
-        "debug_snapshot": debug_snapshot,
-        "grounding_verifier": {
-            "supported": None,
-            "support_ratio": None,
-            "total_claims": 0,
-            "supported_claims": 0,
-            "unsupported_claims": [],
-        },
-        "online_eval": {
-            "enabled": False,
-            "ran": False,
-            "skipped_reason": answer.skipped_reason,
-            "context_chars": sum(len(str(row.get("text") or "")) for row in contexts),
-            "overall_score": None,
-            "needs_review": None,
-            "flags": [],
-            "action": "none",
-        },
-        "runtime_confidence_gate": {
-            "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
-            "applied": False,
-            "decision": "skipped",
-            "skip_reason": answer.skipped_reason,
-        },
-        "used_owner_memory": False,
-        "model_used": answer.model_used,
-        "provider_used": answer.provider_used,
-        "identity_gate_mode": "public",
-        **context_trace,
-    }
-
-
 @router.post("/public/chat/{twin_id}/{token}")
 @observe(name="public_chat_request")
 async def public_chat_endpoint(
@@ -4528,24 +4411,306 @@ async def public_chat_endpoint(
         request.message,
         interaction_context=resolved_context.context.value,
     )
+    if public_query_policy.get("is_smalltalk"):
+        _greeting_settings = _load_public_twin_settings(twin_id)
+        public_smalltalk_text = _smalltalk_response_for_query(request.message, settings=_greeting_settings)
+        decision_payload = {
+            "intent": "answer",
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+            "action": "answer",
+            "confidence": 0.9,
+            "required_inputs_missing": [],
+            "clarifying_questions": [],
+        }
+        return {
+            "status": "answer",
+            "message": public_smalltalk_text,
+            "response": public_smalltalk_text,
+            "response_type": "answer",
+            "requires_user_input": False,
+            "citations": [],
+            "citation_details": [],
+            "confidence_score": 0.9,
+            "owner_memory_refs": [],
+            "owner_memory_topics": [],
+            "clarification_hint": None,
+            "clarification_options": [],
+            "dialogue_mode": "SMALLTALK",
+            "intent_label": "meta_or_system",
+            "workflow_intent": "answer",
+            "module_ids": ["procedural.style.smalltalk"],
+            "routing_decision": decision_payload,
+            "render_strategy": "source_faithful",
+            "query_class": str(public_query_policy.get("query_class") or "smalltalk"),
+            "quote_intent": False,
+            "answerability_state": "direct",
+            "planner_action": "answer",
+            "retrieval_stats": {
+                "chunk_count": 0,
+                "dense_top1": 0.0,
+                "dense_top5_avg": 0.0,
+                "sparse_top1": 0.0,
+                "sparse_top5_avg": 0.0,
+                "rerank_top1": 0.0,
+                "rerank_top5_avg": 0.0,
+                "evidence_block_counts": {},
+            },
+            "selected_evidence_block_types": [],
+            "debug_snapshot": {
+                "query_class": str(public_query_policy.get("query_class") or "smalltalk"),
+                "requires_evidence": False,
+                "quote_intent": False,
+                "answerability_state": "direct",
+                "planner_action": "answer",
+                "retrieval_stats": {
+                    "chunk_count": 0,
+                    "dense_top1": 0.0,
+                    "dense_top5_avg": 0.0,
+                    "sparse_top1": 0.0,
+                    "sparse_top5_avg": 0.0,
+                    "rerank_top1": 0.0,
+                    "rerank_top5_avg": 0.0,
+                    "evidence_block_counts": {},
+                },
+                "selected_evidence_block_types": [],
+            },
+            "grounding_verifier": {
+                "supported": None,
+                "support_ratio": None,
+                "total_claims": 0,
+                "supported_claims": 0,
+                "unsupported_claims": [],
+            },
+            "online_eval": {
+                "enabled": False,
+                "ran": False,
+                "skipped_reason": "public_smalltalk",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            },
+            "runtime_confidence_gate": {
+                "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+                "applied": False,
+                "decision": "skipped",
+                "skip_reason": "public_smalltalk",
+            },
+            "used_owner_memory": False,
+            "model_used": inference_router.get_active_model(),
+            "provider_used": inference_router.get_active_provider(),
+            "identity_gate_mode": "public",
+            **context_trace,
+        }
+
+    public_fastpath = classify_fastpath_intent(request.message)
+    public_fastpath_text = None
+    if public_fastpath.get("matched"):
+        public_fastpath_text = await _build_public_fastpath_message(
+            twin_id,
+            str(public_fastpath.get("intent") or "").strip(),
+        )
+    if public_fastpath_text:
+        decision_payload = {
+            "intent": "answer",
+            "chosen_workflow": "answer",
+            "output_schema": "workflow.answer.v1",
+            "action": "answer",
+            "confidence": float(public_fastpath.get("confidence") or 0.0),
+            "required_inputs_missing": [],
+            "clarifying_questions": [],
+        }
+        return {
+            "status": "answer",
+            "message": public_fastpath_text,
+            "response": public_fastpath_text,
+            "response_type": "answer",
+            "requires_user_input": False,
+            "citations": [],
+            "citation_details": [],
+            "confidence_score": float(public_fastpath.get("confidence") or 0.0),
+            "owner_memory_refs": [],
+            "owner_memory_topics": [],
+            "clarification_hint": None,
+            "clarification_options": [],
+            "dialogue_mode": "IDENTITY_FACT",
+            "intent_label": "meta_or_system",
+            "workflow_intent": "answer",
+            "module_ids": [],
+            "routing_decision": decision_payload,
+            "render_strategy": "source_faithful",
+            "query_class": "identity",
+            "quote_intent": False,
+            "answerability_state": "direct",
+            "planner_action": "answer",
+            "retrieval_stats": {
+                "chunk_count": 0,
+                "dense_top1": 0.0,
+                "dense_top5_avg": 0.0,
+                "sparse_top1": 0.0,
+                "sparse_top5_avg": 0.0,
+                "rerank_top1": 0.0,
+                "rerank_top5_avg": 0.0,
+                "evidence_block_counts": {},
+            },
+            "selected_evidence_block_types": [],
+            "debug_snapshot": {
+                "query_class": "identity",
+                "requires_evidence": False,
+                "quote_intent": False,
+                "answerability_state": "direct",
+                "planner_action": "answer",
+                "retrieval_stats": {
+                    "chunk_count": 0,
+                    "dense_top1": 0.0,
+                    "dense_top5_avg": 0.0,
+                    "sparse_top1": 0.0,
+                    "sparse_top5_avg": 0.0,
+                    "rerank_top1": 0.0,
+                    "rerank_top5_avg": 0.0,
+                    "evidence_block_counts": {},
+                },
+                "selected_evidence_block_types": [],
+            },
+            "grounding_verifier": {
+                "supported": None,
+                "support_ratio": None,
+                "total_claims": 0,
+                "supported_claims": 0,
+                "unsupported_claims": [],
+            },
+            "online_eval": {
+                "enabled": False,
+                "ran": False,
+                "skipped_reason": "public_fastpath",
+                "context_chars": 0,
+                "overall_score": None,
+                "needs_review": None,
+                "flags": [],
+                "action": "none",
+            },
+            "runtime_confidence_gate": {
+                "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+                "applied": False,
+                "decision": "skipped",
+                "skip_reason": "public_fastpath",
+            },
+            "used_owner_memory": False,
+            "model_used": inference_router.get_active_model(),
+            "provider_used": inference_router.get_active_provider(),
+            "identity_gate_mode": "public",
+            **context_trace,
+        }
+
     public_action_like_query = bool(
         classify_deepagents_intent(request.message).get("is_action_or_control")
     )
     if public_action_like_query:
         context_trace["public_action_query_guarded"] = True
 
-    public_persona_answer = await maybe_answer_public_persona_query(
-        twin_id,
-        request.message,
-        query_policy=public_query_policy,
-        action_like_query=public_action_like_query,
-    )
-    if public_persona_answer:
-        return _build_public_persona_direct_response(
-            public_persona_answer,
-            twin_id=twin_id,
-            context_trace=context_trace,
+    if not public_action_like_query:
+        profile_first_answer = await _maybe_answer_from_public_profile(
+            twin_id,
+            request.message,
+            public_query_policy,
         )
+        if profile_first_answer:
+            profile_contexts = _normalize_json(profile_first_answer.get("contexts") or [])
+            profile_citations = _normalize_json(profile_first_answer.get("citations") or [])
+            confidence_score = float(profile_first_answer.get("confidence") or 0.0)
+            decision_payload = {
+                "intent": "answer",
+                "chosen_workflow": "answer",
+                "output_schema": "workflow.answer.v1",
+                "action": "answer",
+                "confidence": confidence_score,
+                "required_inputs_missing": [],
+                "clarifying_questions": [],
+            }
+            return {
+                "status": "answer",
+                "message": str(profile_first_answer.get("response") or "").strip(),
+                "response": str(profile_first_answer.get("response") or "").strip(),
+                "response_type": "answer",
+                "requires_user_input": False,
+                "citations": profile_citations,
+                "citation_details": _normalize_json(_resolve_citation_details(profile_citations, twin_id)),
+                "confidence_score": confidence_score,
+                "owner_memory_refs": [],
+                "owner_memory_topics": [],
+                "clarification_hint": None,
+                "clarification_options": [],
+                "dialogue_mode": "QA_FACT",
+                "intent_label": "factual_with_evidence",
+                "workflow_intent": "answer",
+                "module_ids": ["procedural.profile_qa.public"],
+                "routing_decision": decision_payload,
+                "render_strategy": "source_faithful",
+                "query_class": str(public_query_policy.get("query_class") or "factual"),
+                "quote_intent": _is_quote_intent(request.message),
+                "answerability_state": "derivable",
+                "planner_action": "answer",
+                "retrieval_stats": {
+                    "chunk_count": len(profile_contexts),
+                    "dense_top1": 0.0,
+                    "dense_top5_avg": 0.0,
+                    "sparse_top1": 0.0,
+                    "sparse_top5_avg": 0.0,
+                    "rerank_top1": 0.0,
+                    "rerank_top5_avg": 0.0,
+                    "evidence_block_counts": {"canonical_profile_seed": len(profile_contexts)},
+                },
+                "selected_evidence_block_types": ["canonical_profile_seed"],
+                "debug_snapshot": {
+                    "query_class": str(public_query_policy.get("query_class") or "factual"),
+                    "requires_evidence": True,
+                    "quote_intent": _is_quote_intent(request.message),
+                    "answerability_state": "derivable",
+                    "planner_action": "answer",
+                    "retrieval_stats": {
+                        "chunk_count": len(profile_contexts),
+                        "dense_top1": 0.0,
+                        "dense_top5_avg": 0.0,
+                        "sparse_top1": 0.0,
+                        "sparse_top5_avg": 0.0,
+                        "rerank_top1": 0.0,
+                        "rerank_top5_avg": 0.0,
+                        "evidence_block_counts": {"canonical_profile_seed": len(profile_contexts)},
+                    },
+                    "selected_evidence_block_types": ["canonical_profile_seed"],
+                    "public_profile_first_answer": True,
+                },
+                "grounding_verifier": {
+                    "supported": None,
+                    "support_ratio": None,
+                    "total_claims": 0,
+                    "supported_claims": 0,
+                    "unsupported_claims": [],
+                },
+                "online_eval": {
+                    "enabled": False,
+                    "ran": False,
+                    "skipped_reason": "public_profile_first_answer",
+                    "context_chars": sum(len(str(row.get("text") or "")) for row in profile_contexts),
+                    "overall_score": None,
+                    "needs_review": None,
+                    "flags": [],
+                    "action": "none",
+                },
+                "runtime_confidence_gate": {
+                    "enabled": RUNTIME_CONFIDENCE_GATE_ENABLED,
+                    "applied": False,
+                    "decision": "skipped",
+                    "skip_reason": "public_profile_first_answer",
+                },
+                "used_owner_memory": False,
+                "model_used": inference_router.get_active_model(),
+                "provider_used": inference_router.get_active_provider(),
+                "identity_gate_mode": "public",
+                **context_trace,
+            }
 
     # Get public group for context (with fallback to default group)
     public_group = get_public_group_for_twin(twin_id)
@@ -4783,30 +4948,29 @@ async def public_chat_endpoint(
                 not public_action_like_query
                 and (not final_response or final_response.strip() == fallback_message)
             ):
-                profile_seed_fallback = await maybe_build_public_persona_fallback(
+                profile_seed_fallback = await _maybe_build_public_profile_seed_fallback(
                     twin_id,
                     request.message,
                 )
                 if profile_seed_fallback:
-                    final_response = str(profile_seed_fallback.response or "").strip() or fallback_message
+                    final_response = str(profile_seed_fallback.get("response") or "").strip() or fallback_message
                     draft_for_audit = final_response
-                    citations = _merge_citations(citations, profile_seed_fallback.citations)
+                    citations = _merge_citations(citations, profile_seed_fallback.get("citations"))
                     retrieved_context_snippets = _merge_context_snippets(
                         retrieved_context_snippets,
-                        profile_seed_fallback.contexts or [],
+                        profile_seed_fallback.get("contexts") or [],
                     )
                     confidence_score = max(
                         float(confidence_score or 0.0),
-                        float(profile_seed_fallback.confidence or 0.0),
+                        float(profile_seed_fallback.get("confidence") or 0.0),
                     )
-                    dialogue_mode = dialogue_mode or profile_seed_fallback.dialogue_mode
-                    intent_label = intent_label or profile_seed_fallback.intent_label
-                    workflow_intent = workflow_intent or profile_seed_fallback.workflow_intent
-                    render_strategy = profile_seed_fallback.render_strategy
+                    dialogue_mode = dialogue_mode or "QA_FACT"
+                    intent_label = intent_label or "factual_with_evidence"
+                    workflow_intent = workflow_intent or "answer"
+                    render_strategy = "source_faithful"
                     module_ids = list(module_ids or [])
-                    for module_id in profile_seed_fallback.module_ids:
-                        if module_id not in module_ids:
-                            module_ids.append(module_id)
+                    if "procedural.fallback.public_profile_seed" not in module_ids:
+                        module_ids.append("procedural.fallback.public_profile_seed")
                     if not isinstance(routing_decision, dict):
                         routing_decision = {
                             "intent": "answer",
@@ -4826,7 +4990,7 @@ async def public_chat_endpoint(
                         "render_strategy": "source_faithful",
                         "reasoning_trace": "Public profile fallback answered from canonical persona evidence.",
                         "answerability": {
-                            "answerability": profile_seed_fallback.answerability_state,
+                            "answerability": "derivable",
                             "answerable": True,
                             "confidence": confidence_score,
                             "reasoning": "Answered from canonical persona profile evidence after retrieval returned no public chunks.",
@@ -4835,8 +4999,6 @@ async def public_chat_endpoint(
                         },
                     }
                     context_trace["public_profile_seed_fallback"] = True
-                    inference_provider = profile_seed_fallback.provider_used or inference_provider
-                    inference_model = profile_seed_fallback.model_used or inference_model
 
             if context_trace.get("public_scope_violation"):
                 draft_for_audit = fallback_message
