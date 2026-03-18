@@ -1708,7 +1708,8 @@ def _resolve_twin_pronoun_query(query: str) -> str:
             "and core expertise)"
         )
 
-    padded = f" {re.sub(r'\\s+', ' ', lowered)} "
+    padded_core = re.sub(r"\s+", " ", lowered)
+    padded = f" {padded_core} "
     pronoun_markers = (
         " you ",
         " your ",
