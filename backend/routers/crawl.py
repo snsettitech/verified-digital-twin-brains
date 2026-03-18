@@ -25,12 +25,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["crawl"])
 
-# Deep Research is always enabled. Keep helper for backward compatibility.
-def _check_feature_enabled():
-    """No-op compatibility check."""
-    return None
-
-
 # Tracks in-flight research crawl tasks keyed by research_run_id.
 _ACTIVE_RESEARCH_CRAWL_TASKS: Dict[str, asyncio.Task[Any]] = {}
 
@@ -566,9 +560,6 @@ async def create_crawl(
     
     Deep Research routes are always enabled.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -626,9 +617,6 @@ async def get_crawl_status(
     
     Returns metadata-only response (no page content).
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -667,9 +655,6 @@ async def list_crawls(
     
     Optional status filter: queued, running, completed, failed
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -740,9 +725,6 @@ async def cancel_crawl(
     
     Note: Cannot cancel completed or failed crawls.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -810,9 +792,6 @@ async def get_crawl_changes(
     that compares against previous crawl's complete page list. Currently
     returns 0 with a note that full removal detection is pending.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -954,9 +933,6 @@ async def create_confirmations(
     
     Idempotent: Safe to call multiple times - will skip existing confirmations.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1025,9 +1001,6 @@ async def list_pending_confirmations(
     - manual_review: Blocked/manual-needed quality
     - auto_rejected: Low confidence, user can override
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1099,9 +1072,6 @@ async def resolve_confirmation_endpoint(
     Phase 3.4: After resolving, triggers orchestrator to check if all
     confirmations are resolved and potentially transition to ready_for_ingestion.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1188,9 +1158,6 @@ async def bulk_resolve_confirmations_endpoint(
     Phase 3.4: After resolving, triggers orchestrator to check if all
     confirmations are resolved and potentially transition to ready_for_ingestion.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1256,9 +1223,6 @@ async def get_confirmation_summary_endpoint(
     
     Returns counts and resolution status for the research run.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1360,9 +1324,6 @@ async def create_research_run_endpoint(
     Transitions through state machine:
     planning -> queued -> crawling -> awaiting_confirmation -> ready_for_ingestion
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1542,9 +1503,6 @@ async def get_research_run_status(
     - Confirmation summary (if applicable)
     - Next action hint for polling
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1652,9 +1610,6 @@ async def continue_ingestion_endpoint(
     
     Phase 3.5 stops here - no bio generation, no mind score updates.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1790,9 +1745,6 @@ async def continue_bio_endpoint(
     
     Phase 4 stops here - no mind score updates, no readiness checks.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -1929,9 +1881,6 @@ async def continue_finalize_endpoint(
     
     Phase 5 stops here - no frontend changes, no chat changes.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -2074,9 +2023,6 @@ async def get_research_summary_endpoint(
     
     No frontend changes in this phase - this is the backend contract only.
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
@@ -2257,9 +2203,6 @@ async def force_status_transition(
     Valid statuses: planning, queued, crawling, awaiting_confirmation,
     timed_out, ready_for_ingestion, completed, failed
     """
-    # Check feature flag
-    _check_feature_enabled()
-    
     # Verify twin ownership
     verify_twin_ownership(twin_id, user)
     
