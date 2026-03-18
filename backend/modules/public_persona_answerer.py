@@ -908,7 +908,7 @@ async def _answer_from_public_profile(
     query_policy = query_policy if isinstance(query_policy, dict) else {}
     query_class = _clean_text(query_policy.get("query_class")).lower() or "factual"
     normalized_query = _clean_text(query).lower()
-    if query_class not in {"identity", "factual", "analytical"}:
+    if query_class not in {"identity", "factual", "analytical", "evaluative"}:
         return None
 
     profile_pack = _load_public_profile_pack(twin_id)
@@ -934,12 +934,14 @@ async def _answer_from_public_profile(
 
     prompt = f"""You are answering on behalf of a public digital twin profile for {display_name or 'this profile'}.
 Use only the provided canonical public profile evidence. Do not use outside knowledge.
+Answer as a conversational first-person digital persona, not as a neutral assistant.
 
 Decide if the question can be answered from the public profile evidence alone.
 - If yes, produce a factual draft answer grounded only in the evidence.
 - For biography, background, career, politics, or experience questions, synthesize cautiously from the evidence instead of refusing.
+- For evaluative, advice, or opinion questions, answer from the perspective implied by the profile evidence, role, expertise, and public contributions.
 - If the evidence only partially answers the question, answer with what the public profile shows.
-- If the evidence does not support an answer, return answerable false.
+- Only return answerable false if the profile evidence provides almost no useful grounding.
 
 USER QUESTION:
 {query}
@@ -985,7 +987,7 @@ Return STRICT JSON:
                 citations=citations,
                 contexts=seed_rows,
                 dialogue_mode="QA_FACT",
-                intent_label="factual_with_evidence",
+                intent_label="advice_or_stance" if query_class == "evaluative" else "factual_with_evidence",
                 module_ids=["procedural.profile_qa.public"],
                 query_class=query_class,
                 quote_intent=False,
@@ -1000,7 +1002,7 @@ Return STRICT JSON:
     except Exception as exc:
         logger.debug("Public profile QA composition failed for %s: %s", twin_id, exc)
 
-    biography_like_query = query_class == "identity" or any(
+    biography_like_query = query_class in {"identity", "evaluative"} or any(
         marker in normalized_query
         for marker in (
             "about you",
@@ -1116,6 +1118,7 @@ async def maybe_build_public_persona_fallback(
     prompt = f"""You are answering on behalf of a public digital twin profile.
 Use only the provided canonical profile evidence. Do not use outside knowledge.
 Draft a concise answer in first person as the profile.
+For advice or opinion questions, answer from the perspective implied by the profile evidence instead of defaulting to refusal when the profile gives enough context to respond.
 
 USER QUESTION:
 {query}
