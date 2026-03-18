@@ -17,7 +17,7 @@ from modules.fastpath_intent_router import classify_fastpath_intent
 from modules.grounding_policy import get_grounding_policy
 import modules.inference_router as inference_router
 from modules.observability import supabase
-from modules.public_profile_pack import _safe_dict, build_public_profile_pack
+from modules.public_profile_pack import _clean_unique_strings, _safe_dict, build_public_profile_pack
 
 logger = logging.getLogger(__name__)
 
