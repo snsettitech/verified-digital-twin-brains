@@ -1,0 +1,94 @@
+name: ADK Staging CI
+
+on:
+  push:
+    branches: [feat/adk-migration]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/adk-staging-ci.yml'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install ruff
+      - run: ruff check backend/ --select E,W,F --ignore E501
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - run: pip install pytest pytest-asyncio
+      - run: |
+          cd backend && python -m pytest tests/ -v \
+            --ignore=tests/test_e2e_action_lane_replay.py \
+            --ignore=tests/test_e2e_loop_replay.py \
+            --ignore=tests/test_founder_clarifier_replay_e2e.py \
+            -x --tb=short
+        env:
+          AGENT_RUNTIME: adk
+          SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.STAGING_SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE_INDEX_NAME: ${{ secrets.PINECONE_INDEX_NAME }}
+
+  import-check:
+    name: No LangChain Imports (ADK path)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify ADK path has no LangChain imports
+        run: |
+          echo "Checking that ADK agent files don't import from langchain..."
+          files="backend/agents/ backend/adk_tools/ backend/sessions/"
+          for dir in $files; do
+            if [ -d "$dir" ]; then
+              if grep -r "from langchain" "$dir" --include="*.py" | grep -v "# legacy" | grep -v "runner.py"; then
+                echo "FAIL: LangChain imports found in ADK code!"
+                exit 1
+              fi
+            fi
+          done
+          echo "PASS: No LangChain imports in ADK code."
+
+  parity-test:
+    name: Parity Smoke Test
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r backend/requirements.txt
+      - run: pip install pytest pytest-asyncio
+      - run: |
+          cd backend && python -m pytest tests/test_adk_parity.py -v --tb=short
+        env:
+          AGENT_RUNTIME: adk
+          SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.STAGING_SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          PINECONE_INDEX_NAME: ${{ secrets.PINECONE_INDEX_NAME }}

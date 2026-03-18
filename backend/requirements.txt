@@ -18,11 +18,21 @@ cerebras-cloud-sdk>=1.0.0
 pydantic
 python-dotenv
 python-multipart
+
+# ---------- Agent Runtime ----------
+# ADK migration: LangChain deps kept for backward compatibility during
+# migration. Set AGENT_RUNTIME=adk to use the new pipeline.
+# Once migration is complete, remove the langchain block below.
 langchain
 langchain-openai
 langchain-community
 langgraph
 langgraph-checkpoint-postgres
+
+# ADK: New agent framework (Phase 1: foundation alongside LangGraph)
+# google-adk>=1.0.0
+# litellm>=1.50.0
+
 asyncpg
 PyPDF2
 python-jose[cryptography]

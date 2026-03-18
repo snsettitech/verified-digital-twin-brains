@@ -1,0 +1,81 @@
+# ============================================================================
+# Render Staging Blueprint — ADK Migration
+# ============================================================================
+# Deploy this as a SEPARATE service from production.
+# Dashboard: https://dashboard.render.com → New → Blueprint
+# Point to branch: feat/adk-migration
+# ============================================================================
+
+services:
+  # ---------- Staging API ----------
+  - type: web
+    name: personaon-api-staging
+    runtime: python
+    region: oregon
+    plan: starter
+    branch: feat/adk-migration
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --timeout-keep-alive 120
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+      - key: ENVIRONMENT
+        value: staging
+      - key: DEV_MODE
+        value: "false"
+      - key: AGENT_RUNTIME
+        value: adk
+      # --- Secrets (set in Render dashboard, not here) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+
+  # ---------- Staging Worker ----------
+  - type: worker
+    name: personaon-worker-staging
+    runtime: python
+    region: oregon
+    plan: starter
+    branch: feat/adk-migration
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && python worker.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.6"
+      - key: ENVIRONMENT
+        value: staging
+      - key: WORKER_MODE
+        value: all
+      # --- Same secrets as API (set in Render dashboard) ---
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        sync: false
