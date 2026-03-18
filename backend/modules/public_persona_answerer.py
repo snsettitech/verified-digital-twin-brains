@@ -64,8 +64,11 @@ def build_smalltalk_response(query: str, settings: Optional[Dict[str, Any]] = No
             public_profile = settings.get("public_profile") or {}
             conversation_profile = _safe_dict(public_profile.get("conversation_profile"))
             display_name = _display_name_from_settings(settings)
+            greeting = _clean_text(conversation_profile.get("greeting"))
             capability_intro = _clean_text(conversation_profile.get("capability_intro"))
             help_areas = _conversation_help_areas(settings)
+            if greeting:
+                return greeting
             if capability_intro:
                 return f"Hi, it's {display_name}'s AI. {capability_intro} What would you like to dig into?"
             if help_areas:
@@ -114,6 +117,136 @@ def _display_name_from_settings(settings: Optional[Dict[str, Any]]) -> str:
         or _clean_text((settings or {}).get("name"))
         or "this persona"
     )
+
+
+def _query_focus_flags(query: str) -> Dict[str, bool]:
+    normalized = _clean_text(query).lower()
+    return {
+        "identity": any(
+            marker in normalized
+            for marker in ("who are", "about you", "role", "title", "office", "background")
+        ),
+        "background": any(
+            marker in normalized
+            for marker in (
+                "background",
+                "career",
+                "journey",
+                "experience",
+                "started",
+                "became",
+                "get into",
+                "got into",
+            )
+        ),
+        "politics": any(
+            marker in normalized
+            for marker in (
+                "politic",
+                "party",
+                "bjp",
+                "bharatiya janata",
+                "public life",
+                "government",
+                "chief minister",
+                "prime minister",
+                "election",
+            )
+        ),
+        "capability": any(
+            marker in normalized
+            for marker in ("what can you do", "how can you help", "what can you help", "what topics")
+        ),
+        "advice": any(
+            marker in normalized
+            for marker in ("should", "recommend", "think about", "look at", "opinion", "advice", "what do you think")
+        ),
+    }
+
+
+def _seed_type_priority(seed_type: str) -> int:
+    return {
+        "contribution": 6,
+        "qa": 6,
+        "work": 5,
+        "achievement": 5,
+        "bio": 4,
+        "summary": 3,
+        "headline": 2,
+        "expertise": 2,
+        "education": 1,
+    }.get(seed_type, 0)
+
+
+def _score_public_seed_row(row: Dict[str, Any], query_tokens: set[str], flags: Dict[str, bool]) -> Tuple[int, int, int]:
+    text = _clean_text(row.get("text")).lower()
+    seed_type = _clean_text(row.get("seed_type")).lower()
+    overlap = sum(1 for token in query_tokens if token in text)
+    bonus = 0
+
+    if flags["identity"] and seed_type in {"summary", "bio", "headline"}:
+        bonus += 3
+
+    if flags["background"]:
+        if seed_type in {"work", "contribution", "bio", "achievement"}:
+            bonus += 3
+        if any(marker in text for marker in ("born", "joined", "served", "worked", "career", "background")):
+            bonus += 2
+
+    if flags["politics"]:
+        if seed_type == "contribution":
+            bonus += 5
+        elif seed_type in {"work", "achievement", "bio"}:
+            bonus += 3
+        if any(
+            marker in text
+            for marker in (
+                "bjp",
+                "bharatiya janata",
+                "politic",
+                "party",
+                "public life",
+                "government",
+                "chief minister",
+                "prime minister",
+                "joined",
+            )
+        ):
+            bonus += 4
+        if seed_type == "summary":
+            bonus -= 1
+
+    if flags["capability"] and seed_type in {"expertise", "summary", "qa"}:
+        bonus += 3
+
+    if flags["advice"] and seed_type in {"expertise", "qa", "contribution", "achievement"}:
+        bonus += 3
+
+    brevity_bonus = 2 if 0 < len(text) <= 220 else 1 if text else 0
+    return (overlap + bonus, _seed_type_priority(seed_type), brevity_bonus)
+
+
+def _prioritize_public_seed_rows(
+    seed_rows: List[Dict[str, Any]],
+    query: str,
+    *,
+    limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    deduped = _merge_context_snippets([], seed_rows)
+    query_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", _clean_text(query).lower())
+        if len(token) > 2
+    }
+    flags = _query_focus_flags(query)
+    ranked = sorted(
+        deduped,
+        key=lambda row: _score_public_seed_row(row, query_tokens, flags),
+        reverse=True,
+    )
+    if isinstance(limit, int) and limit > 0:
+        return ranked[:limit]
+    return ranked
 
 
 def _first_sentence(text: Any) -> str:
@@ -424,28 +557,7 @@ def _manual_public_profile_seed_rows(
         elif role_value and company:
             _add_row("work", f"{display_name} worked as {role_value} at {company}{years}", source_name="Public work history")
 
-    query_tokens = {
-        token
-        for token in re.findall(r"[a-z0-9]+", _clean_text(query).lower())
-        if len(token) > 2
-    }
-
-    def _score_row(row: Dict[str, Any]) -> Tuple[int, int]:
-        text = _clean_text(row.get("text")).lower()
-        overlap = sum(1 for token in query_tokens if token in text)
-        seed_type = _clean_text(row.get("seed_type")).lower()
-        bonus = 0
-        if any(token in query_tokens for token in {"background", "career", "journey", "politics", "political", "experience"}):
-            if seed_type in {"qa", "work", "contribution", "bio"}:
-                bonus += 2
-        if any(token in query_tokens for token in {"who", "about", "role", "title", "office"}):
-            if seed_type in {"summary", "bio", "headline"}:
-                bonus += 2
-        return (overlap + bonus, len(text))
-
-    deduped = _merge_context_snippets([], seed_rows)
-    ranked = sorted(deduped, key=_score_row, reverse=True)
-    return ranked[: max(1, limit)]
+    return _prioritize_public_seed_rows(seed_rows, query, limit=max(1, limit))
 
 
 def _manual_public_pack_seed_rows(
@@ -535,28 +647,7 @@ def _manual_public_pack_seed_rows(
             parts = [part for part in [degree, field, institution] if part]
             _add_row("education", f"{display_name} studied {', '.join(parts)}", source_name="Public education")
 
-    query_tokens = {
-        token
-        for token in re.findall(r"[a-z0-9]+", _clean_text(query).lower())
-        if len(token) > 2
-    }
-
-    def _score_row(row: Dict[str, Any]) -> Tuple[int, int]:
-        text = _clean_text(row.get("text")).lower()
-        overlap = sum(1 for token in query_tokens if token in text)
-        seed_type = _clean_text(row.get("seed_type")).lower()
-        bonus = 0
-        if any(token in query_tokens for token in {"background", "career", "journey", "politics", "political", "experience"}):
-            if seed_type in {"work", "contribution", "bio", "achievement"}:
-                bonus += 2
-        if any(token in query_tokens for token in {"who", "about", "role", "title", "office"}):
-            if seed_type in {"summary", "bio", "headline"}:
-                bonus += 2
-        return (overlap + bonus, len(text))
-
-    deduped = _merge_context_snippets([], seed_rows)
-    ranked = sorted(deduped, key=_score_row, reverse=True)
-    return ranked[: max(1, limit)]
+    return _prioritize_public_seed_rows(seed_rows, query, limit=max(1, limit))
 
 
 def _public_profile_seed_rows(
@@ -682,9 +773,11 @@ Use only the supported facts below. Do not add outside knowledge, inferred motiv
 
 Requirements:
 - Return only the final answer text.
-- Keep it to 1 or 2 concise sentences.
+- Keep it concise, conversational, and direct.
+- For straightforward identity or capability questions, 1 or 2 sentences is enough.
+- For background, advice, or opinion questions, 2 to 4 short sentences is fine when it reads better.
 - Write in first person.
-- Keep the answer direct and natural.
+- Sound like a real person with a clear point of view, not a neutral assistant.
 - Stay close to the supported facts and the draft answer.
 - Do not mention citations, evidence blocks, or "public profile".
 
@@ -721,7 +814,12 @@ DRAFT ANSWER:
         return cleaned_draft, _default_provider_meta()
 
 
-async def _build_public_fastpath_answer(twin_id: str, intent: str) -> Optional[PublicPersonaAnswer]:
+async def _build_public_fastpath_answer(
+    twin_id: str,
+    intent: str,
+    *,
+    query: Optional[str] = None,
+) -> Optional[PublicPersonaAnswer]:
     snapshot = _load_public_identity_snapshot(twin_id)
     profile_pack = _load_public_profile_pack(twin_id) if intent == "identity_background" and not snapshot else None
     if not snapshot and not profile_pack:
@@ -790,6 +888,7 @@ async def _build_public_fastpath_answer(twin_id: str, intent: str) -> Optional[P
         )
 
     if intent == "identity_background":
+        background_query = query or "background career politics public life"
         seed_rows: List[Dict[str, Any]] = []
         if snapshot:
             snapshot_settings = {
@@ -809,36 +908,37 @@ async def _build_public_fastpath_answer(twin_id: str, intent: str) -> Optional[P
             }
             seed_rows = _merge_context_snippets(
                 seed_rows,
-                _manual_public_profile_seed_rows(snapshot_settings, "background career politics public life", limit=4),
+                _manual_public_profile_seed_rows(snapshot_settings, background_query, limit=6),
             )
         if isinstance(profile_pack, dict) and not seed_rows:
             seed_rows = _merge_context_snippets(
                 seed_rows,
-                _manual_public_pack_seed_rows(profile_pack, "background career politics public life", limit=4),
+                _manual_public_pack_seed_rows(profile_pack, background_query, limit=6),
             )
+        prioritized_rows = _prioritize_public_seed_rows(seed_rows, background_query, limit=6)
         biography_rows = [
-            row for row in seed_rows
+            row for row in prioritized_rows
             if _clean_text(row.get("seed_type")).lower() in {"bio", "work", "contribution", "achievement", "education"}
         ]
         draft = await rewrite_public_background_fastpath(
             display_name=display_name,
-            seed_rows=biography_rows or seed_rows,
+            seed_rows=biography_rows or prioritized_rows,
         )
         if not draft:
-            draft = _public_profile_direct_answer(biography_rows or seed_rows, display_name=display_name)
+            draft = _public_profile_direct_answer(biography_rows or prioritized_rows, display_name=display_name)
         if not draft and bio_sentence:
             draft = bio_sentence
         if not draft:
             draft = "My public background is summarized in this profile."
         finalized, provider_meta = await _finalize_public_persona_answer(
-            query="What is your background?",
+            query=background_query,
             display_name=display_name,
             draft=draft,
-            seed_rows=biography_rows or seed_rows,
+            seed_rows=biography_rows or prioritized_rows,
         )
         return PublicPersonaAnswer(
             response=finalized or draft,
-            contexts=biography_rows or seed_rows,
+            contexts=biography_rows or prioritized_rows,
             dialogue_mode="IDENTITY_FACT",
             intent_label="meta_or_system",
             query_class="identity",
@@ -867,6 +967,8 @@ async def _build_public_fastpath_answer(twin_id: str, intent: str) -> Optional[P
             base = f"I can help you think through {scope} from this perspective."
             if bio_sentence:
                 base = f"{base} {bio_sentence}"
+        if authenticity_disclosure:
+            base = f"{base} {authenticity_disclosure}"
         return PublicPersonaAnswer(
             response=base,
             dialogue_mode="IDENTITY_FACT",
@@ -884,6 +986,8 @@ async def _build_public_fastpath_answer(twin_id: str, intent: str) -> Optional[P
     base += "."
     if bio_sentence:
         base = f"{base} {bio_sentence}"
+    if authenticity_disclosure:
+        base = f"{base} {authenticity_disclosure}"
     return PublicPersonaAnswer(
         response=base,
         dialogue_mode="IDENTITY_FACT",
@@ -924,6 +1028,7 @@ async def _answer_from_public_profile(
         seed_rows = _merge_context_snippets(seed_rows, _manual_public_pack_seed_rows(profile_pack, query, limit=6))
     if isinstance(settings, dict):
         seed_rows = _merge_context_snippets(seed_rows, _public_profile_seed_rows(settings, query, limit=6))
+    seed_rows = _prioritize_public_seed_rows(seed_rows, query, limit=6)
     if not seed_rows:
         return None
 
@@ -1027,7 +1132,15 @@ Return STRICT JSON:
     if not biography_like_query:
         return None
 
-    draft = _public_profile_direct_answer(seed_rows, display_name=display_name)
+    draft = ""
+    focus_flags = _query_focus_flags(query)
+    if focus_flags["background"] or focus_flags["politics"]:
+        draft = await rewrite_public_background_fastpath(
+            display_name=display_name,
+            seed_rows=seed_rows,
+        )
+    if not draft:
+        draft = _public_profile_direct_answer(seed_rows, display_name=display_name)
     if not draft:
         return None
     finalized, provider_meta = await _finalize_public_persona_answer(
@@ -1084,6 +1197,7 @@ async def maybe_answer_public_persona_query(
         answer = await _build_public_fastpath_answer(
             twin_id,
             str(fastpath.get("intent") or "").strip(),
+            query=query,
         )
         if answer:
             return answer

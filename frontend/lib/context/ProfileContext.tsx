@@ -19,7 +19,6 @@ export interface Profile {
   location?: string;
   expertise_tags?: string[];
   status: ProfileStatus;
-  answerability_score: number;
   tenant_id: string;
   created_at: string;
   updated_at: string;

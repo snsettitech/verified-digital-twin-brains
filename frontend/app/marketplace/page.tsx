@@ -20,9 +20,8 @@ type MarketplacePersona = {
   bio: string;
   short_description: string;
   avatar_url: string;
-  answerability_score: number;
   verified_claims_count: number;
-  public_topics: Array<{ slug: string; name: string; answerability_score: number }>;
+  public_topics: Array<{ slug: string; name: string }>;
   areas_of_expertise: string[];
   pinned_questions: string[];
   public_url: string | null;
@@ -90,10 +89,10 @@ function PersonaCard({ persona }: { persona: MarketplacePersona }) {
 
         <div className="rounded-2xl bg-slate-50 px-3 py-2 text-right">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Answerability
+            Profile
           </p>
-          <p className="text-lg font-semibold text-slate-950">
-            {Math.round(persona.answerability_score || 0)}%
+          <p className="text-sm font-semibold text-slate-950">
+            {persona.verified_profile ? 'Verified public persona' : 'Public persona'}
           </p>
         </div>
       </div>

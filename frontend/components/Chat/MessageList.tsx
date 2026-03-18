@@ -568,7 +568,7 @@ const MessageList = React.memo(({
                 </div>
               )}
 
-              {msg.role === 'assistant' && (msg.citations || msg.source_tier || msg.graph_used || msg.used_owner_memory || msg.review_required) && (
+              {msg.role === 'assistant' && (msg.citations || msg.graph_used || msg.used_owner_memory) && (
                 <div className="flex flex-wrap gap-2 px-1">
                   {msg.used_owner_memory && (
                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-emerald-50 text-emerald-700 border-emerald-100">
@@ -585,17 +585,6 @@ const MessageList = React.memo(({
                       From your interview
                     </div>
                   )}
-                  {msg.source_tier ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-slate-50 text-slate-700 border-slate-200">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-                      {msg.source_tier}
-                    </div>
-                  ) : null}
-                  {msg.review_required ? (
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black border uppercase tracking-wider bg-amber-50 text-amber-700 border-amber-100">
-                      Needs review
-                    </div>
-                  ) : null}
                   {msg.citations?.map((source, sIdx) => (
                     <div key={sIdx} className="bg-slate-100 text-slate-500 px-3 py-1.5 rounded-full text-[10px] font-black border border-slate-200 uppercase tracking-wider flex items-center gap-1.5">
                       <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>

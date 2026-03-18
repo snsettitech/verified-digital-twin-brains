@@ -50,7 +50,6 @@ type PersonaProfilePack = {
   death_year?: number | null;
   nationality?: string;
   verified_profile?: boolean;
-  answerability_score?: number;
   verified_claims_count?: number;
   areas_of_expertise?: string[];
   personality_traits?: string[];
@@ -437,7 +436,6 @@ function ProfilePageContent() {
       death_year: pack?.death_year,
       nationality: pack?.nationality,
       verified_profile: Boolean(pack?.verified_profile),
-      answerability_score: pack?.answerability_score,
       verified_claims_count: pack?.verified_claims_count,
       areas_of_expertise: normalizeStringArray(pack?.areas_of_expertise, [], 6),
       personality_traits: normalizeStringArray(pack?.personality_traits, [], 6),
@@ -787,9 +785,9 @@ function ProfilePageContent() {
 
                 <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
                   <div className="rounded-3xl bg-[#f8f7f4] p-5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Answerability</p>
-                    <p className="mt-2 text-3xl font-bold text-slate-900">
-                      {Math.round(previewProfile.answerability_score || 0)}%
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Profile</p>
+                    <p className="mt-2 text-base font-bold text-slate-900">
+                      {previewProfile.verified_profile ? 'Verified public persona' : 'Public digital persona'}
                     </p>
                   </div>
                   <div className="rounded-3xl bg-[#f8f7f4] p-5">

@@ -25,7 +25,6 @@ type PersonaProfilePack = {
   death_year?: number | null;
   nationality?: string;
   verified_profile?: boolean;
-  answerability_score?: number;
   verified_claims_count?: number;
   areas_of_expertise?: string[];
   key_achievements?: string[];
@@ -294,9 +293,9 @@ export default function SharePage() {
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
             <div className="rounded-[24px] bg-[#f8f5ef] p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Answerability</p>
-              <p className="mt-2 text-3xl font-semibold text-slate-950">
-                {Math.round(previewProfile.answerability_score || 0)}%
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Profile</p>
+              <p className="mt-2 text-base font-semibold text-slate-950">
+                {previewProfile.verified_profile ? 'Verified public persona' : 'Public digital persona'}
               </p>
             </div>
             <div className="rounded-[24px] bg-[#f8f5ef] p-5">

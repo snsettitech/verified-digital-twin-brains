@@ -37,7 +37,6 @@ type PublicProfile = {
   death_year?: number | null;
   nationality?: string;
   verified_profile?: boolean;
-  answerability_score?: number;
   verified_claims_count?: number;
   areas_of_expertise?: string[];
   personality_traits?: string[];
@@ -414,8 +413,10 @@ export default function PublicSharePage() {
             {/* Right: stats */}
             <div className="grid grid-cols-3 gap-3 sm:gap-4 lg:grid-cols-1">
               <div className="rounded-[18px] bg-[#f8f5ef] p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Answerability</p>
-                <p className="mt-1.5 text-2xl font-semibold text-slate-900">{Math.round(profile?.answerability_score || 0)}%</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Profile</p>
+                <p className="mt-1.5 text-base font-semibold text-slate-900">
+                  {profile?.verified_profile ? 'Verified public persona' : 'Public digital persona'}
+                </p>
               </div>
               <div className="rounded-[18px] bg-[#f8f5ef] p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">Verified Claims</p>
@@ -507,18 +508,8 @@ export default function PublicSharePage() {
                               : 'border border-slate-200 bg-slate-50 text-slate-800'
                         }`}>
                           <p className="whitespace-pre-wrap">{message.content}</p>
-                          {message.role === 'assistant' && !message.isError && ((message.citations && message.citations.length > 0) || message.source_tier || message.review_required) && (
+                          {message.role === 'assistant' && !message.isError && message.citations && message.citations.length > 0 && (
                             <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-slate-200/60 pt-2.5">
-                              {message.source_tier ? (
-                                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-slate-700">
-                                  {message.source_tier}
-                                </span>
-                              ) : null}
-                              {message.review_required ? (
-                                <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-amber-700">
-                                  Needs review
-                                </span>
-                              ) : null}
                               {message.citations?.map((source, citationIndex) => {
                                 const detail = message.citation_details?.[citationIndex];
                                 const label = detail?.filename || source || `Source ${citationIndex + 1}`;

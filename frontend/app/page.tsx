@@ -234,8 +234,8 @@ export default function Home() {
                 <div className="mb-5 grid grid-cols-3 gap-3">
                   {[
                     { label: 'Conversations', value: '1.4k' },
-                    { label: 'Answerability', value: '94%' },
-                    { label: 'Verified Claims', value: '312' },
+                    { label: 'Verified Sources', value: '218' },
+                    { label: 'Live Advice', value: 'Always on' },
                   ].map(({ label, value }) => (
                     <div key={label} className="rounded-[14px] bg-[#162236] p-3 text-center">
                       <p className="text-lg font-semibold text-white">{value}</p>
