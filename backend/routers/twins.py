@@ -260,7 +260,7 @@ def _extract_name_research_questions(result_json: Dict[str, Any], combined_quest
         top_n = min(max(combined_questions_estimate, 5), 20)
         collected.append(f"What are the top {top_n} questions you can answer about me right now?")
     collected.append("Which parts of my profile still need stronger evidence?")
-    collected.append("Show me your confidence and source citations for your next answer.")
+    collected.append("Show me the support and source citations for your next answer.")
 
     return _dedupe_questions(collected, limit=12)
 

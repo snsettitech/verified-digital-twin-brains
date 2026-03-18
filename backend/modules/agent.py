@@ -1955,14 +1955,17 @@ async def _rewrite_query_with_context(
             twin_context=twin_context,
         )
         
-        # Use rewritten query if confident
-        if rewrite_result.rewrite_applied and rewrite_result.rewrite_confidence >= 0.7:
-            print(f"[QueryRewrite] '{user_query}' -> '{rewrite_result.standalone_query}' "
-                  f"(intent: {rewrite_result.intent}, conf: {rewrite_result.rewrite_confidence:.2f})")
+        if rewrite_result.rewrite_applied:
+            print(
+                f"[QueryRewrite] '{user_query}' -> '{rewrite_result.standalone_query}' "
+                f"(intent: {rewrite_result.intent})"
+            )
             return rewrite_result.standalone_query, rewrite_result
         else:
-            print(f"[QueryRewrite] Skipped rewrite for '{user_query}' "
-                  f"(applied: {rewrite_result.rewrite_applied}, conf: {rewrite_result.rewrite_confidence:.2f})")
+            print(
+                f"[QueryRewrite] Skipped rewrite for '{user_query}' "
+                f"(applied: {rewrite_result.rewrite_applied})"
+            )
             return user_query, rewrite_result
             
     except Exception as e:
@@ -2199,7 +2202,6 @@ async def router_node(state: TwinState):
         router_metadata["query_rewrite.original"] = user_query
         router_metadata["query_rewrite.rewritten"] = effective_query
         router_metadata["query_rewrite.intent"] = rewrite_result.intent
-        router_metadata["query_rewrite.confidence"] = rewrite_result.rewrite_confidence
         router_metadata["query_rewrite.applied"] = rewrite_result.rewrite_applied
     
     try:

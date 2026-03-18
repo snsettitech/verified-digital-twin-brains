@@ -80,7 +80,7 @@ ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FA
 ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE = float(os.getenv("ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE", "0.2"))
 RUNTIME_SUPPORT_POLICY_ENABLED = os.getenv("RUNTIME_SUPPORT_POLICY_ENABLED", "false").lower() == "true"
 
-_LIVE_CONFIDENCE_KEYS = {
+_LEGACY_RUNTIME_STRIP_KEYS = {
     "confidence",
     "confidence_score",
     "avg_confidence",
@@ -314,15 +314,15 @@ def _extract_answerability_state(planning_output: Optional[Dict[str, Any]]) -> s
     return "unknown"
 
 
-def _strip_live_confidence_fields(value: Any) -> Any:
+def _strip_legacy_runtime_fields(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: _strip_live_confidence_fields(inner)
+            key: _strip_legacy_runtime_fields(inner)
             for key, inner in value.items()
-            if str(key) not in _LIVE_CONFIDENCE_KEYS
+            if str(key) not in _LEGACY_RUNTIME_STRIP_KEYS
         }
     if isinstance(value, list):
-        return [_strip_live_confidence_fields(item) for item in value]
+        return [_strip_legacy_runtime_fields(item) for item in value]
     return value
 
 
@@ -378,7 +378,7 @@ def _derive_review_state(
 
 
 def _sanitize_routing_decision(decision: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    sanitized = _strip_live_confidence_fields(decision if isinstance(decision, dict) else {})
+    sanitized = _strip_legacy_runtime_fields(decision if isinstance(decision, dict) else {})
     if "action" not in sanitized:
         sanitized["action"] = "answer"
     if "intent" not in sanitized:
@@ -404,7 +404,7 @@ def _normalize_live_chat_payload(
     fallback_message: Optional[str] = None,
     online_eval_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    normalized = _strip_live_confidence_fields(payload)
+    normalized = _strip_legacy_runtime_fields(payload)
     answerability_state = str(
         normalized.get("answerability_state")
         or (normalized.get("debug_snapshot") or {}).get("answerability_state")
@@ -431,15 +431,15 @@ def _normalize_live_chat_payload(
     normalized["review_reason"] = normalized.get("review_reason") or review_reason
     normalized["routing_decision"] = _sanitize_routing_decision(normalized.get("routing_decision"))
     if isinstance(normalized.get("debug_snapshot"), dict):
-        normalized["debug_snapshot"] = _strip_live_confidence_fields(normalized.get("debug_snapshot"))
+        normalized["debug_snapshot"] = _strip_legacy_runtime_fields(normalized.get("debug_snapshot"))
     if isinstance(normalized.get("planning_output"), dict):
-        normalized["planning_output"] = _strip_live_confidence_fields(normalized.get("planning_output"))
+        normalized["planning_output"] = _strip_legacy_runtime_fields(normalized.get("planning_output"))
     if isinstance(normalized.get("grounding_verifier"), dict):
-        normalized["grounding_verifier"] = _strip_live_confidence_fields(normalized.get("grounding_verifier"))
+        normalized["grounding_verifier"] = _strip_legacy_runtime_fields(normalized.get("grounding_verifier"))
     if isinstance(normalized.get("online_eval"), dict):
-        normalized["online_eval"] = _strip_live_confidence_fields(normalized.get("online_eval"))
+        normalized["online_eval"] = _strip_legacy_runtime_fields(normalized.get("online_eval"))
     if isinstance(normalized.get("runtime_support_policy"), dict):
-        normalized["runtime_support_policy"] = _strip_live_confidence_fields(normalized.get("runtime_support_policy"))
+        normalized["runtime_support_policy"] = _strip_legacy_runtime_fields(normalized.get("runtime_support_policy"))
     return normalized
 
 
@@ -2476,7 +2476,7 @@ async def chat(
                     
                     full_response = trace.to_readable_trace()
                     decision_trace = trace.model_dump()
-                    decision_trace = _strip_live_confidence_fields(decision_trace)
+                    decision_trace = _strip_legacy_runtime_fields(decision_trace)
                     
                     # Log as assistant message
                     langchain_history.append(AIMessage(content=full_response))

@@ -2,7 +2,7 @@
 Metrics and analytics router for the live product.
 
 The runtime is support-state based:
-- no confidence scores
+- no numeric support scores
 - answerability, source tier, citations, and review state drive UI metrics
 """
 
