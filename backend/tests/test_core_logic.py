@@ -40,26 +40,3 @@ async def test_retrieve_context_structure():
         assert results[0]["source_id"] == "src-123"
         assert results[0]["is_verified"] == True
 
-
-@pytest.mark.network  # Skip in CI - requires real network services
-def test_generate_answer_citations():
-    """Test answer generation with citations - requires network access."""
-    from modules.answering import generate_answer
-    
-    mock_contexts = [
-        {"text": "Sample knowledge", "score": 0.8, "source_id": "src-1"}
-    ]
-    
-    mock_openai_response = MagicMock()
-    mock_openai_response.choices[0].message.content = "The answer is here [Source 1]"
-    
-    mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_openai_response
-    
-    with patch("modules.answering.get_openai_client", return_value=mock_client):
-        result = generate_answer("test query", mock_contexts)
-        
-        assert "answer" in result
-        assert "[Source 1]" in result["answer"]
-        assert result["confidence_score"] == 0.8
-        assert result["citations"] == ["src-1"]

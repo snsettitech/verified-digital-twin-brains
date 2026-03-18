@@ -534,7 +534,7 @@ async def finalize_interview_session(
 
         if below_support_threshold_skipped > 0:
             notes.append(
-                f"{below_support_threshold_skipped} low-support memories were skipped "
+                f"{below_support_threshold_skipped} low-confidence memories were skipped "
                 f"(<{INTERVIEW_MEMORY_MIN_CONFIDENCE})."
             )
         if proposed_failed_count > 0:

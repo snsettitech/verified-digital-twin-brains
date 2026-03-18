@@ -29,7 +29,6 @@ from modules._core.repair_strategies import RepairManager
 from modules._core.registry_loader import get_specialization_manifest
 from modules._core.interview_controller import InterviewController, InterviewStage
 from modules.specializations import get_specialization
-from langchain_core.messages import AIMessage
 
 router = APIRouter(tags=["cognitive"])
 
@@ -542,8 +541,8 @@ Keep responses brief and conversational."""
         async for event in run_agent_stream(twin_id, request.message, history_with_context):
             if "agent" in event:
                 msg = event["agent"]["messages"][-1]
-                if isinstance(msg, AIMessage) and msg.content:
-                    final_response = msg.content
+                if getattr(msg, "content", None):
+                    final_response = str(msg.content)
         
         log_interaction(conversation_id, "user", request.message)
         if final_response:

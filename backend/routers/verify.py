@@ -355,8 +355,6 @@ async def _run_single_quality_test(
                 issues=issues
             )
         
-        from langchain_core.messages import HumanMessage
-        
         # Run retrieval to get context (similar to chat)
         contexts = await retrieve_context(query, twin_id, top_k=5)
         
@@ -380,7 +378,7 @@ async def _run_single_quality_test(
         
         # Run a simplified agent stream to get answer
         # We'll collect the response
-        langchain_history = [HumanMessage(content=query)]
+        legacy_history = [{"role": "user", "content": query}]
         
         full_response = ""
         try:
@@ -391,7 +389,7 @@ async def _run_single_quality_test(
             async for chunk in run_agent_stream(
                 twin_id=twin_id,
                 query=query,
-                history=langchain_history,
+                history=legacy_history,
                 conversation_id=None
             ):
                 # Check timeout

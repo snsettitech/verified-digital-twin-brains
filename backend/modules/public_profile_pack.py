@@ -1749,8 +1749,17 @@ def build_existing_profile_projection(
     ]
 
     display_name = normalized["display_name"]
-    role = normalized["role"]
-    organization = normalized["organization"]
+    role = (
+        normalized["role"]
+        or _clean_text(existing_public_profile.get("role"))
+        or _clean_text(existing_identity_pack.get("role"))
+        or _clean_text(settings.get("headline"))
+    )
+    organization = (
+        normalized["organization"]
+        or _clean_text(existing_public_profile.get("organization"))
+        or _clean_text(existing_identity_pack.get("organization"))
+    )
     expertise = _clean_unique_strings(
         [
             *normalized.get("areas_of_expertise", []),

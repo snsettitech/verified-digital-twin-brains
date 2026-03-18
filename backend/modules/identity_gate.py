@@ -15,7 +15,6 @@ from modules.owner_memory_store import (
     detect_conflicts,
     format_owner_memory_context
 )
-from modules.clarification_manager import build_clarification
 from modules.observability import supabase
 
 
@@ -46,6 +45,68 @@ CONSTRAINT_KEYWORDS = {"constraint", "constraints", "limitation", "limitations",
 BOUNDARY_KEYWORDS = {"boundary", "boundaries", "won't", "will not", "never"}
 PUBLIC_CLARIFICATION_QUEUE_ENABLED = os.getenv("ENABLE_PUBLIC_CLARIFICATION_QUEUE", "false").lower() == "true"
 AUTO_APPROVE_OWNER_MEMORY = os.getenv("AUTO_APPROVE_OWNER_MEMORY", "true").lower() == "true"
+
+
+def _default_clarification_options(memory_type: str, topic: str) -> List[Dict[str, Any]]:
+    if memory_type == "stance":
+        return [
+            {"label": "Support", "value": f"I generally support {topic}."},
+            {"label": "Oppose", "value": f"I generally oppose {topic}."},
+            {"label": "Neutral / depends", "value": f"My stance on {topic} depends on context."},
+        ]
+    if memory_type == "preference":
+        return [
+            {"label": "Prefer speed", "value": f"I prefer speed when it comes to {topic}."},
+            {"label": "Prefer depth", "value": f"I prefer depth when it comes to {topic}."},
+            {"label": "No strong preference", "value": f"I do not have a strong preference about {topic}."},
+        ]
+    if memory_type == "tone_rule":
+        return [
+            {"label": "Direct and concise", "value": f"When discussing {topic}, be direct and concise."},
+            {"label": "Warm and explanatory", "value": f"When discussing {topic}, be warm and explanatory."},
+            {"label": "Analytical and cautious", "value": f"When discussing {topic}, be analytical and cautious."},
+        ]
+    if memory_type == "lens":
+        return [
+            {"label": "Pragmatic ROI lens", "value": f"I view {topic} through a pragmatic ROI lens."},
+            {"label": "Ethics-first lens", "value": f"I evaluate {topic} through an ethics-first lens."},
+            {"label": "Long-term risk lens", "value": f"I prioritize long-term risk when assessing {topic}."},
+        ]
+    return [
+        {"label": "Core belief", "value": f"My core belief about {topic} is: [fill in one sentence]."},
+        {"label": "Skeptical by default", "value": f"I am generally skeptical about {topic} until proven otherwise."},
+        {"label": "Optimistic by default", "value": f"I am generally optimistic about {topic}."},
+    ]
+
+
+def build_clarification(query: str, topic: str, memory_type: str) -> Dict[str, Any]:
+    del query
+    topic = topic or "this topic"
+    memory_type = memory_type or "stance"
+
+    if memory_type == "stance":
+        question = f"What's your stance on {topic}? Choose one or answer in one sentence."
+    elif memory_type == "preference":
+        question = f"What's your preference regarding {topic}? Choose one or answer in one sentence."
+    elif memory_type == "lens":
+        question = f"What lens should guide decisions about {topic}? Choose one or answer in one sentence."
+    elif memory_type == "tone_rule":
+        question = f"How should your twin talk about {topic}? Choose one or answer in one sentence."
+    else:
+        question = f"What core belief do you hold about {topic}? One sentence is enough."
+
+    options = _default_clarification_options(memory_type, topic)
+    return {
+        "question": question,
+        "options": options,
+        "memory_write_proposal": {
+            "topic": topic,
+            "memory_type": memory_type,
+            "value_template": options[0]["value"] if options else "",
+            "confidence": 0.7,
+            "source": "owner_clarification",
+        },
+    }
 
 
 def _float_env(name: str, default: float) -> float:

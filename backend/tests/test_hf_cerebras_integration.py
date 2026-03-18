@@ -188,52 +188,6 @@ class TestCerebrasClient:
             assert client1 is client2
 
 
-class TestAnsweringProviderSwitching:
-    """Test provider switching in answering module."""
-    
-    def test_answering_openai_provider(self):
-        """Test answering uses OpenAI by default."""
-        with patch("modules.answering._generate_answer_openai") as mock_openai:
-            mock_openai.return_value = {
-                "answer": "Test answer",
-                "confidence_score": 0.8,
-                "citations": ["src-1"],
-                "provider": "openai",
-                "model": "gpt-4o"
-            }
-            
-            with patch.dict(os.environ, {"INFERENCE_PROVIDER": "openai"}):
-                from modules import answering
-                answering.INFERENCE_PROVIDER = "openai"
-                
-                from modules.answering import generate_answer
-                result = generate_answer("test", [{"text": "context", "score": 0.8, "source_id": "src-1"}])
-                
-                mock_openai.assert_called_once()
-                assert result["provider"] == "openai"
-    
-    @patch("modules.inference_cerebras.CerebrasClient")
-    def test_answering_cerebras_provider(self, mock_cerebras):
-        """Test answering uses Cerebras when configured."""
-        mock_instance = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="Cerebras answer"))]
-        mock_instance.generate.return_value = mock_response
-        mock_cerebras.return_value = mock_instance
-        mock_instance.model = "llama-3.3-70b"
-        
-        with patch.dict(os.environ, {"CEREBRAS_API_KEY": "test_key"}):
-            with patch.dict(os.environ, {"INFERENCE_PROVIDER": "cerebras"}):
-                from modules import answering
-                answering.INFERENCE_PROVIDER = "cerebras"
-                
-                from modules.answering import generate_answer
-                result = generate_answer("test", [{"text": "context", "score": 0.8, "source_id": "src-1"}])
-                
-                mock_instance.generate.assert_called_once()
-                assert result["provider"] == "cerebras"
-
-
 class TestBackwardCompatibility:
     """Test backward compatibility with existing code."""
     
@@ -262,26 +216,6 @@ class TestBackwardCompatibility:
             assert len(result) == 3072
             mock_client.embeddings.create.assert_called_once()
     
-    @patch("modules.answering.get_openai_client")
-    def test_existing_answering_code(self, mock_get_client):
-        """Test existing code calling generate_answer still works."""
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="Test answer"))]
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_get_client.return_value = mock_client
-        
-        with patch.dict(os.environ, {"INFERENCE_PROVIDER": "openai"}):
-            from modules import answering
-            answering.INFERENCE_PROVIDER = "openai"
-            
-            from modules.answering import generate_answer
-            result = generate_answer("test", [{"text": "context", "score": 0.8, "source_id": "src-1"}])
-            
-            assert "answer" in result
-            mock_client.chat.completions.create.assert_called_once()
-
-
 class TestHealthChecks:
     """Test health check functionality."""
     

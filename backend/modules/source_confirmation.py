@@ -246,6 +246,7 @@ class PendingConfirmationItem:
     title: Optional[str]
     snippet: Optional[str]
     content_quality: str
+    identity_confidence_percent: Optional[int]
     identity_match_tier: Optional[str]
     match_details: Optional[Dict[str, Any]]
     submitted_root_url: Optional[str]
@@ -557,6 +558,7 @@ class SourceConfirmationManager:
                     title=row.get("title"),
                     snippet=row.get("snippet"),
                     content_quality=row.get("content_quality", "full"),
+                    identity_confidence_percent=format_score_for_display(normalized),
                     identity_match_tier=score_to_identity_match_tier(
                         normalized,
                         content_quality=content_quality,

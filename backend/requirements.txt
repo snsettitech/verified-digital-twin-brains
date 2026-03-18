@@ -20,18 +20,16 @@ python-dotenv
 python-multipart
 
 # ---------- Agent Runtime ----------
-# ADK migration: LangChain deps kept for backward compatibility during
-# migration. Set AGENT_RUNTIME=adk to use the new pipeline.
-# Once migration is complete, remove the langchain block below.
+# ADK is now the authoritative runtime for research, compiler, and chat.
+# LangChain remains only for unrelated legacy tool modules outside the new
+# runtime path.
 langchain
 langchain-openai
 langchain-community
-langgraph
-langgraph-checkpoint-postgres
 
-# ADK: New agent framework (Phase 1: foundation alongside LangGraph)
-# google-adk>=1.0.0
-# litellm>=1.50.0
+# ADK: authoritative runtime for research/compiler/chat
+google-adk==1.27.2
+litellm>=1.75.0
 
 asyncpg
 PyPDF2

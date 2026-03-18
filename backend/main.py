@@ -11,6 +11,7 @@ from modules.cors_middleware import create_cors_middleware, get_allowed_origins
 from routers import (
     auth,
     chat,
+    personas,
     training_sessions,
     persona_specs,
     decision_capture,
@@ -56,15 +57,8 @@ from routers import (
     cost_tracking,
     synthetic_monitoring,
     twin_runtime,
-    persona_link_compile,
-    
-    # Phase 1A.6: Deep Research crawl management
-    crawl,
     deep_research,
-    
-    # Phase 8: Research claims enrichment
-    research_claims,
-    
+
     # Person Completeness v1: Profile abstraction layer
     profile,
     profile_person_data,
@@ -92,10 +86,6 @@ ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").low
 ADVISOR_RETRIEVAL_ENABLED = os.getenv("ENABLE_ADVISOR_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
-# Deep Research routes remain env-gated for safer staged rollouts.
-DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
-# Name-only deep research flow (enabled by default; can be disabled explicitly)
-NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true"
 
 def print_feature_flag_summary():
     """Print enabled/disabled feature summary for observability."""
@@ -105,8 +95,7 @@ def print_feature_flag_summary():
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  advisor retrieval:   {'ENABLED' if ADVISOR_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
-    print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
-    print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
+    print("  ADK v2 Research:    ENABLED")
     print("-" * 60)
     sys.stdout.flush()
 
@@ -171,6 +160,7 @@ async def log_requests(request, call_next):
 # Include Routers
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(personas.router)
 app.include_router(training_sessions.router)
 app.include_router(persona_specs.router)
 app.include_router(twin_runtime.router)
@@ -187,7 +177,6 @@ else:
     print("[INFO] Realtime ingestion routes disabled (ENABLE_REALTIME_INGESTION=false)")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
-app.include_router(persona_link_compile.router)
 
 app.include_router(actions.router)
 app.include_router(knowledge.router)
@@ -238,18 +227,8 @@ app.include_router(cost_tracking.router)
 app.include_router(synthetic_monitoring.router)
 print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare, playground, ab-testing, costs, monitoring)")
 
-if DEEP_RESEARCH_ENABLED:
-    app.include_router(crawl.router)
-    print("[INFO] Deep Research crawl routes enabled")
-    app.include_router(research_claims.router)
-    print("[INFO] Deep Research claims routes enabled")
-    app.include_router(deep_research.router)
-    if NAME_ONLY_DEEP_RESEARCH_ENABLED:
-        print("[INFO] Name-only deep research routes enabled")
-    else:
-        print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
-else:
-    print("[INFO] Deep Research routes disabled (DEEP_RESEARCH_ENABLED=false)")
+app.include_router(deep_research.router)
+print("[INFO] ADK v2 research routes enabled")
 
 # Person Completeness v1: Profile abstraction layer
 app.include_router(profile.router)
