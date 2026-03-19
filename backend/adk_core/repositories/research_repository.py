@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from adk_core.repositories.base import compact_dict, utc_now_iso
+from adk_core.repositories.base import compact_dict, is_empty_lookup_error, utc_now_iso
 from modules.observability import supabase
 
 
@@ -30,8 +30,9 @@ class ResearchRepository:
                 .limit(1)
                 .execute()
             )
-            if existing.data:
-                return existing.data[0]
+            existing_data = existing.data if existing else None
+            if existing_data:
+                return existing_data[0]
 
         payload = compact_dict(
             {
@@ -47,14 +48,20 @@ class ResearchRepository:
             }
         )
         response = supabase.table("adk_research_runs").insert(payload).execute()
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def get_run(self, *, run_id: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         query = supabase.table("adk_research_runs").select("*").eq("id", run_id)
         if tenant_id:
             query = query.eq("tenant_id", tenant_id)
-        response = query.maybe_single().execute()
-        return response.data or None
+        try:
+            response = query.maybe_single().execute()
+        except Exception as exc:
+            if is_empty_lookup_error(exc):
+                return None
+            raise
+        return (response.data if response else None) or None
 
     def update_run(self, run_id: str, **updates: Any) -> Optional[Dict[str, Any]]:
         payload = compact_dict({**updates, "updated_at": utc_now_iso()})
@@ -64,7 +71,8 @@ class ResearchRepository:
             .eq("id", run_id)
             .execute()
         )
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def save_artifact(
         self,
@@ -82,14 +90,21 @@ class ResearchRepository:
             "created_at": utc_now_iso(),
             "updated_at": utc_now_iso(),
         }
-        existing = (
-            supabase.table("adk_research_artifacts")
-            .select("id")
-            .eq("run_id", run_id)
-            .maybe_single()
-            .execute()
-        )
-        if existing.data:
+        try:
+            existing = (
+                supabase.table("adk_research_artifacts")
+                .select("id")
+                .eq("run_id", run_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception as exc:
+            if is_empty_lookup_error(exc):
+                existing = None
+            else:
+                raise
+        existing_data = (existing.data if existing else None) or None
+        if existing_data:
             response = (
                 supabase.table("adk_research_artifacts")
                 .update(payload)
@@ -98,11 +113,17 @@ class ResearchRepository:
             )
         else:
             response = supabase.table("adk_research_artifacts").insert(payload).execute()
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def get_artifact(self, *, run_id: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         query = supabase.table("adk_research_artifacts").select("*").eq("run_id", run_id)
         if tenant_id:
             query = query.eq("tenant_id", tenant_id)
-        response = query.maybe_single().execute()
-        return response.data or None
+        try:
+            response = query.maybe_single().execute()
+        except Exception as exc:
+            if is_empty_lookup_error(exc):
+                return None
+            raise
+        return (response.data if response else None) or None

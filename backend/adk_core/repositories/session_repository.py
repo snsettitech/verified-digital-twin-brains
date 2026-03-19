@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from google.adk.sessions import Session
 
-from adk_core.repositories.base import compact_dict, utc_now_iso
+from adk_core.repositories.base import compact_dict, is_empty_lookup_error, utc_now_iso
 from modules.observability import supabase
 
 
@@ -31,19 +31,27 @@ class SessionRepository:
                 "updated_at": utc_now_iso(),
             }
         )
-        existing = (
-            supabase.table("adk_sessions")
-            .select("id")
-            .eq("id", session.id)
-            .maybe_single()
-            .execute()
-        )
-        if existing.data:
+        try:
+            existing = (
+                supabase.table("adk_sessions")
+                .select("id")
+                .eq("id", session.id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception as exc:
+            if is_empty_lookup_error(exc):
+                existing = None
+            else:
+                raise
+        existing_data = (existing.data if existing else None) or None
+        if existing_data:
             response = supabase.table("adk_sessions").update(payload).eq("id", session.id).execute()
         else:
             payload["created_at"] = utc_now_iso()
             response = supabase.table("adk_sessions").insert(payload).execute()
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def get(
         self,
@@ -52,16 +60,21 @@ class SessionRepository:
         user_id: str,
         session_id: str,
     ) -> Optional[Session]:
-        response = (
-            supabase.table("adk_sessions")
-            .select("session_json")
-            .eq("id", session_id)
-            .eq("app_name", app_name)
-            .eq("user_id", user_id)
-            .maybe_single()
-            .execute()
-        )
-        if not response.data:
+        try:
+            response = (
+                supabase.table("adk_sessions")
+                .select("session_json")
+                .eq("id", session_id)
+                .eq("app_name", app_name)
+                .eq("user_id", user_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception as exc:
+            if is_empty_lookup_error(exc):
+                return None
+            raise
+        if not response or not response.data:
             return None
         return Session.model_validate(response.data["session_json"])
 
@@ -70,7 +83,8 @@ class SessionRepository:
         if user_id:
             query = query.eq("user_id", user_id)
         response = query.execute()
-        return [Session.model_validate(row["session_json"]) for row in (response.data or [])]
+        response_data = response.data if response else []
+        return [Session.model_validate(row["session_json"]) for row in (response_data or [])]
 
     def delete(self, *, app_name: str, user_id: str, session_id: str) -> None:
         (

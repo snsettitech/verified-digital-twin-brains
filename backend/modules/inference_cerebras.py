@@ -18,7 +18,7 @@ Usage:
 
 Environment Variables:
     CEREBRAS_API_KEY: Your Cerebras API key (required)
-    CEREBRAS_MODEL: Model to use (default: llama-3.3-70b)
+    CEREBRAS_MODEL: Model to use (default: qwen-3-235b-a22b-instruct-2507)
 """
 import os
 import logging
@@ -28,7 +28,7 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 # Constants
-DEFAULT_MODEL = "llama-3.3-70b"
+DEFAULT_MODEL = "qwen-3-235b-a22b-instruct-2507"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 1024
 
@@ -106,7 +106,7 @@ class CerebrasClient:
         
         Args:
             messages: List of message dicts with 'role' and 'content'
-            model: Model name (default: llama-3.3-70b)
+            model: Model name (default: qwen-3-235b-a22b-instruct-2507)
             temperature: Sampling temperature (0-2)
             max_tokens: Maximum tokens to generate
             stream: Whether to stream response

@@ -36,7 +36,8 @@ class ConversationRepository:
             }
         )
         response = supabase.table("adk_conversations").insert(payload).execute()
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def get_conversation(
         self,
@@ -50,7 +51,7 @@ class ConversationRepository:
             .maybe_single()
             .execute()
         )
-        return response.data or None
+        return (response.data if response else None) or None
 
     def touch_conversation(self, conversation_id: str) -> None:
         (
@@ -83,7 +84,8 @@ class ConversationRepository:
         }
         response = supabase.table("adk_messages").insert(payload).execute()
         self.touch_conversation(conversation_id)
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def list_messages(self, *, conversation_id: str) -> List[Dict[str, Any]]:
         response = (
@@ -93,4 +95,4 @@ class ConversationRepository:
             .order("created_at", desc=False)
             .execute()
         )
-        return response.data or []
+        return (response.data if response else None) or []

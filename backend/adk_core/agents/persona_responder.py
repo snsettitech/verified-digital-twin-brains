@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from google.adk.agents import LlmAgent
 
 PERSONA_RESPONDER_NAME = "persona_responder"
 
 
-def build_persona_responder_agent(*, model: str) -> LlmAgent:
+def build_persona_responder_agent(*, model: Any) -> LlmAgent:
     return LlmAgent(
         name=PERSONA_RESPONDER_NAME,
         model=model,

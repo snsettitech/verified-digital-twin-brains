@@ -21,6 +21,7 @@ TOKEN_COSTS = {
     "claude-3-opus": {"input": 0.015, "output": 0.075},
     "claude-3-sonnet": {"input": 0.003, "output": 0.015},
     "llama-3.3-70b": {"input": 0.0009, "output": 0.0009},  # Cerebras
+    "qwen-3-235b-a22b-instruct-2507": {"input": 0.0009, "output": 0.0009},  # Cerebras
 }
 
 

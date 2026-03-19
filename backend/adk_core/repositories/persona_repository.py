@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional
 
-from adk_core.repositories.base import utc_now_iso
+from adk_core.repositories.base import is_empty_lookup_error, utc_now_iso
 from modules.clients import get_pinecone_index
 from modules.embeddings import get_embedding
 from modules.observability import supabase
+
+logger = logging.getLogger(__name__)
 
 
 class PersonaRepository:
@@ -30,7 +33,8 @@ class PersonaRepository:
         if tenant_id:
             query = query.eq("tenant_id", tenant_id)
         response = query.execute()
-        return (response.data or [None])[0]
+        response_data = response.data if response else None
+        return (response_data or [None])[0]
 
     def list_quotes(
         self,
@@ -47,7 +51,7 @@ class PersonaRepository:
         if tenant_id:
             query = query.eq("tenant_id", tenant_id)
         response = query.execute()
-        return response.data or []
+        return (response.data if response else None) or []
 
     def publish_artifact(
         self,
@@ -77,7 +81,8 @@ class PersonaRepository:
             "updated_at": utc_now_iso(),
         }
         response = supabase.table("adk_persona_artifacts").insert(payload).execute()
-        row = (response.data or [None])[0]
+        response_data = response.data if response else None
+        row = (response_data or [None])[0]
         artifact_id = row["id"]
 
         (
@@ -112,14 +117,21 @@ class PersonaRepository:
         return row
 
     def _mirror_to_legacy_twin_settings(self, *, twin_id: str, artifact: Dict[str, Any]) -> None:
-        twin_result = (
-            supabase.table("twins")
-            .select("settings")
-            .eq("id", twin_id)
-            .maybe_single()
-            .execute()
-        )
-        current_settings = dict((twin_result.data or {}).get("settings") or {})
+        try:
+            twin_result = (
+                supabase.table("twins")
+                .select("settings")
+                .eq("id", twin_id)
+                .maybe_single()
+                .execute()
+            )
+        except Exception as exc:
+            if is_empty_lookup_error(exc):
+                twin_result = None
+            else:
+                raise
+        twin_data = twin_result.data if twin_result else None
+        current_settings = dict((twin_data or {}).get("settings") or {})
         current_settings["public_profile"] = artifact.get("public_profile") or {}
         current_settings["persona_identity_pack"] = artifact.get("persona_identity_pack") or {}
         current_settings["adk_persona_version"] = artifact.get("version")
@@ -138,44 +150,52 @@ class PersonaRepository:
         if index is None:
             return
 
-        namespace = f"adk-persona-{twin_id}"
-        records: List[Dict[str, Any]] = []
+        try:
+            namespace = f"adk-persona-{twin_id}"
+            records: List[Dict[str, Any]] = []
 
-        for idx, claim in enumerate(artifact.get("claims") or [], start=1):
-            text = str(claim.get("text") or "").strip()
-            if not text:
-                continue
-            records.append(
-                {
-                    "id": f"{artifact_id}-claim-{idx}",
-                    "values": get_embedding(text),
-                    "metadata": {
-                        "twin_id": twin_id,
-                        "artifact_id": artifact_id,
-                        "doc_type": "claim",
-                        "text": text,
-                        "source_ids": claim.get("source_ids") or [],
-                    },
-                }
+            for idx, claim in enumerate(artifact.get("claims") or [], start=1):
+                text = str(claim.get("text") or "").strip()
+                if not text:
+                    continue
+                records.append(
+                    {
+                        "id": f"{artifact_id}-claim-{idx}",
+                        "values": get_embedding(text),
+                        "metadata": {
+                            "twin_id": twin_id,
+                            "artifact_id": artifact_id,
+                            "doc_type": "claim",
+                            "text": text,
+                            "source_ids": claim.get("source_ids") or [],
+                        },
+                    }
+                )
+
+            for idx, quote in enumerate(artifact.get("quote_pack") or [], start=1):
+                text = str(quote.get("quote") or "").strip()
+                if not text:
+                    continue
+                records.append(
+                    {
+                        "id": f"{artifact_id}-quote-{idx}",
+                        "values": get_embedding(text),
+                        "metadata": {
+                            "twin_id": twin_id,
+                            "artifact_id": artifact_id,
+                            "doc_type": "quote",
+                            "text": text,
+                            "source_id": quote.get("source_id"),
+                        },
+                    }
+                )
+
+            if records:
+                index.upsert(vectors=records, namespace=namespace)
+        except Exception as exc:
+            logger.warning(
+                "Persona retrieval indexing skipped for twin %s artifact %s: %s",
+                twin_id,
+                artifact_id,
+                exc,
             )
-
-        for idx, quote in enumerate(artifact.get("quote_pack") or [], start=1):
-            text = str(quote.get("quote") or "").strip()
-            if not text:
-                continue
-            records.append(
-                {
-                    "id": f"{artifact_id}-quote-{idx}",
-                    "values": get_embedding(text),
-                    "metadata": {
-                        "twin_id": twin_id,
-                        "artifact_id": artifact_id,
-                        "doc_type": "quote",
-                        "text": text,
-                        "source_id": quote.get("source_id"),
-                    },
-                }
-            )
-
-        if records:
-            index.upsert(vectors=records, namespace=namespace)

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
 
 from adk_core.tools.research_tools import gather_public_research
 
 
-def build_research_pipeline_agent(*, model: str) -> SequentialAgent:
+def build_research_pipeline_agent(*, model: Any) -> SequentialAgent:
     gather_agent = LlmAgent(
         name="research_gatherer",
         model=model,

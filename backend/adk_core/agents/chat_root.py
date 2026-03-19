@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from google.adk.agents import LlmAgent, SequentialAgent
 
 from adk_core.agents.persona_responder import build_persona_responder_agent
@@ -13,7 +15,7 @@ from adk_core.tools.retrieval_tools import (
 )
 
 
-def build_chat_root_agent(*, model: str) -> SequentialAgent:
+def build_chat_root_agent(*, model: Any) -> SequentialAgent:
     coordinator = LlmAgent(
         name="chat_coordinator",
         model=model,

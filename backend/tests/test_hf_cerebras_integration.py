@@ -9,6 +9,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 RUN_CEREBRAS_LIVE_TESTS = os.getenv("RUN_CEREBRAS_LIVE_TESTS", "").lower() in {"1", "true", "yes"}
+DEFAULT_CEREBRAS_MODEL = "qwen-3-235b-a22b-instruct-2507"
 
 
 class TestHFEmbeddings:
@@ -135,7 +136,7 @@ class TestCerebrasClient:
         CerebrasClient.reset()
         
         client = CerebrasClient()
-        assert client.model == "llama-3.3-70b"
+        assert client.model == DEFAULT_CEREBRAS_MODEL
     
     @pytest.mark.skipif(
         not (RUN_CEREBRAS_LIVE_TESTS and os.getenv("CEREBRAS_API_KEY")),
@@ -255,7 +256,7 @@ class TestHealthChecks:
             health = client.health_check()
             
             assert health["status"] == "healthy"
-            assert health["model"] == "llama-3.3-70b"
+            assert health["model"] == DEFAULT_CEREBRAS_MODEL
 
 
 if __name__ == "__main__":

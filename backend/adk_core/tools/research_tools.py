@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +12,12 @@ from google.adk.tools import ToolContext
 
 from modules.firecrawl_client import FirecrawlResult, get_firecrawl_client
 from modules.research_claim_web_search import SearchResult, create_search_provider_with_fallback
+
+MAX_RESEARCH_RESULTS = max(2, min(int(os.getenv("ADK_RESEARCH_MAX_RESULTS", "3")), 8))
+MAX_RESEARCH_SCRAPES = max(1, min(int(os.getenv("ADK_RESEARCH_MAX_SCRAPES", "2")), 6))
+MAX_SOURCE_TEXT_CHARS = max(300, min(int(os.getenv("ADK_RESEARCH_MAX_SOURCE_TEXT_CHARS", "700")), 3000))
+MAX_SNIPPET_CHARS = max(160, min(int(os.getenv("ADK_RESEARCH_MAX_SNIPPET_CHARS", "250")), 800))
+MAX_QUOTE_CANDIDATES = max(3, min(int(os.getenv("ADK_RESEARCH_MAX_QUOTE_CANDIDATES", "8")), 16))
 
 
 def _quote_candidates(source_id: str, text: str) -> List[Dict[str, Any]]:
@@ -94,17 +101,17 @@ async def gather_public_research(
             continue
         seen_urls.add(result.url)
         deduped.append(result)
-        if len(deduped) >= 8:
+        if len(deduped) >= MAX_RESEARCH_RESULTS:
             break
 
     firecrawl = get_firecrawl_client()
     crawl_payloads: Dict[str, FirecrawlResult] = {}
     if firecrawl and deduped:
         scrape_results = await asyncio.gather(
-            *[firecrawl.scrape_with_retry(item.url) for item in deduped[:6]],
+            *[firecrawl.scrape_with_retry(item.url) for item in deduped[:MAX_RESEARCH_SCRAPES]],
             return_exceptions=True,
         )
-        for item, scrape_result in zip(deduped[:6], scrape_results):
+        for item, scrape_result in zip(deduped[:MAX_RESEARCH_SCRAPES], scrape_results):
             if isinstance(scrape_result, Exception):
                 continue
             crawl_payloads[item.url] = scrape_result
@@ -116,7 +123,7 @@ async def gather_public_research(
         extracted_text = ""
         quality = "search_only"
         if scrape and scrape.success:
-            extracted_text = (scrape.content or "")[:3000]
+            extracted_text = (scrape.content or "")[:MAX_SOURCE_TEXT_CHARS]
             quality = scrape.quality.value
             quote_candidates.extend(_quote_candidates(f"src-{idx}", extracted_text))
         source_registry.append(
@@ -124,7 +131,7 @@ async def gather_public_research(
                 "source_id": f"src-{idx}",
                 "url": result.url,
                 "title": result.title,
-                "snippet": (result.snippet or "")[:800],
+                "snippet": (result.snippet or "")[:MAX_SNIPPET_CHARS],
                 "extracted_text": extracted_text,
                 "provider": result.source or getattr(provider, "name", "unknown"),
                 "quality": quality,
@@ -141,6 +148,7 @@ async def gather_public_research(
             "search_provider": getattr(provider, "name", "unknown"),
             "source_count": len(source_registry),
             "scraped_count": len(crawl_payloads),
+            "source_text_chars": MAX_SOURCE_TEXT_CHARS,
         },
     }
     if tool_context:

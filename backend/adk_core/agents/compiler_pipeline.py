@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Dict
+from typing import Any, Dict
 
 from google.adk.agents import LlmAgent, SequentialAgent
 from google.adk.tools import ToolContext
@@ -40,7 +40,7 @@ def materialize_persona_seed(tool_context: ToolContext) -> Dict[str, object]:
     }
 
 
-def build_compiler_pipeline_agent(*, model: str) -> SequentialAgent:
+def build_compiler_pipeline_agent(*, model: Any) -> SequentialAgent:
     seed_agent = LlmAgent(
         name="persona_seed_materializer",
         model=model,
