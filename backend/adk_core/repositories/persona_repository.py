@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from adk_core.repositories.base import is_empty_lookup_error, utc_now_iso
 from modules.clients import get_pinecone_index
-from modules.embeddings import get_embedding
 from modules.observability import supabase
+from modules.pinecone_adapter import PineconeIndexAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +144,24 @@ class PersonaRepository:
 
     def _index_for_retrieval(self, *, twin_id: str, artifact: Dict[str, Any], artifact_id: str) -> None:
         try:
-            index = get_pinecone_index()
-        except Exception:
-            index = None
-        if index is None:
+            adapter = PineconeIndexAdapter(get_pinecone_index())
+        except Exception as exc:
+            logger.warning(
+                "Persona retrieval indexing unavailable for twin %s artifact %s: %s",
+                twin_id,
+                artifact_id,
+                exc,
+            )
+            return
+
+        if adapter.mode != "integrated":
+            logger.info(
+                "Skipping persona namespace indexing for twin %s artifact %s because "
+                "Pinecone mode is '%s' and ADK indexing is text-first only.",
+                twin_id,
+                artifact_id,
+                adapter.mode,
+            )
             return
 
         try:
@@ -161,7 +175,6 @@ class PersonaRepository:
                 records.append(
                     {
                         "id": f"{artifact_id}-claim-{idx}",
-                        "values": get_embedding(text),
                         "metadata": {
                             "twin_id": twin_id,
                             "artifact_id": artifact_id,
@@ -179,7 +192,6 @@ class PersonaRepository:
                 records.append(
                     {
                         "id": f"{artifact_id}-quote-{idx}",
-                        "values": get_embedding(text),
                         "metadata": {
                             "twin_id": twin_id,
                             "artifact_id": artifact_id,
@@ -190,8 +202,43 @@ class PersonaRepository:
                     }
                 )
 
+            for idx, item in enumerate(artifact.get("timeline") or [], start=1):
+                date_or_range = str(item.get("date_or_range") or "").strip()
+                event = str(item.get("event") or "").strip()
+                text = f"{date_or_range}: {event}".strip(": ")
+                if not text:
+                    continue
+                records.append(
+                    {
+                        "id": f"{artifact_id}-timeline-{idx}",
+                        "metadata": {
+                            "twin_id": twin_id,
+                            "artifact_id": artifact_id,
+                            "doc_type": "timeline",
+                            "text": text,
+                            "source_ids": item.get("source_ids") or [],
+                        },
+                    }
+                )
+
+            for idx, seed in enumerate(artifact.get("retrieval_seeds") or [], start=1):
+                text = str(seed or "").strip()
+                if not text:
+                    continue
+                records.append(
+                    {
+                        "id": f"{artifact_id}-seed-{idx}",
+                        "metadata": {
+                            "twin_id": twin_id,
+                            "artifact_id": artifact_id,
+                            "doc_type": "seed",
+                            "text": text,
+                        },
+                    }
+                )
+
             if records:
-                index.upsert(vectors=records, namespace=namespace)
+                adapter.upsert(vectors=records, namespace=namespace)
         except Exception as exc:
             logger.warning(
                 "Persona retrieval indexing skipped for twin %s artifact %s: %s",
