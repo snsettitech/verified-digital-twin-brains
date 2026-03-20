@@ -1,5 +1,7 @@
 # VC Specialization Integration - Implementation Summary
 
+> Historical note: this document describes an earlier VC-only route design. The `ENABLE_VC_ROUTES` flag and `backend/api/vc_routes.py` are no longer part of the current runtime.
+
 **Status:** ✅ Complete  
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation

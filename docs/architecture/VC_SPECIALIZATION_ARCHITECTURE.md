@@ -1,5 +1,7 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
+> Historical note: this document describes an earlier VC-only route design. The `ENABLE_VC_ROUTES` flag and `backend/api/vc_routes.py` are no longer part of the current runtime.
+
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 
