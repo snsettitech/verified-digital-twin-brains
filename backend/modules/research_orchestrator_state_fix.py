@@ -69,9 +69,8 @@ def is_deep_research_enabled(run_data: Dict[str, Any]) -> bool:
     # Check global config (default to True for new runs)
     from modules.deep_research_config import get_config
     config = get_config()
-    
-    # Deep research is enabled by default unless explicitly disabled
-    return not getattr(config, 'phase_8_claims_disabled', False)
+
+    return config.is_enabled()
 
 
 def get_valid_transitions(
