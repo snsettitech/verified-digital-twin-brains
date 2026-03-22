@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { FeatureFlagProvider } from "@/lib/features/FeatureFlags";
 import { ToastProvider } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/lib/context/ThemeContext";
 
@@ -28,11 +27,9 @@ export default function RootLayout({
         className="antialiased bg-[#080E1A] text-white"
       >
         <ThemeProvider>
-          <FeatureFlagProvider>
-            <ToastProvider>
-              {children}
-            </ToastProvider>
-          </FeatureFlagProvider>
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>
