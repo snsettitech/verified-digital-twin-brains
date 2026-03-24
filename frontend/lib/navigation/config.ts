@@ -29,7 +29,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
             { name: 'Home',      href: '/dashboard',           icon: 'home'    },
             { name: 'Profile',   href: '/dashboard/profile',   icon: 'profile' },
             { name: 'Knowledge', href: '/dashboard/knowledge', icon: 'book'    },
-            { name: 'Chat',      href: '/dashboard/chat',      icon: 'chat',   featureFlag: 'dashboardChat' },
+            { name: 'Chat',      href: '/dashboard/chat',      icon: 'chat'    },
         ]
     },
     {
@@ -37,7 +37,7 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         items: [
             { name: 'Studio',          href: '/dashboard/studio',          icon: 'studio'      },
             { name: 'Interview',       href: '/dashboard/simulator/training', icon: 'training'  },
-            { name: 'Memory',          href: '/dashboard/memory',          icon: 'memory',     featureFlag: 'memoryCenter' },
+            { name: 'Memory',          href: '/dashboard/memory',          icon: 'memory'      },
             { name: 'Escalations',     href: '/dashboard/escalations',     icon: 'escalations' },
             { name: 'Verified Q&A',    href: '/dashboard/verified-qna',    icon: 'check'       },
             { name: 'Ingestion Jobs',  href: '/dashboard/training-jobs',   icon: 'history'     },
@@ -58,8 +58,8 @@ export const SIDEBAR_CONFIG: SidebarConfig = [
         items: [
             { name: 'Analytics',        href: '/dashboard/insights',         icon: 'chart'    },
             { name: 'Settings',         href: '/dashboard/settings',         icon: 'settings' },
-            { name: 'Privacy & Data',   href: '/dashboard/privacy',          icon: 'privacy', featureFlag: 'privacyControls'  },
-            { name: 'Publish Controls', href: '/dashboard/publish-controls', icon: 'publish', featureFlag: 'publishControls' },
+            { name: 'Privacy & Data',   href: '/dashboard/privacy',          icon: 'privacy'  },
+            { name: 'Publish Controls', href: '/dashboard/publish-controls', icon: 'publish'  },
         ]
     },
 ];

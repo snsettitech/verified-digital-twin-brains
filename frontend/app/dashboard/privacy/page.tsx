@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import FeatureGate from '@/components/ui/FeatureGate';
-import { isRuntimeFeatureEnabled } from '@/lib/features/runtimeFlags';
 import { useTwin } from '@/lib/context/TwinContext';
 import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 
@@ -15,7 +13,6 @@ type AccessLog = {
 };
 
 export default function PrivacyPage() {
-  const enabled = isRuntimeFeatureEnabled('privacyControls');
   const { activeTwin, refreshTwins } = useTwin();
   const { get, patch } = useAuthFetch();
 
@@ -115,112 +112,106 @@ export default function PrivacyPage() {
   };
 
   return (
-    <FeatureGate
-      enabled={enabled}
-      title="Privacy & Data"
-      description="Enable NEXT_PUBLIC_FF_PRIVACY_CONTROLS to access privacy controls."
-    >
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Privacy & Data</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Private by default. You control retention, exports, and deletion for this twin.
-          </p>
-        </div>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Privacy & Data</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Private by default. You control retention, exports, and deletion for this twin.
+        </p>
+      </div>
 
-        {error ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-        ) : null}
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+      ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Retention</h2>
-            <div className="mt-4 grid gap-3">
-              <label className="text-sm text-slate-700">
-                Conversation Retention
-                <select
-                  value={retention}
-                  onChange={(e) => setRetention(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <option value="30_days">30 days</option>
-                  <option value="90_days">90 days</option>
-                  <option value="1_year">1 year</option>
-                  <option value="forever">Forever</option>
-                </select>
-              </label>
-              <label className="text-sm text-slate-700">
-                Memory Retention
-                <select
-                  value={memoryRetention}
-                  onChange={(e) => setMemoryRetention(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                >
-                  <option value="forever">Forever</option>
-                  <option value="1_year">Auto-delete after 1 year</option>
-                </select>
-              </label>
-              <button
-                onClick={savePrivacySettings}
-                disabled={saving || !twinId}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Privacy Settings'}
-              </button>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Export & Delete</h2>
-            <div className="mt-4 space-y-3">
-              <button
-                onClick={requestExport}
-                disabled={!twinId}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Export Twin Data
-              </button>
-              <a
-                href="/dashboard/settings"
-                className="block w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-100"
-              >
-                Go to Delete Twin (Danger Zone)
-              </a>
-            </div>
-          </section>
-        </div>
-
+      <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200 bg-white p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Access Logs</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Retention</h2>
+          <div className="mt-4 grid gap-3">
+            <label className="text-sm text-slate-700">
+              Conversation Retention
+              <select
+                value={retention}
+                onChange={(e) => setRetention(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="30_days">30 days</option>
+                <option value="90_days">90 days</option>
+                <option value="1_year">1 year</option>
+                <option value="forever">Forever</option>
+              </select>
+            </label>
+            <label className="text-sm text-slate-700">
+              Memory Retention
+              <select
+                value={memoryRetention}
+                onChange={(e) => setMemoryRetention(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="forever">Forever</option>
+                <option value="1_year">Auto-delete after 1 year</option>
+              </select>
+            </label>
             <button
-              onClick={fetchLogs}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={savePrivacySettings}
+              disabled={saving || !twinId}
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              Refresh
+              {saving ? 'Saving...' : 'Save Privacy Settings'}
             </button>
           </div>
-          {logsState === 'loading' && <div className="mt-3 text-sm text-slate-500">Loading logs...</div>}
-          {logsState === 'unavailable' && (
-            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              Access logs endpoint is unavailable in this deployment. This control is intentionally read-only.
-            </div>
-          )}
-          {logsState === 'ready' && logs.length === 0 && (
-            <div className="mt-3 text-sm text-slate-500">No logs found for this twin.</div>
-          )}
-          {logsState === 'ready' && logs.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {logs.map((log, idx) => (
-                <div key={log.id || idx} className="rounded-xl border border-slate-200 p-3 text-sm">
-                  <div className="font-semibold text-slate-800">{log.action || log.event_type || 'event'}</div>
-                  <div className="text-xs text-slate-500">{log.created_at || 'unknown time'}</div>
-                </div>
-              ))}
-            </div>
-          )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Export & Delete</h2>
+          <div className="mt-4 space-y-3">
+            <button
+              onClick={requestExport}
+              disabled={!twinId}
+              className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Export Twin Data
+            </button>
+            <a
+              href="/dashboard/settings"
+              className="block w-full rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-100"
+            >
+              Go to Delete Twin (Danger Zone)
+            </a>
+          </div>
         </section>
       </div>
-    </FeatureGate>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Access Logs</h2>
+          <button
+            onClick={fetchLogs}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        </div>
+        {logsState === 'loading' && <div className="mt-3 text-sm text-slate-500">Loading logs...</div>}
+        {logsState === 'unavailable' && (
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Access logs endpoint is unavailable in this deployment. This control is intentionally read-only.
+          </div>
+        )}
+        {logsState === 'ready' && logs.length === 0 && (
+          <div className="mt-3 text-sm text-slate-500">No logs found for this twin.</div>
+        )}
+        {logsState === 'ready' && logs.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {logs.map((log, idx) => (
+              <div key={log.id || idx} className="rounded-xl border border-slate-200 p-3 text-sm">
+                <div className="font-semibold text-slate-800">{log.action || log.event_type || 'event'}</div>
+                <div className="text-xs text-slate-500">{log.created_at || 'unknown time'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
