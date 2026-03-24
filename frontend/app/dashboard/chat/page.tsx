@@ -4,9 +4,7 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { useSearchParams } from 'next/navigation';
 import ChatInterface, { type ChatStreamEvent } from '@/components/Chat/ChatInterface';
 import ContextPanel from '@/components/Chat/ContextPanel';
-import FeatureGate from '@/components/ui/FeatureGate';
 import { useTwin } from '@/lib/context/TwinContext';
-import { isRuntimeFeatureEnabled } from '@/lib/features/runtimeFlags';
 import { authFetchStandalone } from '@/lib/hooks/useAuthFetch';
 import { API_ENDPOINTS } from '@/lib/constants';
 
@@ -42,8 +40,6 @@ function DashboardChatPageContent() {
   const pendingSnapshotRef = useRef<ContextSnapshot | null>(null);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const chatEnabled = isRuntimeFeatureEnabled('dashboardChat');
-  const contextPanelEnabled = isRuntimeFeatureEnabled('contextPanel');
   const requestedTwinId = searchParams.get('twinId');
   const twinId = activeTwin?.id;
   const effectiveTwinId = canonicalProfileId || twinId;
@@ -237,7 +233,7 @@ function DashboardChatPageContent() {
             initialInput={seededQuestion}
           />
         </div>
-        {contextPanelEnabled ? <ContextPanel snapshot={snapshot} /> : null}
+        <ContextPanel snapshot={snapshot} />
       </div>
     );
   }, [
@@ -247,7 +243,6 @@ function DashboardChatPageContent() {
     activeTwin?.tenant_id,
     conversationId,
     handleStreamEvent,
-    contextPanelEnabled,
     snapshot,
     chatSource,
     profileQuestionCapacity,
@@ -256,21 +251,15 @@ function DashboardChatPageContent() {
   ]);
 
   return (
-    <FeatureGate
-      enabled={chatEnabled}
-      title="Chat Workspace"
-      description="Enable NEXT_PUBLIC_FF_DASHBOARD_CHAT to turn on the dashboard chat workspace."
-    >
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Chat</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Document-grounded chat with streaming responses and structured context visibility.
-          </p>
-        </div>
-        {content}
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Chat</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Document-grounded chat with streaming responses and structured context visibility.
+        </p>
       </div>
-    </FeatureGate>
+      {content}
+    </div>
   );
 }
 

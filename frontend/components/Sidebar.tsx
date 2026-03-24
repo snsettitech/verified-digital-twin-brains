@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/client';
 import { SIDEBAR_CONFIG, APP_NAME, APP_TAGLINE } from '@/lib/navigation/config';
-import { isRuntimeFeatureEnabled, type RuntimeFeatureFlag } from '@/lib/features/runtimeFlags';
 import { ThemeToggle } from '@/lib/context/ThemeContext';
 import type { NavSection, NavItem } from '@/lib/navigation/types';
 
@@ -51,18 +50,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  const isVisible = (item: NavItem) =>
-    !item.featureFlag || isRuntimeFeatureEnabled(item.featureFlag as RuntimeFeatureFlag);
-
-  const visibleSections = SIDEBAR_CONFIG
-    .map((section) => ({
-      ...section,
-      items: section.items.filter(isVisible),
-    }))
-    .filter((section) => section.items.length > 0);
-
-  const allNavItems = visibleSections.flatMap((section) => section.items);
+  const allNavItems = SIDEBAR_CONFIG.flatMap((section) => section.items);
   const activeHref = allNavItems
     .filter((item) => {
       if (!pathname) return false;
@@ -103,7 +91,7 @@ export default function Sidebar() {
 
       {/* Navigation - STATIC CONFIG, NO LOADING STATE */}
       <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
-        {visibleSections.map((section: NavSection, idx: number) => (
+        {SIDEBAR_CONFIG.map((section: NavSection, idx: number) => (
           <div key={idx}>
             {!collapsed && section.title && (
               <div className="px-3 mb-2">
