@@ -47,3 +47,13 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_always_on_feature_routes_exist_even_with_legacy_opt_out_env(monkeypatch):
+    monkeypatch.setenv("ENABLE_REALTIME_INGESTION", "false")
+    monkeypatch.setenv("ENABLE_ADVISOR_RETRIEVAL", "false")
+
+    assert _has_route("/ingestion/realtime/health", "GET")
+    assert _has_route("/ingestion/realtime/config", "GET")
+    assert _has_route("/retrieval/query", "POST")
+    assert _has_route("/retrieval/health", "GET")
