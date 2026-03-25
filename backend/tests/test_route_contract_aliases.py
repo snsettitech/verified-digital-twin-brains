@@ -1,7 +1,14 @@
-def _has_route(path: str, method: str) -> bool:
-    from main import app
+import importlib
+import sys
 
-    for route in app.routes:
+
+def _has_route(path: str, method: str, app=None) -> bool:
+    if app is None:
+        from main import app as current_app
+    else:
+        current_app = app
+
+    for route in current_app.routes:
         route_path = getattr(route, "path", "")
         methods = getattr(route, "methods", set())
         if route_path == path and method.upper() in methods:
@@ -47,3 +54,23 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_always_on_feature_routes_exist_even_with_legacy_opt_out_env(monkeypatch):
+    monkeypatch.setenv("ENABLE_REALTIME_INGESTION", "false")
+    monkeypatch.setenv("ENABLE_ADVISOR_RETRIEVAL", "false")
+    monkeypatch.setenv("SUPABASE_URL", "http://localhost")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "test")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("PINECONE_API_KEY", "test")
+    monkeypatch.setenv("PINECONE_INDEX_NAME", "test")
+    monkeypatch.setenv("JWT_SECRET", "test")
+
+    sys.modules.pop("main", None)
+    importlib.invalidate_caches()
+    app = importlib.import_module("main").app
+
+    assert _has_route("/ingestion/realtime/health", "GET", app)
+    assert _has_route("/ingestion/realtime/config", "GET", app)
+    assert _has_route("/retrieval/query", "POST", app)
+    assert _has_route("/retrieval/health", "GET", app)
