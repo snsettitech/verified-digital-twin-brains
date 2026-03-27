@@ -18,23 +18,12 @@
 - ✅ Updated `get_specialization()` to use lazy loading
 - ✅ VC Python class only imported when `get_specialization("vc")` is called
 
-### Phase 3: Conditional VC Routes
-- ✅ Added conditional VC routes in `backend/main.py`
-- ✅ VC routes only included when `ENABLE_VC_ROUTES=true`
-- ✅ Default: `ENABLE_VC_ROUTES=false` (VC routes disabled)
-
-### Phase 4: VC Routes Fixes
-- ✅ Fixed import paths in `backend/api/vc_routes.py`
-- ✅ Added proper twin ownership verification
-- ✅ Added specialization_id check (only VC twins can use VC routes)
-- ✅ Improved error handling and user feedback
-
-### Phase 5: Error Handling & Fallback
+### Phase 3: Error Handling & Fallback
 - ✅ Added fallback logic to `get_specialization_manifest()`
 - ✅ Always falls back to vanilla if VC manifest fails
 - ✅ Graceful error handling at all levels
 
-### Phase 6: Documentation
+### Phase 4: Documentation
 - ✅ Created comprehensive architecture documentation
 - ✅ Explained connections, design decisions, and why this approach is correct
 - ✅ Documented lazy loading benefits and error handling
@@ -56,44 +45,13 @@
    - Added fallback logic to `get_specialization_manifest()`
    - Always falls back to vanilla if VC fails
 
-4. `backend/main.py`
-   - Added conditional VC routes inclusion
-   - VC routes only loaded when `ENABLE_VC_ROUTES=true`
-
-5. `backend/api/vc_routes.py`
-   - Fixed import paths
-   - Added twin ownership verification
-   - Added specialization_id check
-   - Improved error handling
-
 ### Documentation Files
-6. `docs/architecture/VC_SPECIALIZATION_ARCHITECTURE.md`
+4. `docs/architecture/VC_SPECIALIZATION_ARCHITECTURE.md`
    - Comprehensive architecture documentation
    - Explains connections, design decisions, and why this approach is correct
 
-7. `docs/architecture/VC_IMPLEMENTATION_SUMMARY.md` (this file)
+5. `docs/architecture/VC_IMPLEMENTATION_SUMMARY.md` (this file)
    - Implementation summary
-
----
-
-## Environment Variables
-
-### New Variable
-
-**`ENABLE_VC_ROUTES`** (optional)
-- **Default:** `false`
-- **Purpose:** Enable/disable VC-specific routes
-- **Usage:** Only set to `true` in deployments where VC is actively used
-- **Example:**
-  ```bash
-  # Vanilla-only deployment (default)
-  ENABLE_VC_ROUTES=false
-  
-  # VC deployment
-  ENABLE_VC_ROUTES=true
-  ```
-
-**Note:** This variable controls route inclusion only. VC specialization class is still loaded lazily when needed, regardless of this flag.
 
 ---
 
@@ -125,15 +83,11 @@ get_specialization("vc")
   → Return VCSpecialization()
 ```
 
-### Conditional Routes
+### Runtime Behavior
 
-```python
-# At startup (main.py):
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false") == "true"
-if VC_ROUTES_ENABLED:
-    from api import vc_routes  # Import only if enabled
-    app.include_router(vc_routes.router)
-```
+VC specialization is discovered through the registry and loaded lazily when a twin's
+`specialization_id` is set to `"vc"`. There is no separate VC route gate in the
+current repository.
 
 ---
 
@@ -175,17 +129,6 @@ if VC_ROUTES_ENABLED:
   - Access `/twins/{vc_twin}/specialization`
   - Verify returns VC config (VC loaded on first request)
 
-- [ ] **VC Routes (Disabled)**
-  - Set `ENABLE_VC_ROUTES=false`
-  - Verify `/api/vc/artifact/upload/{twin_id}` returns 404
-  - Verify server starts without errors
-
-- [ ] **VC Routes (Enabled)**
-  - Set `ENABLE_VC_ROUTES=true`
-  - Verify `/api/vc/artifact/upload/{twin_id}` exists
-  - Verify rejects non-VC twins (returns 400)
-  - Verify accepts VC twins (returns placeholder response)
-
 - [ ] **Error Handling**
   - Simulate VC import error (rename VC folder)
   - Verify system falls back to vanilla gracefully
@@ -195,7 +138,7 @@ if VC_ROUTES_ENABLED:
 
 - [ ] Unit tests for lazy loading
 - [ ] Unit tests for fallback logic
-- [ ] Integration tests for API endpoints
+- [ ] Integration tests for specialization endpoints
 - [ ] Error handling tests
 
 ---
