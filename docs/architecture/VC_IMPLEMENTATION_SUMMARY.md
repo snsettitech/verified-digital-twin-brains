@@ -1,5 +1,9 @@
 # VC Specialization Integration - Implementation Summary
 
+> Historical note: this document summarizes an earlier VC-route rollout design.
+> The current backend tree no longer contains `backend/api/vc_routes.py`, and
+> `backend/main.py` no longer reads `ENABLE_VC_ROUTES`.
+
 **Status:** ✅ Complete  
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation
@@ -78,9 +82,9 @@
 
 ## Environment Variables
 
-### New Variable
+### Historical Variable
 
-**`ENABLE_VC_ROUTES`** (optional)
+**`ENABLE_VC_ROUTES`** (historical)
 - **Default:** `false`
 - **Purpose:** Enable/disable VC-specific routes
 - **Usage:** Only set to `true` in deployments where VC is actively used
@@ -93,7 +97,9 @@
   ENABLE_VC_ROUTES=true
   ```
 
-**Note:** This variable controls route inclusion only. VC specialization class is still loaded lazily when needed, regardless of this flag.
+**Note:** This variable documented the earlier route-inclusion design only. The
+current backend tree no longer exposes that dedicated route module, while VC
+specialization loading remains lazy via the specialization registry.
 
 ---
 

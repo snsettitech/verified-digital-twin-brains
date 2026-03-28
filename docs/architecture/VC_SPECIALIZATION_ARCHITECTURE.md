@@ -1,5 +1,9 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
+> Historical note: this document describes an earlier VC route design.
+> The current backend tree no longer contains `backend/api/vc_routes.py`, and
+> `backend/main.py` no longer reads `ENABLE_VC_ROUTES`.
+
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 
@@ -213,30 +217,12 @@ GET /twins/{twin_id}/specialization
   → Call: get_specialization("vc")  # If "vc"
 ```
 
-### Connection 4: Conditional VC Routes
+### Connection 4: Historical VC Route Gating
 
-**File**: `backend/main.py`
-
-```python
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false") == "true"
-if VC_ROUTES_ENABLED:
-    from api import vc_routes  # Conditional import
-    app.include_router(vc_routes.router)
-```
-
-**Why This Matters:**
-- **Feature flag**: VC routes only available when explicitly enabled
-- **Deployment control**: Can disable VC routes in vanilla deployments
-- **Error prevention**: VC route imports don't break vanilla deployments
-- **Explicit opt-in**: Must set `ENABLE_VC_ROUTES=true` to use VC routes
-
-**Connection Flow:**
-```
-Server Startup
-  → Read ENABLE_VC_ROUTES env var (default: false)
-  → If true: import vc_routes, include router
-  → If false: Skip VC routes (they don't exist in API)
-```
+This section documents an older startup pattern where VC-specific routes were
+conditionally registered from `backend/main.py`. That dedicated route module is
+not present in the current backend tree, so current VC behavior is represented
+by the specialization registry and lazy specialization loading instead.
 
 ---
 
@@ -257,7 +243,7 @@ Server Startup
 
 **Load only what you need, when you need it:**
 - VC files not loaded until `get_specialization("vc")` is called
-- VC routes not included unless `ENABLE_VC_ROUTES=true`
+- Historical VC-only routes were also designed to stay out of startup unless enabled
 - VC manifest not read until requested
 
 **Why Lazy Evaluation Matters:**
@@ -424,7 +410,7 @@ spec_class = getattr(module, f"{spec_id.title()}Specialization")
 - Memory: ~50MB (just vanilla)
 - Routes: Core routes only (no VC routes)
 
-**With VC enabled (ENABLE_VC_ROUTES=true):**
+**With historical VC route gating enabled:**
 - Import time: ~150ms (vanilla + VC routes import)
 - Memory: ~60MB (vanilla + VC routes, but not VC class yet)
 - Routes: Core routes + VC routes (but VC class not loaded)
@@ -510,16 +496,15 @@ get_specialization_manifest("vc")
   → User gets vanilla config (no error)
 ```
 
-#### Scenario 4: VC Routes Import Fails
+#### Scenario 4: Historical VC Route Import Fails
 
-```python
-# At startup
-if VC_ROUTES_ENABLED:
-    from api import vc_routes  # ImportError
-    → Print warning
-    → Continue without VC routes
-    → Server starts successfully
-    → Vanilla routes work normally
+```text
+Earlier startup design:
+  conditional VC route import fails
+  → Print warning
+  → Continue without VC routes
+  → Server starts successfully
+  → Vanilla routes work normally
 ```
 
 **Key Principle**: Every error path falls back to vanilla, ensuring system always works.
@@ -552,10 +537,9 @@ if VC_ROUTES_ENABLED:
    - Test `/twins/{vc_twin}/specialization` → returns VC
    - Test `/twins/{invalid_twin}/specialization` → returns vanilla (fallback)
 
-2. **Route Tests**
-   - Test VC routes not available when `ENABLE_VC_ROUTES=false`
-   - Test VC routes available when `ENABLE_VC_ROUTES=true`
-   - Test VC routes reject non-VC twins
+2. **Historical Route Tests**
+   - Validate current backend has no dedicated `backend/api/vc_routes.py` module
+   - Validate specialization routes continue to work for VC twins
 
 ---
 
@@ -563,30 +547,23 @@ if VC_ROUTES_ENABLED:
 
 ### Environment Variables
 
-```bash
-# .env (default - vanilla only)
-ENABLE_VC_ROUTES=false  # VC routes disabled
-
-# .env (VC deployment)
-ENABLE_VC_ROUTES=true   # VC routes enabled
-```
+The historical `ENABLE_VC_ROUTES` deployment toggle is no longer part of the
+current backend runtime. Deployment considerations for VC now center on the
+specialization registry and twin specialization data instead.
 
 ### Deployment Scenarios
 
 **Scenario 1: Vanilla-Only Deployment**
-- Set `ENABLE_VC_ROUTES=false` (default)
-- VC routes not included
+- No dedicated VC route module loaded
 - VC class never loaded
 - Minimal memory footprint
 
 **Scenario 2: VC Deployment**
-- Set `ENABLE_VC_ROUTES=true`
-- VC routes included
+- No separate VC-only route toggle in the current backend tree
 - VC class loaded on first VC twin request
 - Full VC functionality available
 
 **Scenario 3: Mixed Deployment**
-- Set `ENABLE_VC_ROUTES=true`
 - Some twins use vanilla, some use VC
 - VC class loaded when first VC twin accessed
 - Vanilla twins never trigger VC loading
