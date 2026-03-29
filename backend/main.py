@@ -90,8 +90,6 @@ REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "true").lowe
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
 # advisor retrieval is now enabled by default. Set ENABLE_ADVISOR_RETRIEVAL=false to disable.
 ADVISOR_RETRIEVAL_ENABLED = os.getenv("ENABLE_ADVISOR_RETRIEVAL", "true").lower() == "true"
-# VC routes remain opt-in
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 # Deep Research routes remain env-gated for safer staged rollouts.
 DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 # Name-only deep research flow (enabled by default; can be disabled explicitly)
@@ -104,7 +102,6 @@ def print_feature_flag_summary():
     print(f"  Realtime Ingestion: {'ENABLED' if REALTIME_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  advisor retrieval:   {'ENABLED' if ADVISOR_RETRIEVAL_ENABLED else 'DISABLED'}")
-    print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
     print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
