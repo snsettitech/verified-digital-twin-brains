@@ -102,8 +102,6 @@ services:
       - key: INFERENCE_PROVIDER_TIMEOUT_SECONDS
         value: "30"
       # Query Rewriting for Conversational Context
-      - key: QUERY_REWRITE_ENABLED
-        value: "true"
       - key: QUERY_REWRITING_ENABLED
         value: "true"
       # LLM Model Selection (gpt-4.1 released April 2025)
@@ -249,8 +247,6 @@ services:
       - key: INFERENCE_PROVIDER_TIMEOUT_SECONDS
         value: "30"
       # Query Rewriting for Conversational Context
-      - key: QUERY_REWRITE_ENABLED
-        value: "true"
       - key: QUERY_REWRITING_ENABLED
         value: "true"
       - key: QUERY_REWRITING_MODEL

@@ -218,24 +218,20 @@ GET /twins/{twin_id}/specialization
 **File**: `backend/main.py`
 
 ```python
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false") == "true"
-if VC_ROUTES_ENABLED:
-    from api import vc_routes  # Conditional import
-    app.include_router(vc_routes.router)
+app.include_router(specializations.router)
 ```
 
 **Why This Matters:**
-- **Feature flag**: VC routes only available when explicitly enabled
-- **Deployment control**: Can disable VC routes in vanilla deployments
-- **Error prevention**: VC route imports don't break vanilla deployments
-- **Explicit opt-in**: Must set `ENABLE_VC_ROUTES=true` to use VC routes
+- **Shared routing**: VC behavior is exposed through the main application routers
+- **No separate toggle**: There is no VC-only route module mounted behind its own env flag
+- **Error prevention**: Specialization lookup can still fall back safely without startup-time VC route imports
 
 **Connection Flow:**
 ```
 Server Startup
-  → Read ENABLE_VC_ROUTES env var (default: false)
-  → If true: import vc_routes, include router
-  → If false: Skip VC routes (they don't exist in API)
+  → Include shared application routers
+  → Resolve specialization at request time
+  → Apply VC-specific behavior through specialization-aware code paths
 ```
 
 ---
@@ -257,7 +253,7 @@ Server Startup
 
 **Load only what you need, when you need it:**
 - VC files not loaded until `get_specialization("vc")` is called
-- VC routes not included unless `ENABLE_VC_ROUTES=true`
+- Shared routers stay mounted regardless of specialization
 - VC manifest not read until requested
 
 **Why Lazy Evaluation Matters:**
@@ -419,15 +415,15 @@ spec_class = getattr(module, f"{spec_id.title()}Specialization")
 
 ### Startup Performance
 
-**Without VC (vanilla only):**
+**Without VC usage (vanilla only):**
 - Import time: ~100ms (just vanilla)
 - Memory: ~50MB (just vanilla)
-- Routes: Core routes only (no VC routes)
+- Routes: Core routes only
 
-**With VC enabled (ENABLE_VC_ROUTES=true):**
-- Import time: ~150ms (vanilla + VC routes import)
-- Memory: ~60MB (vanilla + VC routes, but not VC class yet)
-- Routes: Core routes + VC routes (but VC class not loaded)
+**With VC specialization in use:**
+- Import time: ~150ms (shared app routes plus VC specialization assets available)
+- Memory: ~60MB (shared routes plus VC specialization support, but not all VC-specific logic exercised yet)
+- Routes: Core routes with VC behavior surfaced through shared router endpoints
 
 **VC Class Loading (first request):**
 - Import time: ~50ms (when `get_specialization("vc")` called)
@@ -510,16 +506,13 @@ get_specialization_manifest("vc")
   → User gets vanilla config (no error)
 ```
 
-#### Scenario 4: VC Routes Import Fails
+#### Scenario 4: Legacy VC-Only Router References
 
-```python
-# At startup
-if VC_ROUTES_ENABLED:
-    from api import vc_routes  # ImportError
-    → Print warning
-    → Continue without VC routes
-    → Server starts successfully
-    → Vanilla routes work normally
+```text
+Older documentation may mention a dedicated vc_routes import path.
+Current runtime does not mount a separate VC-only router.
+Server startup is unaffected because VC behavior flows through shared routers.
+Vanilla routes and shared specialization endpoints continue to work normally.
 ```
 
 **Key Principle**: Every error path falls back to vanilla, ensuring system always works.
@@ -552,10 +545,10 @@ if VC_ROUTES_ENABLED:
    - Test `/twins/{vc_twin}/specialization` → returns VC
    - Test `/twins/{invalid_twin}/specialization` → returns vanilla (fallback)
 
-2. **Route Tests**
-   - Test VC routes not available when `ENABLE_VC_ROUTES=false`
-   - Test VC routes available when `ENABLE_VC_ROUTES=true`
-   - Test VC routes reject non-VC twins
+2. **Routing Tests**
+   - Test specialization endpoints respond without any VC-specific env toggle
+   - Test VC-specialized twins resolve VC manifests/behavior through shared routers
+   - Test non-VC twins continue to use the vanilla specialization path
 
 ---
 
@@ -563,30 +556,22 @@ if VC_ROUTES_ENABLED:
 
 ### Environment Variables
 
-```bash
-# .env (default - vanilla only)
-ENABLE_VC_ROUTES=false  # VC routes disabled
-
-# .env (VC deployment)
-ENABLE_VC_ROUTES=true   # VC routes enabled
-```
+No dedicated `ENABLE_VC_ROUTES` toggle is required in the current app wiring.
 
 ### Deployment Scenarios
 
 **Scenario 1: Vanilla-Only Deployment**
-- Set `ENABLE_VC_ROUTES=false` (default)
-- VC routes not included
-- VC class never loaded
-- Minimal memory footprint
+- Use shared routers only
+- VC-only behavior is never selected unless a VC specialization is requested
+- Minimal memory footprint until VC specialization is resolved
 
 **Scenario 2: VC Deployment**
-- Set `ENABLE_VC_ROUTES=true`
-- VC routes included
+- Use shared routers only
 - VC class loaded on first VC twin request
-- Full VC functionality available
+- Full VC functionality available through specialization-aware handlers
 
 **Scenario 3: Mixed Deployment**
-- Set `ENABLE_VC_ROUTES=true`
+- Use shared routers only
 - Some twins use vanilla, some use VC
 - VC class loaded when first VC twin accessed
 - Vanilla twins never trigger VC loading
