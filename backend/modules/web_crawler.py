@@ -21,7 +21,6 @@ from modules.health_checks import calculate_content_hash
 from modules.governance import AuditLogger
 
 # Deep Research imports (Phase 1A.5+)
-from modules.deep_research_config import get_config as get_dr_config
 from modules.fetch_safety import (
     validate_url_safety,
     validate_content_safety,
@@ -587,15 +586,6 @@ async def crawl_website_v2(
     Returns:
         CrawlV2Result with crawl statistics
     """
-    # Check if Deep Research is enabled
-    dr_config = get_dr_config()
-    if not dr_config.is_enabled():
-        return CrawlV2Result(
-            crawl_id="",
-            success=False,
-            error="Deep Research feature is not enabled",
-        )
-    
     # Validate initial URL
     if not validate_url(url):
         return CrawlV2Result(
