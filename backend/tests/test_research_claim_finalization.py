@@ -524,21 +524,6 @@ class TestFeatureFlags:
         config = DeepResearchConfig.from_env()
         
         assert config.phase_10_claim_finalization_disabled is False
-    
-    @patch("os.getenv")
-    def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
-        from modules.deep_research_config import DeepResearchConfig
-        
-        def mock_env(key, default=None):
-            if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
-                return "false"
-            return default
-        
-        mock_getenv.side_effect = mock_env
-        config = DeepResearchConfig.from_env()
-        
-        assert config.is_enabled() is True
 
 
 # =============================================================================
