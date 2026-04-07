@@ -120,10 +120,10 @@ async def test_get_graph_snapshot_error_handling(twin_id):
         assert "nodes" in snapshot
 
 
-# Test 4: Integration test - toggling works and fallback triggers
+# Test 4: Integration test - fallback triggers when graph returns nothing
 @pytest.mark.asyncio
-async def test_integration_toggle_fallback(twin_id):
-    """Integration test: toggling feature flag works, fallback triggers when graph returns nothing."""
+async def test_integration_empty_graph_fallback(twin_id):
+    """Integration test: graph retrieval falls back cleanly when no graph data exists."""
     import os
     from modules.graph_context import get_graph_snapshot
     
