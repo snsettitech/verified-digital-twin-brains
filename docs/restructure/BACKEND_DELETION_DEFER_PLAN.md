@@ -48,14 +48,14 @@
 ### Specializations + VC Routes (DEFER then DELETE)
 - Files:
   - `backend/routers/specializations.py`
-  - `backend/api/vc_routes.py` (conditional in `backend/main.py` via `ENABLE_VC_ROUTES`)
+  - `backend/api/vc_routes.py` (already removed from the live app)
   - `backend/modules/specializations/*`
   - Columns in `backend/migrations/add_twin_specialization.sql` and `backend/database/migrations/migration_phase3_5_gate1_specialization.sql`
-- Why (evidence): Product is single "expert" path. Specializations are optional and VC routes are gated by env flag in `backend/main.py` but still present.
+- Why (evidence): Product is single "expert" path. Specializations are optional, and the old VC-only route file has already been removed from the live app surface.
 - Replacement: Use a fixed specialization in `twins.settings` or remove specialization fields from API.
 - Verify unused before delete:
   - `rg -n "specialization" backend frontend`
-  - Ensure `ENABLE_VC_ROUTES` is not used and `app.include_router(specializations.router)` removed from `backend/main.py`.
+  - Confirm no VC-only route wiring remains in `backend/main.py` and `backend/api/vc_routes.py` is not referenced by live code.
 
 ### Enhanced Ingestion (Firecrawl, Social, Pipelines) (DELETE once confirmed unused)
 - Files:
