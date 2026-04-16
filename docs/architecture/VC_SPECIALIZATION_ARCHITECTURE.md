@@ -3,6 +3,8 @@
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 
+> Historical note: the live backend no longer includes `backend/api/vc_routes.py` or the `ENABLE_VC_ROUTES` gate. The references below describe the earlier architecture.
+
 ---
 
 ## Executive Summary
