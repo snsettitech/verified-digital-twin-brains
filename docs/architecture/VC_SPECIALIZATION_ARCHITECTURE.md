@@ -3,6 +3,8 @@
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 
+> Historical design note: this document describes an older VC-specific route-gating design. The current backend no longer exposes a separate `ENABLE_VC_ROUTES` gate or dedicated `api/vc_routes.py` router; VC specialization now relies on the shared specialization surfaces described in `backend/main.py`.
+
 ---
 
 ## Executive Summary

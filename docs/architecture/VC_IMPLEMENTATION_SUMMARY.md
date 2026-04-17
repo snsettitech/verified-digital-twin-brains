@@ -4,6 +4,8 @@
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation
 
+> Note: This document describes a historical VC-route rollout design. The current backend no longer exposes separate VC route gating via `ENABLE_VC_ROUTES`; VC specialization now uses the shared specialization surfaces.
+
 ---
 
 ## ✅ Completed Implementation
