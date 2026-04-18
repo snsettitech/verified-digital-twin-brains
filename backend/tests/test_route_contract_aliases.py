@@ -47,3 +47,15 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_feature_flag_summary_excludes_removed_vc_flag(capsys):
+    from main import print_feature_flag_summary
+
+    capsys.readouterr()
+    print_feature_flag_summary()
+    captured = capsys.readouterr()
+
+    assert "Feature Flag Status:" in captured.out
+    assert "Realtime Ingestion" in captured.out
+    assert "VC Routes" not in captured.out
