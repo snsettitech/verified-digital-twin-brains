@@ -1,7 +1,7 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
-**Status:** Implementation Complete  
-**Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
+**Status:** Historical Reference  
+**Purpose:** Explain the original VC specialization design. Current runtime no longer uses `ENABLE_VC_ROUTES`; keep this document as background context only.
 
 ---
 
