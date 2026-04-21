@@ -402,27 +402,27 @@ class TestFeatureFlags:
     """Test Deep Research configuration behavior."""
     
     @patch("os.getenv")
-    def test_phase_8_disabled_flag_ignored(self, mock_getenv):
-        """Deprecated Phase 8 disable flag should be ignored."""
+    def test_name_only_flow_reads_runtime_flag(self, mock_getenv):
+        """Name-only Deep Research flow should respect its runtime flag."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
-            if key == "DR_PHASE_8_CLAIMS_DISABLED":
-                return "true"
+            if key == "NAME_ONLY_DEEP_RESEARCH_ENABLED":
+                return "false"
             return default
         
         mock_getenv.side_effect = mock_env
         config = DeepResearchConfig.from_env()
         
-        assert config.phase_8_claims_disabled is False
+        assert config.name_only_deep_research_enabled is False
     
     @patch("os.getenv")
     def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
+        """Deep Research should remain enabled regardless of unrelated env flags."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
-            if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
+            if key == "NAME_ONLY_DEEP_RESEARCH_ENABLED":
                 return "false"
             return default
         
@@ -430,6 +430,21 @@ class TestFeatureFlags:
         config = DeepResearchConfig.from_env()
         
         assert config.is_enabled() is True
+
+    @patch("os.getenv")
+    def test_phase_12_suppress_unresolved_reads_supported_env(self, mock_getenv):
+        """Phase 12 suppression control should still honor its runtime env."""
+        from modules.deep_research_config import DeepResearchConfig
+
+        def mock_env(key, default=None):
+            if key == "DR_PHASE_12_SUPPRESS_UNRESOLVED":
+                return "false"
+            return default
+
+        mock_getenv.side_effect = mock_env
+        config = DeepResearchConfig.from_env()
+
+        assert config.phase_12_suppress_unresolved_by_default is False
 
 
 # =============================================================================

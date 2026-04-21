@@ -19,7 +19,6 @@ if backend_dir not in sys.path:
 # Ensure feature flags and dev mode are consistent for tests
 os.environ.setdefault("ENABLE_ENHANCED_INGESTION", "true")
 os.environ.setdefault("DEV_MODE", "false")
-os.environ.setdefault("DEEP_RESEARCH_ENABLED", "true")
 
 # Ensure langfuse decorator doesn't break FastAPI signatures in tests
 def _noop_observe(*args, **kwargs):

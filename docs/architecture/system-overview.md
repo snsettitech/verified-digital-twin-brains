@@ -376,12 +376,12 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
   - 17 specialization files not fully tested
   - Registry loading has fallback but may mask errors
   - Some specialization ontologies incomplete
-  - VC-specific routes require `ENABLE_VC_ROUTES=true`
+  - Historical VC route docs still mention a removed opt-in router
   
 **Evidence**:
 - `modules/specializations/registry.json` exists
 - `registry_loader.py` has fallback pattern
-- VC routes conditionally loaded
+- No live `/api/vc/*` routes are registered in `backend/main.py`
 - Not all specializations production-tested
 
 **Fix Priority**: Medium (affects interview quality)

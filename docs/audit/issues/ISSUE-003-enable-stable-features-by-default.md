@@ -30,7 +30,7 @@ Current defaults in `main.py`:
 - `ENABLE_REALTIME_INGESTION` defaults to `false`
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
 - `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
-- `ENABLE_VC_ROUTES` defaults to `false`
+- `ENABLE_VC_ROUTES` defaulted to `false` when this issue was written; the stale flag plumbing has since been removed from `backend/main.py`
 
 ## Scope
 
