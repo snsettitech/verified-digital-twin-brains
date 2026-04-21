@@ -1,5 +1,7 @@
 # VC Specialization Integration - Implementation Summary
 
+> Historical note: this document describes an older VC-route rollout design. The active backend no longer exposes `ENABLE_VC_ROUTES` or conditionally registers VC-specific HTTP routes in `backend/main.py`.
+
 **Status:** ✅ Complete  
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation

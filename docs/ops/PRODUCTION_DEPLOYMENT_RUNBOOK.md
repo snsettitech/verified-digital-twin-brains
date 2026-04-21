@@ -97,7 +97,6 @@ Feature/perf:
 - `GRAPH_RAG_ENABLED=true`
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
-- `ENABLE_VC_ROUTES=false` (unless actively used)
 - Phase 5 realtime ingestion:
   - Default: `ENABLE_REALTIME_INGESTION=true`
   - Emergency rollback: set `ENABLE_REALTIME_INGESTION=false`
@@ -106,6 +105,9 @@ Feature/perf:
 - advisor retrieval:
   - Default: `ENABLE_ADVISOR_RETRIEVAL=true`
   - Emergency rollback: set `ENABLE_ADVISOR_RETRIEVAL=false`
+- Deep research:
+  - Core Deep Research routes are always registered
+  - `NAME_ONLY_DEEP_RESEARCH_ENABLED` gates only the name-only JSON flow
 
 Feedback learning:
 - `FEEDBACK_LEARNING_MIN_EVENTS=5` (or your chosen threshold)
