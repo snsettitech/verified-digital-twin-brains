@@ -355,34 +355,34 @@ class TestFeatureFlags:
     """Test Deep Research configuration behavior."""
     
     @patch("os.getenv")
-    def test_phase_9_disabled_flag_ignored(self, mock_getenv):
-        """Deprecated Phase 9 disable flag should be ignored."""
+    def test_name_only_flag_loaded_from_env(self, mock_getenv):
+        """Name-only deep research flag should still load from env."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
-            if key == "DR_PHASE_9_WEB_VERIFICATION_DISABLED":
+            if key == "NAME_ONLY_DEEP_RESEARCH_ENABLED":
                 return "true"
             return default
         
         mock_getenv.side_effect = mock_env
         config = DeepResearchConfig.from_env()
         
-        assert config.phase_9_web_verification_disabled is False
+        assert config.name_only_deep_research_enabled is True
     
     @patch("os.getenv")
-    def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
+    def test_auto_publish_flag_loaded_from_env(self, mock_getenv):
+        """Phase 12 auto-publish flag should still load from env."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
-            if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
-                return "false"
+            if key == "DR_PHASE_12_AUTO_PUBLISH":
+                return "true"
             return default
         
         mock_getenv.side_effect = mock_env
         config = DeepResearchConfig.from_env()
         
-        assert config.is_enabled() is True
+        assert config.phase_12_auto_publish is True
 
 
 # =============================================================================
