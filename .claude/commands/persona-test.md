@@ -50,7 +50,7 @@ Review the output of `python scripts/persona_e2e_test.py --name "{persona_name}"
 1. Check if the twin status is `persona_built` (not `draft`) in Supabase twins table
 2. Verify Pinecone has chunks for the twin namespace
 3. Check the system prompt is rendering correctly
-4. Check DEEP_RESEARCH_ENABLED=true in production env vars
+4. Check NAME_ONLY_DEEP_RESEARCH_ENABLED=true if the persona flow depends on name-only research JSON output
 ```
 
 $ARGUMENTS
