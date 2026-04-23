@@ -47,3 +47,14 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_specialization_routes_exist_and_no_vc_routes_are_registered():
+    from main import app
+
+    assert _has_route("/config/specialization", "GET")
+    assert _has_route("/config/specializations", "GET")
+    assert not any(
+        getattr(route, "path", "").startswith("/api/vc")
+        for route in app.routes
+    )
