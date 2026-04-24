@@ -1,4 +1,6 @@
-# VC Specialization Integration - Implementation Summary
+# VC Specialization Integration - Historical Implementation Summary
+
+> Historical note: this document describes an earlier VC-route-gated implementation. The current backend no longer exposes a separate `ENABLE_VC_ROUTES` gate or `backend/api/vc_routes.py`; VC specialization content now flows through the shared specialization surfaces.
 
 **Status:** ✅ Complete  
 **Date:** 2025-01-XX  
