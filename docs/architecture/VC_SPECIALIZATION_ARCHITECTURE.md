@@ -1,7 +1,9 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
-**Status:** Implementation Complete  
+**Status:** Historical reference  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
+
+> Historical note: the runtime `ENABLE_VC_ROUTES` gate and separate `backend/api/vc_routes.py` router described below are no longer present in the live application. VC specialization now relies on the shared specialization registry and manifest routes in `backend/main.py`.
 
 ---
 

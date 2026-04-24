@@ -1,5 +1,9 @@
 # Backend Deletion / Defer Plan (Plan Only)
 
+> Historical planning note: references to `ENABLE_VC_ROUTES` and `backend/api/vc_routes.py`
+> below describe an older design. Current runtime no longer includes that separate VC
+> router wiring in `backend/main.py`.
+
 ## Evidence Rules
 - Each candidate lists the exact backend files and the route registration or import paths proving current wiring.
 - "Delete" means remove after dependent calls are removed. "Defer" means keep but disable (e.g., un-register router or keep env flag off) until dependencies are removed.
