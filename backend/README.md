@@ -79,7 +79,6 @@ FastAPI application providing the RAG engine and management APIs for the Verifie
    GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
    CONVERSATIONAL_REALIZER_ENABLED=false
    QUERY_REWRITE_ENABLED=true
-   QUERY_REWRITING_ENABLED=true
    RUNTIME_SUPPORT_POLICY_ENABLED=false
    GOOGLE_API_KEY=...
    RETRIEVAL_HYDE_ENABLED=true

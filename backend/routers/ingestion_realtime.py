@@ -7,7 +7,6 @@ full streaming ingestion infrastructure is not deployed in the environment.
 
 from __future__ import annotations
 
-import os
 from fastapi import APIRouter
 
 
@@ -16,11 +15,11 @@ router = APIRouter(tags=["ingestion-realtime"])
 
 @router.get("/ingestion/realtime/health")
 async def realtime_ingestion_health() -> dict:
-    """Lightweight health endpoint for realtime ingestion feature wiring."""
+    """Lightweight health endpoint for the always-on realtime route surface."""
     return {
         "status": "ok",
         "feature": "realtime_ingestion",
-        "enabled": os.getenv("ENABLE_REALTIME_INGESTION", "true").lower() == "true",
+        "enabled": True,
         "mode": "compat",
     }
 
@@ -29,7 +28,7 @@ async def realtime_ingestion_health() -> dict:
 async def realtime_ingestion_config() -> dict:
     """Expose minimal realtime ingestion runtime config for diagnostics."""
     return {
-        "enabled": os.getenv("ENABLE_REALTIME_INGESTION", "true").lower() == "true",
+        "enabled": True,
         "compat_router": True,
     }
 
