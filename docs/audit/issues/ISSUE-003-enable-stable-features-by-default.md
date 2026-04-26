@@ -25,12 +25,12 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 - `backend/main.py:102`
 - `backend/main.py:119`
 
-Current defaults in `main.py`:
+Current defaults in `main.py` at the time of the audit:
 
-- `ENABLE_REALTIME_INGESTION` defaults to `false`
-- `ENABLE_ENHANCED_INGESTION` defaults to `false`
-- `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
-- `ENABLE_VC_ROUTES` defaults to `false`
+- `ENABLE_REALTIME_INGESTION` defaulted to `false`
+- `ENABLE_ENHANCED_INGESTION` defaulted to `false`
+- `ENABLE_ADVISOR_RETRIEVAL` defaulted to `false`
+- `ENABLE_VC_ROUTES` defaulted to `false`
 
 ## Scope
 
@@ -58,6 +58,7 @@ Out of scope:
 
 - [x] Remove `ENABLE_REALTIME_INGESTION` flag (enable by default).
 - [x] Remove `ENABLE_ADVISOR_RETRIEVAL` flag (enable by default).
+- [x] Remove dead `ENABLE_VC_ROUTES` plumbing after confirming no VC router is registered.
 - [x] Document any remaining feature flags.
 
 ## Verification Plan

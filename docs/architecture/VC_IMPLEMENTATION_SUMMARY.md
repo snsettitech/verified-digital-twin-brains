@@ -1,5 +1,7 @@
 # VC Specialization Integration - Implementation Summary
 
+> Historical note: this document describes a previously planned VC-specific route integration. The current backend no longer ships a live `backend/api/vc_routes.py` router or the `ENABLE_VC_ROUTES` runtime gate.
+
 **Status:** ✅ Complete  
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation
