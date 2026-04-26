@@ -1,5 +1,7 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
+> Historical note: This document describes an earlier design that referenced an `ENABLE_VC_ROUTES` gate and a dedicated VC router file. The current backend no longer wires that flag or router in `backend/main.py`; keep this doc as design history, not current runtime behavior.
+
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 
