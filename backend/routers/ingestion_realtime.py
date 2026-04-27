@@ -19,8 +19,10 @@ async def realtime_ingestion_health() -> dict:
     return {
         "status": "ok",
         "feature": "realtime_ingestion",
-        "enabled": True,
+        # This surface is a compat shim, not proof that full streaming ingestion is live.
+        "enabled": False,
         "mode": "compat",
+        "route_registered": True,
     }
 
 
@@ -28,7 +30,8 @@ async def realtime_ingestion_health() -> dict:
 async def realtime_ingestion_config() -> dict:
     """Expose minimal realtime ingestion runtime config for diagnostics."""
     return {
-        "enabled": True,
+        "enabled": False,
         "compat_router": True,
+        "route_registered": True,
     }
 
