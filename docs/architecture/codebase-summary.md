@@ -223,7 +223,7 @@ verified-digital-twin-brain/
 | **til** | `til.py` | `/til/{twin_id}/events` | Today I Learned feed |
 | **feedback** | `feedback.py` | `/feedback/{twin_id}` | User feedback |
 | **observability** | `observability.py` | `/health`, `/health/enhanced` | Health checks |
-| **vc** (conditional) | `api/vc_routes.py` | `/api/vc/artifact/upload/{twin_id}` | VC-specific routes. Only loaded when `ENABLE_VC_ROUTES=true`. Validates twin uses VC specialization before processing. |
+| **vc** (historical) | `api/vc_routes.py` | `/api/vc/artifact/upload/{twin_id}` | Historical VC-specific route design. No live router registration remains in `backend/main.py`. |
 
 ---
 
@@ -319,7 +319,7 @@ verified-digital-twin-brain/
 - **Files**: 8 files
 - **Location**: `backend/modules/specializations/vc/`
 - **Purpose**: VC/Investment focused
-- **Routes**: Conditional (`ENABLE_VC_ROUTES=true`)
+- **Routes**: Historical docs only; no live VC route registration remains in `backend/main.py`
 - **Loading**: Lazy (only when `specialization_id='vc'`)
 
 ---
@@ -445,7 +445,7 @@ verified-digital-twin-brain/
   - `memory.py` → `from modules.embeddings import get_embedding`
   - `ingestion.py` → `from modules.embeddings import get_embedding`
 - ✅ **Registry loader**: Vanilla fallback logic - prevents VC failures from breaking core functionality
-- ✅ **VC routes**: Conditional loading (`ENABLE_VC_ROUTES=true`) - only loads when explicitly enabled
+- ✅ **VC route docs**: Preserved as historical design references; no live VC route registration remains in `backend/main.py`
 - ✅ **Retrieval module**: Refactored into helper functions for better maintainability and testability
 
 ---
@@ -502,10 +502,10 @@ verified-digital-twin-brain/
 ## 🎯 Key Updates Needed in Your Summary
 
 1. **Embeddings Module**: Now centralized in `modules/embeddings.py` (not in `ingestion.py`)
-2. **Router Count**: 17 routers (not 16) - includes conditional VC routes
+2. **Router Count**: 17 routers (not 16)
 3. **Module Count**: 33 modules (not 25+)
 4. **P0-P1 Hardening**: Add section on recent reliability/security improvements
-5. **VC Routes**: Mention conditional loading (`ENABLE_VC_ROUTES`)
+5. **VC Routes**: Note that VC route docs are historical and not wired in the current backend startup path
 6. **Registry Loader**: Mention vanilla fallback logic
 7. **Retrieval**: Mention P1-C timeouts (2s/5s/3s)
 8. **LangGraph**: Mention P1-A Postgres checkpointer

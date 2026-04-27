@@ -47,3 +47,13 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_realtime_ingestion_compat_routes_exist():
+    assert _has_route("/ingestion/realtime/health", "GET")
+    assert _has_route("/ingestion/realtime/config", "GET")
+
+
+def test_retrieval_advisor_routes_exist():
+    assert _has_route("/retrieval/query", "POST")
+    assert _has_route("/retrieval/health", "GET")
