@@ -47,3 +47,30 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_realtime_ingestion_compat_routes_exist():
+    assert _has_route("/ingestion/realtime/health", "GET")
+    assert _has_route("/ingestion/realtime/config", "GET")
+
+
+def test_retrieval_advisor_routes_exist():
+    assert _has_route("/retrieval/query", "POST")
+    assert _has_route("/retrieval/health", "GET")
+
+
+def test_realtime_ingestion_compat_contract():
+    from routers.ingestion_realtime import realtime_ingestion_config, realtime_ingestion_health
+    import asyncio
+
+    health_payload = asyncio.run(realtime_ingestion_health())
+    config_payload = asyncio.run(realtime_ingestion_config())
+
+    assert health_payload["feature"] == "realtime_ingestion"
+    assert health_payload["mode"] == "compat"
+    assert health_payload["enabled"] is False
+    assert config_payload == {
+        "enabled": False,
+        "compat_router": True,
+        "route_registered": True,
+    }
