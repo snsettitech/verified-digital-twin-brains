@@ -25,12 +25,12 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 - `backend/main.py:102`
 - `backend/main.py:119`
 
-Current defaults in `main.py`:
+Current defaults in `main.py` when this issue was opened:
 
-- `ENABLE_REALTIME_INGESTION` defaults to `false`
-- `ENABLE_ENHANCED_INGESTION` defaults to `false`
-- `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
-- `ENABLE_VC_ROUTES` defaults to `false`
+- `ENABLE_REALTIME_INGESTION` defaulted to `false`
+- `ENABLE_ENHANCED_INGESTION` defaulted to `false`
+- `ENABLE_ADVISOR_RETRIEVAL` defaulted to `false`
+- `ENABLE_VC_ROUTES` defaulted to `false`
 
 ## Scope
 
@@ -49,27 +49,27 @@ Out of scope:
 
 - [x] Define "stable feature" list with engineering sign-off.
 - [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` if stable.
-- [x] Keep explicit opt-out flags for emergency kill switch.
+- [x] Keep explicit opt-out flags for unstable or rollback-sensitive paths only.
 - [x] Add startup log summary that prints enabled/disabled feature map.
 - [x] Add smoke tests that assert route availability under default config.
 - [x] Update `.env.example` and deployment runbook documentation.
 
 ## Acceptance Criteria (from audit report)
 
-- [x] Remove `ENABLE_REALTIME_INGESTION` flag (enable by default).
-- [x] Remove `ENABLE_ADVISOR_RETRIEVAL` flag (enable by default).
+- [x] Remove stale rollout plumbing for fully launched paths where runtime behavior is already unconditional.
+- [x] Remove dead flags with no live router or code path behind them.
 - [x] Document any remaining feature flags.
 
 ## Verification Plan
 
 - [x] Boot backend with no feature env vars and confirm stable routes are mounted.
-- [x] Confirm explicit disable env var still works for emergency rollback.
+- [x] Confirm active route registration still matches intended runtime behavior after cleanup.
 - [x] Confirm docs match runtime behavior.
 
 ## Risks and Mitigations
 
 - Risk: Enabling unstable paths in production.
   Mitigation: Gate defaults behind smoke tests and staged rollout.
-- Risk: Existing deployments rely on current disabled defaults.
-  Mitigation: Document behavior change and provide rollback env flags.
+- Risk: Existing docs or runbooks still advertise dead toggles.
+  Mitigation: Update active env examples and operator docs in the same cleanup PR.
 
