@@ -187,22 +187,13 @@ class DeepResearchConfig(BaseModel):
     """Main Deep Research configuration."""
     enabled: bool = Field(default=True, description="Deep Research is always enabled")
     crawl_safety_enabled: bool = Field(default=True, description="Enable crawl safety controls")
-    global_disable: bool = Field(default=False, description="Deprecated; ignored")
     name_only_deep_research_enabled: bool = Field(
         default=True,
         description="Enable name-only deep research flow (/deep-research/runs)",
     )
-    
-    # Deprecated rollout flags retained for backward compatibility only.
-    phase_8_claims_disabled: bool = Field(default=False, description="Deprecated; ignored")
-    phase_9_web_verification_disabled: bool = Field(default=False, description="Deprecated; ignored")
-    phase_10_claim_finalization_disabled: bool = Field(default=False, description="Deprecated; ignored")
-    
-    # Phase 11: Human Adjudication + Canonical Claim Review
-    phase_11_human_adjudication_disabled: bool = Field(default=False, description="Deprecated; ignored")
-    
+
+    # Phase 11 and 12 runtime policy controls remain live.
     # Phase 12: Runtime Publication + Deployment Readiness
-    phase_12_runtime_publication_disabled: bool = Field(default=False, description="Deprecated; ignored")
     phase_12_suppress_unresolved_by_default: bool = Field(default=True, description="Suppress unresolved claims from runtime")
     phase_12_auto_publish: bool = Field(default=False, description="Auto-publish without manual review")
     
@@ -219,13 +210,7 @@ class DeepResearchConfig(BaseModel):
         return cls(
             enabled=True,
             crawl_safety_enabled=os.getenv("CRAWL_SAFETY_ENABLED", "true").lower() == "true",
-            global_disable=False,
             name_only_deep_research_enabled=os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true",
-            phase_8_claims_disabled=False,
-            phase_9_web_verification_disabled=False,
-            phase_10_claim_finalization_disabled=False,
-            phase_11_human_adjudication_disabled=False,
-            phase_12_runtime_publication_disabled=False,
             phase_12_suppress_unresolved_by_default=os.getenv("DR_PHASE_12_SUPPRESS_UNRESOLVED", "true").lower() == "true",
             phase_12_auto_publish=os.getenv("DR_PHASE_12_AUTO_PUBLISH", "false").lower() == "true",
         )
