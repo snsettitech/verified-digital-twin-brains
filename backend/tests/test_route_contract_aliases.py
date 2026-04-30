@@ -47,3 +47,7 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_vc_routes_are_not_registered():
+    assert _has_route("/api/vc/artifact/upload/{twin_id}", "POST") is False
