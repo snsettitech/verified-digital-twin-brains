@@ -27,10 +27,9 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 
 Current defaults in `main.py`:
 
-- `ENABLE_REALTIME_INGESTION` defaults to `false`
+- `ENABLE_REALTIME_INGESTION` defaulted to `false` before the rollout cleanup
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
-- `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
-- `ENABLE_VC_ROUTES` defaults to `false`
+- `ENABLE_ADVISOR_RETRIEVAL` defaulted to `false` before the rollout cleanup
 
 ## Scope
 
@@ -56,14 +55,14 @@ Out of scope:
 
 ## Acceptance Criteria (from audit report)
 
-- [x] Remove `ENABLE_REALTIME_INGESTION` flag (enable by default).
-- [x] Remove `ENABLE_ADVISOR_RETRIEVAL` flag (enable by default).
+- [ ] Remove `ENABLE_REALTIME_INGESTION` flag (enable by default).
+- [ ] Remove `ENABLE_ADVISOR_RETRIEVAL` flag (enable by default).
 - [x] Document any remaining feature flags.
 
 ## Verification Plan
 
 - [x] Boot backend with no feature env vars and confirm stable routes are mounted.
-- [x] Confirm explicit disable env var still works for emergency rollback.
+- [x] Confirm explicit disable env vars still work for emergency rollback.
 - [x] Confirm docs match runtime behavior.
 
 ## Risks and Mitigations
