@@ -1,5 +1,7 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
+> Historical design note: this document describes an earlier conditional-route design for VC-specific upload endpoints. In the current runtime, `backend/main.py` does not register `backend/api/vc_routes.py`, so treat any `ENABLE_VC_ROUTES` references below as archival context rather than active operator guidance.
+
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 

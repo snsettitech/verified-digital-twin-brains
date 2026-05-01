@@ -1,8 +1,12 @@
 # VC Specialization Integration - Implementation Summary
 
-**Status:** ✅ Complete  
+> Historical design note: this document describes the original VC specialization rollout plan.
+> Current runtime behavior is different: `backend/main.py` does not register `backend/api/vc_routes.py`,
+> and the old `ENABLE_VC_ROUTES` startup flag is no longer part of the live backend config surface.
+
+**Status:** Historical reference  
 **Date:** 2025-01-XX  
-**Purpose:** Summary of VC specialization integration implementation
+**Purpose:** Summary of the original VC specialization integration implementation
 
 ---
 
