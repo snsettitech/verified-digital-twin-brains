@@ -47,7 +47,7 @@
 ## PR 5: Delete Specializations + VC Routes
 - Goal: Remove VC-specific and specialization-only surfaces.
 - Files:
-  - `backend/routers/specializations.py`, `backend/api/vc_routes.py`, `backend/modules/specializations/*`.
+  - `backend/routers/specializations.py`, legacy retired `backend/api/vc_routes.py`, `backend/modules/specializations/*`.
 - Verification:
   - `GET /twins/{twin_id}` unaffected; chat retrieval still works.
 
