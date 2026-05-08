@@ -47,3 +47,15 @@ def test_link_compile_compat_routes_exist():
 
 def test_public_marketplace_route_exists():
     assert _has_route("/public/marketplace", "GET")
+
+
+def test_vc_artifact_upload_route_is_absent():
+    assert not _has_route("/api/vc/artifact/upload/{twin_id}", "POST")
+
+
+def test_feature_flag_summary_no_longer_mentions_vc_routes(capsys):
+    import main
+
+    main.print_feature_flag_summary()
+    captured = capsys.readouterr()
+    assert "VC Routes" not in captured.out

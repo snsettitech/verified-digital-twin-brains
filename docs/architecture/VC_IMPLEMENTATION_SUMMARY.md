@@ -4,6 +4,8 @@
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation
 
+> Historical note: this document describes an earlier dedicated `/api/vc` router design. The current backend no longer registers a VC-specific router or reads `ENABLE_VC_ROUTES`; VC behavior is specialization-driven through the registry.
+
 ---
 
 ## ✅ Completed Implementation

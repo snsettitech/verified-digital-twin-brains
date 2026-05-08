@@ -3,6 +3,8 @@
 **Status:** Implementation Complete  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
 
+> Historical note: sections below reference an older dedicated `/api/vc` router and `ENABLE_VC_ROUTES` gate. The current backend no longer mounts a VC-specific router; VC behavior is specialization-driven through the specialization registry.
+
 ---
 
 ## Executive Summary
