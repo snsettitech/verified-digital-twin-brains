@@ -5,7 +5,7 @@
 - Routers are registered in `backend/main.py` (see the `app.include_router(...)` list).
 - Conditional routers:
   - `backend/routers/enhanced_ingestion.py` registered only if `ENABLE_ENHANCED_INGESTION=true` in `backend/main.py`.
-  - `backend/api/vc_routes.py` registered only if `ENABLE_VC_ROUTES=true` in `backend/main.py`, with prefix `/api`.
+  - Legacy VC route surface is retired; there is no `backend/api/vc_routes.py` or `ENABLE_VC_ROUTES` gate in the current backend.
 - Uvicorn entrypoints:
   - `backend/Procfile` (`uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}`)
   - `backend/railway.json` (`uvicorn main:app --host 0.0.0.0 --port $PORT`)
@@ -289,7 +289,5 @@ Defined in `backend/main.py`:
 | POST | `/feedback/{trace_id}` | `FeedbackRequest` | `FeedbackResponse` | public |
 | GET | `/feedback/reasons` | none | reasons list | public |
 
-### `backend/api/vc_routes.py` (registered only if `ENABLE_VC_ROUTES=true` in `backend/main.py` with prefix `/api`)
-| Method | Path | Request | Response | Auth/Deps |
-| --- | --- | --- | --- | --- |
-| POST | `/api/vc/artifact/upload/{twin_id}` | multipart file | placeholder response | `Depends(get_current_user)` + `verify_twin_ownership` |
+### Legacy VC Route Surface (retired)
+This route family no longer exists in the active backend. The current runtime has no `/api/vc` endpoints and no `ENABLE_VC_ROUTES` gate.

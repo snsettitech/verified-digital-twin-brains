@@ -1,7 +1,7 @@
 # Verified Digital Twin Brain - Complete Codebase Summary
 **Last Updated:** January 27, 2025  
 **Repository:** https://github.com/snsettitech/verified-digital-twin-brains  
-**Status:** ✅ Up to date with latest codebase changes
+**Status:** High-level reference (counts intentionally approximate)
 
 A **advisor-grade** AI platform for creating verified, trustworthy digital twins with enterprise-level governance, multi-audience distribution, and agentic capabilities.
 
@@ -22,8 +22,8 @@ A **advisor-grade** AI platform for creating verified, trustworthy digital twins
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 BACKEND (FastAPI + Python 3.12)             │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐               │
-│  │  17 API    │ │  33 Core   │ │ Cognitive │               │
-│  │  Routers   │ │  Modules   │ │   Brain   │               │
+│  │  API route │ │   Core     │ │ Cognitive │               │
+│  │  surface   │ │  modules   │ │   Brain   │               │
 │  └────────────┘ └────────────┘ └────────────┘               │
 │  - LangGraph Agent                                          │
 │  - Hybrid RAG Retrieval (Verified → Vector → Tools)         │
@@ -65,9 +65,9 @@ A **advisor-grade** AI platform for creating verified, trustworthy digital twins
 ```
 verified-digital-twin-brain/
 ├── backend/                    # 143+ files
-│   ├── main.py                # FastAPI entry point (166 lines)
+│   ├── main.py                # FastAPI entry point
 │   ├── worker.py              # Background job worker
-│   ├── routers/               # 17 API routers
+│   ├── routers/               # FastAPI route modules
 │   │   ├── auth.py           # JWT, user sync, sessions
 │   │   ├── chat.py           # Chat endpoints (3 variants)
 │   │   ├── twins.py          # Twin CRUD, settings
@@ -84,7 +84,7 @@ verified-digital-twin-brain/
 │   │   ├── til.py            # Today I Learned feed
 │   │   ├── feedback.py       # User feedback
 │   │   ├── observability.py  # Health checks
-│   │   └── [conditional] api/vc_routes.py # VC-specific routes
+│   │   └── import_routes.py   # LinkedIn/data import endpoints
 │   ├── modules/               # 33 business logic modules
 │   │   ├── _core/             # 9 cognitive core components
 │   │   │   ├── host_engine.py        # Interview host
@@ -96,12 +96,11 @@ verified-digital-twin-brain/
 │   │   │   ├── ontology_loader.py      # Knowledge ontology
 │   │   │   ├── registry_loader.py     # Specialization registry (with fallback)
 │   │   │   └── scribe_output_base_schema.json
-│   │   ├── specializations/   # 17 specialization files
+│   │   ├── specializations/   # Registry + vanilla specialization
 │   │   │   ├── registry.json   # Global registry
 │   │   │   ├── registry.py     # Lazy loading logic
 │   │   │   ├── base.py         # Base specialization class
-│   │   │   ├── vanilla/        # 5 files (default)
-│   │   │   └── vc/             # 8 files (VC Brain)
+│   │   │   └── vanilla/        # active specialization implementation
 │   │   ├── agent.py           # LangGraph orchestrator (25KB)
 │   │   ├── retrieval.py       # Hybrid RAG pipeline (17KB) - P1-C timeouts
 │   │   ├── graph_context.py   # Cognitive graph context (14KB)
@@ -136,8 +135,8 @@ verified-digital-twin-brain/
 │   │   └── exceptions.py     # Custom exceptions
 │   ├── database/
 │   │   ├── schema/            # Base SQL schema
-│   │   └── migrations/        # 17 migration files
-│   ├── tests/                 # 10 test files
+│   │   └── migrations/        # Database migration files
+│   ├── tests/                 # Backend tests
 │   └── eval/                  # 10 evaluation files
 │
 ├── frontend/                   # 129+ files
@@ -188,14 +187,14 @@ verified-digital-twin-brain/
 ├── docs/                       # 29+ documentation files
 │   ├── ops/                   # 11 operations docs
 │   ├── ai/                    # 6 AI docs
-│   └── architecture/          # 2 architecture docs
+│   └── architecture/          # Architecture docs
 │
 ├── scripts/                    # 13 deployment scripts
 │   ├── preflight.ps1         # Windows preflight
 │   ├── preflight.sh          # Linux/Mac preflight
 │   └── dev.ps1/dev.sh        # Local dev scripts
 │
-└── .github/workflows/          # 3 CI/CD pipelines
+└── .github/workflows/          # CI/CD workflows
     ├── lint.yml               # Main CI (lint + test)
     ├── checkpoint.yml         # Phase checkpoint automation
     └── [other workflows]
@@ -203,7 +202,7 @@ verified-digital-twin-brain/
 
 ---
 
-## 🔌 Backend API Routers (17)
+## 🔌 Backend API Routers
 
 | Router | File | Key Endpoints | Purpose |
 |--------|------|---------------|---------|
@@ -223,11 +222,13 @@ verified-digital-twin-brain/
 | **til** | `til.py` | `/til/{twin_id}/events` | Today I Learned feed |
 | **feedback** | `feedback.py` | `/feedback/{twin_id}` | User feedback |
 | **observability** | `observability.py` | `/health`, `/health/enhanced` | Health checks |
-| **vc** (conditional) | `api/vc_routes.py` | `/api/vc/artifact/upload/{twin_id}` | VC-specific routes. Only loaded when `ENABLE_VC_ROUTES=true`. Validates twin uses VC specialization before processing. |
+---
+
+Note: the legacy VC router surface is retired. No active `/api/vc` router ships in the current backend.
 
 ---
 
-## 🧠 Backend Modules (33)
+## 🧠 Backend Modules
 
 ### Core AI & Retrieval
 | Module | Size | Purpose |
@@ -281,7 +282,7 @@ verified-digital-twin-brain/
 | `artifact_pipeline.py` | 5KB | Artifact generation |
 | `tenant_guard.py` | 6KB | Multi-tenant security |
 | `ontology_loader.py` | 2KB | Knowledge ontology loading |
-| `registry_loader.py` | 4KB | Specialization registry (with vanilla fallback). Always falls back to vanilla if VC manifest fails, ensuring VC failures never break core functionality. |
+| `registry_loader.py` | 4KB | Specialization registry loader. Non-`vanilla` requests normalize back to the vanilla manifest. |
 
 ### Memory & Events
 | Module | Size | Purpose |
@@ -306,21 +307,21 @@ verified-digital-twin-brain/
 ## 🎭 Specialization System
 
 ### Registry Architecture
-- **`registry.json`**: Global specialization registry (vanilla, vc)
-- **`registry.py`**: Lazy loading logic (VC only loaded when requested)
-- **`registry_loader.py`**: Manifest loading with vanilla fallback
+- **`registry.json`**: Global specialization registry (currently `vanilla` only)
+- **`registry.py`**: Returns the vanilla specialization for all requests
+- **`registry_loader.py`**: Manifest loading with non-`vanilla` normalization back to vanilla
 
 ### Vanilla Specialization (Default)
-- **Files**: 5 files
+- **Files**: Vanilla specialization assets
 - **Location**: `backend/modules/specializations/vanilla/`
 - **Purpose**: Generic digital twin
 
-### VC Brain Specialization
-- **Files**: 8 files
-- **Location**: `backend/modules/specializations/vc/`
-- **Purpose**: VC/Investment focused
-- **Routes**: Conditional (`ENABLE_VC_ROUTES=true`)
-- **Loading**: Lazy (only when `specialization_id='vc'`)
+### Legacy VC Surface
+- **Files**: None in the active backend
+- **Location**: n/a
+- **Purpose**: Retired implementation surface kept only in historical docs/git history
+- **Routes**: None
+- **Loading**: Requests for non-`vanilla` specializations normalize back to vanilla
 
 ---
 
@@ -352,7 +353,7 @@ verified-digital-twin-brain/
 
 ---
 
-## 🗄️ Database Migrations (17)
+## 🗄️ Database Migrations
 
 | Migration | Purpose | Status |
 |-----------|---------|--------|
@@ -444,8 +445,8 @@ verified-digital-twin-brain/
   - `verified_qna.py` → `from modules.embeddings import get_embedding, cosine_similarity`
   - `memory.py` → `from modules.embeddings import get_embedding`
   - `ingestion.py` → `from modules.embeddings import get_embedding`
-- ✅ **Registry loader**: Vanilla fallback logic - prevents VC failures from breaking core functionality
-- ✅ **VC routes**: Conditional loading (`ENABLE_VC_ROUTES=true`) - only loads when explicitly enabled
+- ✅ **Registry loader**: Non-`vanilla` requests normalize back to vanilla
+- ✅ **Legacy VC surface**: Retired; no dedicated `/api/vc` router or active VC specialization remains
 - ✅ **Retrieval module**: Refactored into helper functions for better maintainability and testability
 
 ---
@@ -486,12 +487,12 @@ verified-digital-twin-brain/
 
 | Aspect | Your Summary | Current State | Status |
 |--------|--------------|---------------|--------|
-| **Routers** | 16 | 17 (includes conditional VC) | ⚠️ Minor update |
+| **Routers** | 16 | Expanded route surface in `backend/routers/` | ⚠️ Update needed |
 | **Modules** | 25+ | 33 | ⚠️ Needs update |
 | **Dashboard Sections** | 20 | 20 | ✅ Accurate |
-| **Migrations** | 17 | 17 | ✅ Accurate |
+| **Migrations** | 17 | Multiple migration files in `backend/database/migrations/` | ✅ General shape accurate |
 | **Embeddings** | In `ingestion.py` | **NEW** `embeddings.py` | ⚠️ Major change |
-| **VC Routes** | Not mentioned | Conditional loading | ⚠️ New feature |
+| **VC legacy surface** | Not mentioned | Retired; vanilla-only runtime | ⚠️ Historical cleanup |
 | **Registry Loader** | Basic | Vanilla fallback logic | ⚠️ Enhanced |
 | **Retrieval** | Basic | P1-C timeouts added | ⚠️ Enhanced |
 | **LangGraph** | Basic | P1-A checkpointer | ⚠️ Enhanced |
@@ -502,10 +503,10 @@ verified-digital-twin-brain/
 ## 🎯 Key Updates Needed in Your Summary
 
 1. **Embeddings Module**: Now centralized in `modules/embeddings.py` (not in `ingestion.py`)
-2. **Router Count**: 17 routers (not 16) - includes conditional VC routes
-3. **Module Count**: 33 modules (not 25+)
+2. **Router Surface**: `backend/routers/` contains a larger route surface than the earlier summary captured
+3. **Module Surface**: backend core/business-logic modules exceed the earlier 25+ estimate
 4. **P0-P1 Hardening**: Add section on recent reliability/security improvements
-5. **VC Routes**: Mention conditional loading (`ENABLE_VC_ROUTES`)
+5. **VC legacy surface**: Note that VC is retired and the runtime is vanilla-only
 6. **Registry Loader**: Mention vanilla fallback logic
 7. **Retrieval**: Mention P1-C timeouts (2s/5s/3s)
 8. **LangGraph**: Mention P1-A Postgres checkpointer
