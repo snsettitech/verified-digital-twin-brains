@@ -11,7 +11,7 @@
 The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creating trustworthy, auditable digital twins with multi-tenant isolation, governance layers, and agentic capabilities. The system is **currently deployable** but requires attention to specific operational and optimization areas.
 
 ### Key Stats
-- **Backend**: 33 core modules + 17 API routers (143+ files)
+- **Backend**: Large FastAPI backend with many route modules and business-logic components (143+ files)
 - **Frontend**: Next.js 16 with 20+ dashboard sections
 - **Database**: 26+ Supabase tables with RLS policies
 - **AI Stack**: GPT-4o, Pinecone vectors, LangGraph agents
@@ -39,7 +39,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 ┌──────────────────────▼──────────────────────────────────────────┐
 │              BACKEND (FastAPI + Python 3.11)                    │
 │  ┌────────────────────────────────────────────────────┐        │
-│  │ API Router Layer (17 Routers)                      │        │
+│  │ API Router Layer (many routers)                   │        │
 │  ├─ auth.py (JWT, user sync, sessions)              │        │
 │  ├─ chat.py (3 chat variants)                        │        │
 │  ├─ twins.py (CRUD, settings)                        │        │
@@ -59,7 +59,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  └─ VC surface retired; vanilla runtime only         │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
-│  │ Business Logic Layer (33 Modules)                 │        │
+│  │ Business Logic Layer (many modules)               │        │
 │  ├─ COGNITIVE CORE (_core/)                          │        │
 │  │  ├─ host_engine.py (Interview orchestration)     │        │
 │  │  ├─ scribe_engine.py (Memory extraction)          │        │
@@ -100,12 +100,12 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  │  ├─ sessions.py (Session management)              │        │
 │  │  ├─ job_queue.py (Background jobs)                │        │
 │  │  ├─ ingestion.py (Document processing)            │        │
-│  │  ├─ specializations/ (17 domain templates)        │        │
+│  │  ├─ specializations/ (registry + vanilla implementation) │ │
 │  │  └─ schemas.py (Pydantic models)                  │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Data Layer                                         │        │
-│  ├─ main.py (FastAPI app, 17 routers, CORS)        │        │
+│  ├─ main.py (FastAPI app, router wiring, CORS)     │        │
 │  ├─ worker.py (Background job processor)            │        │
 │  └─ database/ (migrations, RPC functions)           │        │
 │  └────────────────────────────────────────────────────┘        │
@@ -373,7 +373,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 ### 4. **Specialization Registry** ⚠️
 - **Status**: Mostly working, fallback implemented
 - **Issues**:
-  - 17 specialization files not fully tested
+  - Specialization surfaces are not fully tested
   - Registry loading has fallback but may mask errors
   - Some specialization ontologies incomplete
 - VC surface is retired; the current backend is vanilla-only and exposes no dedicated `/api/vc` router
@@ -678,7 +678,7 @@ Error: Invalid JWT signature
 ### Backend
 - [x] Code compiles without errors
 - [x] All imports resolve
-- [x] 17 routers integrated
+- [x] Router inventory integrated
 - [x] Health check endpoint ready
 - [x] Environment variable validation ready
 - [x] CORS configured

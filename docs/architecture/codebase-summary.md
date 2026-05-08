@@ -22,8 +22,8 @@ A **advisor-grade** AI platform for creating verified, trustworthy digital twins
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 BACKEND (FastAPI + Python 3.12)             │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐               │
-│  │  17 API    │ │  33 Core   │ │ Cognitive │               │
-│  │  Routers   │ │  Modules   │ │   Brain   │               │
+│  │  API route │ │   Core     │ │ Cognitive │               │
+│  │  surface   │ │  modules   │ │   Brain   │               │
 │  └────────────┘ └────────────┘ └────────────┘               │
 │  - LangGraph Agent                                          │
 │  - Hybrid RAG Retrieval (Verified → Vector → Tools)         │
@@ -67,7 +67,7 @@ verified-digital-twin-brain/
 ├── backend/                    # 143+ files
 │   ├── main.py                # FastAPI entry point (166 lines)
 │   ├── worker.py              # Background job worker
-│   ├── routers/               # 17 API routers
+│   ├── routers/               # FastAPI route modules
 │   │   ├── auth.py           # JWT, user sync, sessions
 │   │   ├── chat.py           # Chat endpoints (3 variants)
 │   │   ├── twins.py          # Twin CRUD, settings
@@ -96,7 +96,7 @@ verified-digital-twin-brain/
 │   │   │   ├── ontology_loader.py      # Knowledge ontology
 │   │   │   ├── registry_loader.py     # Specialization registry (with fallback)
 │   │   │   └── scribe_output_base_schema.json
-│   │   ├── specializations/   # 17 specialization files
+│   │   ├── specializations/   # Registry + vanilla specialization
 │   │   │   ├── registry.json   # Global registry
 │   │   │   ├── registry.py     # Lazy loading logic
 │   │   │   ├── base.py         # Base specialization class
@@ -135,7 +135,7 @@ verified-digital-twin-brain/
 │   │   └── exceptions.py     # Custom exceptions
 │   ├── database/
 │   │   ├── schema/            # Base SQL schema
-│   │   └── migrations/        # 17 migration files
+│   │   └── migrations/        # Database migration files
 │   ├── tests/                 # 10 test files
 │   └── eval/                  # 10 evaluation files
 │
@@ -485,10 +485,10 @@ verified-digital-twin-brain/
 
 | Aspect | Your Summary | Current State | Status |
 |--------|--------------|---------------|--------|
-| **Routers** | 16 | 17 | ⚠️ Minor update |
+| **Routers** | 16 | Expanded route surface in `backend/routers/` | ⚠️ Update needed |
 | **Modules** | 25+ | 33 | ⚠️ Needs update |
 | **Dashboard Sections** | 20 | 20 | ✅ Accurate |
-| **Migrations** | 17 | 17 | ✅ Accurate |
+| **Migrations** | 17 | Multiple migration files in `backend/database/migrations/` | ✅ General shape accurate |
 | **Embeddings** | In `ingestion.py` | **NEW** `embeddings.py` | ⚠️ Major change |
 | **VC legacy surface** | Not mentioned | Retired; vanilla-only runtime | ⚠️ Historical cleanup |
 | **Registry Loader** | Basic | Vanilla fallback logic | ⚠️ Enhanced |
@@ -501,8 +501,8 @@ verified-digital-twin-brain/
 ## 🎯 Key Updates Needed in Your Summary
 
 1. **Embeddings Module**: Now centralized in `modules/embeddings.py` (not in `ingestion.py`)
-2. **Router Count**: 17 routers (not 16)
-3. **Module Count**: 33 modules (not 25+)
+2. **Router Surface**: `backend/routers/` contains a larger route surface than the earlier summary captured
+3. **Module Surface**: backend core/business-logic modules exceed the earlier 25+ estimate
 4. **P0-P1 Hardening**: Add section on recent reliability/security improvements
 5. **VC legacy surface**: Note that VC is retired and the runtime is vanilla-only
 6. **Registry Loader**: Mention vanilla fallback logic
