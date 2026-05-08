@@ -1,7 +1,7 @@
 # Verified Digital Twin Brain - Complete Codebase Summary
 **Last Updated:** January 27, 2025  
 **Repository:** https://github.com/snsettitech/verified-digital-twin-brains  
-**Status:** ✅ Up to date with latest codebase changes
+**Status:** High-level reference (counts intentionally approximate)
 
 A **advisor-grade** AI platform for creating verified, trustworthy digital twins with enterprise-level governance, multi-audience distribution, and agentic capabilities.
 
@@ -65,7 +65,7 @@ A **advisor-grade** AI platform for creating verified, trustworthy digital twins
 ```
 verified-digital-twin-brain/
 ├── backend/                    # 143+ files
-│   ├── main.py                # FastAPI entry point (166 lines)
+│   ├── main.py                # FastAPI entry point
 │   ├── worker.py              # Background job worker
 │   ├── routers/               # FastAPI route modules
 │   │   ├── auth.py           # JWT, user sync, sessions
@@ -136,7 +136,7 @@ verified-digital-twin-brain/
 │   ├── database/
 │   │   ├── schema/            # Base SQL schema
 │   │   └── migrations/        # Database migration files
-│   ├── tests/                 # 10 test files
+│   ├── tests/                 # Backend tests
 │   └── eval/                  # 10 evaluation files
 │
 ├── frontend/                   # 129+ files
@@ -187,14 +187,14 @@ verified-digital-twin-brain/
 ├── docs/                       # 29+ documentation files
 │   ├── ops/                   # 11 operations docs
 │   ├── ai/                    # 6 AI docs
-│   └── architecture/          # 2 architecture docs
+│   └── architecture/          # Architecture docs
 │
 ├── scripts/                    # 13 deployment scripts
 │   ├── preflight.ps1         # Windows preflight
 │   ├── preflight.sh          # Linux/Mac preflight
 │   └── dev.ps1/dev.sh        # Local dev scripts
 │
-└── .github/workflows/          # 3 CI/CD pipelines
+└── .github/workflows/          # CI/CD workflows
     ├── lint.yml               # Main CI (lint + test)
     ├── checkpoint.yml         # Phase checkpoint automation
     └── [other workflows]
@@ -202,7 +202,7 @@ verified-digital-twin-brain/
 
 ---
 
-## 🔌 Backend API Routers (17)
+## 🔌 Backend API Routers
 
 | Router | File | Key Endpoints | Purpose |
 |--------|------|---------------|---------|
@@ -222,11 +222,13 @@ verified-digital-twin-brain/
 | **til** | `til.py` | `/til/{twin_id}/events` | Today I Learned feed |
 | **feedback** | `feedback.py` | `/feedback/{twin_id}` | User feedback |
 | **observability** | `observability.py` | `/health`, `/health/enhanced` | Health checks |
-| **vc legacy surface** | n/a | n/a | Retired. No active VC router or specialization implementation ships in the current backend. |
+---
+
+Note: the legacy VC router surface is retired. No active `/api/vc` router ships in the current backend.
 
 ---
 
-## 🧠 Backend Modules (33)
+## 🧠 Backend Modules
 
 ### Core AI & Retrieval
 | Module | Size | Purpose |
@@ -310,7 +312,7 @@ verified-digital-twin-brain/
 - **`registry_loader.py`**: Manifest loading with non-`vanilla` normalization back to vanilla
 
 ### Vanilla Specialization (Default)
-- **Files**: 5 files
+- **Files**: Vanilla specialization assets
 - **Location**: `backend/modules/specializations/vanilla/`
 - **Purpose**: Generic digital twin
 
@@ -351,7 +353,7 @@ verified-digital-twin-brain/
 
 ---
 
-## 🗄️ Database Migrations (17)
+## 🗄️ Database Migrations
 
 | Migration | Purpose | Status |
 |-----------|---------|--------|
