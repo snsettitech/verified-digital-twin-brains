@@ -100,8 +100,7 @@ verified-digital-twin-brain/
 │   │   │   ├── registry.json   # Global registry
 │   │   │   ├── registry.py     # Lazy loading logic
 │   │   │   ├── base.py         # Base specialization class
-│   │   │   ├── vanilla/        # 5 files (default)
-│   │   │   └── vc/             # 8 files (VC Brain)
+│   │   │   └── vanilla/        # active specialization implementation
 │   │   ├── agent.py           # LangGraph orchestrator (25KB)
 │   │   ├── retrieval.py       # Hybrid RAG pipeline (17KB) - P1-C timeouts
 │   │   ├── graph_context.py   # Cognitive graph context (14KB)
@@ -223,7 +222,7 @@ verified-digital-twin-brain/
 | **til** | `til.py` | `/til/{twin_id}/events` | Today I Learned feed |
 | **feedback** | `feedback.py` | `/feedback/{twin_id}` | User feedback |
 | **observability** | `observability.py` | `/health`, `/health/enhanced` | Health checks |
-| **vc specialization** | `modules/specializations/vc/` | n/a | VC behavior is specialization-driven through the registry; there is no dedicated `/api/vc` router. |
+| **vc legacy surface** | n/a | n/a | Retired. No active VC router or specialization implementation ships in the current backend. |
 
 ---
 
@@ -281,7 +280,7 @@ verified-digital-twin-brain/
 | `artifact_pipeline.py` | 5KB | Artifact generation |
 | `tenant_guard.py` | 6KB | Multi-tenant security |
 | `ontology_loader.py` | 2KB | Knowledge ontology loading |
-| `registry_loader.py` | 4KB | Specialization registry (with vanilla fallback). Always falls back to vanilla if VC manifest fails, ensuring VC failures never break core functionality. |
+| `registry_loader.py` | 4KB | Specialization registry loader. Non-`vanilla` requests normalize back to the vanilla manifest. |
 
 ### Memory & Events
 | Module | Size | Purpose |
@@ -306,21 +305,21 @@ verified-digital-twin-brain/
 ## 🎭 Specialization System
 
 ### Registry Architecture
-- **`registry.json`**: Global specialization registry (vanilla, vc)
-- **`registry.py`**: Lazy loading logic (VC only loaded when requested)
-- **`registry_loader.py`**: Manifest loading with vanilla fallback
+- **`registry.json`**: Global specialization registry (currently `vanilla` only)
+- **`registry.py`**: Returns the vanilla specialization for all requests
+- **`registry_loader.py`**: Manifest loading with non-`vanilla` normalization back to vanilla
 
 ### Vanilla Specialization (Default)
 - **Files**: 5 files
 - **Location**: `backend/modules/specializations/vanilla/`
 - **Purpose**: Generic digital twin
 
-### VC Brain Specialization
-- **Files**: 8 files
-- **Location**: `backend/modules/specializations/vc/`
-- **Purpose**: VC/Investment focused
-- **Routes**: None; VC behavior is specialization-driven through the registry
-- **Loading**: Lazy (only when `specialization_id='vc'`)
+### Legacy VC Surface
+- **Files**: None in the active backend
+- **Location**: n/a
+- **Purpose**: Retired implementation surface kept only in historical docs/git history
+- **Routes**: None
+- **Loading**: Requests for non-`vanilla` specializations normalize back to vanilla
 
 ---
 
@@ -444,8 +443,8 @@ verified-digital-twin-brain/
   - `verified_qna.py` → `from modules.embeddings import get_embedding, cosine_similarity`
   - `memory.py` → `from modules.embeddings import get_embedding`
   - `ingestion.py` → `from modules.embeddings import get_embedding`
-- ✅ **Registry loader**: Vanilla fallback logic - prevents VC failures from breaking core functionality
-- ✅ **VC specialization loading**: Registry-driven with vanilla fallback, no dedicated `/api/vc` router
+- ✅ **Registry loader**: Non-`vanilla` requests normalize back to vanilla
+- ✅ **Legacy VC surface**: Retired; no dedicated `/api/vc` router or active VC specialization remains
 - ✅ **Retrieval module**: Refactored into helper functions for better maintainability and testability
 
 ---
@@ -491,7 +490,7 @@ verified-digital-twin-brain/
 | **Dashboard Sections** | 20 | 20 | ✅ Accurate |
 | **Migrations** | 17 | 17 | ✅ Accurate |
 | **Embeddings** | In `ingestion.py` | **NEW** `embeddings.py` | ⚠️ Major change |
-| **VC specialization** | Not mentioned | Registry-driven, no dedicated `/api/vc` router | ⚠️ New feature |
+| **VC legacy surface** | Not mentioned | Retired; vanilla-only runtime | ⚠️ Historical cleanup |
 | **Registry Loader** | Basic | Vanilla fallback logic | ⚠️ Enhanced |
 | **Retrieval** | Basic | P1-C timeouts added | ⚠️ Enhanced |
 | **LangGraph** | Basic | P1-A checkpointer | ⚠️ Enhanced |
@@ -505,7 +504,7 @@ verified-digital-twin-brain/
 2. **Router Count**: 17 routers (not 16)
 3. **Module Count**: 33 modules (not 25+)
 4. **P0-P1 Hardening**: Add section on recent reliability/security improvements
-5. **VC specialization**: Mention registry-driven loading and absence of a dedicated `/api/vc` router
+5. **VC legacy surface**: Note that VC is retired and the runtime is vanilla-only
 6. **Registry Loader**: Mention vanilla fallback logic
 7. **Retrieval**: Mention P1-C timeouts (2s/5s/3s)
 8. **LangGraph**: Mention P1-A Postgres checkpointer

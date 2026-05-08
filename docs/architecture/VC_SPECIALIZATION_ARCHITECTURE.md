@@ -1,27 +1,29 @@
 # VC Specialization Architecture
 
 **Status:** Current reference
-**Purpose:** Describe the active architecture for VC specialization support.
+**Purpose:** Describe the retired state of the old VC-specific architecture surface.
 
 ## Current State
 
-- VC support is implemented as a specialization, not as a dedicated router family.
-- Runtime behavior is loaded through the specialization registry and lazy specialization loading.
+- No active VC specialization implementation ships in the current backend.
+- The runtime is effectively vanilla-only.
 - The backend does not expose `/api/vc` endpoints.
 - `ENABLE_VC_ROUTES` is no longer a supported runtime flag.
+- `backend/modules/specializations/registry.json` currently lists only `vanilla`.
+- Non-`vanilla` specialization requests normalize back to vanilla.
 
 ## Architecture Notes
 
-### Loading Model
+### Current Runtime Model
 
-- `backend/modules/specializations/registry.json` lists the VC specialization.
-- `backend/modules/specializations/registry_loader.py` applies vanilla fallback behavior if VC-specific loading fails.
-- `get_specialization("vc")` resolves VC behavior only when that specialization is requested.
+- `backend/modules/specializations/registry.json` lists only the vanilla specialization.
+- `backend/modules/_core/registry_loader.py` normalizes non-`vanilla` requests back to the vanilla manifest.
+- `backend/modules/specializations/registry.py` returns the vanilla specialization instance for all requests.
 
 ### Operational Guidance
 
 - Use the standard specialization surfaces exposed by `backend/routers/specializations.py`.
-- Do not expect a VC-only route toggle or a dedicated VC upload endpoint.
+- Do not expect a VC-only route toggle, a VC specialization directory, or a dedicated VC upload endpoint.
 - Verify absence of the retired router surface with `backend/tests/test_route_contract_aliases.py`.
 
 ## Related Docs

@@ -1,20 +1,21 @@
 # VC Specialization Implementation Summary
 
 **Status:** Current reference
-**Purpose:** Summarize the active VC specialization shape after stale route-flag cleanup.
+**Purpose:** Summarize the retired state of the old VC-specific surface after stale flag cleanup.
 
 ## Current State
 
-- VC behavior is specialization-driven through `backend/modules/specializations/vc/`.
+- There is no active VC specialization implementation in the current backend.
 - The backend does not mount a dedicated `/api/vc` router.
 - `ENABLE_VC_ROUTES` and `VC_ROUTES_ENABLED` are not live runtime controls.
-- VC loading is handled through the specialization registry and lazy loading.
+- `backend/modules/specializations/registry.json` currently lists only `vanilla`.
+- Non-`vanilla` specialization requests normalize back to `vanilla`.
 
 ## Why This Changed
 
 - Repository cleanup confirmed there is no live `backend/api/vc_routes.py` surface.
 - The remaining `ENABLE_VC_ROUTES` wiring in `backend/main.py` was dead startup-summary plumbing only.
-- Active docs now describe the current runtime contract instead of the removed router design.
+- Active docs now describe the current vanilla-only runtime instead of the removed VC router design.
 
 ## Verification Pointers
 

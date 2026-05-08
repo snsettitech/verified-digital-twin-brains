@@ -56,7 +56,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  ├─ til.py (today I learned feed)                   │        │
 │  ├─ feedback.py (user feedback)                      │        │
 │  └─ observability.py (health checks)                │        │
-│  └─ VC specialization support via registry loading   │        │
+│  └─ VC surface retired; vanilla runtime only         │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Business Logic Layer (33 Modules)                 │        │
@@ -376,12 +376,12 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
   - 17 specialization files not fully tested
   - Registry loading has fallback but may mask errors
   - Some specialization ontologies incomplete
-- VC specialization support lives in the registry; there is no dedicated `/api/vc` router
+- VC surface is retired; the current backend is vanilla-only and exposes no dedicated `/api/vc` router
   
 **Evidence**:
 - `modules/specializations/registry.json` exists
 - `registry_loader.py` has fallback pattern
-- VC manifests load through `registry_loader.py` with vanilla fallback
+- Non-`vanilla` specialization requests normalize back to vanilla in `registry_loader.py`
 - Not all specializations production-tested
 
 **Fix Priority**: Medium (affects interview quality)
