@@ -84,7 +84,7 @@ verified-digital-twin-brain/
 │   │   ├── til.py            # Today I Learned feed
 │   │   ├── feedback.py       # User feedback
 │   │   ├── observability.py  # Health checks
-│   │   └── [conditional] api/vc_routes.py # VC-specific routes
+│   │   └── import_routes.py   # LinkedIn/data import endpoints
 │   ├── modules/               # 33 business logic modules
 │   │   ├── _core/             # 9 cognitive core components
 │   │   │   ├── host_engine.py        # Interview host
@@ -486,12 +486,12 @@ verified-digital-twin-brain/
 
 | Aspect | Your Summary | Current State | Status |
 |--------|--------------|---------------|--------|
-| **Routers** | 16 | 17 (includes conditional VC) | ⚠️ Minor update |
+| **Routers** | 16 | 17 | ⚠️ Minor update |
 | **Modules** | 25+ | 33 | ⚠️ Needs update |
 | **Dashboard Sections** | 20 | 20 | ✅ Accurate |
 | **Migrations** | 17 | 17 | ✅ Accurate |
 | **Embeddings** | In `ingestion.py` | **NEW** `embeddings.py` | ⚠️ Major change |
-| **VC Routes** | Not mentioned | Conditional loading | ⚠️ New feature |
+| **VC specialization** | Not mentioned | Registry-driven, no dedicated `/api/vc` router | ⚠️ New feature |
 | **Registry Loader** | Basic | Vanilla fallback logic | ⚠️ Enhanced |
 | **Retrieval** | Basic | P1-C timeouts added | ⚠️ Enhanced |
 | **LangGraph** | Basic | P1-A checkpointer | ⚠️ Enhanced |

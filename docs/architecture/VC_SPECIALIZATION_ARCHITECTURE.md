@@ -1,15 +1,22 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
-**Status:** Implementation Complete  
-**Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
+**Status:** Historical reference  
+**Purpose:** Historical explanation of an earlier VC specialization design
 
 > Historical note: sections below reference an older dedicated `/api/vc` router and `ENABLE_VC_ROUTES` gate. The current backend no longer mounts a VC-specific router; VC behavior is specialization-driven through the specialization registry.
+
+## Current State
+
+- VC behavior is specialization-driven through the specialization registry and lazy loading.
+- The current backend does not mount a dedicated `/api/vc` router.
+- `ENABLE_VC_ROUTES` is no longer a live runtime flag.
+- Treat the remaining sections below as design history, not the current runtime contract.
 
 ---
 
 ## Executive Summary
 
-This document explains **how connections are made** between VC specialization files and the core system, and **why lazy loading with conditional activation** is the only correct approach for this architecture.
+This historical document explains **how connections were made** between VC specialization files and an earlier router design, and **why lazy loading with conditional activation** was chosen at the time.
 
 ### Key Insight
 

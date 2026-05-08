@@ -1,14 +1,21 @@
 # VC Specialization Integration - Implementation Summary
 
-**Status:** ✅ Complete  
+**Status:** Historical reference  
 **Date:** 2025-01-XX  
-**Purpose:** Summary of VC specialization integration implementation
+**Purpose:** Historical summary of an earlier VC specialization integration design
 
 > Historical note: this document describes an earlier dedicated `/api/vc` router design. The current backend no longer registers a VC-specific router or reads `ENABLE_VC_ROUTES`; VC behavior is specialization-driven through the registry.
 
+## Current State
+
+- VC behavior is specialization-driven through `modules/specializations/vc/` and the registry loader.
+- The backend does not mount a dedicated `/api/vc` router.
+- `ENABLE_VC_ROUTES` is no longer a live runtime flag.
+- Treat the remaining sections below as implementation history, not the current runtime contract.
+
 ---
 
-## ✅ Completed Implementation
+## Historical Implementation Notes
 
 ### Phase 1: Registry Unification
 - ✅ Added VC entry to `backend/modules/specializations/registry.json`
@@ -20,12 +27,12 @@
 - ✅ Updated `get_specialization()` to use lazy loading
 - ✅ VC Python class only imported when `get_specialization("vc")` is called
 
-### Phase 3: Conditional VC Routes
+### Phase 3: Historical VC Routes (removed from current runtime)
 - ✅ Added conditional VC routes in `backend/main.py`
 - ✅ VC routes only included when `ENABLE_VC_ROUTES=true`
 - ✅ Default: `ENABLE_VC_ROUTES=false` (VC routes disabled)
 
-### Phase 4: VC Routes Fixes
+### Phase 4: Historical VC Route Fixes
 - ✅ Fixed import paths in `backend/api/vc_routes.py`
 - ✅ Added proper twin ownership verification
 - ✅ Added specialization_id check (only VC twins can use VC routes)
