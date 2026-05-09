@@ -27,10 +27,10 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 
 Current defaults in `main.py`:
 
-- `ENABLE_REALTIME_INGESTION` defaults to `false`
+- `ENABLE_REALTIME_INGESTION` defaults to `true`
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
-- `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
-- `ENABLE_VC_ROUTES` defaults to `false`
+- `ENABLE_ADVISOR_RETRIEVAL` defaults to `true`
+- the stale `ENABLE_VC_ROUTES` gate has been removed because no VC router is registered
 
 ## Scope
 
