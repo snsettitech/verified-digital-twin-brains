@@ -1,8 +1,10 @@
 # VC Specialization Integration - Implementation Summary
 
-**Status:** ✅ Complete  
+**Status:** Historical reference only  
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation
+
+> Current runtime note: the live backend no longer exposes `ENABLE_VC_ROUTES` or registers `backend/api/vc_routes.py`. Treat this document as implementation history, not current deployment guidance.
 
 ---
 

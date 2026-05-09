@@ -1,7 +1,9 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
-**Status:** Implementation Complete  
+**Status:** Historical reference only  
 **Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
+
+> Current runtime note: the live backend no longer exposes `ENABLE_VC_ROUTES` or registers `backend/api/vc_routes.py`. Keep this document as design history unless the VC route surface is intentionally reintroduced.
 
 ---
 
