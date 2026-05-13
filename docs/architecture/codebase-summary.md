@@ -84,7 +84,6 @@ verified-digital-twin-brain/
 │   │   ├── til.py            # Today I Learned feed
 │   │   ├── feedback.py       # User feedback
 │   │   ├── observability.py  # Health checks
-│   │   └── [conditional] api/vc_routes.py # VC-specific routes
 │   ├── modules/               # 33 business logic modules
 │   │   ├── _core/             # 9 cognitive core components
 │   │   │   ├── host_engine.py        # Interview host
@@ -96,12 +95,11 @@ verified-digital-twin-brain/
 │   │   │   ├── ontology_loader.py      # Knowledge ontology
 │   │   │   ├── registry_loader.py     # Specialization registry (with fallback)
 │   │   │   └── scribe_output_base_schema.json
-│   │   ├── specializations/   # 17 specialization files
+│   │   ├── specializations/   # Active specialization assets
 │   │   │   ├── registry.json   # Global registry
 │   │   │   ├── registry.py     # Lazy loading logic
 │   │   │   ├── base.py         # Base specialization class
-│   │   │   ├── vanilla/        # 5 files (default)
-│   │   │   └── vc/             # 8 files (VC Brain)
+│   │   │   └── vanilla/        # Active default specialization
 │   │   ├── agent.py           # LangGraph orchestrator (25KB)
 │   │   ├── retrieval.py       # Hybrid RAG pipeline (17KB) - P1-C timeouts
 │   │   ├── graph_context.py   # Cognitive graph context (14KB)
@@ -223,7 +221,7 @@ verified-digital-twin-brain/
 | **til** | `til.py` | `/til/{twin_id}/events` | Today I Learned feed |
 | **feedback** | `feedback.py` | `/feedback/{twin_id}` | User feedback |
 | **observability** | `observability.py` | `/health`, `/health/enhanced` | Health checks |
-| **vc** (conditional) | `api/vc_routes.py` | `/api/vc/artifact/upload/{twin_id}` | VC-specific routes. Only loaded when `ENABLE_VC_ROUTES=true`. Validates twin uses VC specialization before processing. |
+| **vc** (historical) | Removed | N/A | Historical VC-only router; no live registration remains in `backend/main.py`. |
 
 ---
 
@@ -316,11 +314,11 @@ verified-digital-twin-brain/
 - **Purpose**: Generic digital twin
 
 ### VC Brain Specialization
-- **Files**: 8 files
-- **Location**: `backend/modules/specializations/vc/`
-- **Purpose**: VC/Investment focused
-- **Routes**: Conditional (`ENABLE_VC_ROUTES=true`)
-- **Loading**: Lazy (only when `specialization_id='vc'`)
+- **Files**: Removed from the active repository
+- **Location**: Historical only
+- **Purpose**: Preserved in docs as prior specialization work
+- **Routes**: Historical only; no VC-only router is currently registered
+- **Loading**: Not applicable in the current codebase
 
 ---
 
@@ -445,7 +443,7 @@ verified-digital-twin-brain/
   - `memory.py` → `from modules.embeddings import get_embedding`
   - `ingestion.py` → `from modules.embeddings import get_embedding`
 - ✅ **Registry loader**: Vanilla fallback logic - prevents VC failures from breaking core functionality
-- ✅ **VC routes**: Conditional loading (`ENABLE_VC_ROUTES=true`) - only loads when explicitly enabled
+- ✅ **VC specialization**: Lazy registry support remains without a live VC-only router registration
 - ✅ **Retrieval module**: Refactored into helper functions for better maintainability and testability
 
 ---
@@ -502,10 +500,10 @@ verified-digital-twin-brain/
 ## 🎯 Key Updates Needed in Your Summary
 
 1. **Embeddings Module**: Now centralized in `modules/embeddings.py` (not in `ingestion.py`)
-2. **Router Count**: 17 routers (not 16) - includes conditional VC routes
+2. **Router Count**: 17 routers (not 16) - exclude historical VC-only routes
 3. **Module Count**: 33 modules (not 25+)
 4. **P0-P1 Hardening**: Add section on recent reliability/security improvements
-5. **VC Routes**: Mention conditional loading (`ENABLE_VC_ROUTES`)
+5. **VC Routes**: Treat as historical; current runtime has no VC-only router registration
 6. **Registry Loader**: Mention vanilla fallback logic
 7. **Retrieval**: Mention P1-C timeouts (2s/5s/3s)
 8. **LangGraph**: Mention P1-A Postgres checkpointer

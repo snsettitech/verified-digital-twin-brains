@@ -17,7 +17,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 - **AI Stack**: GPT-4o, Pinecone vectors, LangGraph agents
 - **Deployment**: Vercel (frontend) + Render/Railway (backend)
 - **Phase Completion**: 9/10 major phases complete
-- **Deep Research Routing**: Core deep-research routes are always registered; only the name-only JSON flow is gated by `NAME_ONLY_DEEP_RESEARCH_ENABLED`
+- **Deep Research Routing**: Core deep-research routes are gated by `DEEP_RESEARCH_ENABLED`; the name-only JSON flow has an additional `NAME_ONLY_DEEP_RESEARCH_ENABLED` gate
 
 ---
 
@@ -56,7 +56,6 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  ├─ til.py (today I learned feed)                   │        │
 │  ├─ feedback.py (user feedback)                      │        │
 │  └─ observability.py (health checks)                │        │
-│  └─ [conditional] vc_routes.py (venture capital)    │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Business Logic Layer (33 Modules)                 │        │
@@ -376,12 +375,12 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
   - 17 specialization files not fully tested
   - Registry loading has fallback but may mask errors
   - Some specialization ontologies incomplete
-  - VC-specific routes require `ENABLE_VC_ROUTES=true`
+  - VC-specific routes are historical only; shared specialization routes remain active
   
 **Evidence**:
 - `modules/specializations/registry.json` exists
 - `registry_loader.py` has fallback pattern
-- VC routes conditionally loaded
+- No VC-only router is currently registered in `backend/main.py`
 - Not all specializations production-tested
 
 **Fix Priority**: Medium (affects interview quality)
