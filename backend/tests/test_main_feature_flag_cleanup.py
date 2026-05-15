@@ -1,6 +1,8 @@
 import importlib
 import sys
 
+from fastapi.testclient import TestClient
+
 
 REQUIRED_ENV = {
     "SUPABASE_URL": "https://example.supabase.co",
@@ -45,3 +47,28 @@ def test_vc_routes_remain_absent_without_live_router(monkeypatch):
     paths = _route_paths(main.app)
 
     assert not any(path.startswith("/api/vc") for path in paths)
+
+
+def test_realtime_compat_diagnostics_are_unconditional(monkeypatch):
+    main = _load_main(monkeypatch)
+    client = TestClient(main.app)
+
+    health_response = client.get("/ingestion/realtime/health")
+    assert health_response.status_code == 200
+    assert health_response.json() == {
+        "status": "ok",
+        "feature": "realtime_ingestion",
+        "enabled": True,
+        "mode": "compat",
+        "compat_router": True,
+        "route_registered": True,
+    }
+
+    config_response = client.get("/ingestion/realtime/config")
+    assert config_response.status_code == 200
+    assert config_response.json() == {
+        "enabled": True,
+        "mode": "compat",
+        "compat_router": True,
+        "route_registered": True,
+    }
