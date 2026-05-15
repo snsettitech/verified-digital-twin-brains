@@ -84,14 +84,8 @@ except ImportError:
     ingestion_realtime = None
 
 # ISSUE-003: Feature flag definitions (moved here for proper ordering)
-# Realtime ingestion is now enabled by default. Set ENABLE_REALTIME_INGESTION=false to disable.
-REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "true").lower() == "true"
 # Enhanced ingestion remains opt-in until further validation
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
-# advisor retrieval is now enabled by default. Set ENABLE_ADVISOR_RETRIEVAL=false to disable.
-ADVISOR_RETRIEVAL_ENABLED = os.getenv("ENABLE_ADVISOR_RETRIEVAL", "true").lower() == "true"
-# VC routes remain opt-in
-VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 # Deep Research routes remain env-gated for safer staged rollouts.
 DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 # Name-only deep research flow (enabled by default; can be disabled explicitly)
@@ -101,10 +95,7 @@ def print_feature_flag_summary():
     """Print enabled/disabled feature summary for observability."""
     print("-" * 60)
     print("Feature Flag Status:")
-    print(f"  Realtime Ingestion: {'ENABLED' if REALTIME_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
-    print(f"  advisor retrieval:   {'ENABLED' if ADVISOR_RETRIEVAL_ENABLED else 'DISABLED'}")
-    print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
     print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
@@ -176,15 +167,11 @@ app.include_router(persona_specs.router)
 app.include_router(twin_runtime.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
-# Use feature flags defined at top of file
-if REALTIME_INGESTION_ENABLED:
-    if ingestion_realtime is not None:
-        app.include_router(ingestion_realtime.router)
-        print("[INFO] Realtime ingestion routes enabled (ENABLE_REALTIME_INGESTION=true)")
-    else:
-        print("[WARN] Realtime ingestion requested but router module is unavailable")
+if ingestion_realtime is not None:
+    app.include_router(ingestion_realtime.router)
+    print("[INFO] Realtime ingestion compatibility routes enabled")
 else:
-    print("[INFO] Realtime ingestion routes disabled (ENABLE_REALTIME_INGESTION=false)")
+    print("[WARN] Realtime ingestion router module is unavailable")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 app.include_router(persona_link_compile.router)
@@ -215,12 +202,8 @@ app.include_router(api_keys.router)
 app.include_router(debug_retrieval.router)
 app.include_router(verify.router)
 app.include_router(owner_memory.router)
-
-if ADVISOR_RETRIEVAL_ENABLED:
-    app.include_router(retrieval_advisor.router)
-    print("[INFO] advisor retrieval routes enabled (ENABLE_ADVISOR_RETRIEVAL=true)")
-else:
-    print("[INFO] advisor retrieval routes disabled (ENABLE_ADVISOR_RETRIEVAL=false)")
+app.include_router(retrieval_advisor.router)
+print("[INFO] advisor retrieval routes enabled")
 
 # P2: Langfuse observability routers
 app.include_router(regression_testing.router)
