@@ -44,8 +44,8 @@
 - Verification:
   - `/ingest/file`, `/ingest/url`, `/ingest/youtube` still function.
 
-## PR 5: Delete Specializations + VC Routes
-- Goal: Remove VC-specific and specialization-only surfaces.
+## PR 5: Delete Specializations + Legacy VC Router
+- Goal: Remove specialization-only surfaces plus the retired VC-only router files.
 - Files:
   - `backend/routers/specializations.py`, `backend/api/vc_routes.py`, `backend/modules/specializations/*`.
 - Verification:
