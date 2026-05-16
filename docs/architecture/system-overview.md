@@ -11,7 +11,7 @@
 The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creating trustworthy, auditable digital twins with multi-tenant isolation, governance layers, and agentic capabilities. The system is **currently deployable** but requires attention to specific operational and optimization areas.
 
 ### Key Stats
-- **Backend**: 33 core modules + 17 API routers (143+ files)
+- **Backend**: 40+ API routers and 70+ business logic modules
 - **Frontend**: Next.js 16 with 20+ dashboard sections
 - **Database**: 26+ Supabase tables with RLS policies
 - **AI Stack**: GPT-4o, Pinecone vectors, LangGraph agents
@@ -39,7 +39,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 ┌──────────────────────▼──────────────────────────────────────────┐
 │              BACKEND (FastAPI + Python 3.11)                    │
 │  ┌────────────────────────────────────────────────────┐        │
-│  │ API Router Layer (17 Routers)                      │        │
+│  │ API Router Layer (40+ Routers)                    │        │
 │  ├─ auth.py (JWT, user sync, sessions)              │        │
 │  ├─ chat.py (3 chat variants)                        │        │
 │  ├─ twins.py (CRUD, settings)                        │        │
@@ -56,10 +56,10 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  ├─ til.py (today I learned feed)                   │        │
 │  ├─ feedback.py (user feedback)                      │        │
 │  └─ observability.py (health checks)                │        │
-│  └─ [conditional] vc_routes.py (venture capital)    │        │
+│  └─ youtube_preflight.py (YouTube preflight checks) │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
-│  │ Business Logic Layer (33 Modules)                 │        │
+│  │ Business Logic Layer (70+ Modules)               │        │
 │  ├─ COGNITIVE CORE (_core/)                          │        │
 │  │  ├─ host_engine.py (Interview orchestration)     │        │
 │  │  ├─ scribe_engine.py (Memory extraction)          │        │
@@ -105,7 +105,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Data Layer                                         │        │
-│  ├─ main.py (FastAPI app, 17 routers, CORS)        │        │
+│  ├─ main.py (FastAPI app, 40+ routers, CORS)      │        │
 │  ├─ worker.py (Background job processor)            │        │
 │  └─ database/ (migrations, RPC functions)           │        │
 │  └────────────────────────────────────────────────────┘        │
@@ -677,7 +677,7 @@ Error: Invalid JWT signature
 ### Backend
 - [x] Code compiles without errors
 - [x] All imports resolve
-- [x] 17 routers integrated
+- [x] Core router stack integrated
 - [x] Health check endpoint ready
 - [x] Environment variable validation ready
 - [x] CORS configured
@@ -801,7 +801,7 @@ Error: Invalid JWT signature
 
 ### Backend ✅
 - **Well-structured**: Clear separation of concerns
-- **Modular**: 33 focused business logic modules
+- **Modular**: 70+ focused business logic modules
 - **Documented**: Module-level docstrings present
 - **Scalable**: Easy to add new routers/modules
 - **Issue**: `_core/` modules getting large (some >500 lines)

@@ -22,8 +22,8 @@ A **advisor-grade** AI platform for creating verified, trustworthy digital twins
 ┌──────────────────────▼──────────────────────────────────────┐
 │                 BACKEND (FastAPI + Python 3.12)             │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐               │
-│  │  17 API    │ │  33 Core   │ │ Cognitive │               │
-│  │  Routers   │ │  Modules   │ │   Brain   │               │
+│  │   40+ API  │ │   70+ Core │ │ Cognitive │               │
+│  │   Routers  │ │   Modules  │ │   Brain   │               │
 │  └────────────┘ └────────────┘ └────────────┘               │
 │  - LangGraph Agent                                          │
 │  - Hybrid RAG Retrieval (Verified → Vector → Tools)         │
@@ -67,7 +67,7 @@ verified-digital-twin-brain/
 ├── backend/                    # 143+ files
 │   ├── main.py                # FastAPI entry point (166 lines)
 │   ├── worker.py              # Background job worker
-│   ├── routers/               # 17 API routers
+│   ├── routers/               # 40+ API routers
 │   │   ├── auth.py           # JWT, user sync, sessions
 │   │   ├── chat.py           # Chat endpoints (3 variants)
 │   │   ├── twins.py          # Twin CRUD, settings
@@ -84,8 +84,8 @@ verified-digital-twin-brain/
 │   │   ├── til.py            # Today I Learned feed
 │   │   ├── feedback.py       # User feedback
 │   │   ├── observability.py  # Health checks
-│   │   └── [conditional] api/vc_routes.py # VC-specific routes
-│   ├── modules/               # 33 business logic modules
+│   │   └── youtube_preflight.py # YouTube preflight checks
+│   ├── modules/               # 70+ business logic modules
 │   │   ├── _core/             # 9 cognitive core components
 │   │   │   ├── host_engine.py        # Interview host
 │   │   │   ├── scribe_engine.py      # Memory extraction
@@ -203,7 +203,7 @@ verified-digital-twin-brain/
 
 ---
 
-## 🔌 Backend API Routers (17)
+## 🔌 Backend API Routers (40+)
 
 | Router | File | Key Endpoints | Purpose |
 |--------|------|---------------|---------|
@@ -226,7 +226,7 @@ verified-digital-twin-brain/
 
 ---
 
-## 🧠 Backend Modules (33)
+## 🧠 Backend Modules (70+)
 
 ### Core AI & Retrieval
 | Module | Size | Purpose |
@@ -485,8 +485,8 @@ verified-digital-twin-brain/
 
 | Aspect | Your Summary | Current State | Status |
 |--------|--------------|---------------|--------|
-| **Routers** | 16 | 17 | ⚠️ Minor update |
-| **Modules** | 25+ | 33 | ⚠️ Needs update |
+| **Routers** | 16 | 40+ | ⚠️ Minor update |
+| **Modules** | 25+ | 70+ | ⚠️ Needs update |
 | **Dashboard Sections** | 20 | 20 | ✅ Accurate |
 | **Migrations** | 17 | 17 | ✅ Accurate |
 | **Embeddings** | In `ingestion.py` | **NEW** `embeddings.py` | ⚠️ Major change |
@@ -501,8 +501,8 @@ verified-digital-twin-brain/
 ## 🎯 Key Updates Needed in Your Summary
 
 1. **Embeddings Module**: Now centralized in `modules/embeddings.py` (not in `ingestion.py`)
-2. **Router Count**: 17 routers (not 16)
-3. **Module Count**: 33 modules (not 25+)
+2. **Router Count**: 40+ routers (not 16)
+3. **Module Count**: 70+ modules (not 25+)
 4. **P0-P1 Hardening**: Add section on recent reliability/security improvements
 5. **VC Routes**: Note that VC uses shared specialization endpoints rather than a separate router
 6. **Registry Loader**: Mention vanilla fallback logic
