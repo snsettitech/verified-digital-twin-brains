@@ -39,7 +39,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 ┌──────────────────────▼──────────────────────────────────────────┐
 │              BACKEND (FastAPI + Python 3.11)                    │
 │  ┌────────────────────────────────────────────────────┐        │
-│  │ API Router Layer (17 Routers)                      │        │
+│  │ API Router Layer (selected routers)                │        │
 │  ├─ auth.py (JWT, user sync, sessions)              │        │
 │  ├─ chat.py (3 chat variants)                        │        │
 │  ├─ twins.py (CRUD, settings)                        │        │
@@ -56,7 +56,6 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  ├─ til.py (today I learned feed)                   │        │
 │  ├─ feedback.py (user feedback)                      │        │
 │  └─ observability.py (health checks)                │        │
-│  └─ [conditional] vc_routes.py (venture capital)    │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Business Logic Layer (33 Modules)                 │        │
