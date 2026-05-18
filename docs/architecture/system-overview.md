@@ -39,7 +39,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 ┌──────────────────────▼──────────────────────────────────────────┐
 │              BACKEND (FastAPI + Python 3.11)                    │
 │  ┌────────────────────────────────────────────────────┐        │
-│  │ API Router Layer (17 Routers)                      │        │
+│  │ API Router Layer (selected routers)                │        │
 │  ├─ auth.py (JWT, user sync, sessions)              │        │
 │  ├─ chat.py (3 chat variants)                        │        │
 │  ├─ twins.py (CRUD, settings)                        │        │
@@ -56,7 +56,6 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  ├─ til.py (today I learned feed)                   │        │
 │  ├─ feedback.py (user feedback)                      │        │
 │  └─ observability.py (health checks)                │        │
-│  └─ [conditional] vc_routes.py (venture capital)    │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Business Logic Layer (33 Modules)                 │        │
@@ -376,12 +375,12 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
   - 17 specialization files not fully tested
   - Registry loading has fallback but may mask errors
   - Some specialization ontologies incomplete
-  - VC-specific routes require `ENABLE_VC_ROUTES=true`
+  - No separate VC-specific runtime routes are mounted in the current backend
   
 **Evidence**:
 - `modules/specializations/registry.json` exists
 - `registry_loader.py` has fallback pattern
-- VC routes conditionally loaded
+- VC specialization remains in the registry and docs, but not as a separate mounted router
 - Not all specializations production-tested
 
 **Fix Priority**: Medium (affects interview quality)
