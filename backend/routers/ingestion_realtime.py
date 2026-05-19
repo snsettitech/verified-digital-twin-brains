@@ -1,8 +1,8 @@
 """
 Realtime ingestion compatibility router.
 
-This module keeps the realtime-ingestion feature flag path valid even when
-full streaming ingestion infrastructure is not deployed in the environment.
+This module provides always-on compatibility diagnostics for the launched
+realtime-ingestion surface without requiring the full streaming pipeline.
 """
 
 from __future__ import annotations

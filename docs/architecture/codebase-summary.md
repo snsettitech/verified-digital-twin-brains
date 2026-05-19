@@ -84,7 +84,7 @@ verified-digital-twin-brain/
 │   │   ├── til.py            # Today I Learned feed
 │   │   ├── feedback.py       # User feedback
 │   │   ├── observability.py  # Health checks
-│   │   └── [conditional] api/vc_routes.py # VC-specific routes
+│   │   └── specializations.py  # Shared specialization config routes
 │   ├── modules/               # 33 business logic modules
 │   │   ├── _core/             # 9 cognitive core components
 │   │   │   ├── host_engine.py        # Interview host
@@ -218,7 +218,7 @@ verified-digital-twin-brain/
 | **knowledge** | `knowledge.py` | `/sources/{twin_id}`, `/verified-qna/{twin_id}` | Sources, chunks, verified QnA |
 | **metrics** | `metrics.py` | `/metrics/health`, `/metrics/system` | Observability, stats |
 | **jobs** | `jobs.py` | `/jobs`, `/jobs/{id}` | Background jobs |
-| **specializations** | `specializations.py` | `/specializations`, `/specializations/{id}/manifest` | Manifest, ontology |
+| **specializations** | `specializations.py` | `/config/specialization`, `/config/specializations`, `/twins/{twin_id}/specialization` | Shared specialization config |
 | **graph** | `graph.py` | `/graph/{twin_id}/nodes`, `/graph/{twin_id}/edges` | Nodes, edges |
 | **til** | `til.py` | `/til/{twin_id}/events` | Today I Learned feed |
 | **feedback** | `feedback.py` | `/feedback/{twin_id}` | User feedback |
@@ -485,12 +485,12 @@ verified-digital-twin-brain/
 
 | Aspect | Your Summary | Current State | Status |
 |--------|--------------|---------------|--------|
-| **Routers** | 16 | 17 (includes conditional VC) | ⚠️ Minor update |
+| **Routers** | 16 | See live `backend/main.py` router list | ⚠️ Minor update |
 | **Modules** | 25+ | 33 | ⚠️ Needs update |
 | **Dashboard Sections** | 20 | 20 | ✅ Accurate |
 | **Migrations** | 17 | 17 | ✅ Accurate |
 | **Embeddings** | In `ingestion.py` | **NEW** `embeddings.py` | ⚠️ Major change |
-| **VC Routes** | Not mentioned | Conditional loading | ⚠️ New feature |
+| **VC Routes** | Not mentioned | Removed from live runtime | ⚠️ Historical drift |
 | **Registry Loader** | Basic | Vanilla fallback logic | ⚠️ Enhanced |
 | **Retrieval** | Basic | P1-C timeouts added | ⚠️ Enhanced |
 | **LangGraph** | Basic | P1-A checkpointer | ⚠️ Enhanced |

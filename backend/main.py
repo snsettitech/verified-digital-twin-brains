@@ -77,11 +77,7 @@ from routers import (
     import_routes,
 )
 from modules.specializations import get_specialization
-
-try:
-    from routers import ingestion_realtime
-except ImportError:
-    ingestion_realtime = None
+from routers import ingestion_realtime
 
 # ISSUE-003: Remaining runtime feature flags.
 # Enhanced ingestion remains opt-in until further validation.
@@ -167,11 +163,8 @@ app.include_router(persona_specs.router)
 app.include_router(twin_runtime.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
-if ingestion_realtime is not None:
-    app.include_router(ingestion_realtime.router)
-    print("[INFO] Realtime ingestion compat routes enabled")
-else:
-    print("[WARN] Realtime ingestion router module is unavailable")
+app.include_router(ingestion_realtime.router)
+print("[INFO] Realtime ingestion compat routes enabled")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 app.include_router(persona_link_compile.router)
