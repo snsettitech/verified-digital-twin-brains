@@ -84,7 +84,6 @@ verified-digital-twin-brain/
 │   │   ├── til.py            # Today I Learned feed
 │   │   ├── feedback.py       # User feedback
 │   │   ├── observability.py  # Health checks
-│   │   └── [conditional] api/vc_routes.py # VC-specific routes
 │   ├── modules/               # 33 business logic modules
 │   │   ├── _core/             # 9 cognitive core components
 │   │   │   ├── host_engine.py        # Interview host
