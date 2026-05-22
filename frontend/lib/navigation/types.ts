@@ -4,6 +4,8 @@
  * Single source of truth for sidebar structure types.
  */
 
+import type { RuntimeFeatureFlag } from "@/lib/features/runtimeFlags";
+
 export interface NavItem {
     name: string;
     href: string;
@@ -12,7 +14,7 @@ export interface NavItem {
     /** Optional: require a capability to show this item */
     requiresCapability?: string;
     /** Optional runtime feature flag gate */
-    featureFlag?: string;
+    featureFlag?: RuntimeFeatureFlag;
 }
 
 export interface NavSection {
