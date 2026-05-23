@@ -247,7 +247,6 @@ This document categorizes every frontend file according to its fate in the Clone
 
 | File | Purpose |
 |------|---------|
-| `SpecializationContext.tsx` | Vertical config |
 | `index.ts` | Exports |
 
 ---
