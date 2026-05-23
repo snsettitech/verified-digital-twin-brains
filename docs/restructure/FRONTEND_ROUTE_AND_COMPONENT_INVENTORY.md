@@ -175,7 +175,6 @@ Settings
 |---------|------|---------|
 | TwinContext | `lib/context/TwinContext.tsx` | Twin state, user auth |
 | ThemeContext | `lib/context/ThemeContext.tsx` | Dark/light mode |
-| SpecializationContext | `contexts/SpecializationContext.tsx` | Vertical config |
 
 ---
 
