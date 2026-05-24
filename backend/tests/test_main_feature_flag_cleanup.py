@@ -28,7 +28,8 @@ def test_main_no_vc_feature_flag_symbol(monkeypatch):
     assert not hasattr(main, "VC_ROUTES_ENABLED")
 
 
-def test_specialization_routes_still_mount_without_vc_routes(monkeypatch):
+def test_legacy_vc_env_var_no_longer_changes_route_surface(monkeypatch):
+    monkeypatch.setenv("ENABLE_VC_ROUTES", "true")
     main = _load_main(monkeypatch)
 
     route_paths = {getattr(route, "path", "") for route in main.app.routes}
