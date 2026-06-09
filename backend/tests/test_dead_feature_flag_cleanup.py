@@ -15,6 +15,18 @@ def test_dead_backend_feature_flag_surfaces_stay_removed() -> None:
     assert "GRAPH_RAG_ENABLED" not in read_repo_file("docs/ops/PRODUCTION_DEPLOYMENT_RUNBOOK.md")
     assert "RUNTIME_CONFIDENCE_GATE_ENABLED" not in read_repo_file(".env.example")
     assert "RUNTIME_CONFIDENCE_GATE_ENABLED" not in read_repo_file("backend/.env.example")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("backend/main.py")
+    assert "VC_ROUTES_ENABLED" not in read_repo_file("backend/main.py")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("backend/.env.example")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("AGENTS.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/ops/PRODUCTION_DEPLOYMENT_RUNBOOK.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/architecture/system-overview.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/architecture/codebase-summary.md")
+    assert "vc_routes.py" not in read_repo_file("docs/architecture/system-overview.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/restructure/BACKEND_ROUTE_INVENTORY.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/restructure/BACKEND_RESTRUCTURE_OVERVIEW.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/restructure/BACKEND_DELETION_DEFER_PLAN.md")
+    assert "ENABLE_VC_ROUTES" not in read_repo_file("docs/audit/issues/ISSUE-003-enable-stable-features-by-default.md")
     assert not (REPO_ROOT / "backend/tests/test_graphrag_feature_flag.py").exists()
 
 

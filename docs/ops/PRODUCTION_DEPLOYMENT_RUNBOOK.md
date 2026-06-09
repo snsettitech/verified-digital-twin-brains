@@ -96,7 +96,6 @@ Core:
 Feature/perf:
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
-- `ENABLE_VC_ROUTES=false` (unless actively used)
 - Phase 5 realtime ingestion:
   - Default: `ENABLE_REALTIME_INGESTION=true`
   - Emergency rollback: set `ENABLE_REALTIME_INGESTION=false`
