@@ -4,6 +4,8 @@ Tests for State Machine Fix
 Run: pytest backend/tests/test_state_machine_fix.py -v
 """
 
+from types import SimpleNamespace
+
 import pytest
 from modules.research_orchestrator_state_fix import (
     ResearchRunStatus,
@@ -38,6 +40,19 @@ class TestDeepResearchEnablement:
     def test_default_enabled(self):
         run_data = {"checkpoint_data": {}}
         # Should default to enabled
+        assert is_deep_research_enabled(run_data) is True
+
+    def test_default_enabled_ignores_legacy_config_attrs(self, monkeypatch):
+        run_data = {"checkpoint_data": {}}
+
+        monkeypatch.setattr(
+            "modules.deep_research_config.get_config",
+            lambda: SimpleNamespace(
+                legacy_disabled_flag=True,
+                is_enabled=lambda: True,
+            ),
+        )
+
         assert is_deep_research_enabled(run_data) is True
 
 
