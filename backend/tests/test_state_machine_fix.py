@@ -4,6 +4,8 @@ Tests for State Machine Fix
 Run: pytest backend/tests/test_state_machine_fix.py -v
 """
 
+from unittest.mock import patch
+
 import pytest
 from modules.research_orchestrator_state_fix import (
     ResearchRunStatus,
@@ -39,6 +41,33 @@ class TestDeepResearchEnablement:
         run_data = {"checkpoint_data": {}}
         # Should default to enabled
         assert is_deep_research_enabled(run_data) is True
+
+    def test_default_enabled_ignores_legacy_env_flags(self):
+        from modules.deep_research_config import DeepResearchConfig
+
+        with patch.dict(
+            "os.environ",
+            {
+                "DEEP_RESEARCH_ENABLED": "false",
+                "DEEP_RESEARCH_GLOBAL_DISABLE": "true",
+            },
+            clear=False,
+        ):
+            assert DeepResearchConfig.from_env().is_enabled() is True
+
+    def test_deprecated_rollout_fields_removed_from_config_model(self):
+        from modules.deep_research_config import DeepResearchConfig
+
+        deprecated_fields = {
+            "global_disable",
+            "phase_8_claims_disabled",
+            "phase_9_web_verification_disabled",
+            "phase_10_claim_finalization_disabled",
+            "phase_11_human_adjudication_disabled",
+            "phase_12_runtime_publication_disabled",
+        }
+
+        assert deprecated_fields.isdisjoint(DeepResearchConfig.model_fields)
 
 
 class TestStateTransitions:
