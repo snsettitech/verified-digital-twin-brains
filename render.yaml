@@ -123,8 +123,6 @@ services:
       - key: RETRIEVAL_HYDE_ENABLED
         value: "true"
       # Deep Research Runtime Controls
-      - key: DEEP_RESEARCH_ENABLED
-        value: "true"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
         value: "true"
       - key: NAME_RESEARCH_METRICS_QA_ENABLED
@@ -260,8 +258,6 @@ services:
       - key: QUERY_REWRITING_MIN_CONFIDENCE
         value: "0.7"
       - key: RETRIEVAL_HYDE_ENABLED
-        value: "true"
-      - key: DEEP_RESEARCH_ENABLED
         value: "true"
       - key: NAME_ONLY_DEEP_RESEARCH_ENABLED
         value: "true"
