@@ -355,31 +355,21 @@ class TestFeatureFlags:
     """Test Deep Research configuration behavior."""
     
     @patch("os.getenv")
-    def test_phase_9_disabled_flag_ignored(self, mock_getenv):
-        """Deprecated Phase 9 disable flag should be ignored."""
+    def test_legacy_web_disable_flag_not_exposed(self, mock_getenv):
+        """Deprecated web verification rollout flag should not remain on the config."""
         from modules.deep_research_config import DeepResearchConfig
-        
-        def mock_env(key, default=None):
-            if key == "DR_PHASE_9_WEB_VERIFICATION_DISABLED":
-                return "true"
-            return default
-        
-        mock_getenv.side_effect = mock_env
+
+        mock_getenv.side_effect = lambda key, default=None: default
         config = DeepResearchConfig.from_env()
         
-        assert config.phase_9_web_verification_disabled is False
+        assert not hasattr(config, "phase_9_web_verification_disabled")
     
     @patch("os.getenv")
     def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
+        """Deep Research should remain enabled in the simplified config."""
         from modules.deep_research_config import DeepResearchConfig
-        
-        def mock_env(key, default=None):
-            if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
-                return "false"
-            return default
-        
-        mock_getenv.side_effect = mock_env
+
+        mock_getenv.side_effect = lambda key, default=None: default
         config = DeepResearchConfig.from_env()
         
         assert config.is_enabled() is True
