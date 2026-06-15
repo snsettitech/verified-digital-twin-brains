@@ -87,9 +87,6 @@ _checkpointer = None
 _ROUTER_KNOWLEDGE_CACHE_TTL_SECONDS = float(
     os.getenv("ROUTER_KNOWLEDGE_CACHE_TTL_SECONDS", "30")
 )
-_ROUTER_FORCE_RETRIEVAL_WITH_KNOWLEDGE = (
-    os.getenv("ROUTER_FORCE_RETRIEVAL_WITH_KNOWLEDGE", "true").lower() == "true"
-)
 _router_knowledge_cache: Dict[str, Dict[str, Any]] = {}
 
 # Adaptive grounding policy for planner output rendering.
