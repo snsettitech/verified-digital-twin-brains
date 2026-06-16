@@ -53,7 +53,7 @@ def is_deep_research_enabled(run_data: Dict[str, Any]) -> bool:
     
     Deep research is enabled if:
     1. Explicitly enabled in run metadata
-    2. No explicit disable flag and feature flag is on globally
+    2. No explicit disable flag and the global config remains enabled
     """
     checkpoint = run_data.get("checkpoint_data", {})
     metadata = checkpoint.get("metadata", {})
@@ -69,9 +69,9 @@ def is_deep_research_enabled(run_data: Dict[str, Any]) -> bool:
     # Check global config (default to True for new runs)
     from modules.deep_research_config import get_config
     config = get_config()
-    
-    # Deep research is enabled by default unless explicitly disabled
-    return not getattr(config, 'phase_8_claims_disabled', False)
+
+    # Deep research is always enabled unless a specific run opted out.
+    return config.is_enabled()
 
 
 def get_valid_transitions(
