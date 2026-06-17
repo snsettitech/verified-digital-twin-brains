@@ -130,8 +130,6 @@ Feature flags control rollout and safe fallback:
 - `NEXT_PUBLIC_FF_MEMORY_CENTER`
 - `NEXT_PUBLIC_FF_PRIVACY_CONTROLS`
 - `NEXT_PUBLIC_FF_PUBLISH_CONTROLS`
-- `NEXT_PUBLIC_FF_SOURCE_LABELING`
-- `NEXT_PUBLIC_FF_OFFICE_HOURS_MODE`
 
 Disabled features must show deterministic gated UI state.
 
