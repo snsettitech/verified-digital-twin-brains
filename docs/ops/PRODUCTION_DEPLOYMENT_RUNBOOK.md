@@ -94,7 +94,6 @@ Core:
 - `REDIS_URL`
 
 Feature/perf:
-- `GRAPH_RAG_ENABLED=true`
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
 - `ENABLE_VC_ROUTES=false` (unless actively used)
