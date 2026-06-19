@@ -25,18 +25,18 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 - `backend/main.py:102`
 - `backend/main.py:119`
 
-Current defaults in `main.py`:
+Current state in `main.py`:
 
-- `ENABLE_REALTIME_INGESTION` defaults to `false`
-- `ENABLE_ENHANCED_INGESTION` defaults to `false`
-- `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
-- `ENABLE_VC_ROUTES` defaults to `false`
+- Realtime ingestion routes are always mounted
+- `ENABLE_ENHANCED_INGESTION` remains opt-in
+- Advisor retrieval routes are always mounted
+- `ENABLE_VC_ROUTES` remains opt-in
 
 ## Scope
 
 In scope:
 
-- Flip defaults to enabled for stable features.
+- Remove legacy env gates for stable routes that are now always on.
 - Keep unstable/optional features behind explicit flags.
 - Document current feature matrix and required env vars.
 
@@ -48,28 +48,28 @@ Out of scope:
 ## Implementation Checklist
 
 - [x] Define "stable feature" list with engineering sign-off.
-- [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` if stable.
-- [x] Keep explicit opt-out flags for emergency kill switch.
+- [x] Promote `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` through default-on rollout once stable.
+- [x] Remove legacy opt-out flags once routes are confirmed stable.
 - [x] Add startup log summary that prints enabled/disabled feature map.
 - [x] Add smoke tests that assert route availability under default config.
 - [x] Update `.env.example` and deployment runbook documentation.
 
 ## Acceptance Criteria (from audit report)
 
-- [x] Remove `ENABLE_REALTIME_INGESTION` flag (enable by default).
-- [x] Remove `ENABLE_ADVISOR_RETRIEVAL` flag (enable by default).
+- [x] Remove `ENABLE_REALTIME_INGESTION` flag and keep the routes always on.
+- [x] Remove `ENABLE_ADVISOR_RETRIEVAL` flag and keep the routes always on.
 - [x] Document any remaining feature flags.
 
 ## Verification Plan
 
 - [x] Boot backend with no feature env vars and confirm stable routes are mounted.
-- [x] Confirm explicit disable env var still works for emergency rollback.
+- [x] Confirm stable routes stay mounted even if legacy env vars are still present.
 - [x] Confirm docs match runtime behavior.
 
 ## Risks and Mitigations
 
 - Risk: Enabling unstable paths in production.
   Mitigation: Gate defaults behind smoke tests and staged rollout.
-- Risk: Existing deployments rely on current disabled defaults.
-  Mitigation: Document behavior change and provide rollback env flags.
+- Risk: Existing deployments may still carry stale env vars that no longer affect route mounting.
+  Mitigation: Document the removal and verify stable routes remain available under legacy env configuration.
 
