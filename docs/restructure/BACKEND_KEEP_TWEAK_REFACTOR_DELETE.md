@@ -33,5 +33,5 @@
 | Enhanced ingestion (crawl, RSS, social, pipelines) | Delete or defer | `backend/routers/enhanced_ingestion.py`, `backend/modules/web_crawler.py`, `backend/modules/social_ingestion.py`, `backend/modules/auto_updater.py` | Adds Firecrawl/Twitter/LinkedIn complexity. Only enabled with `ENABLE_ENHANCED_INGESTION` in `backend/main.py`. |
 | Audio TTS | Delete or defer | `backend/routers/audio.py`, `backend/modules/audio_generator.py` | Out-of-scope (web chat only). |
 | Reasoning engine | Delete or defer | `backend/routers/reasoning.py`, `backend/modules/reasoning_engine.py` | Out-of-scope. |
-| Specializations + VC | Delete or defer | `backend/routers/specializations.py`, `backend/api/vc_routes.py`, `backend/modules/specializations/*` | New product is general clone-for-experts; no VC specialization. |
+| Specializations + VC | Delete or defer | `backend/routers/specializations.py`, `backend/modules/specializations/*` | New product is general clone-for-experts; no VC specialization. |
 | External tool connectors / web search | Delete or defer | `backend/modules/tools.py` | Composio + web search are platform-level features, out-of-scope. |
