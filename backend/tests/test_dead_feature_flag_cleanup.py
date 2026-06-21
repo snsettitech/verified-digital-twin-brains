@@ -49,6 +49,7 @@ LIVE_SURFACE_LITERALS = {
     ),
     "docs/architecture/system-overview.md": (
         "ENABLE_VC_ROUTES",
+        "vc_routes.py",
     ),
     "docs/architecture/codebase-summary.md": (
         "ENABLE_VC_ROUTES",
@@ -62,6 +63,27 @@ LIVE_SURFACE_LITERALS = {
     "docs/architecture/VC_IMPLEMENTATION_SUMMARY.md": (
         "ENABLE_VC_ROUTES",
         "VC_ROUTES_ENABLED",
+        "api/vc_routes.py",
+    ),
+    "docs/restructure/BACKEND_ROUTE_INVENTORY.md": (
+        "ENABLE_VC_ROUTES",
+        "api/vc_routes.py",
+    ),
+    "docs/restructure/BACKEND_RESTRUCTURE_OVERVIEW.md": (
+        "ENABLE_VC_ROUTES",
+        "api/vc_routes.py",
+    ),
+    "docs/restructure/BACKEND_DELETION_DEFER_PLAN.md": (
+        "ENABLE_VC_ROUTES",
+        "api/vc_routes.py",
+    ),
+    "docs/restructure/BACKEND_PR_EXECUTION_PLAN.md": (
+        "api/vc_routes.py",
+    ),
+    "docs/restructure/BACKEND_KEEP_TWEAK_REFACTOR_DELETE.md": (
+        "api/vc_routes.py",
+    ),
+    "docs/restructure/BACKEND_API_CONTRACT_V1.md": (
         "api/vc_routes.py",
     ),
 }
