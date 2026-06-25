@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import FeatureGate from '@/components/ui/FeatureGate';
-import { isRuntimeFeatureEnabled } from '@/lib/features/runtimeFlags';
 import { useTwin } from '@/lib/context/TwinContext';
 import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
 
@@ -22,7 +20,6 @@ const MEMORY_TYPES = ['belief', 'preference', 'stance', 'lens', 'tone_rule'];
 export default function MemoryCenterPage() {
   const { activeTwin, isLoading: twinLoading } = useTwin();
   const { get, post, patch, del } = useAuthFetch();
-  const enabled = isRuntimeFeatureEnabled('memoryCenter');
 
   const [rows, setRows] = useState<OwnerMemory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -305,63 +302,57 @@ export default function MemoryCenterPage() {
   })();
 
   return (
-    <FeatureGate
-      enabled={enabled}
-      title="Memory Center"
-      description="Enable NEXT_PUBLIC_FF_MEMORY_CENTER to manage explicit owner memory."
-    >
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Memory Center</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Explicit-only memory management with provenance labels and identity-safe controls.
-          </p>
-        </div>
-        {error ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-        ) : null}
-        {content}
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Memory Center</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Explicit-only memory management with provenance labels and identity-safe controls.
+        </p>
+      </div>
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+      ) : null}
+      {content}
 
-        {/* ─── Graph Memory — Early Access ─── */}
-        <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 border border-amber-200/60">
-                <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
+      {/* ─── Graph Memory — Early Access ─── */}
+      <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-amber-100 border border-amber-200/60">
+              <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-900">Knowledge Graph</h2>
+                <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600">
+                  Early Access
+                </span>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900">Knowledge Graph</h2>
-                  <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600">
-                    Early Access
-                  </span>
-                </div>
-                <p className="mt-0.5 text-sm text-slate-500">Structured memory of your beliefs, decisions, and knowledge connections.</p>
-              </div>
+              <p className="mt-0.5 text-sm text-slate-500">Structured memory of your beliefs, decisions, and knowledge connections.</p>
             </div>
           </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {[
-              { label: 'Belief Nodes', desc: 'Core positions and values your persona holds with evidence.' },
-              { label: 'Decision Graph', desc: 'How you approach tradeoffs — surfaced in every answer.' },
-              { label: 'Concept Links', desc: 'Relationships between your areas of expertise.' },
-            ].map(({ label, desc }) => (
-              <div key={label} className="rounded-[14px] border border-amber-200/50 bg-white p-4">
-                <p className="text-sm font-semibold text-slate-800">{label}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">{desc}</p>
-                <p className="mt-3 text-xs font-semibold text-amber-500">Coming soon</p>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-4 text-xs leading-5 text-slate-400">
-            Knowledge Graph is being built on Neo4j + Graphiti. It will become the long-term memory layer that makes your persona richer over time. Early access notifications will be sent to your registered email.
-          </p>
         </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          {[
+            { label: 'Belief Nodes', desc: 'Core positions and values your persona holds with evidence.' },
+            { label: 'Decision Graph', desc: 'How you approach tradeoffs — surfaced in every answer.' },
+            { label: 'Concept Links', desc: 'Relationships between your areas of expertise.' },
+          ].map(({ label, desc }) => (
+            <div key={label} className="rounded-[14px] border border-amber-200/50 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-800">{label}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">{desc}</p>
+              <p className="mt-3 text-xs font-semibold text-amber-500">Coming soon</p>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-4 text-xs leading-5 text-slate-400">
+          Knowledge Graph is being built on Neo4j + Graphiti. It will become the long-term memory layer that makes your persona richer over time. Early access notifications will be sent to your registered email.
+        </p>
       </div>
-    </FeatureGate>
+    </div>
   );
 }

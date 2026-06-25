@@ -1,10 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import FeatureGate from '@/components/ui/FeatureGate';
 import { useTwin } from '@/lib/context/TwinContext';
 import { useAuthFetch } from '@/lib/hooks/useAuthFetch';
-import { isRuntimeFeatureEnabled } from '@/lib/features/runtimeFlags';
 
 type SourceRow = {
   id: string;
@@ -29,7 +27,6 @@ type PublishControls = {
 const POLICY_TYPES = new Set(['stance', 'lens', 'tone_rule']);
 
 export default function PublishControlsPage() {
-  const enabled = isRuntimeFeatureEnabled('publishControls');
   const { activeTwin, refreshTwins } = useTwin();
   const { get, patch } = useAuthFetch();
 
@@ -139,99 +136,93 @@ export default function PublishControlsPage() {
   };
 
   return (
-    <FeatureGate
-      enabled={enabled}
-      title="Publish Controls"
-      description="Enable NEXT_PUBLIC_FF_PUBLISH_CONTROLS to manage office-hours published subsets."
-    >
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Publish Controls</h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Choose exactly what external share users can access: published identity, policies, and sources only.
-          </p>
-        </div>
-        {error ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
-        ) : null}
-        {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading...</div>
-        ) : (
-          <div className="grid gap-4 lg:grid-cols-3">
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Published Identity</h2>
-              <p className="mt-1 text-xs text-slate-500">Used for “who are you” style queries in share mode.</p>
-              <div className="mt-3 space-y-2">
-                {identityMemories.length === 0 ? (
-                  <div className="text-xs text-slate-500">No identity memories available.</div>
-                ) : (
-                  identityMemories.map((row) => (
-                    <label key={row.id} className="flex items-start gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={controls.published_identity_topics.includes(row.topic_normalized)}
-                        onChange={() => toggleListItem('published_identity_topics', row.topic_normalized)}
-                      />
-                      <span>{row.topic_normalized}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Published Policies</h2>
-              <p className="mt-1 text-xs text-slate-500">Used for boundary/policy responses in share mode.</p>
-              <div className="mt-3 space-y-2">
-                {policyMemories.length === 0 ? (
-                  <div className="text-xs text-slate-500">No policy memories available.</div>
-                ) : (
-                  policyMemories.map((row) => (
-                    <label key={row.id} className="flex items-start gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={controls.published_policy_topics.includes(row.topic_normalized)}
-                        onChange={() => toggleListItem('published_policy_topics', row.topic_normalized)}
-                      />
-                      <span>{row.topic_normalized}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Published Sources</h2>
-              <p className="mt-1 text-xs text-slate-500">Only these source IDs are eligible for public citations.</p>
-              <div className="mt-3 max-h-[320px] space-y-2 overflow-y-auto">
-                {sources.length === 0 ? (
-                  <div className="text-xs text-slate-500">No sources available.</div>
-                ) : (
-                  sources.map((row) => (
-                    <label key={row.id} className="flex items-start gap-2 text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={controls.published_source_ids.includes(row.id)}
-                        onChange={() => toggleListItem('published_source_ids', row.id)}
-                      />
-                      <span className="truncate">{row.filename}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-
-        <button
-          onClick={save}
-          disabled={saving || !twinId}
-          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Save Publish Controls'}
-        </button>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-3xl font-black tracking-tight text-slate-900">Publish Controls</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Choose exactly what external share users can access: published identity, policies, and sources only.
+        </p>
       </div>
-    </FeatureGate>
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+      ) : null}
+      {loading ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Loading...</div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Published Identity</h2>
+            <p className="mt-1 text-xs text-slate-500">Used for “who are you” style queries in share mode.</p>
+            <div className="mt-3 space-y-2">
+              {identityMemories.length === 0 ? (
+                <div className="text-xs text-slate-500">No identity memories available.</div>
+              ) : (
+                identityMemories.map((row) => (
+                  <label key={row.id} className="flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={controls.published_identity_topics.includes(row.topic_normalized)}
+                      onChange={() => toggleListItem('published_identity_topics', row.topic_normalized)}
+                    />
+                    <span>{row.topic_normalized}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Published Policies</h2>
+            <p className="mt-1 text-xs text-slate-500">Used for boundary/policy responses in share mode.</p>
+            <div className="mt-3 space-y-2">
+              {policyMemories.length === 0 ? (
+                <div className="text-xs text-slate-500">No policy memories available.</div>
+              ) : (
+                policyMemories.map((row) => (
+                  <label key={row.id} className="flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={controls.published_policy_topics.includes(row.topic_normalized)}
+                      onChange={() => toggleListItem('published_policy_topics', row.topic_normalized)}
+                    />
+                    <span>{row.topic_normalized}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">Published Sources</h2>
+            <p className="mt-1 text-xs text-slate-500">Only these source IDs are eligible for public citations.</p>
+            <div className="mt-3 max-h-[320px] space-y-2 overflow-y-auto">
+              {sources.length === 0 ? (
+                <div className="text-xs text-slate-500">No sources available.</div>
+              ) : (
+                sources.map((row) => (
+                  <label key={row.id} className="flex items-start gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={controls.published_source_ids.includes(row.id)}
+                      onChange={() => toggleListItem('published_source_ids', row.id)}
+                    />
+                    <span className="truncate">{row.filename}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      <button
+        onClick={save}
+        disabled={saving || !twinId}
+        className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+      >
+        {saving ? 'Saving...' : 'Save Publish Controls'}
+      </button>
+    </div>
   );
 }
 

@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/client';
 import { SIDEBAR_CONFIG, APP_NAME, APP_TAGLINE } from '@/lib/navigation/config';
-import { isRuntimeFeatureEnabled, type RuntimeFeatureFlag } from '@/lib/features/runtimeFlags';
 import { ThemeToggle } from '@/lib/context/ThemeContext';
 import type { NavSection, NavItem } from '@/lib/navigation/types';
 
@@ -51,16 +50,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  const isVisible = (item: NavItem) =>
-    !item.featureFlag || isRuntimeFeatureEnabled(item.featureFlag as RuntimeFeatureFlag);
-
-  const visibleSections = SIDEBAR_CONFIG
-    .map((section) => ({
-      ...section,
-      items: section.items.filter(isVisible),
-    }))
-    .filter((section) => section.items.length > 0);
+  const visibleSections = SIDEBAR_CONFIG;
 
   const allNavItems = visibleSections.flatMap((section) => section.items);
   const activeHref = allNavItems
