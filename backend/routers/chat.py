@@ -78,7 +78,6 @@ ONLINE_EVAL_POLICY_MIN_CONTEXT_CHARS = max(0, int(os.getenv("ONLINE_EVAL_POLICY_
 ONLINE_EVAL_POLICY_STRICT_ONLY = os.getenv("ONLINE_EVAL_POLICY_STRICT_ONLY", "false").lower() == "true"
 ONLINE_EVAL_POLICY_FALLBACK_POINTS = max(1, int(os.getenv("ONLINE_EVAL_POLICY_FALLBACK_POINTS", "3")))
 ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE = float(os.getenv("ONLINE_EVAL_LINE_EXTRACTOR_MIN_SCORE", "0.2"))
-RUNTIME_SUPPORT_POLICY_ENABLED = os.getenv("RUNTIME_SUPPORT_POLICY_ENABLED", "false").lower() == "true"
 
 _LEGACY_RUNTIME_STRIP_KEYS = {
     "confidence",
@@ -200,25 +199,6 @@ def _extract_runtime_gate_topic(planning_output: Optional[Dict[str, Any]]) -> Op
         if isinstance(raw, str) and raw.strip():
             return raw.strip()
     return None
-
-
-async def _apply_runtime_support_policy_if_enabled(
-    *,
-    twin_id: str,
-    query: str,
-    response: str,
-    fallback_message: str,
-    planning_output: Optional[Dict[str, Any]],
-    dialogue_mode: Optional[str],
-    retrieved_context_snippets: Optional[List[Dict[str, Any]]] = None,
-) -> Tuple[str, Dict[str, Any]]:
-    metadata: Dict[str, Any] = {
-        "enabled": False,
-        "applied": False,
-        "decision": "skipped",
-        "skip_reason": "support_state_runtime",
-    }
-    return response, metadata
 
 
 def _grounding_tokens(text: str) -> Set[str]:
@@ -438,8 +418,6 @@ def _normalize_live_chat_payload(
         normalized["grounding_verifier"] = _strip_legacy_runtime_fields(normalized.get("grounding_verifier"))
     if isinstance(normalized.get("online_eval"), dict):
         normalized["online_eval"] = _strip_legacy_runtime_fields(normalized.get("online_eval"))
-    if isinstance(normalized.get("runtime_support_policy"), dict):
-        normalized["runtime_support_policy"] = _strip_legacy_runtime_fields(normalized.get("runtime_support_policy"))
     return normalized
 
 
@@ -537,12 +515,6 @@ def _public_persona_answer_payload(
             "needs_review": None,
             "flags": [],
             "action": "none",
-        },
-        "runtime_support_policy": {
-            "enabled": False,
-            "applied": False,
-            "decision": "skipped",
-            "skip_reason": "support_state_runtime",
         },
         "conversation_id": conversation_id,
         "used_owner_memory": False,
@@ -2910,20 +2882,7 @@ async def chat(
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
-            full_response, runtime_gate_meta = await _apply_runtime_support_policy_if_enabled(
-                twin_id=twin_id,
-                query=query,
-                response=full_response,
-                fallback_message=fallback_message,
-                planning_output=planning_output if isinstance(planning_output, dict) else {},
-                dialogue_mode=dialogue_mode,
-                retrieved_context_snippets=retrieved_context_snippets,
-            )
-            if runtime_gate_meta.get("decision") == "block":
-                citations = []
-            context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
-            context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
-            
+
             debug_snapshot = _build_debug_snapshot(
                 query=query,
                 requires_evidence=requires_evidence,
@@ -2967,7 +2926,6 @@ async def chat(
                 "debug_snapshot": debug_snapshot,
                 "grounding_verifier": grounding_result,
                 "online_eval": online_eval_result,
-                "runtime_support_policy": runtime_gate_meta,
                 "deepagents": deepagents_meta,
                 "turn_counters": _extract_turn_counter_payload(debug_snapshot),
                 "router_policy": {
@@ -3624,19 +3582,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
         context_trace["online_eval_action"] = online_eval_result.get("action")
         context_trace["online_eval_score"] = online_eval_result.get("overall_score")
         context_trace["online_eval_flags"] = online_eval_result.get("flags")
-        final_content, runtime_gate_meta = await _apply_runtime_support_policy_if_enabled(
-            twin_id=twin_id,
-            query=query,
-            response=final_content,
-            fallback_message=fallback_message,
-            planning_output=planning_output if isinstance(planning_output, dict) else {},
-            dialogue_mode=dialogue_mode,
-            retrieved_context_snippets=retrieved_context_snippets,
-        )
-        if runtime_gate_meta.get("decision") == "block":
-            citations = []
-        context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
-        context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
         citation_details = _resolve_citation_details(citations, twin_id)
         debug_snapshot = _build_debug_snapshot(
             query=query,
@@ -3674,7 +3619,6 @@ async def chat_widget(twin_id: str, request: ChatWidgetRequest, req_raw: Request
             "debug_snapshot": debug_snapshot,
             "grounding_verifier": grounding_result,
             "online_eval": online_eval_result,
-            "runtime_support_policy": runtime_gate_meta,
             "deepagents": deepagents_meta,
             "turn_counters": _extract_turn_counter_payload(debug_snapshot),
             "session_id": session_id,
@@ -4271,19 +4215,6 @@ async def public_chat_endpoint(
             context_trace["online_eval_action"] = online_eval_result.get("action")
             context_trace["online_eval_score"] = online_eval_result.get("overall_score")
             context_trace["online_eval_flags"] = online_eval_result.get("flags")
-            final_response, runtime_gate_meta = await _apply_runtime_support_policy_if_enabled(
-                twin_id=twin_id,
-                query=request.message,
-                response=final_response,
-                fallback_message=fallback_message,
-                planning_output=planning_output if isinstance(planning_output, dict) else {},
-                dialogue_mode=dialogue_mode,
-                retrieved_context_snippets=retrieved_context_snippets,
-            )
-            if runtime_gate_meta.get("decision") == "block":
-                citations = []
-            context_trace["runtime_gate_applied"] = bool(runtime_gate_meta.get("applied"))
-            context_trace["runtime_gate_decision"] = runtime_gate_meta.get("decision")
 
             try:
                 from modules.evaluation_pipeline import evaluate_response_async
@@ -4400,7 +4331,6 @@ async def public_chat_endpoint(
                     "debug_snapshot": debug_snapshot,
                     "grounding_verifier": grounding_result,
                     "online_eval": online_eval_result,
-                    "runtime_support_policy": runtime_gate_meta,
                     "used_owner_memory": False,
                     "model_used": inference_model,
                     "provider_used": inference_provider,
