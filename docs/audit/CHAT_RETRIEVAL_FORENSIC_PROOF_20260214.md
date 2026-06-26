@@ -99,9 +99,9 @@ Observed:
 - HuggingFace used only if `EMBEDDING_PROVIDER=huggingface`
   - `backend/modules/embeddings.py:284`
 
-### GraphRAG switch
-- Off unless enabled via env:
-  - `backend/modules/agent.py:1151`
+### Graph memory context
+- Retrieval grounding is governed by the active graph memory configuration rather
+  than a separate `GRAPH_RAG_ENABLED` switch.
 
 ### FlashRank reranker
 - Off unless `ENABLE_FLASHRANK=true`:
