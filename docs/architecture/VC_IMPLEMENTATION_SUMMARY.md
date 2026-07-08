@@ -4,6 +4,8 @@
 **Date:** 2025-01-XX  
 **Purpose:** Summary of VC specialization integration implementation
 
+> Historical note: `ENABLE_VC_ROUTES` / `VC_ROUTES_ENABLED` was removed from the live backend runtime in July 2026 after the VC-only route gate became stale. References below describe the earlier rollout design; current runtime uses shared routers instead of a separate VC-only route switch.
+
 ---
 
 ## ✅ Completed Implementation
