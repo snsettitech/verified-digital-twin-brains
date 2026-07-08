@@ -18,9 +18,9 @@ def test_feature_flag_summary_omits_vc_routes(monkeypatch, capsys):
 
     output = capsys.readouterr().out
 
-    assert "Realtime Ingestion:" in output
-    assert "Enhanced Ingestion:" in output
-    assert "advisor retrieval:" in output
-    assert "Deep Research:" in output
-    assert "Name->Research JSON:" in output
+    assert "Realtime Ingestion: ENABLED" in output
+    assert "Enhanced Ingestion: ENABLED" in output
+    assert "advisor retrieval:   ENABLED" in output
+    assert "Deep Research:      ENABLED" in output
+    assert "Name->Research JSON:ENABLED" in output
     assert "VC Routes:" not in output
