@@ -187,7 +187,6 @@ class DeepResearchConfig(BaseModel):
     """Main Deep Research configuration."""
     enabled: bool = Field(default=True, description="Deep Research is always enabled")
     crawl_safety_enabled: bool = Field(default=True, description="Enable crawl safety controls")
-    global_disable: bool = Field(default=False, description="Deprecated; ignored")
     name_only_deep_research_enabled: bool = Field(
         default=True,
         description="Enable name-only deep research flow (/deep-research/runs)",
@@ -219,7 +218,6 @@ class DeepResearchConfig(BaseModel):
         return cls(
             enabled=True,
             crawl_safety_enabled=os.getenv("CRAWL_SAFETY_ENABLED", "true").lower() == "true",
-            global_disable=False,
             name_only_deep_research_enabled=os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true",
             phase_8_claims_disabled=False,
             phase_9_web_verification_disabled=False,
