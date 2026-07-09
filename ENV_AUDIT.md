@@ -35,7 +35,6 @@ These are required by `frontend/proxy.ts`, auth callback handling, and API helpe
 The env examples are now bootstrap-oriented, not exhaustive.
 
 - Removed because code no longer uses them directly:
-  - `DEEP_RESEARCH_ENABLED`
   - `SUPABASE_ACCESS_TOKEN`
   - `DEPLOYED_FRONTEND_URL`
   - `DEPLOYED_BACKEND_URL`
