@@ -26,7 +26,7 @@ def _import_main_with_legacy_deep_research_flags_disabled(monkeypatch):
 def test_core_deep_research_routes_stay_registered_when_legacy_flag_is_false(monkeypatch):
     main = _import_main_with_legacy_deep_research_flags_disabled(monkeypatch)
 
-    paths = {route.path for route in main.app.routes if hasattr(route, "path")}
+    paths = set(main.app.openapi().get("paths", {}))
 
     assert "/twins/{twin_id}/crawls" in paths
     assert "/twins/{twin_id}/research/{research_run_id}/continue-claims" in paths
