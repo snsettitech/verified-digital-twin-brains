@@ -1,8 +1,10 @@
 # VC Specialization Integration - Implementation Summary
 
-**Status:** ✅ Complete  
+**Status:** Historical reference  
 **Date:** 2025-01-XX  
-**Purpose:** Summary of VC specialization integration implementation
+**Purpose:** Summary of a prior VC specialization integration. The active
+backend surface in this repository no longer mounts a dedicated `vc_routes`
+module or `ENABLE_VC_ROUTES` gate.
 
 ---
 
@@ -18,10 +20,10 @@
 - ✅ Updated `get_specialization()` to use lazy loading
 - ✅ VC Python class only imported when `get_specialization("vc")` is called
 
-### Phase 3: Conditional VC Routes
-- ✅ Added conditional VC routes in `backend/main.py`
-- ✅ VC routes only included when `ENABLE_VC_ROUTES=true`
-- ✅ Default: `ENABLE_VC_ROUTES=false` (VC routes disabled)
+### Phase 3: Historical Conditional VC Routes
+- ✅ Previously added conditional VC routes in `backend/main.py`
+- ✅ Those historical notes referenced `ENABLE_VC_ROUTES=true`
+- ✅ The active backend surface no longer mounts that dedicated router module
 
 ### Phase 4: VC Routes Fixes
 - ✅ Fixed import paths in `backend/api/vc_routes.py`

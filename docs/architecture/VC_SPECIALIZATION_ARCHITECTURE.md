@@ -1,7 +1,9 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
-**Status:** Implementation Complete  
-**Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
+**Status:** Historical reference  
+**Purpose:** Explain the prior VC specialization integration design. The active
+backend surface in this repository no longer mounts a dedicated `vc_routes`
+module or `ENABLE_VC_ROUTES` gate.
 
 ---
 

@@ -41,8 +41,8 @@ def test_stable_backend_routes_do_not_keep_rollout_flags():
     realtime_response = client.get("/ingestion/realtime/health")
     retrieval_response = client.post("/retrieval/query", json={})
 
-    assert realtime_response.status_code != 404
-    assert retrieval_response.status_code != 404
+    assert realtime_response.status_code == 200
+    assert retrieval_response.status_code == 401
 
     main_text = _read(BACKEND_MAIN)
     env_text = _read(BACKEND_ENV_EXAMPLE)
