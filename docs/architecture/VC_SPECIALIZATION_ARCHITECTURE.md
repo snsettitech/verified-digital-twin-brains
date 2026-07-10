@@ -1,7 +1,9 @@
 # VC Specialization Architecture: Connections & Design Decisions
 
-**Status:** Implementation Complete  
-**Purpose:** Explain how VC specialization is integrated and why this architecture is the correct approach
+**Status:** Historical reference  
+**Purpose:** Explain the prior VC specialization integration design. The active
+backend surface in this repository no longer mounts a dedicated `vc_routes`
+module or `ENABLE_VC_ROUTES` gate.
 
 ---
 
@@ -213,9 +215,9 @@ GET /twins/{twin_id}/specialization
   → Call: get_specialization("vc")  # If "vc"
 ```
 
-### Connection 4: Conditional VC Routes
+### Connection 4: Historical Conditional VC Routes
 
-**File**: `backend/main.py`
+**File**: Historical `backend/main.py` pattern
 
 ```python
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false") == "true"
@@ -224,13 +226,13 @@ if VC_ROUTES_ENABLED:
     app.include_router(vc_routes.router)
 ```
 
-**Why This Matters:**
-- **Feature flag**: VC routes only available when explicitly enabled
-- **Deployment control**: Can disable VC routes in vanilla deployments
-- **Error prevention**: VC route imports don't break vanilla deployments
-- **Explicit opt-in**: Must set `ENABLE_VC_ROUTES=true` to use VC routes
+**Why This Mattered Historically:**
+- **Feature flag**: VC routes were only available when explicitly enabled
+- **Deployment control**: Vanilla deployments could skip the VC route module
+- **Error prevention**: VC route imports did not break vanilla deployments
+- **Explicit opt-in**: `ENABLE_VC_ROUTES=true` was required in that retired flow
 
-**Connection Flow:**
+**Historical Connection Flow:**
 ```
 Server Startup
   → Read ENABLE_VC_ROUTES env var (default: false)
@@ -257,7 +259,7 @@ Server Startup
 
 **Load only what you need, when you need it:**
 - VC files not loaded until `get_specialization("vc")` is called
-- VC routes not included unless `ENABLE_VC_ROUTES=true`
+- Historically, VC routes were not included unless `ENABLE_VC_ROUTES=true`
 - VC manifest not read until requested
 
 **Why Lazy Evaluation Matters:**
@@ -424,7 +426,7 @@ spec_class = getattr(module, f"{spec_id.title()}Specialization")
 - Memory: ~50MB (just vanilla)
 - Routes: Core routes only (no VC routes)
 
-**With VC enabled (ENABLE_VC_ROUTES=true):**
+**Historical VC-enabled route surface (`ENABLE_VC_ROUTES=true`):**
 - Import time: ~150ms (vanilla + VC routes import)
 - Memory: ~60MB (vanilla + VC routes, but not VC class yet)
 - Routes: Core routes + VC routes (but VC class not loaded)
@@ -552,16 +554,18 @@ if VC_ROUTES_ENABLED:
    - Test `/twins/{vc_twin}/specialization` → returns VC
    - Test `/twins/{invalid_twin}/specialization` → returns vanilla (fallback)
 
-2. **Route Tests**
-   - Test VC routes not available when `ENABLE_VC_ROUTES=false`
-   - Test VC routes available when `ENABLE_VC_ROUTES=true`
-   - Test VC routes reject non-VC twins
+2. **Historical Route Tests**
+   - These checks describe the retired `ENABLE_VC_ROUTES` route flow
+   - Do not use them as current deployment guidance for this repository
 
 ---
 
-## Deployment Considerations
+## Historical Deployment Considerations
 
-### Environment Variables
+Everything in this section is historical reference only. The active backend
+surface in this repository no longer reads `ENABLE_VC_ROUTES`.
+
+### Historical Environment Variables
 
 ```bash
 # .env (default - vanilla only)
@@ -571,7 +575,7 @@ ENABLE_VC_ROUTES=false  # VC routes disabled
 ENABLE_VC_ROUTES=true   # VC routes enabled
 ```
 
-### Deployment Scenarios
+### Historical Deployment Scenarios
 
 **Scenario 1: Vanilla-Only Deployment**
 - Set `ENABLE_VC_ROUTES=false` (default)

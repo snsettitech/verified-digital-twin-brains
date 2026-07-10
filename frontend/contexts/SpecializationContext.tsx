@@ -94,9 +94,3 @@ export function useSpecialization() {
     }
     return context;
 }
-
-// Hook for feature flag gating
-export function useFeatureFlag(featureName: string): boolean {
-    const { isFeatureEnabled } = useSpecialization();
-    return isFeatureEnabled(featureName);
-}

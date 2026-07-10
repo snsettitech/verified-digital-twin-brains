@@ -1,8 +1,10 @@
 # VC Specialization Integration - Implementation Summary
 
-**Status:** ✅ Complete  
+**Status:** Historical reference  
 **Date:** 2025-01-XX  
-**Purpose:** Summary of VC specialization integration implementation
+**Purpose:** Summary of a prior VC specialization integration. The active
+backend surface in this repository no longer mounts a dedicated `vc_routes`
+module or `ENABLE_VC_ROUTES` gate.
 
 ---
 
@@ -18,10 +20,10 @@
 - ✅ Updated `get_specialization()` to use lazy loading
 - ✅ VC Python class only imported when `get_specialization("vc")` is called
 
-### Phase 3: Conditional VC Routes
-- ✅ Added conditional VC routes in `backend/main.py`
-- ✅ VC routes only included when `ENABLE_VC_ROUTES=true`
-- ✅ Default: `ENABLE_VC_ROUTES=false` (VC routes disabled)
+### Phase 3: Historical Conditional VC Routes
+- ✅ Previously added conditional VC routes in `backend/main.py`
+- ✅ Those historical notes referenced `ENABLE_VC_ROUTES=true`
+- ✅ The active backend surface no longer mounts that dedicated router module
 
 ### Phase 4: VC Routes Fixes
 - ✅ Fixed import paths in `backend/api/vc_routes.py`
@@ -57,8 +59,8 @@
    - Always falls back to vanilla if VC fails
 
 4. `backend/main.py`
-   - Added conditional VC routes inclusion
-   - VC routes only loaded when `ENABLE_VC_ROUTES=true`
+   - Historically added conditional VC routes inclusion
+   - Those notes refer to a retired `ENABLE_VC_ROUTES` flow
 
 5. `backend/api/vc_routes.py`
    - Fixed import paths
@@ -76,15 +78,17 @@
 
 ---
 
-## Environment Variables
+## Historical Environment Variables
 
-### New Variable
+All configuration examples in this section are historical reference only. The
+active backend surface in this repository no longer reads `ENABLE_VC_ROUTES`.
 
-**`ENABLE_VC_ROUTES`** (optional)
-- **Default:** `false`
-- **Purpose:** Enable/disable VC-specific routes
-- **Usage:** Only set to `true` in deployments where VC is actively used
-- **Example:**
+### Retired Variable
+
+**`ENABLE_VC_ROUTES`** (retired)
+- This env var was part of the historical VC route rollout design.
+- The active backend surface no longer mounts `backend/api/vc_routes.py`.
+- Keep the examples below only as historical reference:
   ```bash
   # Vanilla-only deployment (default)
   ENABLE_VC_ROUTES=false
@@ -93,7 +97,9 @@
   ENABLE_VC_ROUTES=true
   ```
 
-**Note:** This variable controls route inclusion only. VC specialization class is still loaded lazily when needed, regardless of this flag.
+**Note:** The lazy-loaded VC specialization class remains a historical design
+topic here, but the dedicated VC route gate is no longer part of the active
+runtime contract.
 
 ---
 
@@ -125,10 +131,10 @@ get_specialization("vc")
   → Return VCSpecialization()
 ```
 
-### Conditional Routes
+### Historical Conditional Routes
 
 ```python
-# At startup (main.py):
+# Historical startup pattern from main.py:
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false") == "true"
 if VC_ROUTES_ENABLED:
     from api import vc_routes  # Import only if enabled
@@ -175,16 +181,9 @@ if VC_ROUTES_ENABLED:
   - Access `/twins/{vc_twin}/specialization`
   - Verify returns VC config (VC loaded on first request)
 
-- [ ] **VC Routes (Disabled)**
-  - Set `ENABLE_VC_ROUTES=false`
-  - Verify `/api/vc/artifact/upload/{twin_id}` returns 404
-  - Verify server starts without errors
-
-- [ ] **VC Routes (Enabled)**
-  - Set `ENABLE_VC_ROUTES=true`
-  - Verify `/api/vc/artifact/upload/{twin_id}` exists
-  - Verify rejects non-VC twins (returns 400)
-  - Verify accepts VC twins (returns placeholder response)
+- [ ] **Historical VC Route Checks**
+  - These checks describe the retired `ENABLE_VC_ROUTES` flow
+  - Do not use them as current deployment guidance for this repository
 
 - [ ] **Error Handling**
   - Simulate VC import error (rename VC folder)
@@ -220,18 +219,20 @@ if VC_ROUTES_ENABLED:
 - **Architecture Documentation**: `docs/architecture/VC_SPECIALIZATION_ARCHITECTURE.md`
 - **Registry JSON**: `backend/modules/specializations/registry.json`
 - **Registry Python**: `backend/modules/specializations/registry.py`
-- **VC Routes**: `backend/api/vc_routes.py`
+- **Historical VC Routes**: `backend/api/vc_routes.py`
 - **Main App**: `backend/main.py`
 
 ---
 
 ## Conclusion
 
-The VC specialization is now properly integrated into the codebase with:
+This historical VC specialization design integrated the codebase with:
 - ✅ Clean lazy loading (VC only loaded when needed)
-- ✅ Conditional routes (VC routes only when enabled)
+- ✅ Historical conditional routes (VC routes only when enabled)
 - ✅ Graceful fallback (always falls back to vanilla)
 - ✅ Comprehensive documentation
 
-The implementation ensures VC files are properly connected but completely invisible when not needed, solving the connection and confusion issues while maintaining system reliability.
+The historical implementation kept VC files connected but invisible when not
+needed. The active backend surface in this repository now omits the dedicated
+VC route module entirely.
 
