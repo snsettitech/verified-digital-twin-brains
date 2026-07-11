@@ -3,9 +3,7 @@ export type RuntimeFeatureFlag =
   | "memoryCenter"
   | "privacyControls"
   | "publishControls"
-  | "contextPanel"
-  | "sourceLabeling"
-  | "officeHoursMode";
+  | "contextPanel";
 
 const toBool = (value: string | undefined, fallback: boolean): boolean => {
   if (value === undefined) return fallback;
@@ -21,8 +19,6 @@ export const RUNTIME_FLAGS: Record<RuntimeFeatureFlag, boolean> = {
   privacyControls: toBool(process.env.NEXT_PUBLIC_FF_PRIVACY_CONTROLS, true),
   publishControls: toBool(process.env.NEXT_PUBLIC_FF_PUBLISH_CONTROLS, true),
   contextPanel: toBool(process.env.NEXT_PUBLIC_FF_CONTEXT_PANEL, true),
-  sourceLabeling: toBool(process.env.NEXT_PUBLIC_FF_SOURCE_LABELING, true),
-  officeHoursMode: toBool(process.env.NEXT_PUBLIC_FF_OFFICE_HOURS_MODE, true),
 };
 
 export const isRuntimeFeatureEnabled = (flag: RuntimeFeatureFlag): boolean =>
