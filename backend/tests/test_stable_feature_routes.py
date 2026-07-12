@@ -38,6 +38,9 @@ def _import_main_with_env(**overrides):
 def _iter_routes(routes):
     for route in routes:
         nested_routes = getattr(route, "routes", None)
+        if not nested_routes:
+            original_router = getattr(route, "original_router", None)
+            nested_routes = getattr(original_router, "routes", None)
         if nested_routes:
             yield from _iter_routes(nested_routes)
             continue
