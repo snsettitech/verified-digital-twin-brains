@@ -7,11 +7,20 @@ from contextlib import contextmanager
 
 @contextmanager
 def _import_main_with_env(**overrides):
-    saved_env = {key: os.environ.get(key) for key in overrides}
+    base_env = {
+        "SUPABASE_URL": "https://example.supabase.co",
+        "SUPABASE_SERVICE_KEY": "test-supabase-service-key",
+        "OPENAI_API_KEY": "test-openai-key",
+        "PINECONE_API_KEY": "test-pinecone-key",
+        "PINECONE_INDEX_NAME": "test-index",
+        "JWT_SECRET": "test-jwt-secret",
+    }
+    effective_env = {**base_env, **overrides}
+    saved_env = {key: os.environ.get(key) for key in effective_env}
     original_main = sys.modules.pop("main", None)
 
     try:
-        for key, value in overrides.items():
+        for key, value in effective_env.items():
             os.environ[key] = value
         importlib.invalidate_caches()
         yield importlib.import_module("main")
