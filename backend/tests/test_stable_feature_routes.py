@@ -35,8 +35,17 @@ def _import_main_with_env(**overrides):
                 os.environ[key] = value
 
 
+def _iter_routes(routes):
+    for route in routes:
+        nested_routes = getattr(route, "routes", None)
+        if nested_routes:
+            yield from _iter_routes(nested_routes)
+            continue
+        yield route
+
+
 def _get_route(app, path: str, method: str):
-    for route in app.routes:
+    for route in _iter_routes(app.routes):
         route_path = getattr(route, "path", "")
         methods = getattr(route, "methods", set())
         if route_path == path and method.upper() in methods:
