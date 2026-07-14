@@ -49,7 +49,7 @@ Out of scope:
 
 - [x] Define "stable feature" list with engineering sign-off.
 - [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` if stable.
-- [x] Keep explicit opt-out flags for emergency kill switch.
+- [x] Remove explicit opt-out flags once the stable routes prove safe to keep always on.
 - [x] Add startup log summary that prints enabled/disabled feature map.
 - [x] Add smoke tests that assert route availability under default config.
 - [x] Update `.env.example` and deployment runbook documentation.
@@ -63,7 +63,7 @@ Out of scope:
 ## Verification Plan
 
 - [x] Boot backend with no feature env vars and confirm stable routes are mounted.
-- [x] Confirm explicit disable env var still works for emergency rollback.
+- [x] Confirm legacy disable env vars no longer affect the stable routes.
 - [x] Confirm docs match runtime behavior.
 
 ## Risks and Mitigations
@@ -71,5 +71,5 @@ Out of scope:
 - Risk: Enabling unstable paths in production.
   Mitigation: Gate defaults behind smoke tests and staged rollout.
 - Risk: Existing deployments rely on current disabled defaults.
-  Mitigation: Document behavior change and provide rollback env flags.
+  Mitigation: Document behavior change and use redeploy/revert for rollback.
 
