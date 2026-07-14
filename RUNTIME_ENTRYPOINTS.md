@@ -11,9 +11,9 @@
    - registers all active routers
    - exposes `/health`, `/health/deep`, `/startup`, `/docs`
 3. Feature flags are read in `backend/main.py` for:
-   - realtime ingestion
    - enhanced ingestion
-   - Delphi retrieval
+   - VC routes
+   - deep research
    - name-only deep research gating
 
 ### Registered Backend Route Groups
