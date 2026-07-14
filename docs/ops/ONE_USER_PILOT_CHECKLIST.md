@@ -4,8 +4,7 @@ Use this checklist to validate owner-training and public-chat separation before 
 
 ## 1) Environment
 
-- `ENABLE_REALTIME_INGESTION=true`
-- `ENABLE_ADVISOR_RETRIEVAL=true`
+- Realtime ingestion and advisor retrieval are always enabled
 - `ENABLE_ENHANCED_INGESTION=false` (unless already validated in your environment)
 - `OPENAI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `PINECONE_API_KEY`, `PINECONE_INDEX_NAME` set
 
@@ -53,8 +52,6 @@ Verify tables used by the adaptive flow exist:
 
 ## 6) Rollback Levers
 
-- Disable real-time ingestion quickly with:
-  - `ENABLE_REALTIME_INGESTION=false`
 - Keep core chat online while debugging retrieval:
   - `RERANK_PROVIDER=none` (temporary fallback)
 - If adaptive behavior must be minimized:
