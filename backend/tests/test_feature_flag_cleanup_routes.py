@@ -4,16 +4,6 @@ from contextlib import contextmanager
 
 from fastapi.testclient import TestClient
 
-
-def _has_route(app, path: str, method: str) -> bool:
-    for route in app.routes:
-        route_path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set())
-        if route_path == path and method.upper() in methods:
-            return True
-    return False
-
-
 @contextmanager
 def _reloaded_main(**env_overrides):
     required_env = {
@@ -43,17 +33,21 @@ def _reloaded_main(**env_overrides):
 
 def test_realtime_ingestion_routes_ignore_removed_flag_env():
     with _reloaded_main(ENABLE_REALTIME_INGESTION="false") as main_module:
-        assert _has_route(main_module.app, "/ingestion/realtime/health", "GET")
-
         client = TestClient(main_module.app)
-        response = client.get("/ingestion/realtime/health")
+        health_response = client.get("/ingestion/realtime/health")
+        config_response = client.get("/ingestion/realtime/config")
 
-        assert response.status_code == 200
-        assert response.json()["enabled"] is True
+        assert health_response.status_code == 200
+        assert health_response.json()["enabled"] is True
+        assert config_response.status_code == 200
+        assert config_response.json()["enabled"] is True
 
 
 def test_retrieval_advisor_routes_ignore_removed_flag_env():
     with _reloaded_main(ENABLE_ADVISOR_RETRIEVAL="false") as main_module:
-        assert _has_route(main_module.app, "/retrieval/query", "POST")
-        assert _has_route(main_module.app, "/retrieval/query-across", "POST")
-        assert _has_route(main_module.app, "/retrieval/delete", "POST")
+        client = TestClient(main_module.app)
+
+        assert client.post("/retrieval/query", json={}).status_code == 401
+        assert client.post("/retrieval/query-across-twins", json={}).status_code == 401
+        assert client.request("DELETE", "/retrieval/delete-twin", json={}).status_code == 401
+        assert client.request("DELETE", "/retrieval/delete-creator", json={}).status_code == 401
