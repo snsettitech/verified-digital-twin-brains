@@ -81,6 +81,7 @@ def test_realtime_compat_diagnostics_report_always_on_surface(monkeypatch):
 def test_active_operator_docs_drop_removed_flag_names():
     active_paths = [
         BACKEND_DIR / ".env.example",
+        WORKSPACE_DIR / "AGENTS.md",
         WORKSPACE_DIR / "docs/ops/PRODUCTION_DEPLOYMENT_RUNBOOK.md",
         WORKSPACE_DIR / "docs/ops/ONE_USER_PILOT_CHECKLIST.md",
     ]
@@ -89,3 +90,9 @@ def test_active_operator_docs_drop_removed_flag_names():
         text = path.read_text()
         assert "ENABLE_REALTIME_INGESTION" not in text, f"{path} still mentions removed realtime flag"
         assert "ENABLE_ADVISOR_RETRIEVAL" not in text, f"{path} still mentions removed advisor flag"
+
+
+def test_main_imports_realtime_router_as_stable_surface():
+    text = (BACKEND_DIR / "main.py").read_text()
+    assert "ingestion_realtime," in text
+    assert "ingestion_realtime = None" not in text

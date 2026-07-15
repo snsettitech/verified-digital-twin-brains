@@ -15,6 +15,7 @@ from routers import (
     persona_specs,
     decision_capture,
     ingestion,
+    ingestion_realtime,
     youtube_preflight,
     twins,
     actions,
@@ -77,11 +78,6 @@ from routers import (
     import_routes,
 )
 from modules.specializations import get_specialization
-
-try:
-    from routers import ingestion_realtime
-except ImportError:
-    ingestion_realtime = None
 
 # ISSUE-003: Remaining runtime gates (stable routes are always mounted below).
 # Enhanced ingestion remains opt-in until further validation.
@@ -173,11 +169,8 @@ app.include_router(twin_runtime.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
 # Realtime ingestion compat routes stay mounted after the rollout completed.
-if ingestion_realtime is not None:
-    app.include_router(ingestion_realtime.router)
-    print("[INFO] Realtime ingestion compat routes enabled")
-else:
-    print("[WARN] Realtime ingestion router module is unavailable")
+app.include_router(ingestion_realtime.router)
+print("[INFO] Realtime ingestion compat routes enabled")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 app.include_router(persona_link_compile.router)
