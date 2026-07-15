@@ -25,7 +25,7 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 - `backend/main.py:102`
 - `backend/main.py:119`
 
-Current defaults in `main.py`:
+Defaults in `main.py` at the time of the original audit:
 
 - `ENABLE_REALTIME_INGESTION` defaults to `false`
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
@@ -71,5 +71,5 @@ Out of scope:
 - Risk: Enabling unstable paths in production.
   Mitigation: Gate defaults behind smoke tests and staged rollout.
 - Risk: Existing deployments rely on current disabled defaults.
-  Mitigation: Document behavior change and provide rollback env flags.
+  Mitigation: Document behavior change and use deployment rollback rather than retired route env flags.
 
