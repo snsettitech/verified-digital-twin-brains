@@ -384,12 +384,14 @@ Feature flags are controlled via environment variables:
 
 ```python
 # In backend/main.py
-REALTIME_INGESTION_ENABLED = os.getenv("ENABLE_REALTIME_INGESTION", "true").lower() == "true"
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
 DELPHI_RETRIEVAL_ENABLED = os.getenv("ENABLE_DELPHI_RETRIEVAL", "true").lower() == "true"
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
 DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 ```
+
+Realtime ingestion compat routes are always registered; only the remaining
+optional/rollout surfaces above stay env-gated.
 
 ---
 

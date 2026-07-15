@@ -1,12 +1,8 @@
 def _has_route(path: str, method: str) -> bool:
     from main import app
 
-    for route in app.routes:
-        route_path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set())
-        if route_path == path and method.upper() in methods:
-            return True
-    return False
+    path_item = app.openapi()["paths"].get(path)
+    return path_item is not None and method.lower() in path_item
 
 
 def test_governance_sources_twin_alias_route_exists():

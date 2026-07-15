@@ -25,7 +25,7 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 - `backend/main.py:102`
 - `backend/main.py:119`
 
-Current defaults in `main.py`:
+Defaults in `main.py` at the time of the original audit:
 
 - `ENABLE_REALTIME_INGESTION` defaults to `false`
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
@@ -49,7 +49,7 @@ Out of scope:
 
 - [x] Define "stable feature" list with engineering sign-off.
 - [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` if stable.
-- [x] Keep explicit opt-out flags for emergency kill switch.
+- [x] Remove the legacy opt-out flags once the stable routes are always mounted.
 - [x] Add startup log summary that prints enabled/disabled feature map.
 - [x] Add smoke tests that assert route availability under default config.
 - [x] Update `.env.example` and deployment runbook documentation.
@@ -63,7 +63,7 @@ Out of scope:
 ## Verification Plan
 
 - [x] Boot backend with no feature env vars and confirm stable routes are mounted.
-- [x] Confirm explicit disable env var still works for emergency rollback.
+- [x] Confirm legacy disable env vars are ignored and the stable routes remain mounted.
 - [x] Confirm docs match runtime behavior.
 
 ## Risks and Mitigations
@@ -71,5 +71,5 @@ Out of scope:
 - Risk: Enabling unstable paths in production.
   Mitigation: Gate defaults behind smoke tests and staged rollout.
 - Risk: Existing deployments rely on current disabled defaults.
-  Mitigation: Document behavior change and provide rollback env flags.
+  Mitigation: Document behavior change and use deployment rollback rather than retired route env flags.
 
