@@ -56,7 +56,7 @@ The **Verified Digital Twin Brain** is an enterprise-grade AI platform for creat
 │  ├─ til.py (today I learned feed)                   │        │
 │  ├─ feedback.py (user feedback)                      │        │
 │  └─ observability.py (health checks)                │        │
-│  └─ [conditional] vc_routes.py (venture capital)    │        │
+│  └─ shared specialization routes (includes VC)      │        │
 │  └────────────────────────────────────────────────────┘        │
 │  ┌────────────────────────────────────────────────────┐        │
 │  │ Business Logic Layer (33 Modules)                 │        │

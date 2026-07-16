@@ -9,7 +9,13 @@ def _read_text(relative_path: str) -> str:
 
 
 def test_dead_backend_flag_surfaces_stay_deleted():
-    stale_terms = ("ENABLE_VC_ROUTES", "VC_ROUTES_ENABLED", "GRAPH_RAG_ENABLED")
+    stale_terms = (
+        "ENABLE_VC_ROUTES",
+        "VC_ROUTES_ENABLED",
+        "GRAPH_RAG_ENABLED",
+        "api/vc_routes.py",
+        "vc_routes.py",
+    )
     target_files = [
         "AGENTS.md",
         "backend/.env.example",
