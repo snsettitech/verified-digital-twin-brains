@@ -12,7 +12,7 @@
 ## Current Backend Architecture (Snapshot)
 - Framework: FastAPI app in `backend/main.py` with uvicorn entrypoints in `backend/Procfile` and `backend/railway.json`.
 - Router registration (directly in `backend/main.py`): `auth`, `chat`, `ingestion`, `youtube_preflight`, `twins`, `actions`, `knowledge`, `sources`, `governance`, `escalations`, `specializations`, `observability`, `cognitive`, `graph`, `metrics`, `jobs`, `til`, `feedback`, `audio`, `reasoning`, `interview`, `api_keys`, `debug_retrieval`, `verify`, `owner_memory`.
-- Conditional routers: `enhanced_ingestion` gated by `ENABLE_ENHANCED_INGESTION`, and `api/vc_routes.py` gated by `ENABLE_VC_ROUTES` in `backend/main.py`.
+- Conditional routers: `enhanced_ingestion` remains gated by `ENABLE_ENHANCED_INGESTION`; specialization behavior uses shared routes rather than a dedicated VC-only router.
 - Health endpoints defined in `backend/main.py`: `GET /health` and `GET /`.
 - Background worker: `backend/worker.py` consumes queue from `backend/modules/job_queue.py`, processes `backend/modules/training_jobs.py` and graph extraction from `backend/modules/_core/scribe_engine.py`.
 
