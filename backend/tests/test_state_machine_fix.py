@@ -40,6 +40,17 @@ class TestDeepResearchEnablement:
         # Should default to enabled
         assert is_deep_research_enabled(run_data) is True
 
+    def test_default_respects_active_config_contract(self, monkeypatch):
+        class DisabledConfig:
+            def is_enabled(self) -> bool:
+                return False
+
+        monkeypatch.setattr("modules.deep_research_config.get_config", lambda: DisabledConfig())
+
+        run_data = {"checkpoint_data": {}}
+
+        assert is_deep_research_enabled(run_data) is False
+
 
 class TestStateTransitions:
     """Test state transition rules."""
