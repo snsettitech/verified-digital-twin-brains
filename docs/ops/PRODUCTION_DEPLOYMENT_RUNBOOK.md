@@ -47,7 +47,7 @@ Phase 5 note:
 - `render.yaml` defines dedicated canary services with realtime ingestion enabled:
   - `verified-digital-twin-backend-canary`
   - `verified-digital-twin-worker-canary`
-- Stable defaults are now enabled on all services; use explicit opt-out for rollback.
+- Stable defaults are now enabled on all services; rollback uses deploy promotion/revert rather than a route-level opt-out flag.
 ### Fallback B: Vercel claimable preview (emergency frontend)
 1. Use `scripts/deploy.sh frontend` or Vercel deploy workflow for preview.
 2. Validate frontend against current backend.
