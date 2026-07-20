@@ -47,7 +47,7 @@ Phase 5 note:
 - `render.yaml` defines dedicated canary services with realtime ingestion enabled:
   - `verified-digital-twin-backend-canary`
   - `verified-digital-twin-worker-canary`
-- Stable defaults are now enabled on all services; use explicit opt-out for rollback.
+- Stable defaults are now enabled on all services; rollback uses deploy promotion, not per-route env toggles.
 ### Fallback B: Vercel claimable preview (emergency frontend)
 1. Use `scripts/deploy.sh frontend` or Vercel deploy workflow for preview.
 2. Validate frontend against current backend.
@@ -98,9 +98,7 @@ Feature/perf:
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
 - `ENABLE_VC_ROUTES=false` (unless actively used)
-- Realtime ingestion routes are always mounted.
-  - Optional (recommended for canary): `REDIS_URL` to enable Redis Streams lane
-  - Knobs (optional): `REALTIME_MIN_CHARS_DELTA`, `REALTIME_MIN_SECONDS_BETWEEN_INDEX`, `REALTIME_USE_REDIS_STREAMS`
+- Realtime ingestion compatibility routes are always mounted.
 - Advisor retrieval routes are always mounted.
 
 Feedback learning:
@@ -203,7 +201,7 @@ Keep `auto_publish` disabled until your quality gate is stable in production.
 
 ### Data rollback
 1. Avoid destructive down-migrations during hot incident.
-2. Prefer feature-flag rollback first.
+2. Prefer deploy rollback first.
 3. If schema rollback is required, use explicit corrective migration.
 
 ## 8) Production go/no-go criteria

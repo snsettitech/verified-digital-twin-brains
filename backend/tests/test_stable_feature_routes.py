@@ -36,10 +36,13 @@ def test_realtime_ingestion_routes_ignore_removed_disable_flag(monkeypatch):
     main = _load_main_with_legacy_disable_flags(monkeypatch)
     client = TestClient(main.app)
 
-    response = client.get("/ingestion/realtime/health")
+    health_response = client.get("/ingestion/realtime/health")
+    config_response = client.get("/ingestion/realtime/config")
 
-    assert response.status_code == 200
-    assert response.json()["enabled"] is True
+    assert health_response.status_code == 200
+    assert health_response.json()["enabled"] is True
+    assert config_response.status_code == 200
+    assert config_response.json() == {"enabled": True, "compat_router": True}
 
 
 def test_advisor_retrieval_routes_ignore_removed_disable_flag(monkeypatch):
