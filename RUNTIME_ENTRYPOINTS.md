@@ -11,15 +11,15 @@
    - registers all active routers
    - exposes `/health`, `/health/deep`, `/startup`, `/docs`
 3. Feature flags are read in `backend/main.py` for:
-   - realtime ingestion
    - enhanced ingestion
-   - Delphi retrieval
+   - VC routes
+   - deep research
    - name-only deep research gating
 
 ### Registered Backend Route Groups
 
 - Core: `auth`, `chat`, `twins`, `training_sessions`, `persona_specs`, `twin_runtime`
-- Ingestion/retrieval: `ingestion`, `youtube_preflight`, `knowledge`, `sources`, `debug_retrieval`, `retrieval_delphi`
+- Ingestion/retrieval: `ingestion`, `ingestion_realtime`, `youtube_preflight`, `knowledge`, `sources`, `debug_retrieval`, `retrieval_advisor`
 - Governance/workflow: `actions`, `governance`, `escalations`, `access_groups_compat`, `api_keys`, `jobs`
 - Research/profile: `crawl`, `research_claims`, `deep_research`, `profile`, `profile_person_data`, `profile_public`
 - Admin/observability: `dashboard`, `trace_compare`, `prompt_playground`, `ab_testing`, `cost_tracking`, `synthetic_monitoring`, `alerts`, `langfuse_metrics`, `dataset_export`, `regression_testing`
