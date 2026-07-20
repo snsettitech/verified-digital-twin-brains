@@ -44,11 +44,8 @@ def test_realtime_ingestion_routes_ignore_removed_disable_flag(monkeypatch):
 
 def test_advisor_retrieval_routes_ignore_removed_disable_flag(monkeypatch):
     main = _load_main_with_legacy_disable_flags(monkeypatch)
+    client = TestClient(main.app)
 
-    route_paths = {
-        path
-        for route in main.app.router.routes
-        if (path := getattr(route, "path", None)) is not None
-    }
+    response = client.get("/retrieval/health")
 
-    assert "/retrieval/health" in route_paths
+    assert response.status_code in {200, 503}
