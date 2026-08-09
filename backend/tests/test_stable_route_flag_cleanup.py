@@ -44,30 +44,27 @@ def test_realtime_ingestion_routes_ignore_legacy_disable_flag(monkeypatch):
         client = TestClient(reloaded_main.app)
 
         response = client.get("/ingestion/realtime/config")
+        assert response.status_code == 200
+        assert response.json()["enabled"] is True
 
     _reload_main()
-
-    assert response.status_code == 200
-    assert response.json()["enabled"] is True
 
 
 def test_advisor_retrieval_routes_ignore_legacy_disable_flag(monkeypatch):
     with monkeypatch.context() as env:
         env.setenv("ENABLE_ADVISOR_RETRIEVAL", "false")
         reloaded_main = _reload_main()
+        assert _has_route(reloaded_main.app, "/retrieval/health", "GET")
+        assert _has_route(reloaded_main.app, "/retrieval/query", "POST")
 
     _reload_main()
-
-    assert _has_route(reloaded_main.app, "/retrieval/health", "GET")
-    assert _has_route(reloaded_main.app, "/retrieval/query", "POST")
 
 
 def test_deep_research_routes_ignore_legacy_disable_flag(monkeypatch):
     with monkeypatch.context() as env:
         env.setenv("DEEP_RESEARCH_ENABLED", "false")
         reloaded_main = _reload_main()
+        assert _has_route(reloaded_main.app, "/twins/{twin_id}/crawls", "GET")
+        assert _has_route(reloaded_main.app, "/deep-research/runs", "POST")
 
     _reload_main()
-
-    assert _has_route(reloaded_main.app, "/twins/{twin_id}/crawls", "GET")
-    assert _has_route(reloaded_main.app, "/deep-research/runs", "POST")
