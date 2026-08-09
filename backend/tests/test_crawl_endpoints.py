@@ -17,6 +17,19 @@ from main import app
 client = TestClient(app)
 
 
+def _iter_routes(routes):
+    for route in routes:
+        route_path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if route_path and methods:
+            yield route_path
+
+        original_router = getattr(route, "original_router", None)
+        nested_routes = getattr(original_router, "routes", None)
+        if nested_routes:
+            yield from _iter_routes(nested_routes)
+
+
 @pytest.fixture
 def mock_user():
     """Mock authenticated user."""
@@ -156,7 +169,7 @@ class TestFeatureFlagGating:
     def test_router_included(self):
         """Router should be in app routes."""
         # Check if routes are registered
-        routes = [r.path for r in app.routes]
+        routes = list(_iter_routes(app.router.routes))
         crawl_routes = [r for r in routes if "crawl" in r.lower()]
         assert len(crawl_routes) > 0
     

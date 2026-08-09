@@ -17,10 +17,21 @@ def _reload_main():
     return importlib.reload(main_module)
 
 
+def _iter_routes(routes):
+    for route in routes:
+        route_path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if route_path and methods:
+            yield route_path, methods
+
+        original_router = getattr(route, "original_router", None)
+        nested_routes = getattr(original_router, "routes", None)
+        if nested_routes:
+            yield from _iter_routes(nested_routes)
+
+
 def _has_route(app, path: str, method: str) -> bool:
-    for route in app.routes:
-        route_path = getattr(route, "path", "")
-        methods = getattr(route, "methods", set())
+    for route_path, methods in _iter_routes(app.router.routes):
         if route_path == path and method.upper() in methods:
             return True
     return False
