@@ -92,8 +92,6 @@ ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").low
 ADVISOR_RETRIEVAL_ENABLED = os.getenv("ENABLE_ADVISOR_RETRIEVAL", "true").lower() == "true"
 # VC routes remain opt-in
 VC_ROUTES_ENABLED = os.getenv("ENABLE_VC_ROUTES", "false").lower() == "true"
-# Deep Research routes remain env-gated for safer staged rollouts.
-DEEP_RESEARCH_ENABLED = os.getenv("DEEP_RESEARCH_ENABLED", "false").lower() == "true"
 # Name-only deep research flow (enabled by default; can be disabled explicitly)
 NAME_ONLY_DEEP_RESEARCH_ENABLED = os.getenv("NAME_ONLY_DEEP_RESEARCH_ENABLED", "true").lower() == "true"
 
@@ -105,7 +103,7 @@ def print_feature_flag_summary():
     print(f"  Enhanced Ingestion: {'ENABLED' if ENHANCED_INGESTION_ENABLED else 'DISABLED'}")
     print(f"  advisor retrieval:   {'ENABLED' if ADVISOR_RETRIEVAL_ENABLED else 'DISABLED'}")
     print(f"  VC Routes:          {'ENABLED' if VC_ROUTES_ENABLED else 'DISABLED'}")
-    print(f"  Deep Research:      {'ENABLED' if DEEP_RESEARCH_ENABLED else 'DISABLED'}")
+    print("  Deep Research:      ENABLED")
     print(f"  Name->Research JSON:{'ENABLED' if NAME_ONLY_DEEP_RESEARCH_ENABLED else 'DISABLED'}")
     print("-" * 60)
     sys.stdout.flush()
@@ -238,18 +236,15 @@ app.include_router(cost_tracking.router)
 app.include_router(synthetic_monitoring.router)
 print("[INFO] Langfuse P3 observability routes enabled (dashboard, trace-compare, playground, ab-testing, costs, monitoring)")
 
-if DEEP_RESEARCH_ENABLED:
-    app.include_router(crawl.router)
-    print("[INFO] Deep Research crawl routes enabled")
-    app.include_router(research_claims.router)
-    print("[INFO] Deep Research claims routes enabled")
-    app.include_router(deep_research.router)
-    if NAME_ONLY_DEEP_RESEARCH_ENABLED:
-        print("[INFO] Name-only deep research routes enabled")
-    else:
-        print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
+app.include_router(crawl.router)
+print("[INFO] Deep Research crawl routes enabled")
+app.include_router(research_claims.router)
+print("[INFO] Deep Research claims routes enabled")
+app.include_router(deep_research.router)
+if NAME_ONLY_DEEP_RESEARCH_ENABLED:
+    print("[INFO] Name-only deep research routes enabled")
 else:
-    print("[INFO] Deep Research routes disabled (DEEP_RESEARCH_ENABLED=false)")
+    print("[INFO] Name-only deep research routes registered but gated by NAME_ONLY_DEEP_RESEARCH_ENABLED=false")
 
 # Person Completeness v1: Profile abstraction layer
 app.include_router(profile.router)
