@@ -30,6 +30,7 @@ from modules.research_claim_service import (
     EnrichmentStatus,
     EnrichmentSummary,
 )
+from modules.deep_research_config import DeepResearchConfig
 
 
 # =============================================================================
@@ -395,32 +396,28 @@ class TestAPIContracts:
 
 
 # =============================================================================
-# Feature Flag Tests
+# Deep Research Config Contract Tests
 # =============================================================================
 
-class TestFeatureFlags:
-    """Test Deep Research configuration behavior."""
+class TestDeepResearchConfigContract:
+    """Test Deep Research config-layer behavior."""
+
+    def test_deprecated_rollout_fields_removed_from_config_surface(self):
+        """Deprecated rollout controls should not remain on the config model."""
+        deprecated_fields = {
+            "global_disable",
+            "phase_8_claims_disabled",
+            "phase_9_web_verification_disabled",
+            "phase_10_claim_finalization_disabled",
+            "phase_11_human_adjudication_disabled",
+            "phase_12_runtime_publication_disabled",
+        }
+
+        assert deprecated_fields.isdisjoint(DeepResearchConfig.model_fields)
     
     @patch("os.getenv")
-    def test_phase_8_disabled_flag_ignored(self, mock_getenv):
-        """Deprecated Phase 8 disable flag should be ignored."""
-        from modules.deep_research_config import DeepResearchConfig
-        
-        def mock_env(key, default=None):
-            if key == "DR_PHASE_8_CLAIMS_DISABLED":
-                return "true"
-            return default
-        
-        mock_getenv.side_effect = mock_env
-        config = DeepResearchConfig.from_env()
-        
-        assert config.phase_8_claims_disabled is False
-    
-    @patch("os.getenv")
-    def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
-        from modules.deep_research_config import DeepResearchConfig
-        
+    def test_config_ignores_legacy_disable_env_flags(self, mock_getenv):
+        """DeepResearchConfig should ignore legacy disable env flags."""
         def mock_env(key, default=None):
             if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
                 return "false"
