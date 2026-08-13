@@ -53,7 +53,7 @@ def is_deep_research_enabled(run_data: Dict[str, Any]) -> bool:
     
     Deep research is enabled if:
     1. Explicitly enabled in run metadata
-    2. No explicit disable flag and feature flag is on globally
+    2. Older runs fall back to the Deep Research config contract
     """
     checkpoint = run_data.get("checkpoint_data", {})
     metadata = checkpoint.get("metadata", {})
