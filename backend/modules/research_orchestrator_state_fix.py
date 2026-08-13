@@ -53,7 +53,8 @@ def is_deep_research_enabled(run_data: Dict[str, Any]) -> bool:
     
     Deep research is enabled if:
     1. Explicitly enabled in run metadata
-    2. Older runs fall back to the Deep Research config contract
+    2. Older runs fall back to the Deep Research config contract for
+       run-state progression after the research flow has already started
     """
     checkpoint = run_data.get("checkpoint_data", {})
     metadata = checkpoint.get("metadata", {})
@@ -67,6 +68,8 @@ def is_deep_research_enabled(run_data: Dict[str, Any]) -> bool:
         return False
     
     # Fall back to the config contract for runs that predate explicit metadata.
+    # This governs in-flight run transitions; app-level route mounting is
+    # still controlled separately in backend/main.py.
     from modules.deep_research_config import get_config
     config = get_config()
 

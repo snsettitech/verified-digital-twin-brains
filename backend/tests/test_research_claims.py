@@ -396,11 +396,11 @@ class TestAPIContracts:
 
 
 # =============================================================================
-# Feature Flag Tests
+# Deep Research Config Contract Tests
 # =============================================================================
 
-class TestFeatureFlags:
-    """Test Deep Research configuration behavior."""
+class TestDeepResearchConfigContract:
+    """Test Deep Research config-layer behavior."""
 
     def test_deprecated_rollout_fields_removed_from_config_surface(self):
         """Deprecated rollout controls should not remain on the config model."""
@@ -416,8 +416,8 @@ class TestFeatureFlags:
         assert deprecated_fields.isdisjoint(DeepResearchConfig.model_fields)
     
     @patch("os.getenv")
-    def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
+    def test_config_ignores_legacy_disable_env_flags(self, mock_getenv):
+        """DeepResearchConfig should ignore legacy disable env flags."""
         def mock_env(key, default=None):
             if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
                 return "false"
