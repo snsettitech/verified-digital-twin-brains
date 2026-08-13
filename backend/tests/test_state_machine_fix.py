@@ -5,6 +5,7 @@ Run: pytest backend/tests/test_state_machine_fix.py -v
 """
 
 import pytest
+import modules.deep_research_config as deep_research_config
 from modules.research_orchestrator_state_fix import (
     ResearchRunStatus,
     is_deep_research_enabled,
@@ -39,6 +40,21 @@ class TestDeepResearchEnablement:
         run_data = {"checkpoint_data": {}}
         # Should default to enabled
         assert is_deep_research_enabled(run_data) is True
+
+    def test_default_enabled_uses_config_contract(self, monkeypatch):
+        class ConfigWithDeprecatedFlag:
+            phase_8_claims_disabled = True
+
+            def is_enabled(self):
+                return True
+
+        monkeypatch.setattr(
+            deep_research_config,
+            "get_config",
+            lambda: ConfigWithDeprecatedFlag(),
+        )
+
+        assert is_deep_research_enabled({"checkpoint_data": {}}) is True
 
 
 class TestStateTransitions:
