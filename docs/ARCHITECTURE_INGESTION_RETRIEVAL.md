@@ -578,6 +578,7 @@ def _filter_by_group_permissions(contexts, group_id):
 | `YOUTUBE_COOKIES_FILE` | ❌ | - | YouTube auth for gated videos |
 | `YOUTUBE_PROXY` | ❌ | - | Proxy for YouTube requests |
 | `GOOGLE_API_KEY` | ❌ | - | YouTube Data API validation |
+| `GRAPH_MEMORY_ENABLED` | ❌ | "false" | Enable graph-memory context |
 | `ENABLE_ENHANCED_INGESTION` | ❌ | "false" | Enable enhanced routes |
 
 ### 4.2 Tunable Parameters

@@ -11,6 +11,7 @@ def _read(relative_path: str) -> str:
 
 def test_removed_dead_feature_flags_are_absent_from_live_code_and_docs():
     assert "RUNTIME_SUPPORT_POLICY_ENABLED" not in _read("backend/routers/chat.py")
+    assert "RUNTIME_SUPPORT_POLICY_ENABLED" not in _read("backend/README.md")
     assert "ROUTER_FORCE_RETRIEVAL_WITH_KNOWLEDGE" not in _read("backend/modules/agent.py")
     assert "RUNTIME_CONFIDENCE_GATE_ENABLED" not in _read(".env.example")
     assert "RUNTIME_CONFIDENCE_GATE_ENABLED" not in _read("backend/.env.example")
