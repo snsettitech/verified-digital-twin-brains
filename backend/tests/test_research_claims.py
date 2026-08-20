@@ -418,12 +418,12 @@ class TestFeatureFlags:
     
     @patch("os.getenv")
     def test_deep_research_always_enabled(self, mock_getenv):
-        """Deep Research should remain enabled regardless of legacy env flags."""
+        """Deep Research should remain enabled regardless of deprecated disable env vars."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
-            if key in ("DEEP_RESEARCH_ENABLED", "DEEP_RESEARCH_GLOBAL_DISABLE"):
-                return "false"
+            if key == "DEEP_RESEARCH_GLOBAL_DISABLE":
+                return "true"
             return default
         
         mock_getenv.side_effect = mock_env
