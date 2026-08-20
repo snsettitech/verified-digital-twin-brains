@@ -25,7 +25,7 @@ def test_core_deep_research_routes_remain_registered_when_legacy_flag_false(monk
         name_only_enabled="true",
     )
 
-    routes = {route.path for route in main.app.router.routes}
+    routes = {route.path for route in main.app.router.routes if hasattr(route, "path")}
 
     assert "/twins/{twin_id}/crawls" in routes
     assert "/twins/{twin_id}/research/{research_run_id}/continue-claims" in routes
@@ -39,7 +39,7 @@ def test_name_only_routes_still_register_when_name_only_flag_false(monkeypatch):
         name_only_enabled="false",
     )
 
-    routes = {route.path for route in main.app.router.routes}
+    routes = {route.path for route in main.app.router.routes if hasattr(route, "path")}
 
     assert "/twins/{twin_id}/crawls" in routes
     assert "/twins/{twin_id}/research/{research_run_id}/continue-claims" in routes
