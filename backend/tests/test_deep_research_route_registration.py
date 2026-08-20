@@ -18,6 +18,23 @@ def _load_main(monkeypatch, *, deep_research_enabled: str, name_only_enabled: st
     return importlib.import_module("main")
 
 
+def _route_paths(app) -> set[str]:
+    paths: set[str] = set()
+    for route in app.router.routes:
+        path = getattr(route, "path", None)
+        if path:
+            paths.add(path)
+
+        original_router = getattr(route, "original_router", None)
+        if original_router is not None:
+            for child_route in getattr(original_router, "routes", []):
+                child_path = getattr(child_route, "path", None)
+                if child_path:
+                    paths.add(child_path)
+
+    return paths
+
+
 def test_core_deep_research_routes_remain_registered_when_legacy_flag_false(monkeypatch):
     main = _load_main(
         monkeypatch,
@@ -25,7 +42,7 @@ def test_core_deep_research_routes_remain_registered_when_legacy_flag_false(monk
         name_only_enabled="true",
     )
 
-    routes = {route.path for route in main.app.router.routes if hasattr(route, "path")}
+    routes = _route_paths(main.app)
 
     assert "/twins/{twin_id}/crawls" in routes
     assert "/twins/{twin_id}/research/{research_run_id}/continue-claims" in routes
@@ -39,7 +56,7 @@ def test_name_only_routes_still_register_when_name_only_flag_false(monkeypatch):
         name_only_enabled="false",
     )
 
-    routes = {route.path for route in main.app.router.routes if hasattr(route, "path")}
+    routes = _route_paths(main.app)
 
     assert "/twins/{twin_id}/crawls" in routes
     assert "/twins/{twin_id}/research/{research_run_id}/continue-claims" in routes
