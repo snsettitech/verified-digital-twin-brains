@@ -34,7 +34,7 @@ python scripts/persona_e2e_test.py --name "Elon Musk" --chat-only
 ## If it fails
 Check in order:
 1. Is Render service running? Check https://dashboard.render.com
-2. Is `DEEP_RESEARCH_ENABLED=true` in Render env vars?
+2. If you're exercising the name-only JSON flow, is `NAME_ONLY_DEEP_RESEARCH_ENABLED=true` in Render env vars?
 3. Is the twin status `persona_built`? (Check Supabase twins table)
 4. Are there Pinecone vectors for this twin? (Check retrieval pipeline)
 

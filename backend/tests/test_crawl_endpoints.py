@@ -156,7 +156,21 @@ class TestFeatureFlagGating:
     def test_router_included(self):
         """Router should be in app routes."""
         # Check if routes are registered
-        routes = [r.path for r in app.routes]
+        routes = []
+        for route in app.routes:
+            path = getattr(route, "path", None)
+            if path:
+                routes.append(path)
+            original_router = getattr(route, "original_router", None)
+            if original_router is not None:
+                routes.extend(
+                    child_path
+                    for child_path in (
+                        getattr(child_route, "path", None)
+                        for child_route in getattr(original_router, "routes", [])
+                    )
+                    if child_path
+                )
         crawl_routes = [r for r in routes if "crawl" in r.lower()]
         assert len(crawl_routes) > 0
     
