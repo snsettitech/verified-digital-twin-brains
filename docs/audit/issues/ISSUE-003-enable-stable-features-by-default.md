@@ -10,7 +10,7 @@
 
 ## Problem Statement
 
-Key routes remain disabled unless environment flags are explicitly enabled, which leads to missing features in deployments and inconsistent behavior across environments.
+Stable routes previously remained disabled unless environment flags were explicitly enabled, which led to missing features in deployments and inconsistent behavior across environments.
 
 ## Why This Matters
 
@@ -25,12 +25,19 @@ Key routes remain disabled unless environment flags are explicitly enabled, whic
 - `backend/main.py:102`
 - `backend/main.py:119`
 
-Current defaults in `main.py`:
+Historical defaults in `main.py` before the cleanup:
 
 - `ENABLE_REALTIME_INGESTION` defaults to `false`
 - `ENABLE_ENHANCED_INGESTION` defaults to `false`
 - `ENABLE_ADVISOR_RETRIEVAL` defaults to `false`
 - `ENABLE_VC_ROUTES` defaults to `false`
+
+Current state after cleanup:
+
+- realtime ingestion compatibility routes are always mounted
+- advisor retrieval routes are always mounted
+- `ENABLE_ENHANCED_INGESTION` remains opt-in
+- `ENABLE_VC_ROUTES` remains opt-in
 
 ## Scope
 
@@ -49,10 +56,11 @@ Out of scope:
 
 - [x] Define "stable feature" list with engineering sign-off.
 - [x] Set default `true` for `ENABLE_REALTIME_INGESTION` and `ENABLE_ADVISOR_RETRIEVAL` if stable.
-- [x] Keep explicit opt-out flags for emergency kill switch.
+- [x] Keep explicit opt-out flags for emergency kill switch during the default-on transition.
 - [x] Add startup log summary that prints enabled/disabled feature map.
 - [x] Add smoke tests that assert route availability under default config.
 - [x] Update `.env.example` and deployment runbook documentation.
+- [x] Remove obsolete opt-out flag plumbing once the stable routes are permanently on.
 
 ## Acceptance Criteria (from audit report)
 
@@ -63,13 +71,13 @@ Out of scope:
 ## Verification Plan
 
 - [x] Boot backend with no feature env vars and confirm stable routes are mounted.
-- [x] Confirm explicit disable env var still works for emergency rollback.
+- [x] Confirm obsolete disable env vars are ignored and stable routes still mount.
 - [x] Confirm docs match runtime behavior.
 
 ## Risks and Mitigations
 
 - Risk: Enabling unstable paths in production.
   Mitigation: Gate defaults behind smoke tests and staged rollout.
-- Risk: Existing deployments rely on current disabled defaults.
-  Mitigation: Document behavior change and provide rollback env flags.
+- Risk: Operators continue relying on removed rollback flags.
+  Mitigation: Remove the flags from active docs and env examples so the current contract is unambiguous.
 
