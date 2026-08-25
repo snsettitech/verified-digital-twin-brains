@@ -397,16 +397,14 @@ async def get_creator_stats(
 @router.get("/health")
 async def advisor_health():
     """
-    Basic health check for creator namespace retrieval service.
+    Minimal health check for creator namespace retrieval service.
     """
     try:
         client = get_advisor_client()
-        stats = client.index.describe_index_stats()
+        client.index.describe_index_stats()
         return {
             "status": "healthy",
-            "index": client.index_name,
-            "total_vectors": stats.total_vector_count,
-            "namespaces": len(stats.namespaces),
         }
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
+        logger.warning("advisor health check failed: %s", e)
+        raise HTTPException(status_code=503, detail="Service unhealthy")
