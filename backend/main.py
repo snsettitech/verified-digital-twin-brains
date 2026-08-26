@@ -33,6 +33,7 @@ from routers import (
     access_groups_compat,
     audio,
     enhanced_ingestion,
+    ingestion_realtime,
 
     reasoning,
     interview,
@@ -77,11 +78,6 @@ from routers import (
     import_routes,
 )
 from modules.specializations import get_specialization
-
-try:
-    from routers import ingestion_realtime
-except ImportError:
-    ingestion_realtime = None
 
 # Enhanced ingestion remains opt-in until further validation
 ENHANCED_INGESTION_ENABLED = os.getenv("ENABLE_ENHANCED_INGESTION", "false").lower() == "true"
@@ -169,11 +165,8 @@ app.include_router(persona_specs.router)
 app.include_router(twin_runtime.router)
 app.include_router(decision_capture.router)
 app.include_router(ingestion.router)
-if ingestion_realtime is not None:
-    app.include_router(ingestion_realtime.router)
-    print("[INFO] Realtime ingestion routes enabled")
-else:
-    print("[WARN] Realtime ingestion router module is unavailable")
+app.include_router(ingestion_realtime.router)
+print("[INFO] Realtime ingestion routes enabled")
 app.include_router(youtube_preflight.router)
 app.include_router(twins.router)
 app.include_router(persona_link_compile.router)

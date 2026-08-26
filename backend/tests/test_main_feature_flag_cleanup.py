@@ -1,5 +1,7 @@
 import importlib
 
+from fastapi.testclient import TestClient
+
 
 REQUIRED_ENV_VARS = {
     "SUPABASE_URL": "https://example.supabase.co",
@@ -41,9 +43,12 @@ def _has_route(app, path: str, method: str) -> bool:
 
 def test_realtime_ingestion_routes_remain_available_when_legacy_flag_false(monkeypatch):
     main = _load_main_module(monkeypatch, ENABLE_REALTIME_INGESTION="false")
+    client = TestClient(main.app)
 
     assert _has_route(main.app, "/ingestion/realtime/health", "GET")
     assert _has_route(main.app, "/ingestion/realtime/config", "GET")
+    assert client.get("/ingestion/realtime/health").json()["enabled"] is True
+    assert client.get("/ingestion/realtime/config").json()["enabled"] is True
 
 
 def test_advisor_retrieval_routes_remain_available_when_legacy_flag_false(monkeypatch):
