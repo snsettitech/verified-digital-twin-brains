@@ -2,6 +2,14 @@ def _has_route(path: str, method: str) -> bool:
     from main import app
 
     for route in app.routes:
+        nested_router = getattr(route, "original_router", None)
+        if nested_router is not None:
+            for nested_route in getattr(nested_router, "routes", []):
+                nested_path = getattr(nested_route, "path", "")
+                nested_methods = getattr(nested_route, "methods", set())
+                if nested_path == path and method.upper() in nested_methods:
+                    return True
+
         route_path = getattr(route, "path", "")
         methods = getattr(route, "methods", set())
         if route_path == path and method.upper() in methods:
