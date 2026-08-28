@@ -98,14 +98,10 @@ Feature/perf:
 - `CONTENT_EXTRACT_MAX_CHUNKS=6`
 - `ENABLE_ENHANCED_INGESTION` (true/false as intended)
 - `ENABLE_VC_ROUTES=false` (unless actively used)
-- Phase 5 realtime ingestion:
-  - Default: `ENABLE_REALTIME_INGESTION=true`
-  - Emergency rollback: set `ENABLE_REALTIME_INGESTION=false`
+- Realtime ingestion routes are always registered
   - Optional (recommended for canary): `REDIS_URL` to enable Redis Streams lane
   - Knobs (optional): `REALTIME_MIN_CHARS_DELTA`, `REALTIME_MIN_SECONDS_BETWEEN_INDEX`, `REALTIME_USE_REDIS_STREAMS`
-- advisor retrieval:
-  - Default: `ENABLE_ADVISOR_RETRIEVAL=true`
-  - Emergency rollback: set `ENABLE_ADVISOR_RETRIEVAL=false`
+- advisor retrieval routes are always registered
 
 Feedback learning:
 - `FEEDBACK_LEARNING_MIN_EVENTS=5` (or your chosen threshold)
