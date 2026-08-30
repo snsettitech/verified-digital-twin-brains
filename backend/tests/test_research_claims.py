@@ -402,8 +402,8 @@ class TestFeatureFlags:
     """Test Deep Research configuration behavior."""
     
     @patch("os.getenv")
-    def test_phase_8_disabled_flag_ignored(self, mock_getenv):
-        """Deprecated Phase 8 disable flag should be ignored."""
+    def test_phase_8_disabled_flag_removed(self, mock_getenv):
+        """Deprecated Phase 8 disable flag should not exist in config."""
         from modules.deep_research_config import DeepResearchConfig
         
         def mock_env(key, default=None):
@@ -412,9 +412,7 @@ class TestFeatureFlags:
             return default
         
         mock_getenv.side_effect = mock_env
-        config = DeepResearchConfig.from_env()
-        
-        assert config.phase_8_claims_disabled is False
+        assert "phase_8_claims_disabled" not in DeepResearchConfig.model_fields
     
     @patch("os.getenv")
     def test_deep_research_always_enabled(self, mock_getenv):
